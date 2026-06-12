@@ -11,7 +11,9 @@ interface PlanDohodModuleProps {
 export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'active' | 'archive' | 'history'>('active');
+  const [archiveMonth, setArchiveMonth] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{key: string, dir: 'asc'|'desc'} | null>(null);
   
   // Realtime Data
   const [trips, setTrips] = useState<TripPlan[]>([]);
@@ -169,10 +171,14 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     };
   }, [nbResizing, nbResizeStartSize]);
 
+  // Derived state for dispatchers
+  const filterDispatchers = dispatchersOrder.filter(d => d && d.trim() !== 'Общая' && d.trim() !== 'All' && d.trim() !== 'Все' && d.trim() !== 'Все диспетчеры');
+  const activeDispatchers = filterDispatchers.length > 0 ? ['Все диспетчеры', ...filterDispatchers] : [];
+
   useEffect(() => {
-    if (dispatchersOrder.length > 0) {
-      if (activeDispatcherTab !== 'All' && !dispatchersOrder.includes(activeDispatcherTab)) {
-        setActiveDispatcherTab('All');
+    if (activeDispatchers.length > 0) {
+      if (!activeDispatchers.includes(activeDispatcherTab) || activeDispatcherTab === 'All') {
+        setActiveDispatcherTab(activeDispatchers[0]);
       }
     }
   }, [dispatchersOrder, activeDispatcherTab]);
@@ -496,9 +502,15 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                   <textarea
                     value={valText}
                     onChange={(e) => handleNoteChange(car, e.target.value)}
+                    onMouseUp={(e) => {
+                      const el = e.target as HTMLTextAreaElement;
+                      if (el.style.height) {
+                        localStorage.setItem(`ratipa_nb_height_${user.name}`, el.style.height);
+                      }
+                    }}
                     placeholder="Заметка к авто..."
-                    rows={2}
-                    className="w-full p-2 bg-white text-xs border border-slate-200/60 rounded-xl focus:outline-none placeholder:text-[10px] text-slate-800 font-bold leading-relaxed resize-none focus:border-slate-400 font-sans"
+                    style={{ height: localStorage.getItem(`ratipa_nb_height_${user.name}`) || 'auto' }}
+                    className="w-full p-2 bg-white text-xs border border-slate-200/60 rounded-xl focus:outline-none placeholder:text-[10px] text-slate-800 font-bold leading-relaxed resize-y focus:border-slate-400 font-sans min-h-[48px]"
                   />
                 </div>
               );
@@ -542,6 +554,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [dateEnd, setDateEnd] = useState('');
   const [extraExpense, setExtraExpense] = useState<number>(0);
   const [extraExpenseNote, setExtraExpenseNote] = useState('');
+  const [ferryCost, setFerryCost] = useState(0);
+  const [referenceRate, setReferenceRate] = useState<number | undefined>(undefined);
+  const [referenceCurrency, setReferenceCurrency] = useState<'EUR'|'USD'|'RUB'|'BYN'>('EUR');
   const [tripNote, setTripNote] = useState('');
   const [stripColor, setStripColor] = useState('bg-blue-500');
   const [factKm, setFactKm] = useState<number | undefined>(undefined);
@@ -570,7 +585,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
   const getDispatcherActiveTabStyle = (d: string) => {
     if (activeDispatcherTab !== d) return 'bg-slate-50 text-slate-500 hover:bg-slate-100';
-    if (d === 'All') return 'bg-blue-100 text-[#1e40af] border-b-2 border-blue-500';
+    if (d === 'All' || d === 'Все диспетчеры') return 'bg-slate-900 text-[#70FC8E] shadow-sm border border-slate-900';
     
     const colorKey = dispatchersColors[d];
     const preset = DISPATCHER_COLORS_PRESETS.find(p => p.key === colorKey);
@@ -664,7 +679,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     const totalFreight = legs.reduce((acc, l) => acc + Number(l.rate || 0), 0);
     
     let baseExpenses = legs.reduce((acc, l) => acc + ((Number(l.km || 0) * Number(l.coeff || 0)) + Number(l.ferry || 0)), 0);
-    const totalExpensesPlan = baseExpenses + Number(extraExpense || 0);
+    const totalExpensesPlan = baseExpenses + Number(extraExpense || 0) + Number(ferryCost || 0);
     const profit = totalFreight - totalExpensesPlan;
     
     let totalExpenses = totalExpensesPlan;
@@ -690,6 +705,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setDateEnd('');
     setExtraExpense(0);
     setExtraExpenseNote('');
+    setFerryCost(0);
+    setReferenceRate(undefined);
+    setReferenceCurrency('EUR');
     setTripNote('');
     setStripColor('bg-blue-500');
     setFactKm(undefined);
@@ -772,6 +790,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setDateEnd(trip.dateEnd || '');
     setExtraExpense(trip.extraExpense || 0);
     setExtraExpenseNote(trip.extraExpenseNote || '');
+    setFerryCost(trip.ferryCost || 0);
+    setReferenceRate(trip.referenceRate);
+    setReferenceCurrency(trip.referenceCurrency || 'EUR');
     setTripNote(trip.tripNote || '');
     setStripColor(trip.stripColor || 'bg-blue-500');
     setFactKm(trip.factKm || undefined);
@@ -813,6 +834,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       totalExpenses: totals.totalExpenses,
       extraExpense: Number(extraExpense || 0),
       extraExpenseNote,
+      ferryCost: Number(ferryCost || 0),
+      referenceRate,
+      referenceCurrency,
       profit: totals.profit,
       factKm: Number(factKm || 0),
       profitFact: totals.profitFact,
@@ -998,14 +1022,30 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               <div className="lg:col-span-8 bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col justify-between">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-4">
                     <div>
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">Доп Расходы €</label>
                       <input type="number" value={extraExpense || ''} onChange={e => setExtraExpense(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-blue-500 transition" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">Комментарий доп расходов</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">Коммент расходов</label>
                       <input type="text" value={extraExpenseNote} onChange={e => setExtraExpenseNote(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 transition" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">Паром (общ) €</label>
+                      <input type="number" value={ferryCost || ''} onChange={e => setFerryCost(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-blue-500 transition" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">Справ. ставка</label>
+                      <div className="flex bg-slate-50 border border-slate-200 rounded-xl overflow-hidden focus-within:border-blue-500 transition">
+                        <input type="number" step="0.01" value={referenceRate || ''} onChange={e => setReferenceRate(e.target.value ? Number(e.target.value) : undefined)} className="w-full bg-transparent text-slate-800 px-4 py-3 text-sm font-bold outline-none" />
+                        <select value={referenceCurrency} onChange={e => setReferenceCurrency(e.target.value as any)} className="bg-slate-100/50 border-l border-slate-200 text-slate-600 text-xs font-bold outline-none px-2 cursor-pointer font-mono">
+                          <option value="EUR">€</option>
+                          <option value="USD">$</option>
+                          <option value="RUB">₽</option>
+                          <option value="BYN">Br</option>
+                        </select>
+                      </div>
                     </div>
                  </div>
 
@@ -1073,10 +1113,28 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                  </div>
               </div>
               
-              <div className="lg:col-span-4 bg-slate-50 rounded-[2rem] p-6 border border-slate-200 text-center flex flex-col justify-center relative overflow-hidden">
-                 <div className={`absolute top-0 left-0 w-full h-1.5 ${stripColor}`} />
-                 <span className="text-[10px] uppercase font-black tracking-widest text-slate-500 font-mono mb-2">Расчетная Прибыль {factKm && factKm > 0 ? '(ФАКТ)' : '(ПЛАН)'}</span>
-                 <span className={`text-5xl font-black tracking-tighter ${profitFact < 0 ? 'text-rose-500' : 'text-slate-800'}`}>{Math.round(profitFact)} <span className="text-2xl text-slate-400">€</span></span>
+              <div className="lg:col-span-4 flex flex-col gap-4">
+                 <div className="bg-slate-50 rounded-[1.5rem] p-6 border border-slate-200 text-center flex flex-col justify-center relative overflow-hidden flex-1 shadow-sm">
+                   <div className={`absolute top-0 left-0 w-full h-1.5 ${stripColor}`} />
+                   <span className="text-[10px] uppercase font-black tracking-widest text-slate-500 font-mono mb-2">Прибыль Общая</span>
+                   <span className={`text-4xl font-black tracking-tighter ${profitFact < 0 ? 'text-rose-500' : 'text-slate-800'}`}>{Math.round(profitFact)} <span className="text-xl text-slate-400">€</span></span>
+                   <div className="flex justify-center gap-4 mt-3">
+                     <span className="text-[10px] font-bold text-slate-400 font-mono">План: {Math.round(profit)} €</span>
+                     {factKm && factKm > 0 && <span className="text-[10px] font-bold text-emerald-600 font-mono">Факт: {Math.round(profitFact)} €</span>}
+                   </div>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                   <div className="bg-white rounded-2xl p-4 border border-slate-200 text-center flex flex-col justify-center flex-1 shadow-sm">
+                     <span className="text-[9px] uppercase font-black tracking-widest text-slate-500 font-mono mb-1">Прибыль в день (План)</span>
+                     <span className={`text-xl font-black tracking-tighter ${Math.round(profit / (getTripDays() || 1)) < 0 ? 'text-rose-500' : 'text-slate-700'}`}>{Math.round(profit / (getTripDays() || 1))} €</span>
+                   </div>
+                   <div className="bg-white rounded-2xl p-4 border border-emerald-100 text-center flex flex-col justify-center flex-1 shadow-sm relative overflow-hidden">
+                     {factKm && factKm > 0 && <div className="absolute top-0 right-0 w-8 h-8 bg-emerald-500 rounded-bl-[100%] z-0 opacity-10"></div>}
+                     <span className="text-[9px] uppercase font-black tracking-widest text-emerald-600/70 font-mono mb-1 relative z-10">Прибыль в день (Факт)</span>
+                     <span className={`text-xl font-black tracking-tighter relative z-10 ${Math.round(profitFact / (getTripDays() || 1)) < 0 ? 'text-rose-500' : 'text-emerald-700'}`}>{Math.round(profitFact / (getTripDays() || 1))} €</span>
+                   </div>
+                 </div>
               </div>
             </div>
           </div>
@@ -1111,26 +1169,57 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
   const renderTripsGrid = (archived: boolean) => {
     let list = trips.filter(t => !!t.isArchived === archived);
-    if (!archived && activeDispatcherTab !== 'All') {
-       list = list.filter(t => t.dispatcher === activeDispatcherTab);
+    if (!archived && activeDispatcherTab) {
+       if (activeDispatcherTab === 'Все диспетчеры') {
+          list = list.filter(t => filterDispatchers.includes(t.dispatcher));
+       } else if (activeDispatcherTab !== 'All') {
+          list = list.filter(t => t.dispatcher === activeDispatcherTab);
+       }
     }
     if (!archived && activeDirectionTab !== 'All') {
        list = list.filter(t => t.direction === activeDirectionTab);
     }
+    if (archived) {
+       const months = Array.from(new Set(list.filter(t => t.currentMonth).map(t => t.currentMonth as string)));
+       let targetMonth = archiveMonth;
+       if (!targetMonth && months.length > 0) {
+         targetMonth = months[0];
+         // Delaying state update slightly or just use it locally
+       }
+       if (targetMonth) {
+          list = list.filter(t => t.currentMonth === targetMonth);
+       }
+    }
     
     // Sort logic
-    if (!archived) {
+    if (sortConfig) {
+      list.sort((a, b) => {
+        let valA: string | number = 0;
+        let valB: string | number = 0;
+        if (sortConfig.key === 'carNumber') { valA = a.carNumber; valB = b.carNumber; }
+        else if (sortConfig.key === 'dateStart') { valA = a.dateStart; valB = b.dateStart; }
+        else if (sortConfig.key === 'km') { valA = a.factKm || a.totalKm || 0; valB = b.factKm || b.totalKm || 0; }
+        else if (sortConfig.key === 'freight') { valA = a.totalFreight || 0; valB = b.totalFreight || 0; }
+        else if (sortConfig.key === 'expenses') { valA = a.totalExpenses || 0; valB = b.totalExpenses || 0; }
+        else if (sortConfig.key === 'profit') { valA = a.profitFact || 0; valB = b.profitFact || 0; }
+        else if (sortConfig.key === 'profitDay') { 
+          valA = (a.profitFact || 0) / (a.days || 1); 
+          valB = (b.profitFact || 0) / (b.days || 1); 
+        }
+        
+        if (valA < valB) return sortConfig.dir === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.dir === 'asc' ? 1 : -1;
+        return 0;
+      });
+    } else {
       list.sort((a, b) => {
         const idxA = manualTripsOrder.indexOf(a.id);
         const idxB = manualTripsOrder.indexOf(b.id);
-        if (idxA === -1 && idxB === -1) return 0;
+        if (idxA === -1 && idxB === -1) return b.id.localeCompare(a.id);
         if (idxA === -1) return 1;
         if (idxB === -1) return -1;
         return idxA - idxB;
       });
-    } else {
-      // Archive usually sorted by date or something else, default descending by ID
-      list.sort((a, b) => b.id.localeCompare(a.id));
     }
 
 
@@ -1160,9 +1249,35 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
        if (t.factKm && t.factKm > 0) factKmCount++;
     });
 
+    const handleSort = (key: string) => {
+      setSortConfig(prev => {
+        if (!prev || prev.key !== key) return { key, dir: 'desc' };
+        if (prev.dir === 'desc') return { key, dir: 'asc' };
+        return null; // toggle off
+      });
+    };
+
+    const SortIndicator = ({ sortKey }: { sortKey: string }) => {
+      if (sortConfig?.key !== sortKey) return null;
+      return <span className="text-blue-500 ml-1">{sortConfig.dir === 'asc' ? '↑' : '↓'}</span>;
+    };
+
     return (
-      <div className="flex flex-col gap-3">
-        {list.map(trip => {
+      <div className="flex flex-col gap-3 relative">
+        {/* Table Headers */}
+        <div className="hidden lg:flex px-6 pb-2 border-b border-slate-200/50 text-[10px] uppercase font-black tracking-widest text-slate-400 font-mono self-start w-full cursor-pointer select-none">
+           <div className="min-w-[200px] hover:text-blue-500 transition" onClick={() => handleSort('carNumber')}>Автомобиль <SortIndicator sortKey="carNumber" /></div>
+           <div className="min-w-[140px] hover:text-blue-500 transition" onClick={() => handleSort('dateStart')}>Даты <SortIndicator sortKey="dateStart" /></div>
+           <div className="flex-1 min-w-[220px]">Маршрут</div>
+           <div className="min-w-[280px] flex gap-4 pl-6">
+              <span className="w-16 hover:text-blue-500 transition" onClick={() => handleSort('km')}>КМ <SortIndicator sortKey="km" /></span>
+              <span className="w-16 hover:text-blue-500 transition" onClick={() => handleSort('freight')}>Фрахт <SortIndicator sortKey="freight" /></span>
+              <span className="w-16 hover:text-blue-500 transition" onClick={() => handleSort('expenses')}>Расх <SortIndicator sortKey="expenses" /></span>
+              <span className="w-[120px] ml-auto text-right hover:text-blue-500 transition" onClick={() => handleSort('profit')}>Прибыль <SortIndicator sortKey="profit" /> / Дни</span>
+           </div>
+        </div>
+
+        {list.map((trip, idx) => {
           const firstLeg = trip.legs?.[0];
           const lastLeg = trip.legs?.[trip.legs.length - 1];
           const routeTitle = firstLeg?.from && lastLeg?.to ? `${firstLeg.from} ➔ ${lastLeg.to}` : 'Плечи маршрута';
@@ -1173,11 +1288,12 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             <div 
               key={trip.id} 
               data-trip-id={trip.id}
-              className={`car-strip-item ${cardBg} rounded-2xl p-4 pl-5 border hover:shadow-md transition group relative flex flex-col lg:flex-row gap-6 items-start lg:items-center cursor-move ${isHighlighted ? 'border-amber-500 ring-2 ring-amber-500/20 shadow-[0_10px_25px_rgba(245,158,11,0.08)] scale-[1.01]' : 'border-slate-200/50'}`}
-              draggable={!archived}
-              onDragStart={(e) => e.dataTransfer.setData('tripId', trip.id)}
+              onClick={() => loadTripToForm(trip)}
+              className={`car-strip-item ${cardBg} rounded-2xl p-4 pl-5 border hover:shadow-md transition group relative flex flex-col lg:flex-row gap-6 items-start lg:items-center cursor-pointer ${isHighlighted ? 'border-amber-500 ring-2 ring-amber-500/20 shadow-[0_10px_25px_rgba(245,158,11,0.08)] scale-[1.01]' : 'border-slate-200/50'}`}
+              draggable={true}
+              onDragStart={(e) => { e.dataTransfer.setData('tripId', trip.id); e.stopPropagation(); }}
               onDragOver={(e) => { e.preventDefault(); }}
-              onDrop={(e) => !archived && handleTripDrop(e, trip.id)}
+              onDrop={(e) => { handleTripDrop(e, trip.id); e.stopPropagation(); }}
             >
               <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${trip.stripColor || 'bg-slate-200'} rounded-l-2xl`} />
               
@@ -1191,11 +1307,8 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 </div>
                 
                 <div className="flex items-center gap-1.5 mt-2 opacity-100 lg:opacity-0 group-hover:opacity-100 transition">
-                  <button onClick={() => loadTripToForm(trip)} className="px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-blue-800 hover:text-white bg-blue-100 hover:bg-blue-500 rounded-lg transition">
-                    Открыть
-                  </button>
-                  {!archived && <button onClick={() => finishTripToArchive(trip)} className="p-1.5 text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 rounded-lg transition" title="В архив"><Archive className="w-3.5 h-3.5"/></button>}
-                  {user.role === 'root_admin' && <button onClick={() => deleteTrip(trip.id)} className="p-1.5 text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 rounded-lg transition"><Trash2 className="w-3.5 h-3.5"/></button>}
+                  {!archived && <button onClick={(e) => { e.stopPropagation(); finishTripToArchive(trip); }} className="p-1.5 text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 rounded-lg transition" title="В архив"><Archive className="w-3.5 h-3.5"/></button>}
+                  {user.role === 'root_admin' && <button onClick={(e) => { e.stopPropagation(); deleteTrip(trip.id); }} className="p-1.5 text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 rounded-lg transition"><Trash2 className="w-3.5 h-3.5"/></button>}
                 </div>
               </div>
 
@@ -1262,23 +1375,27 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         })}
         
         {/* Сводка (Summary Box) */}
-        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-           <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col items-center">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest font-mono mb-1">Фрахт общий</span>
-              <span className="text-xl font-black text-slate-900">{Math.round(sumFreight).toLocaleString('ru-RU')} €</span>
+        <div className="mt-4 grid grid-cols-2 lg:grid-cols-5 gap-3">
+           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col items-center">
+              <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest font-mono mb-1">Общая прибыль</span>
+              <span className={`text-xl font-black ${sumProfit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>{Math.round(sumProfit).toLocaleString('ru-RU')} €</span>
            </div>
-           <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col items-center">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest font-mono mb-1">Расходы общие</span>
-              <span className="text-xl font-black text-rose-500">{Math.round(sumExpenses).toLocaleString('ru-RU')} €</span>
+           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col items-center">
+              <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest font-mono mb-1">Маржинальность</span>
+              <span className="text-xl font-black text-slate-800">{sumFreight > 0 ? Math.round((sumProfit / sumFreight) * 100) : 0} %</span>
            </div>
-           <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col items-center border-b-4 border-b-emerald-400">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest font-mono mb-1">Прибыль чистая</span>
-              <span className={`text-2xl font-black tracking-tight ${sumProfit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{Math.round(sumProfit).toLocaleString('ru-RU')} €</span>
-              <span className="text-[9px] font-bold text-slate-400 mt-1 uppercase">с {list.length} авто</span>
+           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col items-center">
+              <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest font-mono mb-1">Прибыль/день</span>
+              <span className="text-xl font-black text-slate-800">{sumDays > 0 ? Math.round(sumProfit / sumDays).toLocaleString('ru-RU') : 0} €</span>
            </div>
-           <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col items-center">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest font-mono mb-1">В среднем в день</span>
-              <span className={`text-xl font-black ${sumProfit >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{sumDays > 0 ? Math.round(sumProfit / sumDays).toLocaleString('ru-RU') : 0} €</span>
+           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col items-center">
+              <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest font-mono mb-1">Пробег</span>
+              <span className="text-xl font-black text-slate-800">{Math.round(sumKm).toLocaleString('ru-RU')} км</span>
+           </div>
+           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col items-center">
+              <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest font-mono mb-1">Качество списка</span>
+              <span className="text-xl font-black text-slate-800">{list.length > 0 ? Math.round((profitableCount / list.length) * 100) : 0} %</span>
+              <span className="text-[8px] uppercase font-bold text-slate-400 font-mono mt-0.5">В ПЛЮС: {profitableCount}/{list.length}</span>
            </div>
         </div>
       </div>
@@ -1313,8 +1430,6 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     );
   };
 
-  const activeDispatchers = ['All', ...dispatchersOrder.filter(d => d.trim() !== 'Общая')];
-
   return (
     <div className="w-full space-y-6">
       <div className="bg-white rounded-[2rem] p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-4">
@@ -1348,18 +1463,21 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
            </div>
          </div>
 
-         {activeTab === 'active' && activeDispatchers.length > 0 && (
+         <div className={activeTab === 'active' ? 'space-y-4' : 'hidden'}>
+           {activeDispatchers.length > 0 && (
            <div className="space-y-3">
              <div className="flex items-center gap-2 border-t border-slate-100 pt-4 overflow-x-auto custom-scrollbar pb-2">
                {activeDispatchers.map(d => (
                   <button 
                     key={d} 
-                    draggable
+                    draggable={d !== 'Все диспетчеры'}
                     onDragStart={(e) => {
+                      if (d === 'Все диспетчеры') return;
                       e.dataTransfer.setData('tabName', d);
                     }}
                     onDragOver={(e) => { e.preventDefault(); }}
                     onDrop={(e) => {
+                      if (d === 'Все диспетчеры') return;
                       // Try getting trip first
                       const tripId = e.dataTransfer.getData('tripId');
                       if (tripId) {
@@ -1370,7 +1488,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       
                       // Reorder tabs
                       const srcTab = e.dataTransfer.getData('tabName');
-                      if (srcTab && srcTab !== d && srcTab !== 'All' && d !== 'All') {
+                      if (srcTab && srcTab !== d && srcTab !== 'All' && d !== 'All' && srcTab !== 'Все диспетчеры') {
                         const newOrder = [...dispatchersOrder];
                         const idxSrc = newOrder.indexOf(srcTab);
                         const idxTarget = newOrder.indexOf(d);
@@ -1382,28 +1500,26 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       }
                     }}
                     onClick={() => setActiveDispatcherTab(d)}
-                    className={`px-4 py-2 flex items-center gap-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition cursor-move ${getDispatcherActiveTabStyle(d)}`}
+                    className={`px-4 py-2 flex items-center gap-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition ${d === 'Все диспетчеры' ? 'cursor-pointer' : 'cursor-move'} ${getDispatcherActiveTabStyle(d)}`}
                   >
-                    {d === 'All' ? 'Все диспетчеры' : <>👤 {d}</>}
+                    <>👤 {d}</>
                   </button>
                ))}
              </div>
              
-             {activeDispatcherTab === 'All' && (
-               <div className="px-1 border-t border-slate-100 pt-2">
-                 <input
-                  type="text"
-                  placeholder="Поиск по всем авто..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold"
-                 />
-               </div>
-             )}
+             <div className="px-1 border-t border-slate-100 pt-2">
+               <input
+                type="text"
+                placeholder="Поиск по авто..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold"
+               />
+             </div>
            </div>
          )}
 
-         {activeTab === 'active' && Object.keys(directions).length > 0 && (
+           {Object.keys(directions).length > 0 && (
            <div className="flex items-center gap-2 border-t border-slate-100 pt-3 overflow-x-auto custom-scrollbar pb-2">
              <div className="flex gap-2">
                {['All', ...Object.keys(directions)].map(dir => (
@@ -1418,12 +1534,44 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
              </div>
            </div>
          )}
+
+         </div>
+
+         <div className={activeTab === 'archive' ? '' : 'hidden'}>
+           <div className="flex items-center gap-2 border-t border-slate-100 pt-4 overflow-x-auto custom-scrollbar pb-2">
+             <div className="flex gap-2">
+               {Array.from(new Set(trips.filter(t => t.isArchived && t.currentMonth).map(t => t.currentMonth as string))).map(month => (
+                 <button
+                   key={month}
+                   onClick={() => setArchiveMonth(month)}
+                   onDragOver={e => e.preventDefault()}
+                   onDrop={e => {
+                     e.preventDefault();
+                     const tripId = e.dataTransfer.getData('tripId');
+                     if (tripId) {
+                        pdService.updateTrip(tripId, { currentMonth: month }, user.name, user.role);
+                     }
+                   }}
+                   className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition whitespace-nowrap min-w-max ${archiveMonth === month ? 'bg-blue-100 text-blue-900 border-b-2 border-blue-500' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+                 >
+                   📅 {month}
+                 </button>
+               ))}
+             </div>
+           </div>
+         </div>
       </div>
 
       <div className="space-y-6">
-         {activeTab === 'active' && renderTripsGrid(false)}
-         {activeTab === 'archive' && renderTripsGrid(true)}
-         {activeTab === 'history' && renderHistory()}
+         <div className={activeTab === 'active' ? '' : 'hidden'}>
+           {renderTripsGrid(false)}
+         </div>
+         <div className={activeTab === 'archive' ? '' : 'hidden'}>
+           {renderTripsGrid(true)}
+         </div>
+         <div className={activeTab === 'history' ? '' : 'hidden'}>
+           {renderHistory()}
+         </div>
       </div>
 
       {renderNotebookWidget()}

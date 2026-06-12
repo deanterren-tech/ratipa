@@ -133,13 +133,14 @@ export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryPro
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs">
-            {typesOrder.map((id, index) => {
-              const t = types[id];
-              if (!t) return null;
-              const printMap = printMappings[t.name] || {};
+            {typesOrder
+              .filter(id => types[id])
+              .map((id, index) => {
+                const t = types[id];
+                const printMap = printMappings[t.name] || {};
 
-              return (
-                  <tr key={t.id} className="hover:bg-slate-50/40 transition">
+                return (
+                  <tr key={id} className="hover:bg-slate-50/40 transition">
                     <td className="p-4 pl-6">
                         <div className="flex flex-col items-center gap-1">
                             <button disabled={index === 0} onClick={() => moveItem(index, -1)} className="text-slate-300 hover:text-slate-600 cursor-pointer disabled:opacity-30">▲</button>
@@ -168,10 +169,10 @@ export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryPro
                       </div>
                     </td>
                   </tr>
-              );
-            })}
-            {!typesOrder.length && (
-              <tr>
+                );
+              })}
+            {typesOrder.filter(id => types[id]).length === 0 && (
+              <tr key="empty">
                 <td colSpan={6} className="p-10 text-center text-slate-400 font-bold text-xs uppercase tracking-wider font-mono">Справочник пуст</td>
               </tr>
             )}

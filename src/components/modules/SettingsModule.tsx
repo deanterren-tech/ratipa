@@ -330,30 +330,75 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     <div className="w-full space-y-6 font-sans">
       
       {/* Global Rates Settings */}
-      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
-        <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-6">
+      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
+        <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3">
           <Settings className="h-4 w-4 text-slate-900" style={{ fill: '#70FC8E' }} />
-          Глобальные ставки
+          Глобальные настройки и Таблицы
         </h2>
         {settings && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono">Ставка простоя (€/день)</label>
-              <input
-                type="number"
-                defaultValue={settings.idleRate}
-                onBlur={(e) => dbService.saveSettings({...settings, idleRate: Number(e.target.value)}, user.name, user.role)}
-                className="w-full mt-2 px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black"
-              />
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-2">Ставка простоя (€/день)</label>
+                <input
+                  type="number"
+                  defaultValue={settings.idleRate}
+                  onBlur={(e) => dbService.saveSettings({...settings, idleRate: Number(e.target.value)}, user.name, user.role)}
+                  className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black focus:outline-none focus:border-slate-400"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-2">Ставка суточных (€/день)</label>
+                <input
+                  type="number"
+                  defaultValue={settings.perDiemRate}
+                  onBlur={(e) => dbService.saveSettings({...settings, perDiemRate: Number(e.target.value)}, user.name, user.role)}
+                  className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black focus:outline-none focus:border-slate-400"
+                />
+              </div>
             </div>
-            <div>
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono">Ставка суточных (€/день)</label>
-              <input
-                type="number"
-                defaultValue={settings.perDiemRate}
-                onBlur={(e) => dbService.saveSettings({...settings, perDiemRate: Number(e.target.value)}, user.name, user.role)}
-                className="w-full mt-2 px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black"
-              />
+
+            <div className="border border-slate-200 rounded-2xl p-4 sm:p-6 bg-slate-50/50 space-y-4">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                <ExternalLink className="w-4 h-4 text-emerald-500" />
+                Ссылки на Google Таблицы (Фреймы)
+              </h3>
+              <p className="text-xs text-slate-500 font-medium pb-2 border-b border-slate-200">
+                Вставьте прямые ссылки на Google Таблицы. Рекомендуется использовать формат <code>/edit</code> для сохранения панели инструментов.
+              </p>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5">План Загрузок (План)</label>
+                  <input
+                    type="url"
+                    defaultValue={settings.planZagruzokSheetUrl || ''}
+                    onBlur={(e) => dbService.saveSettings({...settings, planZagruzokSheetUrl: e.target.value}, user.name, user.role)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition"
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5">План Загрузок (Черный Список)</label>
+                  <input
+                    type="url"
+                    defaultValue={settings.planZagruzokBlacklistUrl || ''}
+                    onBlur={(e) => dbService.saveSettings({...settings, planZagruzokBlacklistUrl: e.target.value}, user.name, user.role)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-red-400 transition"
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5">Диспозиция</label>
+                  <input
+                    type="url"
+                    defaultValue={settings.dispositionSheetUrl || ''}
+                    onBlur={(e) => dbService.saveSettings({...settings, dispositionSheetUrl: e.target.value}, user.name, user.role)}
+                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition"
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                  />
+                </div>
+              </div>
             </div>
           </div>
         )}

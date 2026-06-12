@@ -60,10 +60,18 @@ export default function DozvolaModule({ user }: DozvolaModuleProps) {
 
       {/* Active Tab Content */}
       <div className="mt-4">
-        {activeTab === 'registry' && <DozvolaRegistryList user={user} />}
-        {activeTab === 'documents' && <DozvolaDocuments user={user} />}
-        {activeTab === 'history' && <DozvolaHistory user={user} />}
-        {activeTab === 'types' && <DozvolaTypesDirectory user={user} />}
+        <div className={activeTab === 'registry' ? '' : 'hidden'}>
+          <DozvolaRegistryList user={user} />
+        </div>
+        <div className={activeTab === 'documents' ? '' : 'hidden'}>
+          <DozvolaDocuments user={user} />
+        </div>
+        <div className={activeTab === 'history' ? '' : 'hidden'}>
+          <DozvolaHistory user={user} />
+        </div>
+        <div className={activeTab === 'types' ? '' : 'hidden'}>
+          <DozvolaTypesDirectory user={user} />
+        </div>
       </div>
     </div>
   );

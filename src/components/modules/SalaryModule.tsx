@@ -577,9 +577,17 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                     </div>
                                     )}
                                 </div>
-                                <div className="flex flex-col bg-slate-900 border border-slate-800 px-4 py-2 rounded-2xl justify-center items-end shadow-md min-w-[140px]">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-[#70FC8E]/60 font-mono mb-0.5">Итого к выплате</span>
-                                    <span className="text-2xl font-black text-[#70FC8E] font-mono tracking-tight">{Math.round(rec.totalSalary || 0).toLocaleString('ru-RU')} €</span>
+                                <div className="flex gap-2.5">
+                                    {(rec.totalDays || 0) > 0 && (
+                                        <div className="flex flex-col bg-slate-50 border border-slate-200 px-4 py-2 rounded-2xl justify-center items-end shadow-[0_2px_10px_rgba(0,0,0,0.01)] min-w-[120px]">
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 font-mono mb-0.5">З/П в день</span>
+                                            <span className="text-2xl font-black text-slate-800 font-mono tracking-tight">{Math.round((rec.totalSalary || 0) / rec.totalDays).toLocaleString('ru-RU')} €</span>
+                                        </div>
+                                    )}
+                                    <div className="flex flex-col bg-slate-900 border border-slate-800 px-4 py-2 rounded-2xl justify-center items-end shadow-md min-w-[130px]">
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-[#70FC8E]/60 font-mono mb-0.5">Итого к выплате</span>
+                                        <span className="text-2xl font-black text-[#70FC8E] font-mono tracking-tight">{Math.round(rec.totalSalary || 0).toLocaleString('ru-RU')} €</span>
+                                    </div>
                                 </div>
                             </div>
 

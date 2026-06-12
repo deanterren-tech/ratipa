@@ -28,6 +28,20 @@ export default function DohodModule({ user }: DohodModuleProps) {
   const [editingCalcId, setEditingCalcId] = useState<string | null>(null);
   const [editingCalcData, setEditingCalcData] = useState<Partial<RouteCalculation>>({});
   
+  const [nbrbRates, setNbrbRates] = useState<Record<string, { scale: number; rate: number }>>({
+    USD: { scale: 1, rate: 3.25 },
+    EUR: { scale: 1, rate: 3.55 },
+    RUB: { scale: 100, rate: 3.42 },
+    BYN: { scale: 1, rate: 1.0 },
+  });
+
+  const [conversionDialog, setConversionDialog] = useState<{
+    index: number;
+    infoRate: number;
+    infoCurrency: string;
+    proposedFreight: number;
+  } | null>(null);
+  
   const [legs, setLegs] = useState<Omit<Leg, 'id'>[]>([{ 
     from: '', to: '', dist: 0, freight: 0, coeff: 0, infoRate: 0, infoCurrency: 'USD', ferrySelectValue: 'none', ferryCost: 0 
   }]);
@@ -52,6 +66,32 @@ export default function DohodModule({ user }: DohodModuleProps) {
     const subDistances = dbService.getDistances(setDistances);
     const subDirs = dbService.getDirections(setDirections);
     const subChat = dbService.getChatMessages('ai_dispatcher', setChatMessages);
+
+    // Fetch live NBRB rates directly with fallbacks
+    fetch('https://api.nbrb.by/exrates/rates?periodicity=0')
+      .then(res => res.json())
+      .then((data: any[]) => {
+        const updated: Record<string, { scale: number; rate: number }> = {
+          BYN: { scale: 1, rate: 1.0 },
+          USD: { scale: 1, rate: 3.25 },
+          EUR: { scale: 1, rate: 3.55 },
+          RUB: { scale: 100, rate: 3.42 },
+        };
+        if (Array.isArray(data)) {
+          data.forEach(item => {
+            if (item && ['USD', 'EUR', 'RUB'].includes(item.Cur_Abbreviation)) {
+              updated[item.Cur_Abbreviation] = {
+                scale: item.Cur_Scale || 1,
+                rate: item.Cur_OfficialRate,
+              };
+            }
+          });
+        }
+        setNbrbRates(updated);
+      })
+      .catch(err => {
+        console.warn('Failed to fetch NBRB rates:', err);
+      });
 
     return () => {
       subHistory();
@@ -130,6 +170,45 @@ export default function DohodModule({ user }: DohodModuleProps) {
       }
       return l;
     }));
+  };
+
+  const handleInfoRateBlur = (index: number) => {
+    const leg = legs[index];
+    if (!leg || !leg.infoRate || leg.infoCurrency === 'EUR') return;
+    triggerConversionCheck(index, leg.infoRate, leg.infoCurrency);
+  };
+
+  const handleCurrencyChange = (index: number, newCurrency: string) => {
+    const leg = legs[index];
+    if (!leg || !leg.infoRate || newCurrency === 'EUR') return;
+    triggerConversionCheck(index, leg.infoRate, newCurrency);
+  };
+
+  const triggerConversionCheck = (index: number, infoRate: number, infoCurrency: string) => {
+    const rateX = nbrbRates[infoCurrency] ? (nbrbRates[infoCurrency].rate / nbrbRates[infoCurrency].scale) : 0;
+    const rateEur = nbrbRates['EUR'] ? nbrbRates['EUR'].rate : 1;
+    const proposedFreight = rateEur > 0 ? Math.round(infoRate * rateX / rateEur) : 0;
+
+    const currentFreight = legs[index]?.freight || 0;
+    if (proposedFreight > 0 && Math.abs(currentFreight - proposedFreight) > 2) {
+      setConversionDialog({
+        index,
+        infoRate,
+        infoCurrency,
+        proposedFreight
+      });
+    }
+  };
+
+  const applyConversion = () => {
+    if (conversionDialog) {
+      updateLeg(conversionDialog.index, { freight: conversionDialog.proposedFreight });
+      setConversionDialog(null);
+    }
+  };
+
+  const dismissConversion = () => {
+    setConversionDialog(null);
   };
 
   const findDistanceInPool = (c1: string, c2: string) => {
@@ -300,52 +379,136 @@ export default function DohodModule({ user }: DohodModuleProps) {
       closeEditCalcModal();
   };
 
-  // AI PARSER logic ported from dohod-7.html
+  // Date and Days helper
+  const extractDays = (txt: string): number | null => {
+      const lower = txt.toLowerCase();
+      // Ищем паттерны вроде "5 дней", "на 10 дн", "рейс 7 суток", "круг 14 дней", "12 суток"
+      const m = lower.match(/(\d+)\s*(?:дней|дн\.|дн|суток|сут\.|сут|дня|день|сутки)/i) || 
+                lower.match(/(?:круг|рейс|на|срок|время)\s*(\d+)\s*(?:дней|дн\.|дн|суток|сут\.|сут|дня|день|сутки)?/i);
+      if (m) {
+          return parseInt(m[1], 10);
+      }
+      return null;
+  };
+
+  // AI PARSER logic ported from dohod-7.html and heavily upgraded
   const parseRouteMessage = (text: string) => {
     const parsedLegs: any[] = [];
     const originalText = (text || '').replace(/[→➔➡]/g, ' ').replace(/[—–]/g, '-');
 
     const normalizeCityName = (name: string) => (name || '').trim().replace(/\s+/g, ' ').split(' ').map(p => p ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : '').join(' ');
+    
+    // Продвинутый маппинг валют
     const mapCurrency = (raw: string) => {
-        const v = (raw || '').toLowerCase();
-        if (['€', 'eur', 'евро', 'euro'].includes(v)) return 'EUR';
-        if (['₽', 'rub', 'руб', 'рубль', 'рублей'].includes(v)) return 'RUB';
-        if (['byn', 'бел', 'белруб'].includes(v)) return 'BYN';
+        const v = (raw || '').toLowerCase().trim().replace(/[^a-zа-яё0-9$€₽.]/g, '');
+        if (!v) return 'EUR';
+        if (['€', 'eur', 'евро', 'euro', 'эур', 'евр'].some(x => v.includes(x)) || v.includes('€')) return 'EUR';
+        if (['₽', 'rub', 'руб', 'рубль', 'рублей', 'рос', 'росруб', 'рр', 'росс', 'рубли'].some(x => v.includes(x)) || v.includes('₽') || v === 'рр') return 'RUB';
+        if (['byn', 'бел', 'белруб', 'рб', 'by', 'белорус'].some(x => v.includes(x))) return 'BYN';
+        if (['usd', '$', 'долл', 'доллар', 'доллара', 'долларов', 'уе', 'бакс', 'баксов', 'dollars', 'y.e', 'ye'].some(x => v.includes(x)) || v.includes('$')) return 'USD';
         return 'USD';
     };
 
+    // Продвинутый парсинг стоимости (учитывает тыс., к, пробелы, запятые)
     const extractRate = (chunk: string) => {
         const matches = [];
-        const rateRegex = /(\d[\d\s]*(?:[.,]\d+)?)\s*(евро|eur|euro|€|долл|доллар|доллара|долларов|usd|\$|руб|рубль|рублей|rub|₽|byn|бел|белруб)?/gi;
+        // В регулярном выражении для валют ищем словосочетания с пробелами, такие как рос руб
+        const rateRegex = /(\d[\d\s]*(?:[.,]\d+)?)\s*(тыс|тысяч|тыс\.|тысячи|к|k)?\s*(евро|eur|euro|эур|€|долл|доллар|доллара|долларов|usd|\$|у\.е|уе|руб(?:лей|ль|ля|и|ов)?|rub|₽|byn|бел(?:рус|руб(?:лей)?)?|рос\.?\s*руб(?:лей|ля|ь)?|росруб|рр)/gi;
         let match;
         while ((match = rateRegex.exec(chunk)) !== null) {
             const after = chunk.slice(match.index + match[0].length, match.index + match[0].length + 8).toLowerCase();
             if (/^\s*(км|km)/.test(after)) continue;
-            const amount = parseFloat(match[1].replace(/\s+/g, '').replace(',', '.')) || 0;
-            if (amount > 0) matches.push({ amount, currency: mapCurrency(match[2]), hasCurrency: Boolean(match[2]) });
+            let amount = parseFloat(match[1].replace(/\s+/g, '').replace(',', '.')) || 0;
+            const multiplier = match[2] ? match[2].toLowerCase() : '';
+            if (['тыс', 'тысяч', 'тыс.', 'тысячи', 'к', 'k'].some(m => multiplier.includes(m))) {
+                amount *= 1000;
+            }
+            if (amount > 0) {
+                matches.push({ amount, currency: mapCurrency(match[3]), hasCurrency: Boolean(match[3]) });
+            }
         }
         return matches.find(i => i.hasCurrency) || matches[matches.length - 1] || { amount: 0, currency: 'EUR' };
     };
 
-    const cities = Array.from(new Set(distances.flatMap(item => [item.from, item.to]).filter(Boolean)))
+    // Нормализация падежей для fallback-режима
+    const cleanCityName = (city: string) => {
+        let name = city.trim();
+        if (name.length <= 2) return name;
+        const low = name.toLowerCase();
+        if (low.endsWith('ска')) return name.slice(0, -1); // Минска -> Минск
+        if (low.endsWith('ске')) return name.slice(0, -1); // Минске -> ...
+        if (low.endsWith('ску')) return name.slice(0, -1) + 'к'; // Минску -> Минск
+        if (low.endsWith('кву')) return name.slice(0, -1) + 'а'; // Москву -> Москва
+        if (low.endsWith('квы')) return name.slice(0, -1) + 'а'; // Москвы -> Москва
+        if (low.endsWith('кве')) return name.slice(0, -1) + 'а'; // Москве -> Москва
+        if (low.endsWith('бурга')) return name.slice(0, -1); // ...
+        if (low.endsWith('бурге')) return name.slice(0, -1); // ...
+        if (low.endsWith('града')) return name.slice(0, -1); 
+        if (low.endsWith('граде')) return name.slice(0, -1);
+        if (low.endsWith('тера')) return name.slice(0, -1) + 'р'; // Питера -> Питер
+        if (low.endsWith('тере')) return name.slice(0, -1) + 'р'; // Питере -> Питер
+        if (low.endsWith('ова')) return name.slice(0, -1); // Ростова -> Ростов
+        if (low.endsWith('ове')) return name.slice(0, -1); // Ростове ->  Ростов
+        return name;
+    };
+
+    // Автогенерация базовых словоформ для городов из пресетов distances
+    const getCityForms = (cityName: string): string[] => {
+        const lower = cityName.toLowerCase().trim();
+        const forms = [lower];
+        
+        if (lower.includes('санкт-петербург') || lower === 'питер' || lower === 'спб') {
+            forms.push('санкт-петербург', 'санкт-петербурга', 'санкт-петербурге', 'питер', 'питера', 'питере', 'спб');
+        }
+        if (lower === 'нижний новгород') {
+            forms.push('нижний новгород', 'нижнего новгорода', 'нижнем новгороде', 'нн', 'нижнем');
+        }
+        if (lower.includes('ростов-на-дону')) {
+            forms.push('ростов-на-дону', 'ростове-на-дону', 'ростова-на-дону', 'ростов');
+        }
+
+        if (lower.length > 3) {
+            if (lower.endsWith('а') || lower.endsWith('ы')) {
+                forms.push(lower.slice(0, -1)); // Москва -> москв
+            } else if (lower.endsWith('о') || lower.endsWith('е')) {
+                forms.push(lower.slice(0, -1)); // ...
+            } else if (lower.endsWith('ий') || lower.endsWith('ый')) {
+                forms.push(lower.slice(0, -2));
+            } else if (lower.endsWith('ь')) {
+                forms.push(lower.slice(0, -1)); // Гомель -> гомел
+            }
+        }
+        
+        return Array.from(new Set(forms)).filter(f => f.length > 2).sort((a, b) => b.length - a.length);
+    };
+
+    const citiesDataset = Array.from(new Set(distances.flatMap(item => [item.from, item.to]).filter(Boolean)))
                 .map(city => String(city).trim())
-                .filter(city => city.length > 1)
-                .sort((a, b) => b.length - a.length);
+                .filter(city => city.length > 1);
     
     const lowerSource = originalText.toLowerCase();
     const mentions: any[] = [];
 
-    cities.forEach(city => {
-        const lowerCity = city.toLowerCase();
-        let index = lowerSource.indexOf(lowerCity);
-        while (index !== -1) {
-            const bBefore = lowerSource[index - 1] || ' ';
-            const bAfter = lowerSource[index + lowerCity.length] || ' ';
-            const hasCleanBoundary = !/[а-яёa-z0-9]/i.test(bBefore) && !/[а-яёa-z0-9]/i.test(bAfter);
-            const overlaps = mentions.some(m => index < m.end && (index + lowerCity.length) > m.index);
-            if (hasCleanBoundary && !overlaps) mentions.push({ city: city.trim(), index, end: index + lowerCity.length });
-            index = lowerSource.indexOf(lowerCity, index + lowerCity.length);
-        }
+    citiesDataset.forEach(city => {
+        const forms = getCityForms(city);
+        forms.forEach(form => {
+            let index = lowerSource.indexOf(form);
+            while (index !== -1) {
+                const bBefore = lowerSource[index - 1] || ' ';
+                const bAfter = lowerSource[index + form.length] || ' ';
+                const hasCleanBoundary = !/[а-яёa-z0-9]/i.test(bBefore) && !/[а-яёa-z0-9]/i.test(bAfter);
+                const overlaps = mentions.some(m => index < m.end && (index + form.length) > m.index);
+                if (hasCleanBoundary && !overlaps) {
+                    mentions.push({ 
+                        city: city, // Используем правильное (официальное) имя города из пресетов
+                        matchedText: originalText.slice(index, index + form.length),
+                        index, 
+                        end: index + form.length 
+                    });
+                }
+                index = lowerSource.indexOf(form, index + 1);
+            }
+        });
     });
 
     mentions.sort((a, b) => a.index - b.index);
@@ -358,25 +521,37 @@ export default function DohodModule({ user }: DohodModuleProps) {
             const nextBoundary = mentions[i + 2] ? mentions[i + 2].index : originalText.length;
             const rateChunk = originalText.slice(mentions[i + 1].end, nextBoundary);
             const rate = extractRate(rateChunk);
-            parsedLegs.push({ from, to, eurRate: rate.currency === 'EUR' ? rate.amount : 0, infoRate: rate.currency !== 'EUR' ? rate.amount : 0, infoCurrency: rate.currency });
+            parsedLegs.push({ 
+                from, 
+                to, 
+                eurRate: rate.currency === 'EUR' ? rate.amount : 0, 
+                infoRate: rate.currency !== 'EUR' ? rate.amount : 0, 
+                infoCurrency: rate.currency 
+            });
         }
         return parsedLegs;
     }
 
     // fallback
     const tokens = originalText.replace(/[,.;:()]/g, ' ').replace(/-/g, ' ').split(/\s+/).filter(t => t.length > 0);
-    const noiseWords = ['в', 'во', 'из', 'с', 'со', 'от', 'на', 'до', 'по', 'потом', 'далее', 'через', 'едем', 'рейс', 'маршрут', 'ставка', 'фрахт', 'цена', 'за', 'евро', 'eur', 'euro', '€', 'долл', 'usd', '$', 'руб', 'rub', '₽', 'byn', 'бел'];
+    const noiseWords = ['в', 'во', 'из', 'с', 'со', 'от', 'на', 'до', 'по', 'потом', 'далее', 'через', 'едем', 'рейс', 'маршрут', 'ставка', 'фрахт', 'цена', 'за', 'евро', 'eur', 'euro', '€', 'долл', 'usd', '$', 'руб', 'rub', '₽', 'byn', 'бел', 'дней', 'дн', 'дней', 'суток', 'сут', 'дня', 'день', 'сутки'];
     const cityItems: string[] = [];
 
     tokens.forEach(token => {
         if (noiseWords.includes(token.toLowerCase()) || /^\d/.test(token)) return;
-        cityItems.push(normalizeCityName(token));
+        cityItems.push(normalizeCityName(cleanCityName(token)));
     });
 
     for (let i = 0; i < cityItems.length - 1; i++) {
         const rateChunk = originalText.split(cityItems[i + 1]).slice(1).join(cityItems[i + 1]);
         const rate = extractRate(rateChunk);
-        parsedLegs.push({ from: cityItems[i], to: cityItems[i + 1], eurRate: rate.currency === 'EUR' ? rate.amount : 0, infoRate: rate.currency !== 'EUR' ? rate.amount : 0, infoCurrency: rate.currency });
+        parsedLegs.push({ 
+            from: cityItems[i], 
+            to: cityItems[i + 1], 
+            eurRate: rate.currency === 'EUR' ? rate.amount : 0, 
+            infoRate: rate.currency !== 'EUR' ? rate.amount : 0, 
+            infoCurrency: rate.currency 
+        });
     }
     return parsedLegs;
   };
@@ -384,22 +559,50 @@ export default function DohodModule({ user }: DohodModuleProps) {
   const handleAISend = () => {
       const text = chatInput.trim();
       if (!text) return;
+      
       const parsed = parseRouteMessage(text);
+      const parsedDays = extractDays(text);
+      
       if (parsed.length > 0) {
           const newArray = [...legs];
           if (newArray.length === 1 && !newArray[0].from && !newArray[0].to) newArray.shift();
 
           parsed.forEach(r => {
               const matchedDist = findDistanceInPool(r.from, r.to) || 0;
+              let freightValue = r.eurRate || 0;
+              if (!freightValue && r.infoRate && r.infoCurrency !== 'EUR') {
+                  const rateX = nbrbRates[r.infoCurrency] ? (nbrbRates[r.infoCurrency].rate / nbrbRates[r.infoCurrency].scale) : 0;
+                  const rateEur = nbrbRates['EUR'] ? nbrbRates['EUR'].rate : 1;
+                  freightValue = rateEur > 0 ? Math.round(r.infoRate * rateX / rateEur) : 0;
+              }
               newArray.push({
-                  from: r.from, to: r.to, dist: matchedDist, freight: r.eurRate || 0,
+                  from: r.from, to: r.to, dist: matchedDist, freight: freightValue,
                   infoRate: r.infoRate || 0, infoCurrency: r.infoCurrency || 'USD',
                   coeff: getDirCoeff(), ferrySelectValue: 'none', ferryCost: 0
               });
           });
           setLegs(newArray);
           
-          dbService.sendChatMessage('ai_dispatcher', `Запрос обработан! Добавлено ${parsed.length} плеча в таблицу.`, "🤖 Робот парсер", "system");
+          if (parsedDays) {
+              setTripDays(parsedDays);
+          }
+
+          let responseMsg = `Запрос обработан! Добавлено плеч: ${parsed.length}.`;
+          if (parsedDays) {
+              responseMsg += ` Установлено время поездки: ${parsedDays} дн.`;
+          }
+          
+          // Детальная расшифровка того, что было найдено
+          const details = parsed.map(p => {
+              let rateStr = '';
+              if (p.eurRate) rateStr = `${p.eurRate} EUR`;
+              else if (p.infoRate) rateStr = `${p.infoRate} ${p.infoCurrency}`;
+              return `${p.from} ➔ ${p.to} (${rateStr || 'без ставки'})`;
+          }).join(', ');
+
+          dbService.sendChatMessage('ai_dispatcher', `${responseMsg} (${details})`, "🤖 Робот парсер", "system");
+      } else {
+          dbService.sendChatMessage('ai_dispatcher', `Не удалось распознать маршрут. Пожалуйста, напишите в формате: "Минск Москва 120 тыс рос руб, едем 6 дней"`, "🤖 Робот парсер", "system");
       }
 
       if (editingMsgId) {
@@ -513,11 +716,35 @@ export default function DohodModule({ user }: DohodModuleProps) {
                                <td className="p-2">
                                    <input type="number" value={leg.freight || ''} onChange={(e) => updateLeg(idx, {freight: Number(e.target.value)})} className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-[#0f7632] outline-none" />
                                </td>
-                               <td className="p-2">
-                                   <input type="number" value={leg.infoRate || ''} onChange={(e) => updateLeg(idx, {infoRate: Number(e.target.value)})} className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold focus:border-[#0f7632] outline-none" />
+                               <td className="p-2 relative group">
+                                   <input 
+                                       type="number" 
+                                       value={leg.infoRate || ''} 
+                                       onChange={(e) => updateLeg(idx, {infoRate: Number(e.target.value)})} 
+                                       onBlur={() => handleInfoRateBlur(idx)}
+                                       className="w-full pr-8 px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold focus:border-[#0f7632] outline-none" 
+                                   />
+                                   {leg.infoRate > 0 && leg.infoCurrency !== 'EUR' && (
+                                       <button 
+                                           type="button"
+                                           onClick={() => triggerConversionCheck(idx, leg.infoRate, leg.infoCurrency)} 
+                                           title="Конвертировать по курсу НБРБ"
+                                           className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-600 transition p-1"
+                                       >
+                                           <RefreshCw className="h-3.5 w-3.5" />
+                                       </button>
+                                   )}
                                </td>
                                <td className="p-2">
-                                    <select value={leg.infoCurrency} onChange={(e) => updateLeg(idx, {infoCurrency: e.target.value})} className="w-full px-1 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none leading-tight overflow-hidden text-ellipsis">
+                                    <select 
+                                        value={leg.infoCurrency} 
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            updateLeg(idx, {infoCurrency: val});
+                                            handleCurrencyChange(idx, val);
+                                        }} 
+                                        className="w-full px-1 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none leading-tight overflow-hidden text-ellipsis"
+                                    >
                                         <option value="USD">USD</option><option value="EUR">EUR</option><option value="RUB">RUB</option><option value="BYN">BYN</option>
                                     </select>
                                </td>
@@ -576,22 +803,63 @@ export default function DohodModule({ user }: DohodModuleProps) {
                    <div key={idx} className="p-5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-between group">
                        <div className="flex justify-between items-start mb-3">
                            <span className="font-extrabold text-base text-slate-800 break-all leading-tight">📁 {t.name}</span>
-                           <button onClick={() => dbService.deleteRouteTemplate(t.id!, user.name, user.role)} className="opacity-0 group-hover:opacity-100 text-rose-500 hover:bg-rose-100 p-1 rounded transition"><Trash2 className="h-4 w-4"/></button>
-                       </div>
-                       <div className="text-xs text-slate-500 mb-4 space-y-1">
-                           {t.legs.map((l, i) => <div key={i}>• {l.from} ➔ {l.to} ({l.dist || l.distance} км)</div>)}
-                       </div>
-                       <button onClick={() => loadTemplate(t)} className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold py-3 rounded-lg w-full transition uppercase">Развернуть ↵</button>
-                   </div>
-               ))}
-               {routeTemplates.length === 0 && <div className="text-sm text-slate-400 font-bold">Шаблоны не найдены</div>}
-           </div>
-        </div>
+                           <button onClick={() => dbService.deleteRouteTemplate(t.id!, user.name, user.role)} className="opacity-0 group-hover:opacity-100 text-rose-500 hover:bg-rose-100 p-1 rounded transition">
+                               <Trash2 className="h-4 w-4"/>
+                           </button>
+                        </div>
+                        <div className="text-xs text-slate-500 mb-4 space-y-1">
+                            {(t.legs || []).map((l, i) => <div key={i}>• {l.from} ➔ {l.to} ({l.dist || l.distance} км)</div>)}
+                        </div>
+                        <button onClick={() => loadTemplate(t)} className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold py-3 rounded-lg w-full transition uppercase">Развернуть ↵</button>
+                    </div>
+                ))}
+                {routeTemplates.length === 0 && <div className="text-sm text-slate-400 font-bold">Шаблоны не найдены</div>}
+            </div>
+         </div>
       </div>
 
       {/* Main Right Sidebar Workspace */}
       <div className="xl:col-span-4 space-y-6">
         
+         {/* MyFin Currency Converter Widget */}
+         <div id="myfin-converter-widget" className="bg-white rounded-[2rem] p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] relative overflow-hidden">
+             <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4 select-none">
+                 <h2 className="text-xs font-black uppercase text-slate-800 tracking-tight flex items-center gap-1.5 font-mono">
+                     🏦 Конвертер валют НБ РБ
+                 </h2>
+                 <a 
+                   href="https://myfin.by/converter" 
+                   target="_blank" 
+                   rel="noopener noreferrer" 
+                   className="text-[9px] font-black uppercase tracking-wider text-blue-600 hover:underline"
+                 >
+                   Myfin.by ↗
+                 </a>
+             </div>
+             
+             <div className="flex flex-wrap items-center justify-between gap-1 mb-4 bg-slate-50 border border-slate-200/60 p-3 rounded-2xl text-[10px] font-mono select-none">
+                 <span className="text-slate-400 font-bold uppercase tracking-wider">Курсы НБ РБ:</span>
+                 <span className="text-slate-800 font-black">1 USD = {(nbrbRates['USD']?.rate || 3.25).toFixed(4)}</span>
+                 <span className="text-slate-800 font-black">1 EUR = {(nbrbRates['EUR']?.rate || 3.55).toFixed(4)}</span>
+                 <span className="text-slate-800 font-black">100 RUB = {(nbrbRates['RUB']?.rate || 3.42).toFixed(4)}</span>
+             </div>
+
+             <div className="w-full relative bg-slate-50 rounded-2xl overflow-hidden border border-slate-200" style={{ height: '390px' }}>
+                 <iframe 
+                     src="https://myfin.by/outer/informer/nb/converter" 
+                     width="100%" 
+                     height="100%" 
+                     style={{ border: 'none', overflow: 'hidden' }}
+                     scrolling="no"
+                     title="Конвертер валют НБ РБ"
+                     referrerPolicy="no-referrer"
+                 />
+             </div>
+             <p className="text-[9px] text-slate-400 mt-2 font-mono leading-tight uppercase font-medium">
+                 *официальный информер Национального Банка РБ от портала myfin.by
+             </p>
+         </div>
+
          {/* Profit per Day Widget / Calendar */}
          <div className="bg-white rounded-[2rem] p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] relative overflow-hidden">
              <h2 className="text-sm font-black uppercase text-slate-800 tracking-tight mb-2">Доходность проекта</h2>
@@ -718,6 +986,53 @@ export default function DohodModule({ user }: DohodModuleProps) {
         </div>
       </div>
       
+      {conversionDialog && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/45 backdrop-blur-xs animate-fade-in">
+             <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl border border-slate-200 p-6 lg:p-8 space-y-6">
+                 <div className="flex items-center gap-3">
+                     <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+                         <Sparkles className="h-6 w-6 animate-pulse" />
+                     </div>
+                     <div>
+                         <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 font-mono">Автоконвертация НБ РБ</h3>
+                         <p className="text-[10px] text-slate-400 font-mono font-bold uppercase mt-0.5">Курсы валют в реальном времени</p>
+                     </div>
+                 </div>
+
+                 <p className="text-xs text-slate-600 font-extrabold leading-relaxed">
+                     Вы указали инфо-ставку <span className="text-slate-900 underline font-black">{conversionDialog.infoRate} {conversionDialog.infoCurrency}</span>. Хотите автоматически сконвертировать её в евро для «Ставки €» плеча #{conversionDialog.index + 1}?
+                 </p>
+
+                 <div className="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200/60 font-mono text-center">
+                     <div className="border-r border-slate-200">
+                         <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest">Инфо Ставка</span>
+                         <span className="text-sm font-black text-slate-700 mt-1 block">{conversionDialog.infoRate} {conversionDialog.infoCurrency}</span>
+                     </div>
+                     <div>
+                         <span className="block text-[8px] font-black text-emerald-500 uppercase tracking-widest">Результат (€)</span>
+                         <span className="text-sm font-black text-emerald-600 mt-1 block">{conversionDialog.proposedFreight} €</span>
+                     </div>
+                 </div>
+
+                 <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between px-1">
+                     <span>Курс {conversionDialog.infoCurrency}/EUR (НБ РБ):</span>
+                     <span className="font-extrabold text-slate-600">
+                         {((nbrbRates[conversionDialog.infoCurrency]?.rate / nbrbRates[conversionDialog.infoCurrency]?.scale) / (nbrbRates['EUR']?.rate || 1)).toFixed(5)}
+                     </span>
+                 </div>
+
+                 <div className="flex gap-2.5 pt-2">
+                     <button onClick={dismissConversion} className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-xs uppercase tracking-wider rounded-xl transition cursor-pointer">
+                         Пропустить
+                     </button>
+                     <button onClick={applyConversion} className="flex-1 py-3 px-4 bg-slate-950 hover:bg-slate-800 text-[#70FC8E] font-black text-xs uppercase tracking-wider rounded-xl transition border border-black cursor-pointer flex items-center justify-center gap-1.5 shadow-xs">
+                         Применить
+                     </button>
+                 </div>
+             </div>
+         </div>
+      )}
+
       {editingCalcId && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
                 <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl border border-slate-200">

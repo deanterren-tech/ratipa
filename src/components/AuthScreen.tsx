@@ -63,9 +63,10 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
               planZagruzok: "write",
               baza: "write",
               dozvola: "write",
+              documentTracking: "write",
+              disposition: "write",
               settings: "write",
-              admin: "write",
-              archives: "write"
+              admin: "write"
             };
             dbService.saveUser(userToLogin); // Sync state back to the database
           }
@@ -85,9 +86,10 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
               planZagruzok: "write",
               baza: "write",
               dozvola: "write",
+              documentTracking: "write",
+              disposition: "write",
               settings: "write",
-              admin: "write",
-              archives: "write"
+              admin: "write"
             },
             createdAt: new Date().toISOString()
           };

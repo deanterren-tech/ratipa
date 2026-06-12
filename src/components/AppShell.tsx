@@ -10,7 +10,8 @@ import {
   FileSpreadsheet, 
   Truck, 
   FileText, 
-  Archive, 
+  Clock, 
+  Map,
   Settings, 
   ShieldAlert, 
   LogOut, 
@@ -23,7 +24,8 @@ import {
   Sparkles,
   ChevronDown,
   ArrowUp,
-  Pencil
+  Pencil,
+  Calendar
 } from 'lucide-react';
 
 // Import newly created business modules
@@ -32,9 +34,10 @@ import DohodModule from './modules/DohodModule';
 import SalaryModule from './modules/SalaryModule';
 import PlanDohodModule from './modules/PlanDohodModule';
 import PlanZagruzokModule from './modules/PlanZagruzokModule';
+import CurrentPlanningModule from './modules/CurrentPlanningModule';
 import BazaModule from './modules/BazaModule';
 import DozvolaModule from './modules/DozvolaModule';
-import ArchiveModule from './modules/ArchiveModule';
+import DispositionModule from './modules/DispositionModule';
 import SettingsModule from './modules/SettingsModule';
 import AdminModule from './modules/AdminModule';
 
@@ -211,27 +214,49 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'salary', label: 'Зарплата Водителей', icon: Wallet, permissionKey: 'salary' },
     { key: 'planDohod', label: 'План Дохода', icon: TrendingUp, permissionKey: 'planDohod' },
     { key: 'planZagruzok', label: 'План Загрузок', icon: FileSpreadsheet, permissionKey: 'planZagruzok' },
+    { key: 'currentPlanning', label: 'Текущее планирование', icon: Calendar, permissionKey: 'currentPlanning' },
     { key: 'baza', label: 'Учет выезда', icon: Truck, permissionKey: 'baza' },
     { key: 'dozvola', label: 'Учет Дозволов', icon: FileText, permissionKey: 'dozvola' },
-    { key: 'archives', label: 'Архивы Системы', icon: Archive, permissionKey: 'archives' },
+    { key: 'disposition', label: 'Диспозиция', icon: Map, permissionKey: 'disposition' },
     { key: 'settings', label: 'Справочники', icon: Settings, permissionKey: 'settings' },
     { key: 'admin', label: 'Администрирование', icon: ShieldAlert, permissionKey: 'admin' }
   ];
 
   // Filter modules based on user's permission (not 'none' and matching admin fields)
-  const allowedModules = allModules.filter(mod => {
-    if (user.role === 'root_admin') return true; // root admin sees all
-    
-    // Check specific module level perm
-    const userPerm = user.permissions[mod.permissionKey];
-    return userPerm && userPerm !== 'none';
-  });
+  const allowedModules = useMemo(() => {
+    return allModules.filter(mod => {
+      if (user.role === 'root_admin') return true; // root admin sees all
+      
+      // Check specific module level perm
+      const userPerm = user.permissions[mod.permissionKey];
+      return userPerm && userPerm !== 'none';
+    });
+  }, [user.role, user.permissions]);
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
 
   useEffect(() => {
      return dbService.getSettings(setSettings);
   }, []);
+
+  // Redirect to first available tab if active is not allowed
+  useEffect(() => {
+    const isAllowed = allowedModules.some(m => m.key === activeModule);
+    if (!isAllowed && allowedModules.length > 0) {
+      // Find modules sorted by settings.moduleOrder if possible
+      const sortedModules = [...allowedModules];
+      if (settings && settings.moduleOrder) {
+        sortedModules.sort((a,b) => {
+          const orderA = settings.moduleOrder.indexOf(a.key);
+          const orderB = settings.moduleOrder.indexOf(b.key);
+          const idxA = orderA === -1 ? 99 : orderA;
+          const idxB = orderB === -1 ? 99 : orderB;
+          return idxA - idxB;
+        });
+      }
+      setActiveModule(sortedModules[0].key);
+    }
+  }, [activeModule, allowedModules, settings]);
 
   const navModules = useMemo(() => {
     const modules = [...allowedModules];
@@ -255,10 +280,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   };
 
   // Render the currently selected main active workspace component
-  const renderActiveModuleContent = () => {
-    switch (activeModule) {
+  const renderModuleByKey = (key: string) => {
+    switch (key) {
       case 'dashboard':
         return <DashboardModule user={user} onNavigate={handleNavigate} />;
+      case 'currentPlanning':
+        return <CurrentPlanningModule user={user} />;
       case 'dohod':
         return <DohodModule user={user} />;
       case 'salary':
@@ -271,14 +298,14 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         return <BazaModule user={user} />;
       case 'dozvola':
         return <DozvolaModule user={user} />;
-      case 'archives':
-        return <ArchiveModule user={user} />;
+      case 'disposition':
+        return <DispositionModule user={user} />;
       case 'settings':
         return <SettingsModule user={user} />;
       case 'admin':
         return <AdminModule user={user} />;
       default:
-        return <DashboardModule user={user} onNavigate={handleNavigate} />;
+        return null;
     }
   };
 
@@ -453,15 +480,29 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           ref={mainScrollRef} 
           className="flex-1 p-6 sm:p-10 overflow-y-auto max-w-full relative bg-[#f4f5f6]"
         >
-          <motion.div
-            key={activeModule}
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="h-full"
-          >
-            {renderActiveModuleContent()}
-          </motion.div>
+          {allModules.map((mod) => {
+            const isAllowed = user.role === 'root_admin' || (user.permissions[mod.permissionKey] && user.permissions[mod.permissionKey] !== 'none');
+            if (!isAllowed) return null;
+
+            const isActive = activeModule === mod.key;
+
+            return (
+              <div
+                key={mod.key}
+                style={{ display: isActive ? 'block' : 'none' }}
+                className="h-full"
+              >
+                <motion.div
+                  initial={{ opacity: 0, y: 3 }}
+                  animate={{ opacity: isActive ? 1 : 0, y: isActive ? 0 : 3 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  className="h-full"
+                >
+                  {renderModuleByKey(mod.key)}
+                </motion.div>
+              </div>
+            );
+          })}
         </main>
 
       </div>

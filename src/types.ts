@@ -7,9 +7,10 @@ export interface UserPermissions {
   planZagruzok: 'none' | 'read' | 'write';
   baza: 'none' | 'read' | 'write';
   dozvola: 'none' | 'read' | 'write';
+  documentTracking: 'none' | 'read' | 'write';
+  disposition: 'none' | 'read' | 'write';
   settings: 'none' | 'read' | 'write';
   admin: 'none' | 'read' | 'write';
-  archives: 'none' | 'read' | 'write';
 }
 
 export interface UserProfile {
@@ -133,6 +134,9 @@ export interface TripPlan {
   totalExpenses: number;
   extraExpense: number;
   extraExpenseNote: string;
+  ferryCost?: number;
+  referenceRate?: number;
+  referenceCurrency?: 'EUR' | 'USD' | 'RUB' | 'BYN';
   profit: number;
   factKm: number;
   profitFact: number;
@@ -197,6 +201,7 @@ export interface HighlightData {
   imageUrl?: string;
   date: string;
   author: string;
+  height?: number;
 }
 
 export interface QuickLink {
@@ -205,10 +210,27 @@ export interface QuickLink {
   url: string;
 }
 
+export interface CurrentPlanningTab {
+  id: string;
+  name: string;
+  sheetUrl: string;
+}
+
+export interface PlanZagruzokTab {
+  id: string;
+  name: string;
+  sheetUrl: string;
+}
+
 export interface AppSettings {
   googleSheetsId: string;
   googleSheetsUrl: string;
   googleSheetsEmbedUrl: string;
+  planZagruzokSheetUrl?: string;
+  planZagruzokBlacklistUrl?: string;
+  dispositionSheetUrl?: string;
+  currentPlanningTabs?: CurrentPlanningTab[];
+  planZagruzokTabs?: PlanZagruzokTab[];
   announcements: Announcement[];
   highlight: HighlightData | null;
   quickLinks: QuickLink[];
@@ -287,7 +309,7 @@ export const allModules = [
     { key: 'planZagruzok', label: 'План Загрузок', icon: 'FileSpreadsheet', permissionKey: 'planZagruzok' },
     { key: 'baza', label: 'Учет выезда', icon: 'Truck', permissionKey: 'baza' },
     { key: 'dozvola', label: 'Учет Дозволов', icon: 'FileText', permissionKey: 'dozvola' },
-    { key: 'archives', label: 'Архивы Системы', icon: 'Archive', permissionKey: 'archives' },
+    { key: 'disposition', label: 'Диспозиция', icon: 'Map', permissionKey: 'disposition' },
     { key: 'settings', label: 'Справочники', icon: 'Settings', permissionKey: 'settings' },
     { key: 'admin', label: 'Администрирование', icon: 'ShieldAlert', permissionKey: 'admin' }
 ];

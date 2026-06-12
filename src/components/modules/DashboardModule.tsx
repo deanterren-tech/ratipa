@@ -35,11 +35,20 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
   const [isDbOnline, setIsDbOnline] = useState(false);
   const [isEditingHighlight, setIsEditingHighlight] = useState(false);
   const [editHighlight, setEditHighlight] = useState<HighlightData | null>(null);
+  const [newsTab, setNewsTab] = useState<'bamap' | 'system'>('bamap');
 
   const [highlightHeight, setHighlightHeight] = useState<number>(() => {
-    return Number(localStorage.getItem('ratipa_highlight_height')) || 240;
+    return 240;
   });
   const [isResizing, setIsResizing] = useState(false);
+
+  useEffect(() => {
+    if (settings && settings.highlight && settings.highlight.height) {
+      if (!isResizing) {
+        setHighlightHeight(settings.highlight.height);
+      }
+    }
+  }, [settings?.highlight?.height, isResizing]);
 
   useEffect(() => {
     if (!isResizing) return;
@@ -49,11 +58,22 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
         const rect = cardEl.getBoundingClientRect();
         const newHeight = Math.max(160, Math.min(960, e.clientY - rect.top));
         setHighlightHeight(newHeight);
-        localStorage.setItem('ratipa_highlight_height', String(newHeight));
       }
     };
     const handleMouseUp = () => {
       setIsResizing(false);
+      // Save globally if admin
+      const cardEl = document.getElementById('dashboard-highlight-card');
+      if (cardEl && (user.role === 'admin' || user.role === 'root_admin')) {
+        const rect = cardEl.getBoundingClientRect();
+        const newHeight = Math.max(160, Math.min(960, parseInt(cardEl.style.height || String(rect.height))));
+        if (settings && settings.highlight) {
+           dbService.saveSettings({
+             ...settings,
+             highlight: { ...settings.highlight, height: newHeight }
+           }, user.name, user.role);
+        }
+      }
     };
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
@@ -61,7 +81,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isResizing]);
+  }, [isResizing, settings, user]);
 
   useEffect(() => {
     // 1. Sync Audit Logs
@@ -230,16 +250,69 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
       {/* SECTION MIDDLE: News and Bookmarks */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* News Section */}
-        <div className="lg:col-span-2 bg-white rounded-[2.2rem] p-8 border border-slate-200 shadow-sm">
-            <h2 className="text-xl font-black uppercase tracking-tighter text-slate-900 mb-6">Новости</h2>
-            <div className="space-y-4">
-              {settings?.announcements?.map((ann) => (
-                <div key={ann.id} className={`p-4 rounded-2xl border ${ann.important ? 'border-amber-200 bg-amber-50' : 'border-slate-100 bg-slate-50'}`}>
-                    <small className="text-slate-500 font-mono">{ann.date} - {ann.author}</small>
-                    <p className="font-semibold text-slate-800">{ann.text}</p>
+        <div className="lg:col-span-2 bg-white rounded-[2.2rem] p-8 border border-slate-200 shadow-sm flex flex-col">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <h2 className="text-xl font-black uppercase tracking-tighter text-slate-900">Новости БАМАП</h2>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => setNewsTab('bamap')} 
+                        className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition cursor-pointer ${
+                            newsTab === 'bamap' 
+                            ? 'bg-slate-950 text-[#70FC8E]' 
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                        }`}
+                    >
+                        Лента БАМАП
+                    </button>
+                    <button 
+                        onClick={() => setNewsTab('system')} 
+                        className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition cursor-pointer ${
+                            newsTab === 'system' 
+                            ? 'bg-slate-950 text-[#70FC8E]' 
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                        }`}
+                    >
+                        Объявления ({settings?.announcements?.length || 0})
+                    </button>
                 </div>
-              ))}
             </div>
+
+            {newsTab === 'bamap' ? (
+                <div className="space-y-4 flex-1 flex flex-col">
+                    <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200/60 rounded-xl text-xs select-none">
+                        <span className="text-slate-500 font-mono font-bold">ОФИЦИАЛЬНЫЙ САЙТ БАМАП</span>
+                        <a 
+                            href="http://bamap.org/information/news/" 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="flex items-center gap-1 text-blue-600 hover:underline font-black uppercase text-[10px] tracking-wider"
+                        >
+                            Открыть в новом окне <ExternalLink size={12} />
+                        </a>
+                    </div>
+                    <div className="w-full relative bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 h-[450px]">
+                        <iframe 
+                            src="https://bamap.org/information/news/" 
+                            title="Новости БАМАП" 
+                            className="w-full h-full border-0"
+                            sandbox="allow-same-origin allow-scripts"
+                            referrerPolicy="no-referrer"
+                        />
+                    </div>
+                </div>
+            ) : (
+                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                  {settings?.announcements?.map((ann) => (
+                    <div key={ann.id} className={`p-4 rounded-2xl border ${ann.important ? 'border-amber-200 bg-amber-50' : 'border-slate-100 bg-slate-50'}`}>
+                        <small className="text-slate-500 font-mono">{ann.date} - {ann.author}</small>
+                        <p className="font-semibold text-slate-800">{ann.text}</p>
+                    </div>
+                  ))}
+                  {(!settings?.announcements || settings.announcements.length === 0) && (
+                      <div className="p-8 text-center text-slate-400 font-bold text-xs uppercase tracking-wider font-mono">Объявления отсутствуют</div>
+                  )}
+                </div>
+            )}
         </div>
 
         {/* Bookmarks Section */}

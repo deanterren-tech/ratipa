@@ -26,17 +26,28 @@ export const pdService = {
 
   createTrip: (trip: TripPlan, user: string, role: string) => {
     if (!useFirebase) return;
-    const dbRef = ref(database, 'trips_dashboard');
-    const newRef = push(dbRef);
-    const newTrip = { ...trip, id: newRef.key };
-    set(newRef, newTrip);
-    dbService.logAction(user, role, 'Create Trip Plan', 'PlanDohod', newRef.key!, `Created trip plan for ${trip.carNumber}`);
+    try {
+      const dbRef = ref(database, 'trips_dashboard');
+      const newRef = push(dbRef);
+      const cleanTrip = JSON.parse(JSON.stringify({ ...trip, id: newRef.key }, (k, v) => v === undefined ? null : v));
+      set(newRef, cleanTrip);
+      dbService.logAction(user, role, 'Create Trip Plan', 'PlanDohod', newRef.key!, `Created trip plan for ${trip.carNumber}`);
+    } catch (e) {
+      console.error("Error creating trip in Firebase:", e);
+      alert("Ошибка при сохранении в БД: " + (e as Error).message);
+    }
   },
 
   updateTrip: (id: string, tripInfo: any, user: string, role: string) => {
     if (!useFirebase) return;
-    update(ref(database, `trips_dashboard/${id}`), tripInfo);
-    dbService.logAction(user, role, 'Update Trip Plan', 'PlanDohod', id, `Updated trip plan for ${tripInfo.carNumber || id}`);
+    try {
+      const cleanInfo = JSON.parse(JSON.stringify(tripInfo, (k, v) => v === undefined ? null : v));
+      update(ref(database, `trips_dashboard/${id}`), cleanInfo);
+      dbService.logAction(user, role, 'Update Trip Plan', 'PlanDohod', id, `Updated trip plan for ${tripInfo.carNumber || id}`);
+    } catch (e) {
+      console.error("Error updating trip in Firebase:", e);
+      alert("Ошибка при обновлении в БД: " + (e as Error).message);
+    }
   },
 
   archiveTrip: (id: string, currentMonth: string, user: string, role: string) => {
@@ -135,6 +146,11 @@ export const pdService = {
   updateDispatchersOrder: (order: string[]) => {
     if (!useFirebase) return;
     set(ref(database, 'dispatchers_order'), order);
+  },
+
+  updateDispatchers: (dispatchers: string[]) => {
+    if (!useFirebase) return;
+    set(ref(database, 'dispatchers'), dispatchers);
   },
 
   // --- DISPATCHERS COLORS ---

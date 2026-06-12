@@ -521,7 +521,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 
       <div className="space-y-6">
           
-          {currentTab === 'base' && (
+          <div className={currentTab === 'base' ? '' : 'hidden'}>
              <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
                  <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono border-b border-slate-100 pb-3 mb-6 flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200"></span> 
@@ -570,9 +570,9 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                      </datalist>
                  </form>
              </div>
-          )}
+          </div>
 
-          {currentTab !== 'history' && (
+          <div className={currentTab !== 'history' ? '' : 'hidden'}>
              <div className="bg-white rounded-[2rem] p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col">
                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                     <h2 className="text-base font-black uppercase tracking-tight text-slate-800">
@@ -648,9 +648,9 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     </table>
                  </div>
              </div>
-          )}
+          </div>
 
-          {currentTab === 'history' && (
+          <div className={currentTab === 'history' ? '' : 'hidden'}>
              <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col">
                  <h2 className="text-base font-black uppercase tracking-tight text-slate-800 border-b border-slate-100 pb-4 mb-4">История всех действий в системе</h2>
                  <div className="space-y-3 max-h-[700px] overflow-y-auto pr-2">
@@ -676,7 +676,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     {globalHistory.length === 0 && <div className="text-slate-400 italic font-bold">История пуста.</div>}
                  </div>
              </div>
-          )}
+          </div>
 
       </div>
 

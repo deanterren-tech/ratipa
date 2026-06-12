@@ -91,9 +91,10 @@ const DEFAULT_USERS: UserProfile[] = [
       planZagruzok: "write",
       baza: "write",
       dozvola: "write",
+      documentTracking: "write",
+      disposition: "write",
       settings: "write",
-      admin: "write",
-      archives: "write"
+      admin: "write"
     },
     createdAt: new Date().toISOString()
   }
@@ -188,6 +189,8 @@ const INITIAL_SETTINGS: AppSettings = {
   googleSheetsId: "1qUSrRKGqqo3fZSlpZnxEw-59Y86KJ7tmSnf4liNoMM",
   googleSheetsUrl: "https://docs.google.com/spreadsheets/d/1qUSrRKGqqo3fZSlpZnxEw-59Y86KJ7tmSnf4liNoMM/edit?pli=1&gid=0#gid=0",
   googleSheetsEmbedUrl: "https://docs.google.com/spreadsheets/d/e/2PACX-1vT39hGnyX0R0WjE5wV3g_j_iY16A9-q_y9y-H4S3-B87Hdfm4g/pubhtml",
+  planZagruzokSheetUrl: "https://docs.google.com/spreadsheets/d/1qUSrRKGqqo3fZSlpZnxEw-59Y86KJ7tmSnf4liNoMM/edit#gid=0",
+  dispositionSheetUrl: "https://docs.google.com/spreadsheets/d/1qUSrRKGqqo3fZSlpZnxEw-59Y86KJ7tmSnf4liNoMM/edit#gid=0",
   announcements: [
     { id: "a1", text: "С 15 июня вводится летнее ограничение на проезд тяжеловозов по южным трассам.", date: "2026-06-10", author: "Сергей", important: true },
     { id: "a2", text: "База дозволов обновлена, новые бланки по Германии прибыли в отдел логистики.", date: "2026-06-09", author: "Aleksey", important: false }
@@ -205,7 +208,7 @@ const INITIAL_SETTINGS: AppSettings = {
   ],
   idleRate: 30,
   perDiemRate: 7,
-  moduleOrder: ['dashboard', 'dohod', 'salary', 'planDohod', 'planZagruzok', 'baza', 'dozvola', 'archives', 'settings', 'admin'],
+  moduleOrder: ['dashboard', 'dohod', 'salary', 'planDohod', 'planZagruzok', 'currentPlanning', 'baza', 'dozvola', 'disposition', 'settings', 'admin'],
   customPhrases: ["Сдал отчетность", "На погрузке", "В пути", "Завершил рейс"]
 };
 
@@ -866,12 +869,28 @@ export const dbService = {
   trackPresence: (user: UserProfile | null, currentModule: string) => {
     if (!user) return () => {};
     const presenceId = user.uid;
+    
+    let sessionLoginTime = '';
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        let stored = sessionStorage.getItem('ratipa_session_login_time');
+        if (!stored) {
+          stored = new Date().toISOString();
+          sessionStorage.setItem('ratipa_session_login_time', stored);
+        }
+        sessionLoginTime = stored;
+      }
+    } catch (e) {
+      sessionLoginTime = new Date().toISOString();
+    }
+
     const item = {
       uid: user.uid,
       name: user.name,
       role: user.role,
       currentModule,
-      lastActive: new Date().toISOString()
+      lastActive: new Date().toISOString(),
+      loginTime: sessionLoginTime || new Date().toISOString()
     };
 
     if (useFirebase) {
