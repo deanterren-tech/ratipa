@@ -1,0 +1,6 @@
+{
+  "name": "Ratipa",
+  "description": "Unified logistics and operational management platform including live vehicle tracking, cargo loading plans, route calculators, salary logs, and administrative controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-neon-mint: #70FC8E;
+  --color-true-cobalt: #3765F6;
+  --color-obsidian-black: #181D25;
+  --color-ghost-grey: #F2F3F6;
+  --color-cool-mist: #606E80;
+}
+
+body, html, #root, button, input, select, textarea, [class*="font-"] {
+  font-family: "Inter", var(--font-sans), ui-sans-serif, system-ui, -apple-system, sans-serif !important;
+}
+
+body {
+  background-color: #f4f5f6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Elegant abstract tech grid background matching design compositions 2 and 3 */
+.tech-grid {
+  background-image: radial-gradient(rgba(100, 116, 139, 0.08) 1.2px, transparent 1.2px), 
+                    linear-gradient(rgba(100, 116, 139, 0.02) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(100, 116, 139, 0.02) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: center;
+}
+
+/* Custom scrollbars for data-loaded viewports */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
