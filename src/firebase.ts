@@ -197,12 +197,23 @@ const INITIAL_SETTINGS: AppSettings = {
     { id: "a2", text: "База дозволов обновлена, новые бланки по Германии прибыли в отдел логистики.", date: "2026-06-09", author: "Aleksey", important: false }
   ],
   highlight: {
+     id: "h1",
      title: "Внимание: Летние ограничения",
      text: "Вводится летнее ограничение на проезд тяжеловозов по южным трассам. Пожалуйста, скорректируйте маршруты.",
      imageUrl: "https://images.unsplash.com/photo-1544620347-c4fd6a3d5957?q=80&w=2000&auto=format&fit=crop",
      date: "2026-06-11",
      author: ""
   },
+  highlights: [
+    {
+      id: "h1",
+      title: "Внимание: Летние ограничения",
+      text: "Вводится летнее ограничение на проезд тяжеловозов по южным трассам. Пожалуйста, скорректируйте маршруты.",
+      imageUrl: "https://images.unsplash.com/photo-1544620347-c4fd6a3d5957?q=80&w=2000&auto=format&fit=crop",
+      date: "2026-06-11",
+      author: ""
+    }
+  ],
   quickLinks: [
     { id: "l1", title: "Таможенные Калькуляторы", url: "https://customs.gov" },
     { id: "l2", title: "Паромные Расписания DFDS", url: "https://www.dfds.com" }
@@ -963,6 +974,10 @@ export const dbService = {
           let updated = false;
           if (!data.highlight) {
             data.highlight = INITIAL_SETTINGS.highlight;
+            updated = true;
+          }
+          if (!data.highlights || !Array.isArray(data.highlights) || data.highlights.length === 0) {
+            data.highlights = data.highlight ? [{ ...data.highlight, id: data.highlight.id || 'h1' }] : INITIAL_SETTINGS.highlights;
             updated = true;
           }
           

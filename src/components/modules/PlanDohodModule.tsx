@@ -8,12 +8,47 @@ import { APIProvider, Map, useMap, useMapsLibrary } from '@vis.gl/react-google-m
 const API_KEY = process.env.GOOGLE_MAPS_PLATFORM_KEY || (window as any).GOOGLE_MAPS_PLATFORM_KEY || '';
 const hasValidKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY';
 
-function RouteDisplay({ origin, destination, onDistance }: { origin: string; destination: string; onDistance: (km: number) => void }) {
+function normalizeRoadString(s: string): string {
+  if (!s) return '';
+  return s
+    .toLowerCase()
+    .replace(/m/g, 'м')
+    .replace(/e/g, 'е')
+    .replace(/a/g, 'а')
+    .replace(/o/g, 'о')
+    .replace(/p/g, 'р')
+    .replace(/c/g, 'с')
+    .replace(/x/g, 'х')
+    .replace(/t/g, 'т');
+}
+
+function RouteDisplay({ 
+  origin, 
+  destination, 
+  onDistance,
+  avoidTolls,
+  avoidHighways,
+  avoidFerries,
+  vehicleType,
+  avoidKeywords,
+  onRouteStatus,
+  waypoints = []
+}: { 
+  origin: string; 
+  destination: string; 
+  onDistance: (km: number) => void;
+  avoidTolls: boolean;
+  avoidHighways: boolean;
+  avoidFerries: boolean;
+  vehicleType: string;
+  avoidKeywords: string;
+  onRouteStatus?: (status: { matches: string[]; isAlternative: boolean; avoidedSuccessfully: boolean; attempted: boolean }) => void;
+  waypoints?: string[];
+}) {
   const map = useMap();
-  const routesLib = useMapsLibrary('routes');
-  const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer | null>(null);
   const [debouncedOrigin, setDebouncedOrigin] = useState(origin);
   const [debouncedDestination, setDebouncedDestination] = useState(destination);
+  const rendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -24,48 +59,196 @@ function RouteDisplay({ origin, destination, onDistance }: { origin: string; des
   }, [origin, destination]);
 
   useEffect(() => {
-    if (!map || !routesLib || typeof google === 'undefined') return;
-    const renderer = new google.maps.DirectionsRenderer({
-      map,
-      suppressMarkers: false,
-      polylineOptions: {
-        strokeColor: '#3b82f6',
-        strokeWeight: 5,
-      }
-    });
-    setDirectionsRenderer(renderer);
-    return () => {
-      renderer.setMap(null);
-    };
-  }, [map, routesLib]);
+    if (!map || !debouncedOrigin || !debouncedDestination) return;
 
-  useEffect(() => {
-    if (!map || !routesLib || !debouncedOrigin || !debouncedDestination || !directionsRenderer || typeof google === 'undefined') return;
+    // Initialize or re-use DirectionsRenderer
+    if (!rendererRef.current) {
+      rendererRef.current = new google.maps.DirectionsRenderer({
+        draggable: true,
+        map: map,
+        suppressMarkers: false,
+        polylineOptions: {
+          strokeColor: '#3b82f6',
+          strokeWeight: 6,
+        }
+      });
+
+      // Listen to drag adjustments
+      rendererRef.current.addListener('directions_changed', () => {
+        const directions = rendererRef.current?.getDirections();
+        if (directions) {
+          const route = directions.routes[0];
+          let totalDistance = 0;
+          route.legs.forEach((leg: any) => {
+            totalDistance += leg.distance?.value || 0;
+          });
+          const km = Math.round(totalDistance / 1000);
+          onDistance(km);
+
+          // Apply keyword checks on user manually dragged route
+          const keywords = avoidKeywords
+            ? avoidKeywords.split(',').map((k: string) => k.trim().toLowerCase()).filter(Boolean)
+            : [];
+          const normalizedKeywords = keywords.map(normalizeRoadString);
+          const matchedKws = new Set<string>();
+
+          route.legs?.forEach((leg: any) => {
+            leg.steps?.forEach((step: any) => {
+              const instructionsText = step.instructions || '';
+              const normalizedText = normalizeRoadString(instructionsText);
+              
+              const stepDetails = JSON.stringify(step);
+              const normalizedDetails = normalizeRoadString(stepDetails);
+              
+              keywords.forEach((kw: string, kwIdx: number) => {
+                const normKw = normalizedKeywords[kwIdx];
+                if (normalizedText.includes(normKw) || normalizedDetails.includes(normKw)) {
+                  matchedKws.add(kw);
+                }
+              });
+            });
+          });
+
+          if (onRouteStatus) {
+            onRouteStatus({
+              matches: Array.from(matchedKws),
+              isAlternative: false,
+              avoidedSuccessfully: keywords.length > 0 && matchedKws.size === 0,
+              attempted: keywords.length > 0
+            });
+          }
+        }
+      });
+    } else {
+      rendererRef.current.setMap(map);
+    }
 
     const directionsService = new google.maps.DirectionsService();
-    directionsService.route(
-      {
-        origin: debouncedOrigin,
-        destination: debouncedDestination,
-        travelMode: google.maps.TravelMode.DRIVING,
-      },
-      (result, status) => {
-        if (status === google.maps.DirectionsStatus.OK && result) {
-          directionsRenderer.setDirections(result);
-          const route = result.routes[0];
-          if (route) {
-            let totalDistance = 0;
-            for (let i = 0; i < route.legs.length; i++) {
-              totalDistance += route.legs[i].distance?.value || 0;
-            }
-            onDistance(Math.round(totalDistance / 1000));
+
+    // Prepare waypoints
+    const mappedWaypoints = waypoints
+      .filter(wp => wp && wp.trim() !== '')
+      .map(wp => ({
+        location: wp,
+        stopover: true
+      }));
+
+    const request: google.maps.DirectionsRequest = {
+      origin: debouncedOrigin,
+      destination: debouncedDestination,
+      waypoints: mappedWaypoints,
+      travelMode: google.maps.TravelMode.DRIVING,
+      avoidTolls: avoidTolls,
+      avoidHighways: avoidHighways,
+      avoidFerries: avoidFerries,
+      provideRouteAlternatives: true
+    };
+
+    directionsService.route(request, (result, status) => {
+      if (status === google.maps.DirectionsStatus.OK && result) {
+        const routes = result.routes;
+        const keywords = avoidKeywords
+          ? avoidKeywords.split(',').map((k: string) => k.trim().toLowerCase()).filter(Boolean)
+          : [];
+        const normalizedKeywords = keywords.map(normalizeRoadString);
+
+        const routesWithBlocks = routes.map((route: any, idx: number) => {
+          const matchedKws = new Set<string>();
+          route.legs?.forEach((leg: any) => {
+            leg.steps?.forEach((step: any) => {
+              const instructionsText = step.instructions || '';
+              const normalizedText = normalizeRoadString(instructionsText);
+              
+              const stepDetails = JSON.stringify(step);
+              const normalizedDetails = normalizeRoadString(stepDetails);
+              
+              keywords.forEach((kw: string, kwIdx: number) => {
+                const normKw = normalizedKeywords[kwIdx];
+                if (normalizedText.includes(normKw) || normalizedDetails.includes(normKw)) {
+                  matchedKws.add(kw);
+                }
+              });
+            });
+          });
+
+          return {
+            route,
+            index: idx,
+            blockedKeywords: Array.from(matchedKws)
+          };
+        });
+
+        // Find route with 0 blocked keywords
+        const firstSafeRoute = routesWithBlocks.find((r: any) => r.blockedKeywords.length === 0);
+        let selectedRouteAndInfo = routesWithBlocks[0];
+        let isAlternativeSelected = false;
+
+        if (firstSafeRoute) {
+          selectedRouteAndInfo = firstSafeRoute;
+          if (firstSafeRoute.index > 0) {
+            isAlternativeSelected = true;
           }
-        } else {
-          console.warn("Directions request failed due to: " + status);
+        } else if (routesWithBlocks.length > 1) {
+          const sorted = [...routesWithBlocks].sort((a, b) => a.blockedKeywords.length - b.blockedKeywords.length);
+          if (sorted[0].blockedKeywords.length < routesWithBlocks[0].blockedKeywords.length) {
+            selectedRouteAndInfo = sorted[0];
+            isAlternativeSelected = true;
+          }
         }
+
+        rendererRef.current?.setDirections(result);
+        rendererRef.current?.setRouteIndex(selectedRouteAndInfo.index);
+
+        if (isAlternativeSelected) {
+          rendererRef.current?.setOptions({
+            polylineOptions: {
+              strokeColor: '#059669',
+              strokeWeight: 6
+            }
+          });
+        } else {
+          rendererRef.current?.setOptions({
+            polylineOptions: {
+              strokeColor: '#3b82f6',
+              strokeWeight: 6
+            }
+          });
+        }
+
+        const bounds = result.routes[selectedRouteAndInfo.index].bounds;
+        if (bounds) {
+          map.fitBounds(bounds);
+        }
+
+        let totalDistance = 0;
+        selectedRouteAndInfo.route.legs.forEach((leg: any) => {
+          totalDistance += leg.distance?.value || 0;
+        });
+        onDistance(Math.round(totalDistance / 1000));
+
+        if (onRouteStatus) {
+          onRouteStatus({
+            matches: selectedRouteAndInfo.blockedKeywords,
+            isAlternative: isAlternativeSelected,
+            avoidedSuccessfully: keywords.length > 0 && selectedRouteAndInfo.blockedKeywords.length === 0,
+            attempted: keywords.length > 0
+          });
+        }
+      } else {
+        console.warn("Direction calculation failed:", status);
       }
-    );
-  }, [map, routesLib, debouncedOrigin, debouncedDestination, directionsRenderer, onDistance]);
+    });
+
+  }, [map, debouncedOrigin, debouncedDestination, onDistance, avoidTolls, avoidHighways, avoidFerries, vehicleType, avoidKeywords, waypoints]);
+
+  useEffect(() => {
+    return () => {
+      if (rendererRef.current) {
+        rendererRef.current.setMap(null);
+        rendererRef.current = null;
+      }
+    };
+  }, [map]);
 
   return null;
 }
@@ -646,6 +829,27 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [mapKmResult, setMapKmResult] = useState<number>(0);
   const [mapIsCheckingPl, setMapIsCheckingPl] = useState(false);
   const [saveToDirectoryChecked, setSaveToDirectoryChecked] = useState(false);
+  const [mapAvoidTolls, setMapAvoidTolls] = useState(false);
+  const [mapAvoidHighways, setMapAvoidHighways] = useState(false);
+  const [mapAvoidFerries, setMapAvoidFerries] = useState(false);
+  const [mapVehicleType, setMapVehicleType] = useState('CAR');
+  const [mapAvoidKeywords, setMapAvoidKeywords] = useState(() => localStorage.getItem('ratipa_map_avoid_keywords') || '');
+  const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
+  const [mapAvoidedStatus, setMapAvoidedStatus] = useState<{
+    matches: string[];
+    isAlternative: boolean;
+    avoidedSuccessfully: boolean;
+    attempted: boolean;
+  }>({
+    matches: [],
+    isAlternative: false,
+    avoidedSuccessfully: false,
+    attempted: false
+  });
+
+  useEffect(() => {
+    localStorage.setItem('ratipa_map_avoid_keywords', mapAvoidKeywords);
+  }, [mapAvoidKeywords]);
   
   // Potential Load Form States
   const [plEditingId, setPlEditingId] = useState<string|null>(null);
@@ -1252,6 +1456,12 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               </div>
 
               <h3 className="text-xs font-black uppercase tracking-widest text-slate-800 font-mono flex items-center gap-2 mb-4"><MapPin className="w-4 h-4 text-blue-500" /> Плечи маршрута</h3>
+              
+              {/* Swipe Help Badge for Mobile */}
+              <div className="block lg:hidden text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 mb-3 text-center uppercase tracking-wider select-none">
+                 <span className="inline-block animate-pulse text-blue-500 mr-1.5 font-sans">↔</span> Таблица прокручивается вправо для изменения км, ставок, парома и коэффициентов
+              </div>
+
               <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
                 <table className="w-full min-w-[950px] border-collapse relative">
                   <thead className="bg-slate-50/50">
@@ -1746,7 +1956,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 )}
               </div>
 
-              <div className="flex flex-wrap lg:flex-nowrap items-center gap-6 xl:gap-8 min-w-max">
+              <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 sm:gap-6 xl:gap-8 w-full lg:w-auto justify-between lg:justify-end border-t lg:border-t-0 border-slate-100 pt-3 lg:pt-0">
                  <div className="flex flex-col gap-0.5">
                     <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 font-mono">Пробег</span>
                     <span className="text-[13px] font-black text-slate-800 font-mono whitespace-nowrap">{Math.round(trip.factKm || trip.totalKm || 0).toLocaleString('ru-RU')} км</span>
@@ -1760,10 +1970,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                     <span className="text-[13px] font-black text-rose-600 font-mono whitespace-nowrap">{Math.round(trip.totalExpenses || 0).toLocaleString('ru-RU')} €</span>
                  </div>
                  
-                 <div className="flex items-center gap-4 border-l border-slate-200 pl-4 xl:pl-6">
+                 <div className="flex items-center gap-4 border-l-0 lg:border-l border-slate-200 pl-0 lg:pl-4 xl:pl-6 w-full sm:w-auto justify-between sm:justify-end">
                     <div className="flex flex-col">
-                       <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest font-mono text-right mb-0.5">Прибыль</span>
-                       <span className={`text-xl font-black tracking-tighter leading-none ${trip.profitFact < 0 ? 'text-rose-500' : 'text-slate-900'}`}>{Math.round(trip.profitFact || 0).toLocaleString('ru-RU')} <span className="text-sm font-mono text-slate-400">€</span></span>
+                       <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest font-mono text-left lg:text-right mb-0.5">Прибыль</span>
+                       <span className={`text-xl font-black tracking-tighter leading-none whitespace-nowrap ${trip.profitFact < 0 ? 'text-rose-500' : 'text-slate-900'}`}>{Math.round(trip.profitFact || 0).toLocaleString('ru-RU')} <span className="text-sm font-mono text-slate-400">€</span></span>
                     </div>
                     <div className="flex flex-col border-l border-slate-100 pl-4">
                        <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 font-mono text-right mb-0.5">Дни</span>
@@ -1771,7 +1981,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                     </div>
                     <div className="flex flex-col border-l border-slate-100 pl-4">
                        <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 font-mono text-right mb-0.5">В день</span>
-                       <span className={`text-sm font-black font-mono text-right ${Math.round((trip.profitFact || 0) / (trip.days || 1)) < 0 ? 'text-rose-500' : 'text-green-600'}`}>{Math.round((trip.profitFact || 0) / (trip.days || 1)).toLocaleString('ru-RU')} €</span>
+                       <span className={`text-sm font-black font-mono text-right whitespace-nowrap ${Math.round((trip.profitFact || 0) / (trip.days || 1)) < 0 ? 'text-rose-500' : 'text-green-600'}`}>{Math.round((trip.profitFact || 0) / (trip.days || 1)).toLocaleString('ru-RU')} €</span>
                     </div>
                  </div>
               </div>
@@ -1851,7 +2061,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               </h1>
            </div>
            
-           <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200">
+           <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200 overflow-x-auto max-w-full custom-scrollbar">
               <button onClick={() => { resetForm(); setIsModalOpen(true); }} className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition flex items-center gap-2 bg-slate-900 text-white hover:bg-slate-800 shadow-sm border border-slate-800`}>
                  <Plus className="w-4 h-4" /> Новый План
               </button>
@@ -1963,6 +2173,55 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                    </div>
 
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                   </div>
+
+                    {/* Intermediate Waypoints */}
+                    <div className="bg-slate-50/50 p-4 rounded-2xl border border-dashed border-slate-200 flex flex-col gap-3">
+                       <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-wider">Промежуточные точки {mapWaypoints.length > 0 ? `(${mapWaypoints.length})` : ''}</span>
+                          <button 
+                             type="button"
+                             onClick={() => setMapWaypoints([...mapWaypoints, ''])}
+                             className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 transition cursor-pointer"
+                          >
+                             <Plus className="w-3.5 h-3.5" />
+                             <span>Добавить точку</span>
+                          </button>
+                       </div>
+                       
+                       {mapWaypoints.length > 0 && (
+                          <div className="space-y-2 mt-1">
+                             {mapWaypoints.map((wp, index) => (
+                                <div key={index} className="flex items-center gap-2 animate-fade-in">
+                                   <span className="text-[9px] font-bold text-slate-400 font-mono min-w-[15px]">{index + 1}.</span>
+                                   <input 
+                                      type="text"
+                                      value={wp}
+                                      onChange={(e) => {
+                                         const newWps = [...mapWaypoints];
+                                         newWps[index] = e.target.value;
+                                         setMapWaypoints(newWps);
+                                      }}
+                                      placeholder="Введите населённый пункт..."
+                                      className="flex-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] font-bold text-slate-700 outline-none focus:border-blue-500 transition"
+                                   />
+                                   <button 
+                                      type="button"
+                                      onClick={() => {
+                                         const newWps = mapWaypoints.filter((_, idx) => idx !== index);
+                                         setMapWaypoints(newWps);
+                                      }}
+                                      className="p-1 text-[#70FC8E] bg-slate-900 border border-slate-700/50 hover:bg-slate-800 transition rounded-lg hover:text-rose-50 cursor-pointer"
+                                   >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                   </button>
+                                </div>
+                             ))}
+                          </div>
+                       )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
                       <div className="flex flex-col gap-1">
                          <label className="text-[9px] font-black uppercase tracking-wider text-slate-400 font-mono">Пункт отправления (Откуда)</label>
                          <input 
@@ -1984,7 +2243,83 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                          />
                       </div>
                    </div>
-                </div>
+
+                   <div className="mt-2 bg-slate-50/50 p-3 rounded-2xl border border-dashed border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 items-center">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                         <input 
+                            type="checkbox" 
+                            checked={mapAvoidTolls} 
+                            onChange={(e) => setMapAvoidTolls(e.target.checked)} 
+                            className="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                         />
+                         <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight font-mono">Без платных</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                         <input 
+                            type="checkbox" 
+                            checked={mapAvoidHighways} 
+                            onChange={(e) => setMapAvoidHighways(e.target.checked)} 
+                            className="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                         />
+                         <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight font-mono">Без шоссе</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                         <input 
+                            type="checkbox" 
+                            checked={mapAvoidFerries} 
+                            onChange={(e) => setMapAvoidFerries(e.target.checked)} 
+                            className="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                         />
+                         <span className="text-[10px] font Black text-slate-600 uppercase tracking-tight font-mono">Без паромов</span>
+                      </label>
+                      <div className="flex flex-col gap-0.5">
+                         <span className="text-[8px] font-black uppercase text-slate-400 font-mono">Тип авто</span>
+                         <select 
+                            value={mapVehicleType} 
+                            onChange={(e) => setMapVehicleType(e.target.value)}
+                            className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold text-slate-700 outline-none focus:border-blue-500"
+                         >
+                            <option value="CAR">Легковой</option>
+                            <option value="TRUCK">Грузовой</option>
+                         </select>
+                      </div>
+                   </div>
+
+                   <div className="mt-2 bg-slate-50/50 p-3 rounded-2xl border border-dashed border-slate-200 flex flex-col sm:flex-row gap-3 items-stretch justify-between">
+                      <div className="flex-1 flex flex-col gap-1">
+                         <span className="text-[8px] font-black uppercase text-slate-400 font-mono">Избегать ключевых слов (трассы, города, напр: M1, Польша)</span>
+                         <input 
+                            type="text"
+                            placeholder="Введите слова через запятую..."
+                            value={mapAvoidKeywords}
+                            onChange={(e) => setMapAvoidKeywords(e.target.value)}
+                            className="bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] font-bold text-slate-700 outline-none focus:border-blue-500 w-full"
+                         />
+                      </div>
+                      
+                      {mapAvoidedStatus.attempted && (
+                         <div className="flex items-center min-w-[200px] justify-end">
+                            {mapAvoidedStatus.avoidedSuccessfully ? (
+                               <div className="bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl px-2.5 py-1 text-[10px] font-bold flex items-center gap-1.5 shadow-sm">
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>Взят маршрут в обход</span>
+                               </div>
+                            ) : mapAvoidedStatus.matches.length > 0 ? (
+                               <div className="bg-amber-50 text-amber-700 border border-amber-200 rounded-xl px-2.5 py-1 text-[10px] font-bold flex items-center gap-1.5 shadow-sm">
+                                  <X className="w-3.5 h-3.5 text-amber-600" />
+                                  <span>Используется: {mapAvoidedStatus.matches.join(', ')}</span>
+                               </div>
+                            ) : (
+                               <div className="bg-blue-50 text-blue-700 border border-blue-200 rounded-xl px-2.5 py-1 text-[10px] font-bold flex items-center gap-1.5 shadow-sm">
+                                  <Check className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>Маршрут чист</span>
+                                </div>
+                            )}
+                         </div>
+                      )}
+                   </div>
+                 </div>
+
                 
                 <div className="h-[400px] w-full bg-slate-100 relative">
                    {!hasValidKey ? (
@@ -2020,7 +2355,17 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                            gestureHandling={'greedy'}
                            disableDefaultUI={true}
                          >
-                           <RouteDisplay origin={mapOrigin} destination={mapDestination} onDistance={setMapKmResult} />
+                           <RouteDisplay 
+                             origin={mapOrigin} 
+                             destination={mapDestination} 
+                             onDistance={setMapKmResult} 
+                             avoidTolls={mapAvoidTolls}
+                             avoidKeywords={mapAvoidKeywords}
+                             onRouteStatus={setMapAvoidedStatus}
+                             avoidHighways={mapAvoidHighways}
+                             avoidFerries={mapAvoidFerries}
+                             vehicleType={mapVehicleType} waypoints={mapWaypoints}
+                           />
                          </Map>
                       </APIProvider>
                    ) : (

@@ -214,6 +214,7 @@ export interface Announcement {
 }
 
 export interface HighlightData {
+  id?: string;
   title: string;
   text: string;
   imageUrl?: string;
@@ -259,6 +260,7 @@ export interface AppSettings {
   planZagruzokTabs?: PlanZagruzokTab[];
   announcements: Announcement[];
   highlight: HighlightData | null;
+  highlights?: HighlightData[];
   quickLinks: QuickLink[];
   idleRate: number;
   perDiemRate: number;

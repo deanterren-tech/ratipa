@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { UserProfile, AppSettings, ChatMessage } from '../types';
-import { dbService } from '../firebase';
-import { motion } from 'motion/react';
+import { dbService, database, useFirebase } from '../firebase';
+import { ref, onValue, set, push, update, remove } from 'firebase/database';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   LayoutDashboard, 
   Calculator, 
@@ -25,8 +26,44 @@ import {
   ChevronDown,
   ArrowUp,
   Pencil,
-  Calendar
+  Calendar,
+  Bell,
+  Check,
+  CheckCheck,
+  AlertTriangle,
+  Info
 } from 'lucide-react';
+
+interface NotificationItem {
+  id: string;
+  title: string;
+  text: string;
+  type: 'info' | 'warning' | 'success' | 'alert';
+  date: string;
+  isRead: boolean;
+  dispatcher?: string;
+}
+
+const defaultNotifications: NotificationItem[] = [
+  {
+    id: 'notif_1',
+    title: '🛠️ Ремонт закончен — BY 1982 MH',
+    text: 'Тягач BY 1982 MH (водитель Козлов) успешно прошел ремонт осей SAF. Готов к рейсу! Свой диспетчер: Алексей. Нужно грузить!',
+    type: 'success',
+    date: '13.06.2026 10:15',
+    isRead: false,
+    dispatcher: 'Алексей'
+  },
+  {
+    id: 'notif_2',
+    title: '📦 Срок готовности — BY 8812 AM',
+    text: 'Машина должна быть готова к 15.06.2026. Подходит дата готовности — необходимо планировать погрузку! Свой диспетчер: Татьяна.',
+    type: 'warning',
+    date: '12.06.2026 18:40',
+    isRead: false,
+    dispatcher: 'Татьяна'
+  }
+];
 
 // Import newly created business modules
 import DashboardModule from './modules/DashboardModule';
@@ -52,6 +89,346 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const [isDbOnline, setIsDbOnline] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+  // Notifications states
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
+    const saved = localStorage.getItem('ratipa_notifications_v1');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return defaultNotifications;
+      }
+    }
+    return defaultNotifications;
+  });
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [notifTab, setNotifTab] = useState<'all' | 'unread'>('all');
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  // Real-time Database references for notification auto-generation
+  const [bazaCars, setBazaCars] = useState<any[]>([]);
+  const [tripsDashboard, setTripsDashboard] = useState<any[]>([]);
+
+  // Close notifications dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setIsNotifOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Sync notifications from Firebase Realtime Database
+  useEffect(() => {
+    if (!useFirebase) return;
+    try {
+      const notifRef = ref(database, 'ratipa_notifications');
+      const unsub = onValue(notifRef, snap => {
+        const val = snap.val();
+        if (val) {
+          const list: NotificationItem[] = Object.keys(val).map(key => ({
+            id: key,
+            ...val[key]
+          }));
+          
+          // Sort by timestamp descending
+          list.sort((a, b) => {
+            const tA = a.id.startsWith('notif_') ? parseInt(a.id.replace('notif_', '')) : (a.id.includes('_') ? parseInt(a.id.split('_').slice(-1)[0]) || 0 : 0);
+            const tB = b.id.startsWith('notif_') ? parseInt(b.id.replace('notif_', '')) : (b.id.includes('_') ? parseInt(b.id.split('_').slice(-1)[0]) || 0 : 0);
+            if (tA && tB) return tB - tA;
+            return b.date.localeCompare(a.date);
+          });
+          
+          setNotifications(list);
+          localStorage.setItem('ratipa_notifications_v1', JSON.stringify(list));
+        } else {
+          setNotifications([]);
+          localStorage.setItem('ratipa_notifications_v1', JSON.stringify([]));
+        }
+      });
+      return () => unsub();
+    } catch (e) {
+      console.warn("Error subscribing to ratipa_notifications in Firebase", e);
+    }
+  }, [useFirebase]);
+
+  // Subscribe to baza_cars and trips_dashboard
+  useEffect(() => {
+    if (!useFirebase) return;
+    try {
+      const unsubBaza = onValue(ref(database, 'baza_cars'), snap => {
+        const data = snap.val() || {};
+        const list = Object.keys(data).map(id => ({ id, ...data[id] }));
+        setBazaCars(list);
+      });
+      const unsubTrips = onValue(ref(database, 'trips_dashboard'), snap => {
+        const data = snap.val() || {};
+        const list = Object.keys(data).map(id => ({ id, ...data[id] }));
+        setTripsDashboard(list);
+      });
+      return () => {
+        unsubBaza();
+        unsubTrips();
+      };
+    } catch (e) {
+      console.warn("Error subscribing in AppShell notification updater:", e);
+    }
+  }, [useFirebase]);
+
+  // Auto-generate notifications based on base vehicle milestones and departure dates
+  useEffect(() => {
+    if (!useFirebase || bazaCars.length === 0) return;
+    
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const todayStr = today.toISOString().split('T')[0];
+
+    const formatDeadlineToRu = (dateStr: string) => {
+      if (!dateStr) return '';
+      try {
+        const parts = dateStr.split('-');
+        if (parts.length === 3) {
+          return `${parts[2]}.${parts[1]}.${parts[0]}`;
+        }
+      } catch (e) {}
+      return dateStr;
+    };
+
+    bazaCars.forEach(car => {
+      // Find dispatcher assigned to this vehicle
+      const matchedTrip = tripsDashboard.find((t: any) => 
+        t.carNumber && car.carNumber && 
+        String(t.carNumber).trim().toUpperCase() === String(car.carNumber).trim().toUpperCase() &&
+        !t.isArchived
+      );
+      const dispatcherName = matchedTrip?.dispatcher || matchedTrip?.logist || "Не назначен";
+
+      // 1. Repair ended (dateRepairEnd exists and is set)
+      if (car.dateRepairEnd) {
+        const repKey = `repair_end_${car.id}_${car.dateRepairEnd}`.replace(/[.#$[\]]/g, '_');
+        const alreadyExists = notifications.some(n => n.id === repKey);
+        
+        if (!alreadyExists) {
+          const now = new Date();
+          const d = String(now.getDate()).padStart(2, '0');
+          const m = String(now.getMonth() + 1).padStart(2, '0');
+          const y = now.getFullYear();
+          const h = String(now.getHours()).padStart(2, '0');
+          const min = String(now.getMinutes()).padStart(2, '0');
+
+          const repNotif = {
+            title: `🛠️ Ремонт закончен — ${car.carNumber}`,
+            text: `Тягач ${car.carNumber} (водитель ${car.driverName || 'не назначен'}) успешно прошел ремонт. Готов к рейсу! Свой диспетчер: ${dispatcherName}. Нужно грузить!`,
+            type: 'success',
+            date: `${d}.${m}.${y} ${h}:${min}`,
+            isRead: false,
+            dispatcher: dispatcherName
+          };
+
+          try {
+            set(ref(database, `ratipa_notifications/${repKey}`), repNotif);
+          } catch(e) {
+            console.warn("Failed pushing repair notification", e);
+          }
+        }
+      }
+
+      // 2. dateLoading deadline starts approaching ("подходит дата к какому числу должна быть готова машина")
+      if (car.dateLoading) {
+        try {
+          const loadDate = new Date(car.dateLoading);
+          loadDate.setHours(0,0,0,0);
+          const diffTime = loadDate.getTime() - today.getTime();
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+          // If the date is approaching (<= 3 days left or passed) AND the vehicle has NOT left yet
+          const hasDeparted = car.dateDeparture && car.dateDeparture <= todayStr;
+          if (diffDays <= 3 && !hasDeparted) {
+            const loadKey = `loading_warn_${car.id}_${car.dateLoading}`.replace(/[.#$[\]]/g, '_');
+            const alreadyExists = notifications.some(n => n.id === loadKey);
+
+            if (!alreadyExists) {
+              const now = new Date();
+              const d = String(now.getDate()).padStart(2, '0');
+              const m = String(now.getMonth() + 1).padStart(2, '0');
+              const y = now.getFullYear();
+              const h = String(now.getHours()).padStart(2, '0');
+              const min = String(now.getMinutes()).padStart(2, '0');
+
+              let alertText = `Машина ${car.carNumber} должна быть готова к ${formatDeadlineToRu(car.dateLoading)}. Подходит дата готовности — значит нужно грузить! Свой диспетчер: ${dispatcherName}.`;
+              if (diffDays < 0) {
+                alertText = `Внимание! Машина ${car.carNumber} должна была быть готова к ${formatDeadlineToRu(car.dateLoading)} (просрочено на ${Math.abs(diffDays)} дн.). Нужно срочно грузить! Свой диспетчер: ${dispatcherName}.`;
+              } else if (diffDays === 0) {
+                alertText = `Внимание! Машина ${car.carNumber} должна быть готова СЕГОДНЯ (${formatDeadlineToRu(car.dateLoading)}). Нужно её срочно грузить! Свой диспетчер: ${dispatcherName}.`;
+              }
+
+              const loadNotif = {
+                title: `📦 Срок готовности — ${car.carNumber}`,
+                text: alertText,
+                type: diffDays < 0 ? 'alert' : 'warning',
+                date: `${d}.${m}.${y} ${h}:${min}`,
+                isRead: false,
+                dispatcher: dispatcherName
+              };
+
+              try {
+                set(ref(database, `ratipa_notifications/${loadKey}`), loadNotif);
+              } catch(e) {
+                console.warn("Failed pushing loading notification", e);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("Invalid dateLoading parsing in notification checker", e);
+        }
+      }
+    });
+
+  }, [useFirebase, bazaCars, tripsDashboard, notifications]);
+
+  const unreadNotifsCount = useMemo(() => {
+    return notifications.filter(n => !n.isRead).length;
+  }, [notifications]);
+
+  const filteredNotifications = useMemo(() => {
+    if (notifTab === 'unread') {
+      return notifications.filter(n => !n.isRead);
+    }
+    return notifications;
+  }, [notifications, notifTab]);
+
+  const markNotifAsRead = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const item = notifications.find(n => n.id === id);
+    if (!item) return;
+
+    if (useFirebase) {
+      try {
+        update(ref(database, `ratipa_notifications/${id}`), { isRead: !item.isRead });
+      } catch (err) {
+        console.warn("Failed to mark read in firebase", err);
+      }
+    } else {
+      setNotifications(prev => {
+        const updated = prev.map(n => n.id === id ? { ...n, isRead: !n.isRead } : n);
+        localStorage.setItem('ratipa_notifications_v1', JSON.stringify(updated));
+        return updated;
+      });
+    }
+  };
+
+  const markAllNotifsAsRead = () => {
+    if (useFirebase) {
+      try {
+        const updates: Record<string, any> = {};
+        notifications.forEach(n => {
+          if (!n.isRead) {
+            updates[`ratipa_notifications/${n.id}/isRead`] = true;
+          }
+        });
+        if (Object.keys(updates).length > 0) {
+          update(ref(database), updates);
+        }
+      } catch (err) {
+        console.warn("Failed to mark all read in firebase", err);
+      }
+    } else {
+      setNotifications(prev => {
+        const updated = prev.map(n => ({ ...n, isRead: true }));
+        localStorage.setItem('ratipa_notifications_v1', JSON.stringify(updated));
+        return updated;
+      });
+    }
+  };
+
+  const deleteNotif = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (useFirebase) {
+      try {
+        remove(ref(database, `ratipa_notifications/${id}`));
+      } catch (err) {
+        console.warn("Failed to delete notification in firebase", err);
+      }
+    } else {
+      setNotifications(prev => {
+        const updated = prev.filter(n => n.id !== id);
+        localStorage.setItem('ratipa_notifications_v1', JSON.stringify(updated));
+        return updated;
+      });
+    }
+  };
+
+  const clearAllNotifications = () => {
+    if (useFirebase) {
+      try {
+        set(ref(database, 'ratipa_notifications'), null);
+      } catch (err) {
+        console.warn("Failed to clear notifications in firebase", err);
+      }
+    } else {
+      setNotifications([]);
+      localStorage.setItem('ratipa_notifications_v1', JSON.stringify([]));
+    }
+  };
+
+  const simulateNotif = () => {
+    const carsList = bazaCars.length > 0 ? bazaCars : [
+      { id: 'sim_1', carNumber: 'BY 1221 AM', driverName: 'Смирнов И.' },
+      { id: 'sim_2', carNumber: 'BY 9999 PL', driverName: 'Иванов О.' }
+    ];
+    const randCar = carsList[Math.floor(Math.random() * carsList.length)];
+    
+    // Pick between repair ends or loading deadline
+    const isRepair = Math.random() > 0.5;
+
+    const dispatchers = ['Алексей', 'Татьяна', 'Сергей', 'Ольга'];
+    const randDisp = dispatchers[Math.floor(Math.random() * dispatchers.length)];
+
+    const now = new Date();
+    const d = String(now.getDate()).padStart(2, '0');
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const y = now.getFullYear();
+    const h = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    const dateStr = `${d}.${m}.${y} ${h}:${min}`;
+
+    const newKey = 'notif_' + Date.now();
+
+    const mockNotif = isRepair ? {
+      title: `🛠️ Ремонт закончен — ${randCar.carNumber}`,
+      text: `Тягач ${randCar.carNumber} (${randCar.driverName || 'водитель не назначен'}) успешно завершил ремонт. Готов к рейсу! Свой диспетчер: ${randDisp}. Нужно грузить!`,
+      type: 'success' as const,
+      date: dateStr,
+      isRead: false,
+      dispatcher: randDisp
+    } : {
+      title: `📦 Срок готовности — ${randCar.carNumber}`,
+      text: `Машина ${randCar.carNumber} должна быть готова к ${now.getDate() + 2}.${m}.${y}. Подходит дата готовности — значит нужно грузить! Свой диспетчер: ${randDisp}.`,
+      type: 'warning' as const,
+      date: dateStr,
+      isRead: false,
+      dispatcher: randDisp
+    };
+
+    if (useFirebase) {
+      try {
+        set(ref(database, `ratipa_notifications/${newKey}`), mockNotif);
+      } catch (err) {
+        console.warn("Failed to write mock notification to Firebase", err);
+      }
+    } else {
+      setNotifications(prev => {
+        const updated = [{ id: newKey, ...mockNotif }, ...prev];
+        localStorage.setItem('ratipa_notifications_v1', JSON.stringify(updated));
+        return updated;
+      });
+    }
+  };
 
   // Dynamic Webpage Tab title
   useEffect(() => {
@@ -320,7 +697,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     >
       
       {/* Modern Capsule-Oriented Header corresponding to uploaded style layout */}
-      <header className="bg-white/80 backdrop-blur-md text-slate-900 border-b border-slate-200/50 h-20 flex items-center justify-between px-6 sm:px-10 shrink-0 relative z-30 select-none">
+      <header className="bg-white/90 backdrop-blur-md text-slate-900 border-b border-slate-200/50 h-20 flex items-center justify-between px-6 sm:px-10 shrink-0 sticky top-0 z-50 select-none shadow-xs">
         
         {/* Left Brand Area: Custom minimal grid logo + title */}
         <div className="flex items-center gap-4">
@@ -390,6 +767,239 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Fully featured Notifications Center dropdown */}
+          <div className="relative font-sans" ref={notifRef}>
+            <button
+              type="button"
+              onClick={() => setIsNotifOpen(!isNotifOpen)}
+              className={`relative p-2 rounded-full border transition-all duration-205 active:scale-95 cursor-pointer flex items-center justify-center ${
+                isNotifOpen 
+                  ? 'bg-slate-950 text-[#70FC8E] border-slate-950 shadow-md scale-105' 
+                  : 'bg-slate-50 text-slate-700 hover:text-slate-950 hover:bg-slate-100 border-slate-200/60'
+              }`}
+              title="Уведомления"
+            >
+              <Bell size={16} className={`${unreadNotifsCount > 0 ? 'animate-pulse' : ''}`} />
+              {unreadNotifsCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 px-1 rounded-full bg-rose-500 text-white text-[8.5px] font-black items-center justify-center border border-white leading-none shadow-sm">
+                  {unreadNotifsCount}
+                </span>
+              )}
+            </button>
+
+            <AnimatePresence>
+              {isNotifOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  className="absolute right-0 mt-3 w-80 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden"
+                >
+                  {/* Dropdown Header */}
+                  <div className="p-4 border-b border-slate-100 bg-white">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-950 font-sans">Уведомления</h3>
+                        <p className="text-[9px] text-slate-400 font-mono tracking-widest mt-0.5 uppercase">Системные события и алерты</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {unreadNotifsCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={markAllNotifsAsRead}
+                            className="p-1 text-slate-400 hover:text-emerald-500 transition rounded hover:bg-slate-50 cursor-pointer"
+                            title="Прочитать все"
+                          >
+                            <CheckCheck size={14} className="stroke-[2.5]" />
+                          </button>
+                        )}
+                        {notifications.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={clearAllNotifications}
+                            className="text-[9.5px] uppercase font-black tracking-wider text-rose-500 hover:text-rose-600 transition cursor-pointer"
+                          >
+                            Очистить
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Filter Tabs & Counter numbers */}
+                    <div className="flex gap-1.5 mt-3 bg-slate-50 border border-slate-100 rounded-xl p-1">
+                      <button
+                        type="button"
+                        onClick={() => setNotifTab('all')}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-1 text-[10px] font-extrabold uppercase rounded-lg transition tracking-wide cursor-pointer ${
+                          notifTab === 'all' 
+                            ? 'bg-white text-slate-950 shadow-xs border border-slate-200/20' 
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        Все
+                        <span className={`px-1.5 py-0.5 rounded-full text-[8.5px] font-bold ${
+                          notifTab === 'all' ? 'bg-slate-150 text-slate-800' : 'bg-slate-200/50 text-slate-500'
+                        }`}>
+                          {notifications.length}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNotifTab('unread')}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-1 text-[10px] font-extrabold uppercase rounded-lg transition tracking-wide cursor-pointer ${
+                          notifTab === 'unread' 
+                            ? 'bg-white text-slate-950 shadow-xs border border-slate-200/20' 
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        Непрочитанные
+                        <span className={`px-1.5 py-0.5 rounded-full text-[8.5px] font-bold ${
+                          unreadNotifsCount > 0 ? 'bg-rose-100 text-rose-600 font-extrabold' : 'bg-slate-200/50 text-slate-500'
+                        }`}>
+                          {unreadNotifsCount}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Scrollable list viewport wrapper */}
+                  <div className="max-h-72 overflow-y-auto divide-y divide-slate-50 custom-scrollbar bg-white">
+                    {filteredNotifications.length === 0 ? (
+                      <div className="p-8 text-center flex flex-col items-center justify-center bg-white">
+                        <div className="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 mb-2">
+                          <Bell size={18} className="opacity-60" />
+                        </div>
+                        <h4 className="text-xs font-bold text-slate-700">Уведомлений нет</h4>
+                        <p className="text-[10px] text-slate-400 mt-1 max-w-[200px] leading-normal font-medium">
+                          {notifTab === 'unread' ? 'У вас нет непрочитанных уведомлений.' : 'Здесь будут отображаться важные обновления и системные алерты.'}
+                        </p>
+                      </div>
+                    ) : (
+                      filteredNotifications.map((notif) => {
+                        const isWarning = notif.type === 'warning';
+                        const isAlert = notif.type === 'alert';
+                        const isSuccess = notif.type === 'success';
+                        
+                        let barColor = 'bg-sky-400';
+                        let badgeBg = 'bg-sky-50 text-sky-500';
+                        let IconComp = Info;
+                        
+                        if (isWarning) {
+                          barColor = 'bg-amber-400';
+                          badgeBg = 'bg-amber-50 text-amber-500';
+                          IconComp = AlertTriangle;
+                        } else if (isAlert) {
+                          barColor = 'bg-rose-500';
+                          badgeBg = 'bg-rose-50/70 text-rose-500';
+                          IconComp = ShieldAlert;
+                        } else if (isSuccess) {
+                          barColor = 'bg-emerald-400';
+                          badgeBg = 'bg-emerald-50 text-emerald-500';
+                          IconComp = Check;
+                        }
+
+                        return (
+                          <div 
+                            key={notif.id} 
+                            onClick={() => markNotifAsRead(notif.id)}
+                            className={`flex group items-start gap-3 p-3.5 transition hover:bg-slate-50/80 relative cursor-pointer ${
+                              notif.isRead ? 'opacity-55' : ''
+                            }`}
+                          >
+                            {/* Color bar on left edge */}
+                            <div className={`absolute left-0 top-0 bottom-0 w-1 ${barColor}`} />
+
+                            <div className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${badgeBg}`}>
+                              <IconComp size={13} className="stroke-[2.5]" />
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-baseline justify-between gap-1.5 mb-1">
+                                <h4 className="text-[11px] font-black text-slate-900 leading-snug truncate">
+                                  {notif.title}
+                                </h4>
+                                <span className="text-[8.5px] font-bold text-slate-400 shrink-0 font-mono">
+                                  {notif.date}
+                                </span>
+                              </div>
+                              <p className="text-[10.5px] leading-relaxed text-slate-500 font-medium">
+                                {notif.text}
+                              </p>
+                              {notif.dispatcher && (
+                                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                  {user.name.toLowerCase() === notif.dispatcher.toLowerCase() ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8.5px] font-black tracking-wide bg-[#c3fb12] text-[#2f4201] uppercase border border-[#c3fb12]/40 animate-pulse-slow">
+                                      <span className="w-1 h-1 rounded-full bg-[#2f4201]" />
+                                      ДЛЯ ВАС (Ваша машина)
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8.5px] font-semibold tracking-wide bg-slate-100 text-slate-600 uppercase border border-slate-200">
+                                      Диспетчер: {notif.dispatcher}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Actions block inside item */}
+                            <div className="flex items-center gap-0.5 shrink-0 pl-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  markNotifAsRead(notif.id);
+                                }}
+                                className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+                                title={notif.isRead ? 'Отметить как непрочитанное' : 'Отметить как прочитанное'}
+                              >
+                                {notif.isRead ? <Check size={11} className="stroke-[3]" /> : <CheckCheck size={11} className="stroke-[2.5]" />}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => deleteNotif(notif.id, e)}
+                                className="p-1 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-500 transition cursor-pointer"
+                                title="Удалить уведомление"
+                              >
+                                <X size={11} className="stroke-[3]" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Informational context and Simulator trigger footer */}
+                  <div className="p-4 bg-slate-50 border-t border-slate-150 rounded-b-2xl">
+                    <div className="mb-3.5">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 font-mono block mb-1">События Учёта выезда</span>
+                      <div className="flex flex-col gap-1.5 mt-1.5 border-b border-slate-200/50 pb-2.5">
+                        <div className="text-[9.5px] text-slate-500 font-bold flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                          <span>🛠️ Ремонт успешно завершен (Оповестить своего диспетчера)</span>
+                        </div>
+                        <div className="text-[9.5px] text-slate-500 font-bold flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />
+                          <span>📦 Подходит срок готовности (Нужно срочно грузить машину!)</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={simulateNotif}
+                      className="w-full py-1.5 bg-[#70FC8E]/10 hover:bg-[#70FC8E]/25 text-slate-950 font-black text-[10px] uppercase tracking-wider rounded-xl border border-[#70FC8E]/30 flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer shadow-xs group"
+                    >
+                      <Sparkles size={11} className="stroke-[3] text-emerald-600 animate-pulse group-hover:rotate-12 transition-transform" />
+                      <span>Сгенерировать тест-событие</span>
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Live indicator badge */}

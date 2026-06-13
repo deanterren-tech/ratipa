@@ -120,7 +120,12 @@ export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryPro
         )}
       </div>
 
-      <div className="overflow-x-auto">
+      {/* Swipe Help Badge for Mobile */}
+      <div className="block lg:hidden text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 mb-3 text-center uppercase tracking-wider select-none">
+         <span className="inline-block animate-pulse text-blue-500 mr-1.5 font-sans">↔</span> Таблица видов прокручивается вправо для просмотра деталей
+      </div>
+
+      <div className="overflow-x-auto custom-scrollbar">
         <table className="w-full text-left border-collapse min-w-[600px]">
           <thead>
             <tr className="bg-slate-50/60 border-b border-slate-200/55 text-[10px] uppercase font-black text-slate-400 tracking-wider">

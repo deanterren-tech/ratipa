@@ -903,7 +903,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
               <button onClick={addPermitRow} className="flex items-center gap-1 bg-slate-950 hover:bg-slate-800 text-[#70FC8E] px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight">+ Добавить строку</button>
             </div>
 
-            <div className="table-responsive select-none">
+            <div className="table-responsive select-none overflow-x-auto custom-scrollbar">
               <table className="main-table w-full text-xs">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-150 text-[10px] font-black uppercase text-slate-400">
@@ -982,7 +982,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
               </div>
             </div>
 
-            <div className="table-responsive select-none">
+            <div className="table-responsive select-none overflow-x-auto custom-scrollbar">
               <table className="main-table w-full text-xs">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-150 text-[10px] font-black uppercase text-slate-400">
@@ -1063,7 +1063,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
               <button onClick={addChinaRow} className="flex items-center gap-1 bg-slate-950 hover:bg-slate-800 text-[#70FC8E] px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight cursor-pointer">+ Добавить строку</button>
             </div>
 
-            <div className="table-responsive select-none">
+            <div className="table-responsive select-none overflow-x-auto custom-scrollbar">
               <table className="main-table w-full text-xs">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-150 text-[10px] font-black uppercase text-slate-400">

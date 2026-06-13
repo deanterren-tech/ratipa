@@ -607,7 +607,12 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     </div>
                  </div>
 
-                 <div className="overflow-x-auto">
+                 {/* Swipe Help Badge for Mobile */}
+                 <div className="block lg:hidden text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 mb-3 text-center uppercase tracking-wider select-none">
+                    <span className="inline-block animate-pulse text-[#107c41] mr-1.5 font-sans">↔</span> Таблица прокручивается вправо для просмотра деталей (Ремонт, Сроки готовности, Выезд)
+                 </div>
+
+                 <div className="overflow-x-auto custom-scrollbar">
                     <table className="w-full text-left min-w-[1450px] border-separate border-spacing-y-2">
                        <thead>
                           <tr>
@@ -626,7 +631,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                           {filteredList.map(v => (
                              <tr key={v.id} onClick={() => openCarModal(v)} className="group cursor-pointer">
                                 <td className="bg-slate-50 rounded-l-2xl px-5 py-5 border-y border-l border-slate-200/50 group-hover:bg-slate-100/60 transition duration-150">
-                                   <span className="font-extrabold text-slate-950 text-sm bg-white px-3 py-1.5 rounded-xl border border-slate-300 group-hover:border-slate-400 group-hover:bg-[#70FC8E]/10 transition-all font-mono tracking-wider shadow-xs">{v.carNumber}</span>
+                                   <span className="font-extrabold text-slate-950 text-xs sm:text-sm bg-white px-2.5 py-1.5 rounded-xl border border-slate-300 group-hover:border-slate-400 group-hover:bg-[#70FC8E]/10 transition-all font-mono tracking-wider shadow-xs whitespace-nowrap inline-block select-all">{v.carNumber}</span>
                                 </td>
                                 <td className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-sm font-black text-slate-800 group-hover:bg-slate-100/60 transition">{v.driverName || '—'}</td>
                                 <td className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-xs font-bold text-slate-700 group-hover:bg-slate-100/60 transition">
@@ -856,7 +861,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                        </button>
                     </div>
 
-                    <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                    <div className="overflow-x-auto border border-slate-200 rounded-2xl custom-scrollbar">
                        <table className="w-full text-left min-w-[900px] border-collapse bg-white">
                           <thead className="bg-slate-50 border-b border-slate-200">
                              <tr>

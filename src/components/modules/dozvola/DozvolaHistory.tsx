@@ -35,6 +35,11 @@ export default function DozvolaHistory({ user }: DozvolaHistoryProps) {
             <History className="h-5 w-5" /> Полный журнал логирования и цепочек передач документов
         </h2>
         
+        {/* Swipe Help Badge for Mobile */}
+        <div className="block lg:hidden text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 mb-3 text-center uppercase tracking-wider select-none">
+           <span className="inline-block animate-pulse text-blue-500 mr-1.5 font-sans">↔</span> Таблица логов прокручивается вправо для просмотра деталей действий
+        </div>
+
         <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse">
                 <thead>

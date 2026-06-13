@@ -414,6 +414,11 @@ export default function DozvolaRegistryList({
           </div>
         </div>
 
+        {/* Swipe Help Badge for Mobile */}
+        <div className="block lg:hidden text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 mb-3 text-center uppercase tracking-wider select-none">
+           <span className="inline-block animate-pulse text-blue-500 mr-1.5 font-sans">↔</span> Таблица прокручивается вправо для просмотра деталей (Локация авто, Копии, Статусы)
+        </div>
+
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
