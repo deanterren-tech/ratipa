@@ -16,7 +16,8 @@ import {
   DistancePreset,
   CarRateGroup,
   DirectionPreset,
-  Driver
+  Driver,
+  CurrencyPreset
 } from './types';
 
 // The verified production config for the Ratipa system
@@ -1105,6 +1106,52 @@ export const dbService = {
       setLocalStorageData('ratipa_distances', filtered);
     }
     dbService.logAction(user, role, 'Delete Distance Preset', 'Settings', id, `Distance preset deleted`);
+  },
+
+  // CURRENCIES Presets
+  getCurrencies: (callback: (presets: CurrencyPreset[]) => void) => {
+    if (useFirebase) {
+      const dbRef = ref(database, 'currenciesList');
+      return onValue(dbRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const list: CurrencyPreset[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+          callback(list.sort((a,b) => a.code.localeCompare(b.code)));
+        } else {
+          const INITIAL_CURRENCIES: CurrencyPreset[] = [
+            { id: '1', code: 'USD' },
+            { id: '2', code: 'EUR' },
+            { id: '3', code: 'RUB' },
+            { id: '4', code: 'BYN' },
+            { id: '5', code: 'TRY' },
+            { id: '6', code: 'KZT' },
+            { id: '7', code: 'CNY' }
+          ];
+          INITIAL_CURRENCIES.forEach(c => {
+            set(ref(database, `currenciesList/${c.id}`), c).catch(e => console.warn(e));
+          });
+          callback(INITIAL_CURRENCIES);
+        }
+      }, (err) => {
+        console.warn("Currencies query fail:", err);
+      });
+    } else {
+      return () => {};
+    }
+  },
+
+  saveCurrency: (c: CurrencyPreset, user: string, role: string) => {
+    if (useFirebase) {
+      set(ref(database, `currenciesList/${c.id}`), c);
+    }
+    dbService.logAction(user, role, 'Save Currency', 'Settings', c.id, `Currency saved: ${c.code}`);
+  },
+
+  deleteCurrency: (id: string, user: string, role: string) => {
+    if (useFirebase) {
+      remove(ref(database, `currenciesList/${id}`));
+    }
+    dbService.logAction(user, role, 'Delete Currency', 'Settings', id, `Currency deleted`);
   },
 
   // CARS POOL (Тарифы по машинам)

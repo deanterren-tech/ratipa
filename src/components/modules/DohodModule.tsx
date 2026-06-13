@@ -1,7 +1,74 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, RouteCalculation, Leg, FerryTemplate, DistancePreset, ChatMessage, RouteTemplate, DirectionPreset } from '../../types';
 import { dbService } from '../../firebase';
-import { Plus, Trash2, Save, MapPin, Calculator, MessageSquare, Sparkles, Info, Ship, TrendingUp, FileSpreadsheet, Calendar, RefreshCw, Edit, Copy } from 'lucide-react';
+import { pdService } from '../../firebase/planDohodService';
+import { Plus, Trash2, Save, MapPin, Calculator, MessageSquare, Sparkles, Info, Ship, TrendingUp, FileSpreadsheet, Calendar, RefreshCw, Edit, Copy, X } from 'lucide-react';
+import { APIProvider, Map, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
+
+const API_KEY = process.env.GOOGLE_MAPS_PLATFORM_KEY || (window as any).GOOGLE_MAPS_PLATFORM_KEY || '';
+const hasValidKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY';
+
+function RouteDisplay({ origin, destination, onDistance }: { origin: string; destination: string; onDistance: (km: number) => void }) {
+  const map = useMap();
+  const routesLib = useMapsLibrary('routes');
+  const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer | null>(null);
+  const [debouncedOrigin, setDebouncedOrigin] = useState(origin);
+  const [debouncedDestination, setDebouncedDestination] = useState(destination);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedOrigin(origin);
+      setDebouncedDestination(destination);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [origin, destination]);
+
+  useEffect(() => {
+    if (!map || !routesLib || typeof google === 'undefined') return;
+    const renderer = new google.maps.DirectionsRenderer({
+      map,
+      suppressMarkers: false,
+      polylineOptions: {
+        strokeColor: '#3b82f6',
+        strokeWeight: 5,
+      }
+    });
+    setDirectionsRenderer(renderer);
+    return () => {
+      renderer.setMap(null);
+    };
+  }, [map, routesLib]);
+
+  useEffect(() => {
+    if (!map || !routesLib || !debouncedOrigin || !debouncedDestination || !directionsRenderer || typeof google === 'undefined') return;
+
+    const directionsService = new google.maps.DirectionsService();
+    directionsService.route(
+      {
+        origin: debouncedOrigin,
+        destination: debouncedDestination,
+        travelMode: google.maps.TravelMode.DRIVING,
+      },
+      (result, status) => {
+        if (status === google.maps.DirectionsStatus.OK && result) {
+          directionsRenderer.setDirections(result);
+          const route = result.routes[0];
+          if (route) {
+            let totalDistance = 0;
+            for (let i = 0; i < route.legs.length; i++) {
+              totalDistance += route.legs[i].distance?.value || 0;
+            }
+            onDistance(Math.round(totalDistance / 1000));
+          }
+        } else {
+          console.warn("Directions request failed due to: " + status);
+        }
+      }
+    );
+  }, [map, routesLib, debouncedOrigin, debouncedDestination, directionsRenderer, onDistance]);
+
+  return null;
+}
 
 interface DohodModuleProps {
   user: UserProfile;
@@ -33,7 +100,21 @@ export default function DohodModule({ user }: DohodModuleProps) {
     EUR: { scale: 1, rate: 3.55 },
     RUB: { scale: 100, rate: 3.42 },
     BYN: { scale: 1, rate: 1.0 },
+    TRY: { scale: 10, rate: 1.0 },
+    KZT: { scale: 1000, rate: 7.2 },
+    KGS: { scale: 100, rate: 3.7 },
+    CNY: { scale: 10, rate: 4.5 },
+    GEL: { scale: 1, rate: 1.2 },
+    AMD: { scale: 1000, rate: 8.35 },
   });
+
+  const [pdSettings, setPdSettings] = useState<any>({ useDistanceLookup: false, googleMapsApiKey: '' });
+  const [mapModalOpen, setMapModalOpen] = useState(false);
+  const [mapLegIndex, setMapLegIndex] = useState<number | null>(null);
+  const [mapOrigin, setMapOrigin] = useState('');
+  const [mapDestination, setMapDestination] = useState('');
+  const [mapKmResult, setMapKmResult] = useState<number>(0);
+  const [saveToDirectoryChecked, setSaveToDirectoryChecked] = useState(false);
 
   const [conversionDialog, setConversionDialog] = useState<{
     index: number;
@@ -66,6 +147,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
     const subDistances = dbService.getDistances(setDistances);
     const subDirs = dbService.getDirections(setDirections);
     const subChat = dbService.getChatMessages('ai_dispatcher', setChatMessages);
+    const subPdSettings = pdService.subscribePlanDohodSettings(setPdSettings);
 
     // Fetch live NBRB rates directly with fallbacks
     fetch('https://api.nbrb.by/exrates/rates?periodicity=0')
@@ -76,10 +158,16 @@ export default function DohodModule({ user }: DohodModuleProps) {
           USD: { scale: 1, rate: 3.25 },
           EUR: { scale: 1, rate: 3.55 },
           RUB: { scale: 100, rate: 3.42 },
+          TRY: { scale: 10, rate: 1.0 },
+          KZT: { scale: 1000, rate: 7.2 },
+          KGS: { scale: 100, rate: 3.7 },
+          CNY: { scale: 10, rate: 4.5 },
+          GEL: { scale: 1, rate: 1.2 },
+          AMD: { scale: 1000, rate: 8.35 },
         };
         if (Array.isArray(data)) {
           data.forEach(item => {
-            if (item && ['USD', 'EUR', 'RUB'].includes(item.Cur_Abbreviation)) {
+            if (item && ['USD', 'EUR', 'RUB', 'TRY', 'KZT', 'KGS', 'CNY', 'GEL', 'AMD'].includes(item.Cur_Abbreviation)) {
               updated[item.Cur_Abbreviation] = {
                 scale: item.Cur_Scale || 1,
                 rate: item.Cur_OfficialRate,
@@ -100,6 +188,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
       subDistances();
       subDirs();
       subChat();
+      subPdSettings();
     };
   }, []);
 
@@ -143,6 +232,51 @@ export default function DohodModule({ user }: DohodModuleProps) {
     const found = directions.find(d => d.name === val);
     const coeff = found ? found.coeff : 0;
     setLegs(legs.map(l => ({ ...l, coeff })));
+  };
+
+  const openMapRouteModal = (idx: number, origin: string, destination: string) => {
+    setMapLegIndex(idx);
+    setMapOrigin(origin || '');
+    setMapDestination(destination || '');
+    setMapKmResult(0);
+    setMapModalOpen(true);
+  };
+
+  const applyMapRoute = () => {
+    if (mapLegIndex !== null) {
+      const cleanOrigin = mapOrigin.trim();
+      const cleanDestination = mapDestination.trim();
+      
+      updateLeg(mapLegIndex, { 
+        dist: mapKmResult,
+        distance: mapKmResult,
+        from: cleanOrigin,
+        to: cleanDestination
+      });
+
+      if (saveToDirectoryChecked) {
+        dbService.saveDistance({
+          id: "dist_" + Date.now(),
+          from: cleanOrigin,
+          to: cleanDestination,
+          distance: mapKmResult
+        }, user.name, user.role);
+      }
+    }
+    setMapModalOpen(false);
+    setSaveToDirectoryChecked(false);
+  };
+
+  const handleCityBlur = (idx: number) => {
+    const leg = legs[idx];
+    if (leg && leg.from && leg.to) {
+      const matchedDist = findDistanceInPool(leg.from, leg.to);
+      if (matchedDist === null && (leg.dist || leg.distance || 0) === 0) {
+        if (pdSettings?.useDistanceLookup) {
+          openMapRouteModal(idx, leg.from, leg.to);
+        }
+      }
+    }
   };
 
   const updateLeg = (index: number, updatedFields: Partial<Omit<Leg, 'id'>>) => {
@@ -700,18 +834,28 @@ export default function DohodModule({ user }: DohodModuleProps) {
                            <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition">
                                <td className="p-2 text-xs font-black text-slate-400">{idx + 1}</td>
                                <td className="p-2">
-                                   <input list="cities-datalist" value={leg.from} onChange={(e) => updateLeg(idx, {from: e.target.value})} className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-[#0f7632] outline-none" />
+                                   <input list="cities-datalist" value={leg.from} onChange={(e) => updateLeg(idx, {from: e.target.value})} onBlur={() => handleCityBlur(idx)} className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-[#0f7632] outline-none" />
                                </td>
                                <td className="p-2">
-                                   <input list="cities-datalist" value={leg.to} onChange={(e) => updateLeg(idx, {to: e.target.value})} className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-[#0f7632] outline-none" />
+                                   <input list="cities-datalist" value={leg.to} onChange={(e) => updateLeg(idx, {to: e.target.value})} onBlur={() => handleCityBlur(idx)} className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-[#0f7632] outline-none" />
                                </td>
                                <td className="p-2">
-                                    <input type="number" 
-                                        value={leg.dist || leg.distance || ''} 
-                                        onChange={(e) => updateLeg(idx, { dist: Number(e.target.value), distance: Number(e.target.value) })} 
-                                        onBlur={(e) => checkManualDistanceUpdate(leg.from, leg.to, Number(e.target.value))}
-                                        className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-[#0f7632] outline-none" 
-                                    />
+                                   <div className="relative flex items-center">
+                                       <input type="number" 
+                                           value={leg.dist || leg.distance || ''} 
+                                           onChange={(e) => updateLeg(idx, { dist: Number(e.target.value), distance: Number(e.target.value) })} 
+                                           onBlur={(e) => checkManualDistanceUpdate(leg.from, leg.to, Number(e.target.value))}
+                                           className="w-full pl-2 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-[#0f7632] outline-none" 
+                                       />
+                                       <button 
+                                           type="button"
+                                           onClick={() => openMapRouteModal(idx, leg.from, leg.to)}
+                                           title="Показать карту и рассчитать расстояние"
+                                           className="absolute right-1 text-slate-400 hover:text-blue-500 hover:bg-slate-100 p-1 rounded-md transition"
+                                       >
+                                           <MapPin className="w-3.5 h-3.5" />
+                                       </button>
+                                   </div>
                                </td>
                                <td className="p-2">
                                    <input type="number" value={leg.freight || ''} onChange={(e) => updateLeg(idx, {freight: Number(e.target.value)})} className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-[#0f7632] outline-none" />
@@ -821,42 +965,69 @@ export default function DohodModule({ user }: DohodModuleProps) {
       {/* Main Right Sidebar Workspace */}
       <div className="xl:col-span-4 space-y-6">
         
-         {/* MyFin Currency Converter Widget */}
-         <div id="myfin-converter-widget" className="bg-white rounded-[2rem] p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] relative overflow-hidden">
+         {/* Custom Currency Converter Widget */}
+         <div id="nbrb-converter-widget" className="bg-white rounded-[2rem] p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] relative overflow-hidden">
              <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4 select-none">
                  <h2 className="text-xs font-black uppercase text-slate-800 tracking-tight flex items-center gap-1.5 font-mono">
                      🏦 Конвертер валют НБ РБ
                  </h2>
-                 <a 
-                   href="https://myfin.by/converter" 
-                   target="_blank" 
-                   rel="noopener noreferrer" 
-                   className="text-[9px] font-black uppercase tracking-wider text-blue-600 hover:underline"
-                 >
-                   Myfin.by ↗
-                 </a>
+                 <span className="text-[9px] font-black uppercase tracking-wider text-[#70FC8E] bg-slate-950 px-2 py-0.5 rounded-md">
+                   API NBRB.BY
+                 </span>
              </div>
              
-             <div className="flex flex-wrap items-center justify-between gap-1 mb-4 bg-slate-50 border border-slate-200/60 p-3 rounded-2xl text-[10px] font-mono select-none">
-                 <span className="text-slate-400 font-bold uppercase tracking-wider">Курсы НБ РБ:</span>
-                 <span className="text-slate-800 font-black">1 USD = {(nbrbRates['USD']?.rate || 3.25).toFixed(4)}</span>
-                 <span className="text-slate-800 font-black">1 EUR = {(nbrbRates['EUR']?.rate || 3.55).toFixed(4)}</span>
-                 <span className="text-slate-800 font-black">100 RUB = {(nbrbRates['RUB']?.rate || 3.42).toFixed(4)}</span>
+             <div className="flex overflow-x-auto custom-scrollbar items-center gap-2 mb-4 bg-slate-50 border border-slate-200/60 p-3 rounded-2xl text-[10px] font-mono select-none whitespace-nowrap">
+                 <span className="text-slate-400 font-bold uppercase tracking-wider shrink-0 mr-2">Курсы НБ РБ:</span>
+                 <span className="text-slate-800 font-black shrink-0">1 USD = {(nbrbRates['USD']?.rate || 3.25).toFixed(4)}</span>
+                 <span className="text-slate-800 font-black shrink-0">1 EUR = {(nbrbRates['EUR']?.rate || 3.55).toFixed(4)}</span>
+                 <span className="text-slate-800 font-black shrink-0">100 RUB = {(nbrbRates['RUB']?.rate || 3.42).toFixed(4)}</span>
+                 <span className="text-slate-800 font-black shrink-0">10 TRY = {(nbrbRates['TRY']?.rate || 1.0).toFixed(4)}</span>
+                 <span className="text-slate-800 font-black shrink-0">10 CNY = {(nbrbRates['CNY']?.rate || 4.5).toFixed(4)}</span>
              </div>
 
-             <div className="w-full relative bg-slate-50 rounded-2xl overflow-hidden border border-slate-200" style={{ height: '390px' }}>
-                 <iframe 
-                     src="https://myfin.by/outer/informer/nb/converter" 
-                     width="100%" 
-                     height="100%" 
-                     style={{ border: 'none', overflow: 'hidden' }}
-                     scrolling="no"
-                     title="Конвертер валют НБ РБ"
-                     referrerPolicy="no-referrer"
-                 />
+             <div className="w-full bg-slate-50 rounded-2xl p-5 border border-slate-200/60 flex flex-col gap-3 h-[450px] overflow-y-auto custom-scrollbar">
+                 {['BYN', 'USD', 'EUR', 'RUB', 'TRY', 'KZT', 'KGS', 'CNY', 'GEL', 'AMD'].map((cur) => (
+                    <div key={cur} className="flex items-center w-full bg-white border border-slate-200 rounded-xl overflow-hidden focus-within:border-blue-500 shadow-sm transition">
+                        <div className="bg-slate-100/80 flex-shrink-0 px-4 py-3 border-r border-slate-200 font-black text-slate-700 min-w-[85px] text-center select-none flex items-center justify-center gap-2 text-sm">
+                            <span className="text-[16px] leading-none">{cur === 'BYN' ? '🇧🇾' : cur === 'USD' ? '🇺🇸' : cur === 'EUR' ? '🇪🇺' : cur === 'RUB' ? '🇷🇺' : cur === 'TRY' ? '🇹🇷' : cur === 'KZT' ? '🇰🇿' : cur === 'KGS' ? '🇰🇬' : cur === 'CNY' ? '🇨🇳' : cur === 'GEL' ? '🇬🇪' : '🇦🇲'}</span>
+                            {cur}
+                        </div>
+                        <input
+                            type="number"
+                            id={`conv-multi-${cur}`}
+                            placeholder="0.00"
+                            defaultValue={cur === 'USD' ? 100 : (100 * ((nbrbRates['USD']?.rate||3.25)/(nbrbRates['USD']?.scale||1)) / ((nbrbRates[cur]?.rate||1)/(nbrbRates[cur]?.scale||1))).toFixed(2)}
+                            onInput={(e) => {
+                                const inputVal = parseFloat((e.target as HTMLInputElement).value);
+                                if (isNaN(inputVal)) {
+                                    ['BYN', 'USD', 'EUR', 'RUB', 'TRY', 'KZT', 'KGS', 'CNY', 'GEL', 'AMD'].forEach(toCur => {
+                                        if (toCur !== cur) {
+                                            const el = document.getElementById(`conv-multi-${toCur}`) as HTMLInputElement;
+                                            if (el) el.value = '';
+                                        }
+                                    });
+                                    return;
+                                }
+                                
+                                const fromCur = cur;
+                                const rateFrom = nbrbRates[fromCur] ? (nbrbRates[fromCur].rate / nbrbRates[fromCur].scale) : 1;
+                                
+                                ['BYN', 'USD', 'EUR', 'RUB', 'TRY', 'KZT', 'KGS', 'CNY', 'GEL', 'AMD'].forEach(toCur => {
+                                    if (toCur !== fromCur) {
+                                        const rateTo = nbrbRates[toCur] ? (nbrbRates[toCur].rate / nbrbRates[toCur].scale) : 1;
+                                        const el = document.getElementById(`conv-multi-${toCur}`) as HTMLInputElement;
+                                        if (el) el.value = (inputVal * rateFrom / rateTo).toFixed(4);
+                                    }
+                                });
+                            }}
+                            className="w-full bg-transparent px-4 py-3 text-right text-base font-black text-slate-800 outline-none placeholder:text-slate-300"
+                        />
+                    </div>
+                 ))}
              </div>
-             <p className="text-[9px] text-slate-400 mt-2 font-mono leading-tight uppercase font-medium">
-                 *официальный информер Национального Банка РБ от портала myfin.by
+             
+             <p className="text-[9px] text-slate-400 mt-4 font-mono leading-tight uppercase font-medium">
+                 *Курсы обновляются автоматически с открытого API НБ РБ
              </p>
          </div>
 
@@ -1032,6 +1203,122 @@ export default function DohodModule({ user }: DohodModuleProps) {
              </div>
          </div>
       )}
+
+       {mapModalOpen && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+             <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col pt-1">
+                <div className="px-6 py-5 border-b border-slate-100 flex flex-col gap-4">
+                   <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                         <div className="bg-blue-50 text-blue-600 p-2 rounded-xl"><MapPin className="w-5 h-5"/></div>
+                         <div>
+                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Интерактивный Расчет Маршрута</h3>
+                            <div className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-widest">Проверка расстояния с авто-калькуляцией</div>
+                         </div>
+                      </div>
+                      <button onClick={() => setMapModalOpen(false)} className="w-10 h-10 rounded-full bg-slate-50 text-slate-500 hover:bg-slate-100 flex items-center justify-center transition"><X className="w-5 h-5"/></button>
+                   </div>
+                   
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1.5">
+                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider font-mono">Пункт Отправления (Откуда)</label>
+                         <input 
+                           type="text" 
+                           value={mapOrigin} 
+                           onChange={e => setMapOrigin(e.target.value)}
+                           className="w-full bg-slate-50 text-slate-800 font-bold border border-slate-200 rounded-xl px-4 py-2.5 text-xs outline-none focus:border-blue-500 focus:bg-white transition"
+                           placeholder="Начните вводить город..."
+                         />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider font-mono">Пункт Назначения (Куда)</label>
+                         <input 
+                           type="text" 
+                           value={mapDestination} 
+                           onChange={e => setMapDestination(e.target.value)}
+                           className="w-full bg-slate-50 text-slate-800 font-bold border border-slate-200 rounded-xl px-4 py-2.5 text-xs outline-none focus:border-blue-500 focus:bg-white transition"
+                           placeholder="Начните вводить город..."
+                         />
+                      </div>
+                   </div>
+                </div>
+                
+                <div className="relative h-[380px] md:h-[450px] w-full bg-slate-100 border-b border-slate-100">
+                    {!(pdSettings?.googleMapsApiKey || API_KEY || (window as any).GOOGLE_MAPS_PLATFORM_KEY) ? (
+                       <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-slate-50">
+                          <div className="bg-red-50 text-red-500 p-4 rounded-full mb-3 shadow-sm"><X className="w-8 h-8"/></div>
+                          <h4 className="font-black text-slate-800 text-sm uppercase tracking-wide">Ключ Google Maps API не найден</h4>
+                          <p className="text-xs text-slate-500 max-w-sm mt-1.5 leading-relaxed font-semibold">
+                             Для работы интерактивной карты необходимо настроить Google Maps API.
+                          </p>
+                          <div className="mt-4 p-4 bg-slate-900 text-left rounded-2xl max-w-md w-full border border-slate-800">
+                             <div className="text-[#70FC8E] text-[10px] font-black font-mono uppercase tracking-widest mb-1.5">Как настроить:</div>
+                             <div className="text-slate-300 text-[10px] space-y-1 font-semibold leading-normal">
+                               <strong>Шаг 1:</strong> Перейдите во вкладку <strong className="text-slate-100">"Справочники"</strong> ➔ <strong className="text-slate-100">"Настройки Google Maps API"</strong>.
+                               <br/>
+                               <strong>Шаг 2:</strong> Вставьте ваш ключ Google Maps API и включите тумблер расчета.
+                             </div>
+                             <div className="text-slate-400 font-bold uppercase text-[9px] font-mono border-t border-slate-100 pt-2 flex items-center gap-1.5 mt-3">
+                                <span>● автоматическая сборка</span>
+                                <span>● перезагрузка не требуется</span>
+                             </div>
+                          </div>
+                       </div>
+                    ) : mapOrigin && mapDestination ? (
+                       <APIProvider apiKey={pdSettings?.googleMapsApiKey || API_KEY || (window as any).GOOGLE_MAPS_PLATFORM_KEY} version="weekly">
+                          <Map 
+                            defaultCenter={{lat: 53.9006, lng: 27.5590}} 
+                            defaultZoom={5} 
+                            mapId="ROUTE_MAP_DOHOD" 
+                            internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+                            style={{width: '100%', height: '100%'}}
+                            gestureHandling={'greedy'}
+                            disableDefaultUI={true}
+                          >
+                            <RouteDisplay origin={mapOrigin} destination={mapDestination} onDistance={setMapKmResult} />
+                          </Map>
+                       </APIProvider>
+                    ) : (
+                       <div className="absolute inset-0 flex items-center justify-center text-slate-400 font-bold text-xs uppercase tracking-wider">
+                          Введите пункты отправления и назначения для прокладки маршрута
+                       </div>
+                    )}
+                </div>
+                
+                <div className="p-6 bg-slate-50 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                   <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+                      <div className="flex flex-col">
+                         <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono">Расстояние маршрута:</span>
+                         <span className={`text-xl font-black ${mapKmResult > 0 ? 'text-blue-600' : 'text-slate-400'}`}>
+                            {mapKmResult > 0 ? `${mapKmResult} км` : 'Рассчитывается...'}
+                         </span>
+                      </div>
+                      
+                      <label className="flex items-center gap-2 cursor-pointer select-none border border-slate-200 rounded-xl px-3.5 py-2.5 bg-white shadow-xs hover:bg-slate-100 transition">
+                         <input 
+                           type="checkbox" 
+                           checked={saveToDirectoryChecked} 
+                           onChange={e => setSaveToDirectoryChecked(e.target.checked)}
+                           className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500"
+                         />
+                         <span className="text-xs font-black text-slate-700">Сохранить также в справочник</span>
+                      </label>
+                   </div>
+                   
+                   <div className="flex gap-2 justify-end">
+                      <button onClick={() => setMapModalOpen(false)} className="px-6 py-3 rounded-xl font-black text-xs uppercase text-slate-500 hover:bg-slate-200 transition">Отмена</button>
+                      <button 
+                        onClick={applyMapRoute}
+                        disabled={mapKmResult === 0}
+                        className={`px-8 py-3 rounded-xl font-black text-xs uppercase transition shadow-sm ${mapKmResult > 0 ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                      >
+                         Применить пробег
+                      </button>
+                   </div>
+                </div>
+             </div>
+          </div>
+       )}
 
       {editingCalcId && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">

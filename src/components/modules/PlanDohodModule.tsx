@@ -1,8 +1,74 @@
-import React, { useState, useEffect } from 'react';
-import { UserProfile, TripPlan, LegPlan, DirectionPreset, DistancePreset, DISPATCHER_COLORS_PRESETS } from '../../types';
+import React, { useState, useEffect, useRef } from 'react';
+import { UserProfile, TripPlan, LegPlan, DirectionPreset, DistancePreset, DISPATCHER_COLORS_PRESETS, PotentialLoad, CurrencyPreset } from '../../types';
 import { dbService } from '../../firebase';
 import { pdService } from '../../firebase/planDohodService';
-import { Plus, Trash2, Save, MapPin, Calculator, TrendingUp, Archive, History, Check, X, BookOpen, Minus } from 'lucide-react';
+import { Plus, Trash2, Save, MapPin, Calculator, TrendingUp, Archive, History, Check, X, BookOpen, Minus, Bot } from 'lucide-react';
+import { APIProvider, Map, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
+
+const API_KEY = process.env.GOOGLE_MAPS_PLATFORM_KEY || (window as any).GOOGLE_MAPS_PLATFORM_KEY || '';
+const hasValidKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY';
+
+function RouteDisplay({ origin, destination, onDistance }: { origin: string; destination: string; onDistance: (km: number) => void }) {
+  const map = useMap();
+  const routesLib = useMapsLibrary('routes');
+  const [directionsRenderer, setDirectionsRenderer] = useState<google.maps.DirectionsRenderer | null>(null);
+  const [debouncedOrigin, setDebouncedOrigin] = useState(origin);
+  const [debouncedDestination, setDebouncedDestination] = useState(destination);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedOrigin(origin);
+      setDebouncedDestination(destination);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [origin, destination]);
+
+  useEffect(() => {
+    if (!map || !routesLib || typeof google === 'undefined') return;
+    const renderer = new google.maps.DirectionsRenderer({
+      map,
+      suppressMarkers: false,
+      polylineOptions: {
+        strokeColor: '#3b82f6',
+        strokeWeight: 5,
+      }
+    });
+    setDirectionsRenderer(renderer);
+    return () => {
+      renderer.setMap(null);
+    };
+  }, [map, routesLib]);
+
+  useEffect(() => {
+    if (!map || !routesLib || !debouncedOrigin || !debouncedDestination || !directionsRenderer || typeof google === 'undefined') return;
+
+    const directionsService = new google.maps.DirectionsService();
+    directionsService.route(
+      {
+        origin: debouncedOrigin,
+        destination: debouncedDestination,
+        travelMode: google.maps.TravelMode.DRIVING,
+      },
+      (result, status) => {
+        if (status === google.maps.DirectionsStatus.OK && result) {
+          directionsRenderer.setDirections(result);
+          const route = result.routes[0];
+          if (route) {
+            let totalDistance = 0;
+            for (let i = 0; i < route.legs.length; i++) {
+              totalDistance += route.legs[i].distance?.value || 0;
+            }
+            onDistance(Math.round(totalDistance / 1000));
+          }
+        } else {
+          console.warn("Directions request failed due to: " + status);
+        }
+      }
+    );
+  }, [map, routesLib, debouncedOrigin, debouncedDestination, directionsRenderer, onDistance]);
+
+  return null;
+}
 
 interface PlanDohodModuleProps {
   user: UserProfile;
@@ -13,6 +79,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [activeTab, setActiveTab] = useState<'active' | 'archive' | 'history'>('active');
   const [archiveMonth, setArchiveMonth] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalTab, setModalTab] = useState<'main' | 'potential'>('main');
   const [sortConfig, setSortConfig] = useState<{key: string, dir: 'asc'|'desc'} | null>(null);
   
   // Realtime Data
@@ -24,6 +91,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [dispatchers, setDispatchers] = useState<string[]>([]);
   const [dispatchersOrder, setDispatchersOrder] = useState<string[]>([]);
   const [dispatchersColors, setDispatchersColors] = useState<Record<string, string>>({});
+  const [currencies, setCurrencies] = useState<any[]>([]); // CurrencyPreset
   const [logs, setLogs] = useState<any[]>([]);
   const [manualTripsOrder, setManualTripsOrder] = useState<string[]>([]);
 
@@ -41,6 +109,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     const unsubCars = pdService.subscribeCars(setSavedCars);
     const unsubDirs = pdService.subscribeDirections(setDirections);
     const unsubDist = pdService.subscribeKnownDistances(setDistances);
+    const unsubCurrencies = dbService.getCurrencies(setCurrencies);
     const unsubSet = pdService.subscribePlanDohodSettings(setSettings);
     const unsubColors = pdService.subscribeDispatchersColors(setDispatchersColors);
     const unsubDisp = pdService.subscribeDispatchers((disp, order) => {
@@ -53,7 +122,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     pdService.setPresence(user.name);
 
     return () => {
-      unsubTrips(); unsubCars(); unsubDirs(); unsubDist(); unsubSet(); unsubDisp(); unsubLogs(); unsubColors();
+      unsubTrips(); unsubCars(); unsubDirs(); unsubDist(); unsubCurrencies(); unsubSet(); unsubDisp(); unsubLogs(); unsubColors();
     };
   }, [user.name]);
 
@@ -567,6 +636,28 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [legs, setLegs] = useState<LegPlan[]>([{ 
     from: '', to: '', km: 0, rate: 0, referenceRate: '', ferry: 0, coeff: 0
   }]);
+  const [potentialLoads, setPotentialLoads] = useState<PotentialLoad[]>([]);
+  
+  // Map Route Modal States
+  const [mapModalOpen, setMapModalOpen] = useState(false);
+  const [mapLegIndex, setMapLegIndex] = useState<number|null>(null);
+  const [mapOrigin, setMapOrigin] = useState('');
+  const [mapDestination, setMapDestination] = useState('');
+  const [mapKmResult, setMapKmResult] = useState<number>(0);
+  const [mapIsCheckingPl, setMapIsCheckingPl] = useState(false);
+  const [saveToDirectoryChecked, setSaveToDirectoryChecked] = useState(false);
+  
+  // Potential Load Form States
+  const [plEditingId, setPlEditingId] = useState<string|null>(null);
+  const [plName, setPlName] = useState('');
+  const [plLegs, setPlLegs] = useState<LegPlan[]>([{ from: '', to: '', km: 0, rate: 0, referenceRate: '', ferry: 0, coeff: 0 }]);
+  const [plFerryCost, setPlFerryCost] = useState(0);
+  const [plExtraExpense, setPlExtraExpense] = useState(0);
+  const [plExtraExpenseNote, setPlExtraExpenseNote] = useState('');
+  const [plReferenceRate, setPlReferenceRate] = useState<number|undefined>(undefined);
+  const [plReferenceCurrency, setPlReferenceCurrency] = useState('EUR');
+  const [plAiInput, setPlAiInput] = useState('');
+  const [plAiFeedback, setPlAiFeedback] = useState('');
 
   const getDispatcherColor = (disp: string) => {
     const colorKey = dispatchersColors[disp];
@@ -623,6 +714,60 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setLegs(legs.map(l => ({ ...l, coeff: c })));
   };
 
+  const checkLegDistance = (idx: number, isPotentialList: boolean = false) => {
+    const list = isPotentialList ? plLegs : legs;
+    const leg = list[idx];
+    if (leg.from && leg.to) {
+      if (settings.useDistanceLookup) {
+        const d = findDistance(leg.from, leg.to);
+        if (d == null && leg.km === 0) {
+          openMapRouteModal(idx, leg.from, leg.to, isPotentialList);
+        }
+      } else if (leg.km === 0) {
+        openMapRouteModal(idx, leg.from, leg.to, isPotentialList);
+      }
+    }
+  };
+
+  const openMapRouteModal = (idx: number, origin: string, destination: string, isPl: boolean) => {
+    setMapLegIndex(idx);
+    setMapOrigin(origin);
+    setMapDestination(destination);
+    setMapKmResult(0);
+    setMapIsCheckingPl(isPl);
+    setMapModalOpen(true);
+  };
+
+  const applyMapRoute = () => {
+    if (mapLegIndex !== null) {
+      const cleanOrigin = mapOrigin.trim();
+      const cleanDestination = mapDestination.trim();
+      if (mapIsCheckingPl) {
+        const nl = [...plLegs];
+        nl[mapLegIndex].km = mapKmResult;
+        nl[mapLegIndex].from = cleanOrigin;
+        nl[mapLegIndex].to = cleanDestination;
+        setPlLegs(nl);
+      } else {
+        updateLeg(mapLegIndex, { 
+          km: mapKmResult,
+          from: cleanOrigin,
+          to: cleanDestination
+        });
+      }
+
+      if (saveToDirectoryChecked) {
+        dbService.saveDistance({
+          id: "dist_" + Date.now(),
+          from: cleanOrigin,
+          to: cleanDestination,
+          distance: mapKmResult
+        }, user.name, user.role);
+      }
+    }
+    setMapModalOpen(false);
+    setSaveToDirectoryChecked(false);
+  };
   const addLeg = (idx: number) => {
     const newLegs = [...legs];
     newLegs.splice(idx + 1, 0, { from: '', to: '', km: 0, rate: 0, referenceRate: '', ferry: 0, coeff: directions[direction] || 0 });
@@ -715,6 +860,8 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setCurrentMonth('');
     setActiveLegIndex(undefined);
     setLegs([{ from: '', to: '', km: 0, rate: 0, referenceRate: '', ferry: 0, coeff: directions[defaultDir] || 0 }]);
+    setPotentialLoads([]);
+    setModalTab('main');
   };
 
   const [aiRouteInput, setAiRouteInput] = useState<string>('');
@@ -799,12 +946,149 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setDispatcher(trip.dispatcher || '');
     setCurrentMonth(trip.currentMonth || '');
     setActiveLegIndex(trip.activeLegIndex !== undefined ? trip.activeLegIndex : undefined);
+    setPotentialLoads(trip.potentialLoads || []);
     if (trip.legs && trip.legs.length > 0) {
       setLegs(trip.legs);
     } else {
       setLegs([{ from: '', to: '', km: 0, rate: 0, referenceRate: '', ferry: 0, coeff: directions[trip.direction] || 0 }]);
     }
     setIsModalOpen(true);
+  };
+
+  const parseAiRouteClient = (raw: string, defaultDir: string, directionsMap: Record<string, number>): LegPlan[] => {
+    const chunks = raw.split(/\n|;/).map(s => s.trim()).filter(Boolean);
+    const parsedRows = chunks.map(line => {
+        let from = "";
+        let to = "";
+        const routePatterns = [
+            /(?:из|от)\s+([а-яёa-z\s.-]+?)\s+(?:в|на|до|—|->|→|-)\s+([а-яёa-z\s.-]+)/i,
+            /^([а-яёa-z\s.-]+?)\s*(?:—|->|→|-)\s*([а-яёa-z\s.-]+)/i,
+            /^([а-яёa-z\s.-]+?)\s+(?:в|на|до)\s+([а-яёa-z\s.-]+)/i
+        ];
+        for (const pattern of routePatterns) {
+            const match = line.match(pattern);
+            if (match) {
+                from = match[1].replace(/\b(ставка|фрахт|цена|паром|переправа|коэф|коэффициент|км|евро|eur|usd|долл|руб).*/i, "").replace(/[,:;]+$/g, "").trim().replace(/\s+/g, " ").replace(/^./, ch => ch.toUpperCase());
+                to = match[2].replace(/\b(ставка|фрахт|цена|паром|переправа|коэф|коэффициент|км|евро|eur|usd|долл|руб).*/i, "").replace(/[,:;]+$/g, "").trim().replace(/\s+/g, " ").replace(/^./, ch => ch.toUpperCase());
+                break;
+            }
+        }
+        const rateMatch = line.match(/(?:ставка|фрахт|цена)?\D*?(\d[\d\s.,]*)\s*(?:€|евро|eur)\b/i);
+        const kmMatch = line.match(/(\d[\d\s.,]*)\s*(?:км|km)\b/i);
+        const ferryMatch = line.match(/(?:паром|переправа)\D*?(\d[\d\s.,]*)/i);
+        const coeffMatch = line.match(/(?:коэф|коэффициент)\D*?(\d+(?:[.,]\d+)?)/i);
+
+        return {
+            from,
+            to,
+            km: kmMatch ? parseSmartNumber(kmMatch[1]) : 0,
+            rate: rateMatch ? parseSmartNumber(rateMatch[1]) : 0,
+            ferry: ferryMatch ? parseSmartNumber(ferryMatch[1]) : 0,
+            coeff: coeffMatch ? parseSmartNumber(coeffMatch[1]) : (directionsMap[defaultDir] || 0),
+            referenceRate: ''
+        };
+    }).filter(r => r.from !== "" || r.to !== "" || r.km > 0 || r.rate > 0);
+    return parsedRows;
+  };
+
+  const processPlAiRoute = async () => {
+    if (!plAiInput.trim()) return;
+    setPlAiFeedback('');
+    try {
+      const parsedRows = parseAiRouteClient(plAiInput, Object.keys(directions)[0] || '', directions);
+      if (parsedRows.length === 0) {
+        setPlAiFeedback('Не удалось распознать маршрут.');
+        return;
+      }
+      setPlLegs(parsedRows);
+      setPlAiInput('');
+      setPlAiFeedback(`Успешно распознано ${parsedRows.length} плечей`);
+      setTimeout(() => setPlAiFeedback(''), 3000);
+    } catch (err) {
+      setPlAiFeedback('Ошибка распознавания');
+    }
+  };
+
+  const calculatePlTotals = () => {
+    const totalKm = plLegs.reduce((acc, l) => acc + Number(l.km || 0), 0);
+    const totalFreight = plLegs.reduce((acc, l) => acc + Number(l.rate || 0), 0);
+    const baseExpenses = plLegs.reduce((acc, l) => acc + (Number(l.km || 0) * Number(l.coeff || 0)), 0);
+    const totalExpensesPlan = baseExpenses + Number(plExtraExpense || 0) + Number(plFerryCost || 0);
+    const profit = totalFreight - totalExpensesPlan;
+    return { totalKm, totalFreight, totalExpenses: totalExpensesPlan, profit };
+  };
+
+  const savePotentialLoad = () => {
+    if (!plName.trim()) { alert('Укажите название просчета'); return; }
+    if (potentialLoads.length >= 3 && !plEditingId) { alert('Можно сохранить максимум 3 просчета'); return; }
+    
+    const totals = calculatePlTotals();
+    const newPl: PotentialLoad = {
+      id: plEditingId || "pl_" + Date.now(),
+      name: plName.trim(),
+      legs: plLegs,
+      totalKm: totals.totalKm,
+      totalFreight: totals.totalFreight,
+      totalExpenses: totals.totalExpenses,
+      ferryCost: plFerryCost,
+      extraExpense: plExtraExpense,
+      extraExpenseNote: plExtraExpenseNote,
+      referenceRate: plReferenceRate,
+      referenceCurrency: plReferenceCurrency,
+      profit: totals.profit,
+      profitFact: totals.profit
+    };
+
+    if (plEditingId) {
+      setPotentialLoads(potentialLoads.map(p => p.id === plEditingId ? newPl : p));
+    } else {
+      setPotentialLoads([...potentialLoads, newPl]);
+    }
+    
+    // Reset PL form
+    setPlEditingId(null);
+    setPlName('');
+    setPlLegs([{ from: '', to: '', km: 0, rate: 0, referenceRate: '', ferry: 0, coeff: Object.keys(directions)[0] ? directions[Object.keys(directions)[0]] : 0 }]);
+    setPlFerryCost(0);
+    setPlExtraExpense(0);
+    setPlExtraExpenseNote('');
+    setPlReferenceRate(undefined);
+    setPlReferenceCurrency('EUR');
+  };
+
+  const editPotentialLoad = (pl: PotentialLoad) => {
+    setPlEditingId(pl.id);
+    setPlName(pl.name);
+    setPlLegs(pl.legs);
+    setPlFerryCost(pl.ferryCost);
+    setPlExtraExpense(pl.extraExpense);
+    setPlExtraExpenseNote(pl.extraExpenseNote);
+    setPlReferenceRate(pl.referenceRate);
+    setPlReferenceCurrency(pl.referenceCurrency || 'EUR');
+  };
+
+  const deletePotentialLoad = (id: string) => {
+    if (confirm('Удалить просчет?')) {
+      setPotentialLoads(potentialLoads.filter(p => p.id !== id));
+      if (plEditingId === id) {
+        // Stop editing if deleted
+        setPlEditingId(null);
+        setPlName('');
+        setPlLegs([{ from: '', to: '', km: 0, rate: 0, referenceRate: '', ferry: 0, coeff: 0 }]);
+      }
+    }
+  };
+
+  const applyPlToMain = (pl: PotentialLoad) => {
+    if (confirm('Осторожно: Это заменит текущие плечи в основной форме. Продолжить?')) {
+      setLegs(pl.legs);
+      setFerryCost(pl.ferryCost);
+      setExtraExpense(pl.extraExpense);
+      setExtraExpenseNote(pl.extraExpenseNote);
+      if (pl.referenceRate !== undefined) setReferenceRate(pl.referenceRate);
+      if (pl.referenceCurrency) setReferenceCurrency(pl.referenceCurrency as any);
+      setModalTab('main');
+    }
   };
 
   const saveTrip = () => {
@@ -843,6 +1127,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       tripNote,
       stripColor: stripColor || 'bg-blue-500',
       legs,
+      potentialLoads,
       activeLegIndex: activeLegIndex !== undefined ? activeLegIndex : -1,
       dispatcher: dispatcher || user.name,
       currentMonth,
@@ -890,13 +1175,23 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                  <span className="text-[10px] font-black font-mono text-slate-400 uppercase tracking-widest">Конструктор рейса - Firebase DB Sync</span>
                </div>
              </div>
+
+             <div className="flex bg-slate-100 rounded-xl p-1 gap-1">
+                <button type="button" onClick={() => setModalTab('main')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition ${modalTab === 'main' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200'}`}>Форма</button>
+                <button type="button" onClick={() => setModalTab('potential')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition ${modalTab === 'potential' ? 'bg-purple-100 shadow-sm text-purple-700' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-200'}`}>
+                  Потенциал. грузы {potentialLoads.length > 0 && <span className="ml-1 bg-purple-500 text-white rounded-full px-1.5 py-0.5 text-[8px]">{potentialLoads.length}</span>}
+                </button>
+             </div>
+
              <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition">
                <X className="w-5 h-5" />
              </button>
           </div>
           
           <div className="p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto custom-scrollbar max-h-[80vh]">
-            <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+            {modalTab === 'main' ? (
+              <>
+                <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
               <div>
                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">Автомобиль</label>
                  <input type="text" list="saved-cars-list" placeholder="АХ 1234-7" value={carNumber} onChange={e => setCarNumber(e.target.value.toUpperCase())} className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-bold uppercase outline-none focus:border-blue-500 transition" />
@@ -965,11 +1260,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider text-left w-8">#</th>
                       <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-32">Откуда</th>
                       <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-32">Куда</th>
-                      <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-24">Km</th>
-                      <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-24">Rate €</th>
-                      <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-32">Ref. Rate</th>
-                      <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-24">Ferry €</th>
-                      <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-16">Coeff</th>
+                      <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-24">Км</th>
+                      <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-24">Фрахт €</th>
+                      <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-32">Инфо Ставка</th>
+                      <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-24">Паром €</th>
+                      <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-16">Коэфф.</th>
                       <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-right rounded-tr-xl w-24"></th>
                     </tr>
                   </thead>
@@ -986,19 +1281,27 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         </td>
                         <td className="p-2 text-[10px] font-black text-slate-400">{idx + 1}</td>
                         <td className="p-2">
-                          <input list="cities-db-pl" value={leg.from} onChange={(e) => updateLeg(idx, {from: e.target.value})} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none" placeholder="City..." />
+                          <input list="cities-db-pl" value={leg.from} onChange={(e) => updateLeg(idx, {from: e.target.value})} onBlur={() => checkLegDistance(idx)} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none" placeholder="Город..." />
                         </td>
                         <td className="p-2">
-                          <input list="cities-db-pl" value={leg.to} onChange={(e) => updateLeg(idx, {to: e.target.value})} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none" placeholder="City..." />
+                          <input list="cities-db-pl" value={leg.to} onChange={(e) => updateLeg(idx, {to: e.target.value})} onBlur={() => checkLegDistance(idx)} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none" placeholder="Город..." />
                         </td>
-                        <td className="p-2">
+                        <td className="p-2 relative">
                           <input type="number" value={leg.km || ''} onChange={(e) => updateLeg(idx, { km: Number(e.target.value) })} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none" />
                         </td>
                         <td className="p-2">
                           <input type="number" value={leg.rate || ''} onChange={(e) => updateLeg(idx, { rate: Number(e.target.value) })} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none" />
                         </td>
                         <td className="p-2">
-                          <input type="text" value={leg.referenceRate || ''} onChange={(e) => updateLeg(idx, { referenceRate: e.target.value })} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none placeholder-slate-300" placeholder="e.g. 1.2 €/km" />
+                          <div className="flex bg-white border border-slate-200 rounded-lg overflow-hidden focus-within:border-blue-500 transition">
+                            <input type="text" value={leg.referenceRate || ''} onChange={(e) => updateLeg(idx, { referenceRate: e.target.value })} className="w-full px-3 py-2.5 bg-transparent text-xs font-bold outline-none placeholder-slate-300" placeholder="напр. 3800" />
+                            <select value={leg.referenceCurrency || ''} onChange={(e) => updateLeg(idx, { referenceCurrency: e.target.value })} className="bg-slate-50/50 border-l border-slate-200 text-slate-600 text-xs font-bold outline-none px-2 cursor-pointer max-w-[60px]">
+                              <option value=""></option>
+                              {currencies.map(c => (
+                                <option key={c.id} value={c.code}>{c.code}</option>
+                              ))}
+                            </select>
+                          </div>
                         </td>
                         <td className="p-2">
                           <input type="number" value={leg.ferry || ''} onChange={(e) => updateLeg(idx, { ferry: Number(e.target.value) })} className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none" />
@@ -1039,11 +1342,18 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">Справ. ставка</label>
                       <div className="flex bg-slate-50 border border-slate-200 rounded-xl overflow-hidden focus-within:border-blue-500 transition">
                         <input type="number" step="0.01" value={referenceRate || ''} onChange={e => setReferenceRate(e.target.value ? Number(e.target.value) : undefined)} className="w-full bg-transparent text-slate-800 px-4 py-3 text-sm font-bold outline-none" />
-                        <select value={referenceCurrency} onChange={e => setReferenceCurrency(e.target.value as any)} className="bg-slate-100/50 border-l border-slate-200 text-slate-600 text-xs font-bold outline-none px-2 cursor-pointer font-mono">
-                          <option value="EUR">€</option>
-                          <option value="USD">$</option>
-                          <option value="RUB">₽</option>
-                          <option value="BYN">Br</option>
+                        <select value={referenceCurrency} onChange={e => setReferenceCurrency(e.target.value as any)} className="bg-slate-100/50 border-l border-slate-200 text-slate-600 text-xs font-bold outline-none px-2 cursor-pointer font-mono min-w-[70px]">
+                          {currencies.length === 0 && (
+                            <>
+                              <option value="EUR">€</option>
+                              <option value="USD">$</option>
+                              <option value="RUB">₽</option>
+                              <option value="BYN">Br</option>
+                            </>
+                          )}
+                          {currencies.map(c => (
+                            <option key={c.id} value={c.code}>{c.code}</option>
+                          ))}
                         </select>
                       </div>
                     </div>
@@ -1137,6 +1447,101 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                  </div>
               </div>
             </div>
+          </>
+          ) : modalTab === 'potential' ? (
+              <div className="bg-slate-100/50 rounded-[2rem] p-6 lg:p-8 flex flex-col xl:flex-row gap-6 min-h-[500px]">
+                 {/* Left side: List of saved Potential Loads */}
+                 <div className="flex-1 w-full xl:w-1/3 xl:max-w-[400px] bg-white rounded-2xl p-6 border border-slate-200/60 shadow-sm flex flex-col gap-4">
+                    <h3 className="text-sm font-black uppercase text-purple-700 font-mono tracking-widest border-b border-purple-100 pb-3">
+                      Сохраненные просчеты ({potentialLoads.length}/3)
+                    </h3>
+                    
+                    <div className="space-y-3">
+                      {potentialLoads.map(pl => (
+                        <div key={pl.id} className={`p-4 rounded-xl border ${plEditingId === pl.id ? 'border-purple-400 bg-purple-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300'} transition cursor-pointer flex flex-col gap-2`} onClick={() => editPotentialLoad(pl)}>
+                          <div className="flex justify-between items-start">
+                             <span className="font-bold text-sm text-slate-800">{pl.name}</span>
+                             <div className="flex gap-1.5" onClick={e => e.stopPropagation()}>
+                                <button className="p-1.5 text-blue-500 hover:bg-blue-100 rounded-lg transition" title="Перенести в основную форму" onClick={() => applyPlToMain(pl)}><Calculator className="w-3.5 h-3.5" /></button>
+                                <button className="p-1.5 text-rose-500 hover:bg-rose-100 rounded-lg transition" title="Удалить" onClick={() => deletePotentialLoad(pl.id)}><Trash2 className="w-3.5 h-3.5" /></button>
+                             </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-2 text-[10px] font-mono mt-1">
+                             <div className="bg-white px-2 py-1.5 rounded-md border border-slate-150">КМ: <span className="font-bold text-slate-700">{Math.round(pl.totalKm)}</span></div>
+                             <div className="bg-white px-2 py-1.5 rounded-md border border-slate-150">Фрахт: <span className="font-bold text-blue-600">{Math.round(pl.totalFreight)}€</span></div>
+                             <div className="bg-white px-2 py-1.5 rounded-md border border-slate-150">Расх: <span className="font-bold text-rose-500">{Math.round(pl.totalExpenses)}€</span></div>
+                             <div className="bg-emerald-50 px-2 py-1.5 rounded-md border border-emerald-100 text-emerald-700">Приб: <span className="font-bold text-emerald-600">{Math.round(pl.profit)}€</span></div>
+                          </div>
+                        </div>
+                      ))}
+                      {potentialLoads.length === 0 && <span className="text-xs text-slate-400 font-bold block text-center py-6">Нет сохраненных просчетов</span>}
+                    </div>
+
+                    {potentialLoads.length < 3 && plEditingId === null && (
+                      <button className="w-full mt-auto py-3 bg-purple-100 text-purple-700 font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-purple-200 transition">
+                         Можно создать еще {3 - potentialLoads.length}
+                      </button>
+                    )}
+                    {plEditingId !== null && (
+                       <button className="w-full mt-auto py-2.5 bg-slate-200 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-300 transition" onClick={() => {
+                          setPlEditingId(null);
+                          setPlName('');
+                          setPlLegs([{ from: '', to: '', km: 0, rate: 0, referenceRate: '', ferry: 0, coeff: 0 }]);
+                       }}>Создать новый</button>
+                    )}
+                 </div>
+
+                 {/* Right side: Editor */}
+                 <div className="flex-[2] bg-white rounded-2xl p-6 border border-slate-200/60 shadow-sm flex flex-col gap-6">
+                    <div className="flex items-center gap-4 border-b border-slate-100 pb-4">
+                       <input type="text" placeholder="Название (напр: Груз на Москву)..." value={plName} onChange={e => setPlName(e.target.value)} className="flex-1 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-purple-400 transition" />
+                       <button onClick={savePotentialLoad} className="px-6 py-3 bg-purple-600 text-white rounded-xl text-xs font-black shadow-sm shadow-purple-600/20 hover:bg-purple-700 transition uppercase tracking-widest min-w-[140px]">
+                          {plEditingId ? 'Обновить' : 'Сохранить'}
+                       </button>
+                    </div>
+
+                    <div className="p-4 bg-purple-50/50 border border-purple-100 rounded-2xl flex flex-col gap-3">
+                       <div className="flex flex-col">
+                         <h4 className="text-[10px] font-black uppercase text-purple-900 tracking-widest font-mono">AI-Ассистент Маршрута</h4>
+                       </div>
+                       <div className="flex gap-2">
+                         <textarea value={plAiInput} onChange={e => setPlAiInput(e.target.value)} placeholder="Вставить текст груза из чата..." className="flex-1 bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-purple-400 min-h-[44px] resize-y" onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); processPlAiRoute(); } }} />
+                         <button onClick={processPlAiRoute} className="px-5 bg-purple-600/10 text-purple-700 hover:bg-purple-600/20 rounded-xl text-xs font-black uppercase tracking-widest transition flex flex-col items-center justify-center gap-1 min-w-[100px] border border-purple-600/20"><Bot className="w-5 h-5" /> AI Parse</button>
+                       </div>
+                       {plAiFeedback && <div className="text-xs font-bold text-emerald-600 mt-1">{plAiFeedback}</div>}
+                    </div>
+
+                    <div className="overflow-x-auto pb-4">
+                       <table className="w-full text-left border-collapse min-w-[600px]">
+                          <thead><tr>
+                             <th className="p-2 text-[10px] uppercase font-black text-slate-400">Откуда</th>
+                             <th className="p-2 text-[10px] uppercase font-black text-slate-400">Куда</th>
+                             <th className="p-2 text-[10px] uppercase font-black text-slate-400 w-24">КМ</th>
+                             <th className="p-2 text-[10px] uppercase font-black text-slate-400 w-28">Ставка €</th>
+                             <th></th>
+                          </tr></thead>
+                          <tbody>
+                            {plLegs.map((leg, i) => (
+                              <tr key={i} className="border-b border-slate-100/50">
+                                <td className="p-1"><input type="text" value={leg.from} onChange={e => { const nl = [...plLegs]; nl[i].from = e.target.value; setPlLegs(nl); }} onBlur={() => checkLegDistance(i, true)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none" /></td>
+                                <td className="p-1"><input type="text" value={leg.to} onChange={e => { const nl = [...plLegs]; nl[i].to = e.target.value; setPlLegs(nl); }} onBlur={() => checkLegDistance(i, true)} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none" /></td>
+                                <td className="p-1"><input type="number" value={leg.km || ''} onChange={e => { const nl = [...plLegs]; nl[i].km = Number(e.target.value); setPlLegs(nl); }} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none" /></td>
+                                <td className="p-1"><input type="number" value={leg.rate || ''} onChange={e => { const nl = [...plLegs]; nl[i].rate = Number(e.target.value); setPlLegs(nl); }} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-blue-600 outline-none" /></td>
+                                <td className="p-1 w-20 text-right">
+                                  <div className="flex gap-1 justify-end">
+                                    <button onClick={() => { const nl = [...plLegs]; nl.splice(i+1, 0, {from:'',to:'',km:0,rate:0,ferry:0,coeff:directions[direction]||0}); setPlLegs(nl); }} className="w-7 h-7 rounded bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-100"><Plus className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => { if(plLegs.length > 1) { const nl = [...plLegs]; nl.splice(i, 1); setPlLegs(nl); } }} className="w-7 h-7 rounded bg-rose-50 text-rose-500 flex items-center justify-center hover:bg-rose-100"><Trash2 className="w-3.5 h-3.5"/></button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                       </table>
+                    </div>
+                 </div>
+              </div>
+          ) : null}
           </div>
         </div>
       </div>
@@ -1465,117 +1870,197 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
          <div className={activeTab === 'active' ? 'space-y-4' : 'hidden'}>
            {activeDispatchers.length > 0 && (
-           <div className="space-y-3">
+              <div className="space-y-3">
+                 <div className="flex items-center gap-2 border-t border-slate-100 pt-4 overflow-x-auto custom-scrollbar pb-2">
+                    {activeDispatchers.map(d => (
+                       <button 
+                          key={d} 
+                          draggable={d !== 'Все диспетчеры'}
+                          onDragStart={(e) => {
+                             if (d === 'Все диспетчеры') return;
+                             e.dataTransfer.setData('dispatcher', d);
+                          }}
+                          onClick={() => setActiveDispatcherTab(d)}
+                          className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition flex items-center gap-1.5 whitespace-nowrap min-w-max ${getDispatcherActiveTabStyle(d)}`}
+                       >
+                          {d}
+                       </button>
+                    ))}
+                 </div>
+                 
+                 {Object.keys(directions).length > 0 && (
+                    <div className="flex items-center gap-2 border-t border-slate-100 pt-3 overflow-x-auto custom-scrollbar pb-2">
+                       <div className="flex gap-2">
+                          {['All', ...Object.keys(directions)].map(dir => (
+                             <button 
+                                key={dir} 
+                                onClick={() => setActiveDirectionTab(dir)}
+                                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition ${activeDirectionTab === dir ? 'bg-amber-100 text-amber-900 border-b-2 border-amber-500' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+                             >
+                                {dir === 'All' ? 'Все направления' : dir}
+                             </button>
+                          ))}
+                       </div>
+                    </div>
+                 )}
+              </div>
+           )}
+        </div>
+
+          <div className={activeTab === 'archive' ? '' : 'hidden'}>
              <div className="flex items-center gap-2 border-t border-slate-100 pt-4 overflow-x-auto custom-scrollbar pb-2">
-               {activeDispatchers.map(d => (
-                  <button 
-                    key={d} 
-                    draggable={d !== 'Все диспетчеры'}
-                    onDragStart={(e) => {
-                      if (d === 'Все диспетчеры') return;
-                      e.dataTransfer.setData('tabName', d);
-                    }}
-                    onDragOver={(e) => { e.preventDefault(); }}
-                    onDrop={(e) => {
-                      if (d === 'Все диспетчеры') return;
-                      // Try getting trip first
-                      const tripId = e.dataTransfer.getData('tripId');
-                      if (tripId) {
-                        if (d === 'All') return; // Cannot move to All specifically 
-                        pdService.updateTrip(tripId, { dispatcher: d }, user.name, user.role);
-                        return;
-                      }
-                      
-                      // Reorder tabs
-                      const srcTab = e.dataTransfer.getData('tabName');
-                      if (srcTab && srcTab !== d && srcTab !== 'All' && d !== 'All' && srcTab !== 'Все диспетчеры') {
-                        const newOrder = [...dispatchersOrder];
-                        const idxSrc = newOrder.indexOf(srcTab);
-                        const idxTarget = newOrder.indexOf(d);
-                        if (idxSrc > -1 && idxTarget > -1) {
-                           newOrder.splice(idxSrc, 1);
-                           newOrder.splice(idxTarget, 0, srcTab);
-                           pdService.updateDispatchersOrder(newOrder);
-                        }
-                      }
-                    }}
-                    onClick={() => setActiveDispatcherTab(d)}
-                    className={`px-4 py-2 flex items-center gap-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition ${d === 'Все диспетчеры' ? 'cursor-pointer' : 'cursor-move'} ${getDispatcherActiveTabStyle(d)}`}
-                  >
-                    <>👤 {d}</>
-                  </button>
-               ))}
+                <div className="flex gap-2">
+                   {Array.from(new Set(trips.filter(t => t.isArchived && t.currentMonth).map(t => t.currentMonth as string))).map(month => (
+                      <button
+                         key={month}
+                         onClick={() => setArchiveMonth(month)}
+                         onDragOver={e => e.preventDefault()}
+                         onDrop={e => {
+                            e.preventDefault();
+                            const tripId = e.dataTransfer.getData('tripId');
+                            if (tripId) {
+                               pdService.updateTrip(tripId, { currentMonth: month }, user.name, user.role);
+                            }
+                         }}
+                         className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition whitespace-nowrap min-w-max ${archiveMonth === month ? 'bg-blue-100 text-blue-900 border-b-2 border-blue-500' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+                      >
+                         📅 {month}
+                      </button>
+                   ))}
+                </div>
              </div>
-             
-             <div className="px-1 border-t border-slate-100 pt-2">
-               <input
-                type="text"
-                placeholder="Поиск по авто..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold"
-               />
+          </div>
+       </div>
+
+       <div className="space-y-6">
+          <div className={activeTab === 'active' ? '' : 'hidden'}>
+             {renderTripsGrid(false)}
+          </div>
+          <div className={activeTab === 'archive' ? '' : 'hidden'}>
+             {renderTripsGrid(true)}
+          </div>
+          <div className={activeTab === 'history' ? '' : 'hidden'}>
+             {renderHistory()}
+          </div>
+       </div>
+
+       {renderNotebookWidget()}
+       {renderCurrentFormModal()}
+
+       {mapModalOpen && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+             <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col pt-1">
+                <div className="px-6 py-5 border-b border-slate-100 flex flex-col gap-4">
+                   <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                         <div className="bg-blue-50 text-blue-600 p-2 rounded-xl"><MapPin className="w-5 h-5"/></div>
+                         <div>
+                            <h3 className="text-lg font-black text-slate-800 tracking-tight">Построение маршрута по карте</h3>
+                            <div className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-widest">Проверка расстояния с авто-калькуляцией</div>
+                         </div>
+                      </div>
+                      <button onClick={() => setMapModalOpen(false)} className="w-10 h-10 rounded-full bg-slate-50 text-slate-500 hover:bg-slate-100 flex items-center justify-center transition"><X className="w-5 h-5"/></button>
+                   </div>
+
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                      <div className="flex flex-col gap-1">
+                         <label className="text-[9px] font-black uppercase tracking-wider text-slate-400 font-mono">Пункт отправления (Откуда)</label>
+                         <input 
+                            type="text" 
+                            value={mapOrigin} 
+                            onChange={(e) => setMapOrigin(e.target.value)} 
+                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 transition" 
+                            placeholder="Введите город отправления..." 
+                         />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                         <label className="text-[9px] font-black uppercase tracking-wider text-slate-400 font-mono">Пункт назначения (Куда)</label>
+                         <input 
+                            type="text" 
+                            value={mapDestination} 
+                            onChange={(e) => setMapDestination(e.target.value)} 
+                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 transition" 
+                            placeholder="Введите город назначения..." 
+                         />
+                      </div>
+                   </div>
+                </div>
+                
+                <div className="h-[400px] w-full bg-slate-100 relative">
+                   {!hasValidKey ? (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-slate-50 text-center border-t border-b border-slate-100">
+                         <div className="bg-amber-50 text-amber-600 p-3 rounded-2xl mb-3 border border-amber-100 animate-pulse">
+                            <MapPin className="w-6 h-6" />
+                         </div>
+                         <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-2">Необходим API Ключ Google Maps</h4>
+                         <p className="text-xs text-slate-500 max-w-md leading-relaxed mb-4 font-medium">
+                            Чтобы строить маршруты напрямую и рассчитывать километраж, пожалуйста, добавьте ваш API ключ Google Maps Platform.
+                         </p>
+                         <div className="bg-white rounded-2xl border border-slate-200/80 p-4 text-left text-[11px] text-slate-600 max-w-lg space-y-2.5 shadow-sm leading-relaxed">
+                            <div>
+                               <strong>Шаг 1:</strong> <a href="https://console.cloud.google.com/google/maps-apis/start?utm_campaign=gmp-code-assist-ais" target="_blank" rel="noopener noreferrer" className="text-blue-600 font-bold hover:underline">Получить API Ключ Google Cloud</a> и активировать <strong>Maps JavaScript API</strong> и <strong>Routes API</strong>.
+                            </div>
+                            <div>
+                               <strong>Шаг 2:</strong> Перейдите в <strong>Settings</strong> (значок шестерёнки ⚙️ в верхнем правом углу панели AI Studio) ➔ <strong>Secrets</strong> ➔ добавьте секрет с именем <code>GOOGLE_MAPS_PLATFORM_KEY</code> и вставьте туда ваш API ключ.
+                            </div>
+                            <div className="text-slate-400 font-bold uppercase text-[9px] font-mono border-t border-slate-100 pt-2 flex items-center gap-1.5">
+                               <span>● автоматическая сборка</span>
+                               <span>● перезагрузка не требуется</span>
+                            </div>
+                         </div>
+                      </div>
+                   ) : mapOrigin && mapDestination ? (
+                      <APIProvider apiKey={settings?.googleMapsApiKey || API_KEY} version="weekly">
+                         <Map 
+                           defaultCenter={{lat: 53.9006, lng: 27.5590}} 
+                           defaultZoom={5} 
+                           mapId="ROUTE_MAP" 
+                           internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+                           style={{width: '100%', height: '100%'}}
+                           gestureHandling={'greedy'}
+                           disableDefaultUI={true}
+                         >
+                           <RouteDisplay origin={mapOrigin} destination={mapDestination} onDistance={setMapKmResult} />
+                         </Map>
+                      </APIProvider>
+                   ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-slate-400 font-bold text-xs uppercase tracking-wider">
+                         Введите пункты отправления и назначения для прокладки маршрута
+                      </div>
+                   )}
+                </div>
+                
+                <div className="p-6 bg-slate-50 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                   <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+                      <div className="flex flex-col">
+                         <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono">Расстояние КМ</span>
+                         <input type="number" value={mapKmResult || ''} onChange={(e) => setMapKmResult(Number(e.target.value))} className="w-32 bg-white border border-slate-200 rounded-xl px-4 py-2 font-black text-blue-600 text-lg outline-none focus:border-blue-500" />
+                      </div>
+
+                      <label className="flex items-center gap-2.5 cursor-pointer select-none bg-blue-50/45 hover:bg-blue-50/80 px-4 py-2.5 rounded-xl border border-blue-100/55 transition mt-4 md:mt-0">
+                         <input 
+                            type="checkbox" 
+                            checked={saveToDirectoryChecked} 
+                            onChange={(e) => setSaveToDirectoryChecked(e.target.checked)} 
+                            className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                         />
+                         <div className="flex flex-col">
+                            <span className="text-xs font-black text-slate-700">Сохранить также в справочник</span>
+                            <span className="text-[9px] text-slate-400 font-bold uppercase font-mono tracking-wider">Добавить в базу расстояний</span>
+                         </div>
+                      </label>
+                   </div>
+                   
+                   <div className="flex gap-2 justify-end">
+                      <button onClick={() => setMapModalOpen(false)} className="px-6 py-3 rounded-xl font-black text-xs uppercase text-slate-500 hover:bg-slate-200 transition">Отмена</button>
+                      <button onClick={applyMapRoute} className="px-6 py-3 rounded-xl font-black text-xs uppercase bg-blue-600 text-white shadow-sm shadow-blue-500/30 hover:bg-blue-700 transition flex gap-2 items-center justify-center">
+                         <Check className="w-4 h-4" /> Внести в плечо
+                      </button>
+                   </div>
+                </div>
              </div>
-           </div>
-         )}
-
-           {Object.keys(directions).length > 0 && (
-           <div className="flex items-center gap-2 border-t border-slate-100 pt-3 overflow-x-auto custom-scrollbar pb-2">
-             <div className="flex gap-2">
-               {['All', ...Object.keys(directions)].map(dir => (
-                 <button 
-                   key={dir} 
-                   onClick={() => setActiveDirectionTab(dir)}
-                   className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition ${activeDirectionTab === dir ? 'bg-amber-100 text-amber-900 border-b-2 border-amber-500' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
-                 >
-                   {dir === 'All' ? 'Все направления' : dir}
-                 </button>
-               ))}
-             </div>
-           </div>
-         )}
-
-         </div>
-
-         <div className={activeTab === 'archive' ? '' : 'hidden'}>
-           <div className="flex items-center gap-2 border-t border-slate-100 pt-4 overflow-x-auto custom-scrollbar pb-2">
-             <div className="flex gap-2">
-               {Array.from(new Set(trips.filter(t => t.isArchived && t.currentMonth).map(t => t.currentMonth as string))).map(month => (
-                 <button
-                   key={month}
-                   onClick={() => setArchiveMonth(month)}
-                   onDragOver={e => e.preventDefault()}
-                   onDrop={e => {
-                     e.preventDefault();
-                     const tripId = e.dataTransfer.getData('tripId');
-                     if (tripId) {
-                        pdService.updateTrip(tripId, { currentMonth: month }, user.name, user.role);
-                     }
-                   }}
-                   className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition whitespace-nowrap min-w-max ${archiveMonth === month ? 'bg-blue-100 text-blue-900 border-b-2 border-blue-500' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
-                 >
-                   📅 {month}
-                 </button>
-               ))}
-             </div>
-           </div>
-         </div>
-      </div>
-
-      <div className="space-y-6">
-         <div className={activeTab === 'active' ? '' : 'hidden'}>
-           {renderTripsGrid(false)}
-         </div>
-         <div className={activeTab === 'archive' ? '' : 'hidden'}>
-           {renderTripsGrid(true)}
-         </div>
-         <div className={activeTab === 'history' ? '' : 'hidden'}>
-           {renderHistory()}
-         </div>
-      </div>
-
-      {renderNotebookWidget()}
-      {renderCurrentFormModal()}
+          </div>
+       )}
     </div>
   );
 }

@@ -37,6 +37,9 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
   const [editHighlight, setEditHighlight] = useState<HighlightData | null>(null);
   const [newsTab, setNewsTab] = useState<'bamap' | 'system'>('bamap');
 
+  const [bamapNews, setBamapNews] = useState<any[]>([]);
+  const [bamapLoading, setBamapLoading] = useState(true);
+
   const [highlightHeight, setHighlightHeight] = useState<number>(() => {
     return 240;
   });
@@ -97,6 +100,17 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
 
     // Is DB connected
     setIsDbOnline(dbService.isOnline());
+
+    // Fetch Bamap News via public RSS-to-JSON
+    fetch('https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fbamap.org%2Frss%2Fnews.xml')
+      .then(r => r.json())
+      .then(res => {
+        if (res.status === 'ok' && res.items) {
+          setBamapNews(res.items);
+        }
+      })
+      .catch(err => console.error('Failed to load bamap news:', err))
+      .finally(() => setBamapLoading(false));
 
     return () => {
       if (typeof unsubscribeAudit === 'function') unsubscribeAudit();
@@ -282,22 +296,39 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                     <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200/60 rounded-xl text-xs select-none">
                         <span className="text-slate-500 font-mono font-bold">ОФИЦИАЛЬНЫЙ САЙТ БАМАП</span>
                         <a 
-                            href="http://bamap.org/information/news/" 
+                            href="https://bamap.org/information/news/" 
                             target="_blank" 
                             rel="noopener noreferrer" 
                             className="flex items-center gap-1 text-blue-600 hover:underline font-black uppercase text-[10px] tracking-wider"
                         >
-                            Открыть в новом окне <ExternalLink size={12} />
+                            Все новости <ExternalLink size={12} />
                         </a>
                     </div>
-                    <div className="w-full relative bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 h-[450px]">
-                        <iframe 
-                            src="https://bamap.org/information/news/" 
-                            title="Новости БАМАП" 
-                            className="w-full h-full border-0"
-                            sandbox="allow-same-origin allow-scripts"
-                            referrerPolicy="no-referrer"
-                        />
+                    <div className="w-full relative bg-slate-50 rounded-2xl border border-slate-200 h-[450px] overflow-y-auto p-4 custom-scrollbar">
+                        {bamapLoading ? (
+                            <div className="flex items-center justify-center h-full text-slate-400 font-bold uppercase text-xs tracking-widest animate-pulse">
+                                Загрузка новостей...
+                            </div>
+                        ) : bamapNews.length > 0 ? (
+                            <div className="space-y-4">
+                                {bamapNews.map((news, i) => (
+                                    <a key={i} href={news.link} target="_blank" rel="noopener noreferrer" className="block p-4 bg-white border border-slate-200 rounded-xl hover:shadow-md hover:border-slate-300 transition group">
+                                        <div className="text-[10px] text-slate-400 font-mono mb-2">
+                                            {new Date(news.pubDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                        </div>
+                                        <h3 className="font-bold text-sm text-slate-800 group-hover:text-blue-600 transition leading-tight mb-2">
+                                            {news.title}
+                                        </h3>
+                                        <div className="text-xs text-slate-500 line-clamp-2" dangerouslySetInnerHTML={{ __html: news.description }} />
+                                    </a>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-2">
+                                <span className="font-bold uppercase text-xs tracking-widest">Не удалось загрузить новости</span>
+                                <a href="https://bamap.org/information/news/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">Перейти на сайт БАМАП ↗</a>
+                            </div>
+                        )}
                     </div>
                 </div>
             ) : (

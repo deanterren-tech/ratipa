@@ -117,8 +117,25 @@ export interface LegPlan {
   km: number;
   rate: number;
   referenceRate?: string;
+  referenceCurrency?: string;
   ferry: number;
   coeff: number;
+}
+
+export interface PotentialLoad {
+  id: string;
+  name: string;
+  legs: LegPlan[];
+  totalKm: number;
+  totalFreight: number;
+  totalExpenses: number;
+  ferryCost: number;
+  extraExpense: number;
+  extraExpenseNote: string;
+  referenceRate?: number;
+  referenceCurrency?: string;
+  profit: number;
+  profitFact: number;
 }
 
 export interface TripPlan {
@@ -143,6 +160,7 @@ export interface TripPlan {
   tripNote: string;
   stripColor: string;
   legs: LegPlan[];
+  potentialLoads?: PotentialLoad[];
   activeLegIndex: number;
   dispatcher: string;
   currentMonth: string;
@@ -222,6 +240,11 @@ export interface PlanZagruzokTab {
   sheetUrl: string;
 }
 
+export interface CurrencyPreset {
+  id: string;
+  code: string;
+}
+
 export interface AppSettings {
   googleSheetsId: string;
   googleSheetsUrl: string;
@@ -229,6 +252,9 @@ export interface AppSettings {
   planZagruzokSheetUrl?: string;
   planZagruzokBlacklistUrl?: string;
   dispositionSheetUrl?: string;
+  gpsBeltranssputnikUrl?: string;
+  gpsWialonUrl?: string;
+  gpsEraGlonassUrl?: string;
   currentPlanningTabs?: CurrentPlanningTab[];
   planZagruzokTabs?: PlanZagruzokTab[];
   announcements: Announcement[];

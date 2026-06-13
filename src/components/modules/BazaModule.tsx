@@ -54,7 +54,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 
   // Local state
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortMode, setSortMode] = useState<string>('arrival');
+  const [sortMode, setSortMode] = useState<string>('default');
   const [isCarModalOpen, setIsCarModalOpen] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   
@@ -422,7 +422,16 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   }).map(c => ({...c, _status: calculateCarStatus(c)})).sort((a,b) => {
      if (sortMode === 'car_asc') return (a.carNumber||'').localeCompare(b.carNumber||'');
      if (sortMode === 'car_desc') return (b.carNumber||'').localeCompare(a.carNumber||'');
-     return (a.dateArrival||'9999').localeCompare(b.dateArrival||'9999');
+     if (sortMode === 'arrival_desc') return (b.dateArrival||'0000').localeCompare(a.dateArrival||'0000');
+     if (sortMode === 'arrival_asc') return (a.dateArrival||'9999').localeCompare(b.dateArrival||'9999');
+     if (sortMode === 'departure_desc') return (b.dateDeparture||'0000').localeCompare(a.dateDeparture||'0000');
+     if (sortMode === 'departure_asc') return (a.dateDeparture||'9999').localeCompare(b.dateDeparture||'9999');
+     
+     // default smart sort
+     if (currentTab === 'archive') {
+         return (b.dateDeparture||'0000').localeCompare(a.dateDeparture||'0000');
+     }
+     return (b.dateArrival||'0000').localeCompare(a.dateArrival||'0000');
   });
 
   const wTotal = cars.filter(c => ['base','repair','ready'].includes(calculateCarStatus(c).code)).length;
@@ -580,10 +589,20 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     </h2>
                     <div className="flex items-center gap-3 w-full sm:w-auto">
                        <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} type="text" className="w-full sm:w-64 bg-slate-50 border border-slate-200 text-xs font-bold px-3 py-2.5 rounded-xl outline-none focus:border-blue-400" placeholder="Быстрый поиск..." />
-                       <select value={sortMode} onChange={e => setSortMode(e.target.value)} className="bg-slate-50 border border-slate-200 text-xs font-bold px-3 py-2.5 rounded-xl outline-none min-w-[170px]">
-                          <option value="arrival">По дате прибытия</option>
-                          <option value="car_asc">А–Я По номеру авто</option>
-                          <option value="car_desc">Я–А По номеру авто</option>
+                       <select value={sortMode} onChange={e => setSortMode(e.target.value)} className="bg-slate-50 border border-slate-200 text-xs font-bold px-3 py-2.5 rounded-xl outline-none min-w-[170px] max-w-[250px]">
+                          <option value="default">Умная сортировка (По умолчанию)</option>
+                          <optgroup label="По номеру авто">
+                             <option value="car_asc">А–Я По номеру авто</option>
+                             <option value="car_desc">Я–А По номеру авто</option>
+                          </optgroup>
+                          <optgroup label="Фактический выезд">
+                             <option value="departure_desc">Вначале недавно выехавшие (Новые)</option>
+                             <option value="departure_asc">Вначале давно выехавшие (Старые)</option>
+                          </optgroup>
+                          <optgroup label="Прибытие на базу">
+                             <option value="arrival_desc">Вначале недавно прибывшие (Новые)</option>
+                             <option value="arrival_asc">Вначале давно прибывшие (Старые)</option>
+                          </optgroup>
                        </select>
                     </div>
                  </div>

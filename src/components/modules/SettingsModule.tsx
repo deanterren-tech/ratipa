@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile, AppSettings, FerryTemplate, DistancePreset, Announcement, QuickLink, CarRateGroup, Driver } from '../../types';
+import { UserProfile, AppSettings, FerryTemplate, DistancePreset, CurrencyPreset, Announcement, QuickLink, CarRateGroup, Driver } from '../../types';
 import { dbService } from '../../firebase';
 import { pdService } from '../../firebase/planDohodService';
 import { 
@@ -29,10 +29,12 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const { showConfirm } = useDialog();
   const { toast } = useToast();
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [pdSettings, setPdSettings] = useState<any>({ useDistanceLookup: false, googleMapsApiKey: '' });
   
   // Dynamic directory builders
   const [ferries, setFerries] = useState<FerryTemplate[]>([]);
   const [distances, setDistances] = useState<DistancePreset[]>([]);
+  const [currencies, setCurrencies] = useState<CurrencyPreset[]>([]);
   const [carRateGroups, setCarRateGroups] = useState<CarRateGroup[]>([]);
 
   // Local Form states (Tariff Group)
@@ -44,6 +46,9 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   // Local Form states (Ferry)
   const [fName, setFName] = useState('');
   const [fPrice, setFPrice] = useState<number>(0);
+
+  // Local Form states (Currency)
+  const [cCode, setCCode] = useState('');
 
   // Local Form states (Distance)
   const [dFrom, setDFrom] = useState('');
@@ -80,16 +85,20 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   useEffect(() => {
     // Sync settings & categories
     const unsubSettings = dbService.getSettings(setSettings);
+    const unsubPdSettings = pdService.subscribePlanDohodSettings(setPdSettings);
     const unsubFerries = dbService.getFerryTemplates(setFerries);
     const unsubDistances = dbService.getDistances(setDistances);
+    const unsubCurrencies = dbService.getCurrencies(setCurrencies);
     const unsubCars = dbService.getCarRateGroups(setCarRateGroups);
     const unsubDirections = pdService.subscribeDirections(setDirections);
     const unsubDrivers = dbService.getDrivers(setDrivers);
 
     return () => {
       unsubSettings();
+      unsubPdSettings();
       unsubFerries();
       unsubDistances();
+      unsubCurrencies();
       unsubCars();
       unsubDirections();
       unsubDrivers();
@@ -248,6 +257,30 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     }
   };
 
+  // Currencies handlers
+  const handleAddCurrency = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cCode.trim()) return;
+    const code = cCode.trim().toUpperCase();
+    if (currencies.some(c => c.code === code)) {
+      toast("Такая валюта уже есть", "error");
+      return;
+    }
+    const newC: CurrencyPreset = {
+      id: "curr_" + Date.now().toString(),
+      code: code
+    };
+    dbService.saveCurrency(newC, user.name, user.role);
+    setCCode('');
+    toast("Валюта добавлена", "success");
+  };
+
+  const handleDeleteCurrency = async (id: string) => {
+    if (await showConfirm("Удалить эту валюту?")) {
+      dbService.deleteCurrency(id, user.name, user.role);
+    }
+  };
+
   // Save settings (Announcements block / Bookmarks block)
   const handleAddAnnouncement = (e: React.FormEvent) => {
     e.preventDefault();
@@ -399,9 +432,115 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                   />
                 </div>
               </div>
+
+              <div className="pt-4 border-t border-slate-100 flex flex-col gap-4 mt-6">
+                 <h3 className="text-xs font-bold text-slate-800 tracking-tight uppercase">Ссылки на GPS провайдеров</h3>
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-500 inline-block"/> Белтрансспутник</label>
+                      <input
+                        type="url"
+                        defaultValue={settings.gpsBeltranssputnikUrl || ''}
+                        onBlur={(e) => dbService.saveSettings({...settings, gpsBeltranssputnikUrl: e.target.value}, user.name, user.role)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-400 transition"
+                        placeholder="https://..."
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-500 inline-block"/> Wialon</label>
+                      <input
+                        type="url"
+                        defaultValue={settings.gpsWialonUrl || ''}
+                        onBlur={(e) => dbService.saveSettings({...settings, gpsWialonUrl: e.target.value}, user.name, user.role)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-orange-400 transition"
+                        placeholder="https://..."
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block"/> ЭРА ГЛОНАСС</label>
+                      <input
+                        type="url"
+                        defaultValue={settings.gpsEraGlonassUrl || ''}
+                        onBlur={(e) => dbService.saveSettings({...settings, gpsEraGlonassUrl: e.target.value}, user.name, user.role)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition"
+                        placeholder="https://..."
+                      />
+                    </div>
+                 </div>
+              </div>
             </div>
           </div>
         )}
+      </div>
+
+      {/* Google Maps API Settings */}
+      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
+        <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
+          <MapPin className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
+          Настройки Google Maps API для расчета расстояний
+        </h2>
+        <div className="space-y-4 text-xs font-medium text-slate-650">
+          <p className="text-slate-500">
+            Здесь вы можете настроить интеграцию с Google Maps для автоматического расчёта маршрутов и расстояний в плечах "Калькуляции" и "Планировании Доходов".
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            <div className="space-y-4">
+              <label className="flex items-center gap-3 cursor-pointer select-none bg-slate-50 border border-slate-200 p-4 rounded-xl hover:bg-slate-100 transition">
+                <input
+                  type="checkbox"
+                  disabled={!isWritePermitted}
+                  checked={pdSettings?.useDistanceLookup || false}
+                  onChange={(e) => {
+                    pdService.updatePlanDohodSettings({
+                      ...pdSettings,
+                      useDistanceLookup: e.target.checked
+                    });
+                    toast(e.target.checked ? "Автоматический расчет расстояний включен" : "Автоматический расчет расстояний выключен", "success");
+                  }}
+                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                />
+                <div className="flex flex-col">
+                  <span className="font-black text-slate-800 text-xs">Использовать расчет через Google Maps</span>
+                  <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider">При отсутствии расстояния в справочнике</span>
+                </div>
+              </label>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-2">Google Maps API Key</label>
+                <input
+                  type="password"
+                  disabled={!isWritePermitted}
+                  value={pdSettings?.googleMapsApiKey || ''}
+                  onChange={(e) => {
+                    pdService.updatePlanDohodSettings({
+                      ...pdSettings,
+                      googleMapsApiKey: e.target.value
+                    });
+                  }}
+                  placeholder="AIzaSy..."
+                  className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-450 font-mono"
+                />
+                <p className="text-[10px] text-slate-400 mt-1.5 font-medium leading-normal">
+                  Ключ используется на клиенте для отрисовки карт и вычисления расстояний через <code>google.maps.DirectionsService</code>.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-[#70FC8E]/5 border border-[#70FC8E]/20 p-5 rounded-2xl space-y-3 text-slate-700">
+              <div className="flex items-center gap-2 font-black text-xs text-slate-900 uppercase tracking-tight">
+                <span className={`w-2.5 h-2.5 rounded-full ${ (pdSettings?.googleMapsApiKey || process.env.GOOGLE_MAPS_PLATFORM_KEY) ? 'bg-emerald-500' : 'bg-amber-500' } animate-pulse`} />
+                Статус интеграции: { (pdSettings?.googleMapsApiKey || process.env.GOOGLE_MAPS_PLATFORM_KEY) ? 'АКТИВНА' : 'ТРЕБУЕТСЯ НАСТРОЙКА' }
+              </div>
+              <p className="leading-relaxed text-[11px] text-slate-600 font-medium">
+                Если у вас не настроен ключ в базах Firebase, вы можете установить переменную окружения <code>GOOGLE_MAPS_PLATFORM_KEY</code> в настройках AI Studio.
+              </p>
+              <div className="text-[10px] text-slate-400 space-y-1 pt-2.5 border-t border-slate-200/50">
+                <div>• Текущий ключ API: { pdSettings?.googleMapsApiKey ? 'Установлен вручную (Firebase)' : (process.env.GOOGLE_MAPS_PLATFORM_KEY ? 'Установлен (AI Studio Secrets)' : 'Не найден') }</div>
+                <div>• Метод: Клиентский Google Maps JavaScript SDK</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ROW 0: TARIFF GROUPS */}
@@ -780,6 +919,51 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
             ))}
             {!distances.length && (
               <div className="text-center py-10 text-slate-400 text-xs font-mono font-black uppercase tracking-widest bg-slate-50 rounded-2xl border border-slate-250/20">Маршруты не заполнены.</div>
+            )}
+          </div>
+        </div>
+
+        {/* CURRENCIES PRESETS */}
+        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
+          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
+            <Wallet className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
+            Справочник Валют
+          </h2>
+
+          {isWritePermitted && (
+            <form onSubmit={handleAddCurrency} className="grid grid-cols-1 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200/50">
+              <input
+                type="text"
+                placeholder="Код (USD, EUR...)"
+                required
+                value={cCode}
+                onChange={(e) => setCCode(e.target.value)}
+                className="col-span-3 p-2 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-[10px] font-bold text-slate-800"
+              />
+              <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-[10px] font-black uppercase tracking-wider transition cursor-pointer">
+                Внести
+              </button>
+            </form>
+          )}
+
+          <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+            {currencies.map((c) => (
+              <div key={c.id} className="flex justify-between items-center p-3.5 bg-slate-50/70 rounded-2xl text-xs font-bold border border-slate-200/20 group hover:border-slate-300/60 transition duration-100">
+                <span className="text-slate-800 tracking-tight font-black">{c.code}</span>
+                <div className="flex items-center gap-3">
+                  {isWritePermitted && (
+                    <button 
+                      onClick={() => handleDeleteCurrency(c.id)} 
+                      className="text-rose-500 hover:text-rose-700 p-1 bg-white border border-slate-150 rounded-lg hover:border-rose-200 transition cursor-pointer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {!currencies.length && (
+              <div className="text-center py-10 text-slate-400 text-xs font-mono font-black uppercase tracking-widest bg-slate-50 rounded-2xl border border-slate-250/20">Валюты не заданы.</div>
             )}
           </div>
         </div>
