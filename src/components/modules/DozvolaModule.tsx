@@ -1,16 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserProfile } from '../../types';
 import DozvolaRegistryList from './dozvola/DozvolaRegistryList';
 import DozvolaDocuments from './dozvola/DozvolaDocuments';
 import DozvolaTypesDirectory from './dozvola/DozvolaTypesDirectory';
 import DozvolaHistory from './dozvola/DozvolaHistory';
+import DozvolaScanner from './dozvola/DozvolaScanner';
+import { useFirebase, database } from '../../firebase';
+import { ref, onValue } from 'firebase/database';
 
 interface DozvolaModuleProps {
   user: UserProfile;
 }
 
 export default function DozvolaModule({ user }: DozvolaModuleProps) {
-  const [activeTab, setActiveTab] = useState<'registry' | 'documents' | 'types' | 'history'>('registry');
+  const [activeTab, setActiveTab] = useState<'registry' | 'documents' | 'types' | 'history' | 'scanner'>('registry');
+  const [customTypes, setCustomTypes] = useState<Record<string, any>>({});
+  const [customTypesOrder, setCustomTypesOrder] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!useFirebase) return;
+    const unsubTypes = onValue(ref(database, 'dozvolsTypesV4'), (snap) => setCustomTypes(snap.val() || {}));
+    const unsubOrder = onValue(ref(database, 'dozvolsTypesOrderV4'), (snap) => setCustomTypesOrder(Array.isArray(snap.val()) ? snap.val() : Object.keys(snap.val() || {})));
+    return () => { unsubTypes(); unsubOrder(); };
+  }, []);
+
+  const customTypesMap = Object.keys(customTypes).reduce((acc: any, key) => {
+    acc[key] = customTypes[key].name;
+    return acc;
+  }, {});
 
   return (
     <div className="w-full space-y-4">
@@ -25,6 +42,16 @@ export default function DozvolaModule({ user }: DozvolaModuleProps) {
           }`}
         >
           Реестр Дозволов
+        </button>
+        <button
+          onClick={() => setActiveTab('scanner')}
+          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-tight transition whitespace-nowrap ${
+            activeTab === 'scanner' 
+              ? 'bg-blue-500 text-white shadow-sm border border-blue-600/80' 
+              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+          }`}
+        >
+          Скан-Распознавание
         </button>
         <button
           onClick={() => setActiveTab('documents')}
@@ -62,6 +89,9 @@ export default function DozvolaModule({ user }: DozvolaModuleProps) {
       <div className="mt-4">
         <div className={activeTab === 'registry' ? '' : 'hidden'}>
           <DozvolaRegistryList user={user} />
+        </div>
+        <div className={activeTab === 'scanner' ? '' : 'hidden'}>
+          <DozvolaScanner user={user} customTypesKeys={customTypesOrder} customTypesMap={customTypesMap} />
         </div>
         <div className={activeTab === 'documents' ? '' : 'hidden'}>
           <DozvolaDocuments user={user} />

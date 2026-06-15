@@ -477,19 +477,38 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
         <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
           <MapPin className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
-          Настройки Google Maps API для расчета расстояний
+          Настройки интеграции карт и расчета расстояний
         </h2>
         <div className="space-y-4 text-xs font-medium text-slate-650">
           <p className="text-slate-500">
-            Здесь вы можете настроить интеграцию с Google Maps для автоматического расчёта маршрутов и расстояний в плечах "Калькуляции" и "Планировании Доходов".
+            Здесь вы можете выбрать провайдера для автоматического расчёта маршрутов и расстояний в плечах "Калькуляции" и "Планировании Доходов". Мы рекомендуем использовать бесплатный OSRM или OpenRouteService в качестве замены Google Maps Directions API.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
             <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono">Провайдер маршрутов</label>
+                <select
+                  disabled={!isWritePermitted}
+                  value={pdSettings?.routingProvider || 'osrm'}
+                  onChange={(e) => {
+                    pdService.updatePlanDohodSettings({
+                      ...pdSettings,
+                      routingProvider: e.target.value
+                    });
+                    toast(`Провайдер изменен на ${e.target.value === 'osrm' ? 'OSRM' : 'OpenRouteService'}`, "success");
+                  }}
+                  className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-450"
+                >
+                  <option value="osrm">OSRM (Без ключа, бесплатно)</option>
+                  <option value="openrouteservice">OpenRouteService API (Требуется ключ)</option>
+                </select>
+              </div>
+
               <label className="flex items-center gap-3 cursor-pointer select-none bg-slate-50 border border-slate-200 p-4 rounded-xl hover:bg-slate-100 transition">
                 <input
                   type="checkbox"
                   disabled={!isWritePermitted}
-                  checked={pdSettings?.useDistanceLookup || false}
+                  checked={pdSettings?.useDistanceLookup !== false}
                   onChange={(e) => {
                     pdService.updatePlanDohodSettings({
                       ...pdSettings,
@@ -500,13 +519,33 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                   className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
                 />
                 <div className="flex flex-col">
-                  <span className="font-black text-slate-800 text-xs">Использовать расчет через Google Maps</span>
-                  <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider">При отсутствии расстояния в справочнике</span>
+                  <span className="font-black text-slate-800 text-xs">Использовать автоматический расчет расстояний</span>
+                  <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider">При отсутствии расстояния в справочнике предустановок</span>
                 </div>
               </label>
 
               <div>
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-2">Google Maps API Key</label>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-2">OpenRouteService API Key</label>
+                <input
+                  type="password"
+                  disabled={!isWritePermitted}
+                  value={pdSettings?.openRouteServiceApiKey || ''}
+                  onChange={(e) => {
+                    pdService.updatePlanDohodSettings({
+                      ...pdSettings,
+                      openRouteServiceApiKey: e.target.value
+                    });
+                  }}
+                  placeholder="5b3ce3597851110001cf6248..."
+                  className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-450 font-mono"
+                />
+                <p className="text-[10px] text-slate-400 mt-1.5 font-medium leading-normal">
+                  Получите бесплатный ключ API на сайте <a href="https://openrouteservice.org" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">openrouteservice.org</a>. Ключ используется для построения маршрутов и точного расчёта км.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-2">Google Maps Geocoding API Key (Резервный / Для карт)</label>
                 <input
                   type="password"
                   disabled={!isWritePermitted}
@@ -521,22 +560,23 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                   className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-450 font-mono"
                 />
                 <p className="text-[10px] text-slate-400 mt-1.5 font-medium leading-normal">
-                  Ключ используется на клиенте для отрисовки карт и вычисления расстояний через <code>google.maps.DirectionsService</code>.
+                  Ключ используется для геокодирования адресов в координаты. Если оставить пустым, используется системный ключ Google Maps.
                 </p>
               </div>
             </div>
 
             <div className="bg-[#70FC8E]/5 border border-[#70FC8E]/20 p-5 rounded-2xl space-y-3 text-slate-700">
               <div className="flex items-center gap-2 font-black text-xs text-slate-900 uppercase tracking-tight">
-                <span className={`w-2.5 h-2.5 rounded-full ${ (pdSettings?.googleMapsApiKey || process.env.GOOGLE_MAPS_PLATFORM_KEY) ? 'bg-emerald-500' : 'bg-amber-500' } animate-pulse`} />
-                Статус интеграции: { (pdSettings?.googleMapsApiKey || process.env.GOOGLE_MAPS_PLATFORM_KEY) ? 'АКТИВНА' : 'ТРЕБУЕТСЯ НАСТРОЙКА' }
+                <span className={`w-2.5 h-2.5 rounded-full ${ (pdSettings?.openRouteServiceApiKey || pdSettings?.googleMapsApiKey || process.env.GOOGLE_MAPS_PLATFORM_KEY) ? 'bg-emerald-500' : 'bg-amber-500' } animate-pulse`} />
+                Статус интеграции: { (pdSettings?.openRouteServiceApiKey || pdSettings?.googleMapsApiKey || process.env.GOOGLE_MAPS_PLATFORM_KEY) ? 'АКТИВНА' : 'ТРЕБУЕТСЯ НАСТРОЙКА' }
               </div>
               <p className="leading-relaxed text-[11px] text-slate-600 font-medium">
-                Если у вас не настроен ключ в базах Firebase, вы можете установить переменную окружения <code>GOOGLE_MAPS_PLATFORM_KEY</code> в настройках AI Studio.
+                Система использует карты Google Maps для отображения, но вычисления маршрутов и километража выполняются через выбранный вами сервис. При отсутствии ключа OpenRouteService система рассчитает расстояние в обход по прямой (функция Haversine).
               </p>
               <div className="text-[10px] text-slate-400 space-y-1 pt-2.5 border-t border-slate-200/50">
-                <div>• Текущий ключ API: { pdSettings?.googleMapsApiKey ? 'Установлен вручную (Firebase)' : (process.env.GOOGLE_MAPS_PLATFORM_KEY ? 'Установлен (AI Studio Secrets)' : 'Не найден') }</div>
-                <div>• Метод: Клиентский Google Maps JavaScript SDK</div>
+                <div>• Провайдер: { pdSettings?.routingProvider === 'openrouteservice' ? 'OpenRouteService API' : 'OSRM API (Без ключа)' }</div>
+                <div>• Ключ OpenRouteService: { pdSettings?.openRouteServiceApiKey ? 'Установлен' : 'Не найден (используется резервный режим)' }</div>
+                <div>• Ключ Google Maps (Геокодирование): { pdSettings?.googleMapsApiKey ? 'Установлен вручную (Firebase)' : (process.env.GOOGLE_MAPS_PLATFORM_KEY ? 'Установлен (AI Studio)' : 'Не найден') }</div>
               </div>
             </div>
           </div>

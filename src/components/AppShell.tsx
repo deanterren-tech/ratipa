@@ -31,7 +31,8 @@ import {
   Check,
   CheckCheck,
   AlertTriangle,
-  Info
+  Info,
+  LineChart
 } from 'lucide-react';
 
 interface NotificationItem {
@@ -42,13 +43,14 @@ interface NotificationItem {
   date: string;
   isRead: boolean;
   dispatcher?: string;
+  isDeleted?: boolean;
 }
 
 const defaultNotifications: NotificationItem[] = [
   {
     id: 'notif_1',
     title: '🛠️ Ремонт закончен — BY 1982 MH',
-    text: 'Тягач BY 1982 MH (водитель Козлов) успешно прошел ремонт осей SAF. Готов к рейсу! Свой диспетчер: Алексей. Нужно грузить!',
+    text: 'Тягач BY 1982 MH (водитель Козлов) успешно прошел ремонт осей SAF. Готов к рейсу! Диспетчер: Алексей. Нужно грузить!',
     type: 'success',
     date: '13.06.2026 10:15',
     isRead: false,
@@ -57,7 +59,7 @@ const defaultNotifications: NotificationItem[] = [
   {
     id: 'notif_2',
     title: '📦 Срок готовности — BY 8812 AM',
-    text: 'Машина должна быть готова к 15.06.2026. Подходит дата готовности — необходимо планировать погрузку! Свой диспетчер: Татьяна.',
+    text: 'Машина должна быть готова к 15.06.2026. Подходит дата готовности — необходимо планировать погрузку! Диспетчер: Татьяна.',
     type: 'warning',
     date: '12.06.2026 18:40',
     isRead: false,
@@ -77,6 +79,7 @@ import DozvolaModule from './modules/DozvolaModule';
 import DispositionModule from './modules/DispositionModule';
 import SettingsModule from './modules/SettingsModule';
 import AdminModule from './modules/AdminModule';
+import AnalysisModule from './modules/AnalysisModule';
 
 interface AppShellProps {
   user: UserProfile;
@@ -101,6 +104,13 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       }
     }
     return defaultNotifications;
+  });
+  const [deletedNotifIds, setDeletedNotifIds] = useState<string[]>(() => {
+    const saved = localStorage.getItem('ratipa_deleted_notif_ids');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { return []; }
+    }
+    return [];
   });
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [notifTab, setNotifTab] = useState<'all' | 'unread'>('all');
@@ -223,7 +233,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
           const repNotif = {
             title: `🛠️ Ремонт закончен — ${car.carNumber}`,
-            text: `Тягач ${car.carNumber} (водитель ${car.driverName || 'не назначен'}) успешно прошел ремонт. Готов к рейсу! Свой диспетчер: ${dispatcherName}. Нужно грузить!`,
+            text: `Тягач ${car.carNumber} (водитель ${car.driverName || 'не назначен'}) успешно прошел ремонт. Готов к рейсу! Диспетчер: ${dispatcherName}. Нужно грузить!`,
             type: 'success',
             date: `${d}.${m}.${y} ${h}:${min}`,
             isRead: false,
@@ -260,11 +270,11 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
               const h = String(now.getHours()).padStart(2, '0');
               const min = String(now.getMinutes()).padStart(2, '0');
 
-              let alertText = `Машина ${car.carNumber} должна быть готова к ${formatDeadlineToRu(car.dateLoading)}. Подходит дата готовности — значит нужно грузить! Свой диспетчер: ${dispatcherName}.`;
+              let alertText = `Машина ${car.carNumber} должна быть готова к ${formatDeadlineToRu(car.dateLoading)}. Подходит дата готовности — значит нужно грузить! Диспетчер: ${dispatcherName}.`;
               if (diffDays < 0) {
-                alertText = `Внимание! Машина ${car.carNumber} должна была быть готова к ${formatDeadlineToRu(car.dateLoading)} (просрочено на ${Math.abs(diffDays)} дн.). Нужно срочно грузить! Свой диспетчер: ${dispatcherName}.`;
+                alertText = `Внимание! Машина ${car.carNumber} должна была быть готова к ${formatDeadlineToRu(car.dateLoading)} (просрочено на ${Math.abs(diffDays)} дн.). Нужно срочно грузить! Диспетчер: ${dispatcherName}.`;
               } else if (diffDays === 0) {
-                alertText = `Внимание! Машина ${car.carNumber} должна быть готова СЕГОДНЯ (${formatDeadlineToRu(car.dateLoading)}). Нужно её срочно грузить! Свой диспетчер: ${dispatcherName}.`;
+                alertText = `Внимание! Машина ${car.carNumber} должна быть готова СЕГОДНЯ (${formatDeadlineToRu(car.dateLoading)}). Нужно её срочно грузить! Диспетчер: ${dispatcherName}.`;
               }
 
               const loadNotif = {
@@ -292,15 +302,16 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   }, [useFirebase, bazaCars, tripsDashboard, notifications]);
 
   const unreadNotifsCount = useMemo(() => {
-    return notifications.filter(n => !n.isRead).length;
-  }, [notifications]);
+    return notifications.filter(n => !n.isRead && !deletedNotifIds.includes(n.id)).length;
+  }, [notifications, deletedNotifIds]);
 
   const filteredNotifications = useMemo(() => {
+    const visible = notifications.filter(n => !deletedNotifIds.includes(n.id));
     if (notifTab === 'unread') {
-      return notifications.filter(n => !n.isRead);
+      return visible.filter(n => !n.isRead);
     }
-    return notifications;
-  }, [notifications, notifTab]);
+    return visible;
+  }, [notifications, notifTab, deletedNotifIds]);
 
   const markNotifAsRead = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -327,7 +338,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       try {
         const updates: Record<string, any> = {};
         notifications.forEach(n => {
-          if (!n.isRead) {
+          if (!n.isRead && !deletedNotifIds.includes(n.id)) {
             updates[`ratipa_notifications/${n.id}/isRead`] = true;
           }
         });
@@ -348,6 +359,13 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
   const deleteNotif = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    
+    setDeletedNotifIds(prev => {
+      const updated = [...prev, id];
+      localStorage.setItem('ratipa_deleted_notif_ids', JSON.stringify(updated));
+      return updated;
+    });
+
     if (useFirebase) {
       try {
         remove(ref(database, `ratipa_notifications/${id}`));
@@ -364,6 +382,13 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   };
 
   const clearAllNotifications = () => {
+    const currentIds = notifications.map(n => n.id);
+    setDeletedNotifIds(prev => {
+      const updated = Array.from(new Set([...prev, ...currentIds]));
+      localStorage.setItem('ratipa_deleted_notif_ids', JSON.stringify(updated));
+      return updated;
+    });
+
     if (useFirebase) {
       try {
         set(ref(database, 'ratipa_notifications'), null);
@@ -373,60 +398,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     } else {
       setNotifications([]);
       localStorage.setItem('ratipa_notifications_v1', JSON.stringify([]));
-    }
-  };
-
-  const simulateNotif = () => {
-    const carsList = bazaCars.length > 0 ? bazaCars : [
-      { id: 'sim_1', carNumber: 'BY 1221 AM', driverName: 'Смирнов И.' },
-      { id: 'sim_2', carNumber: 'BY 9999 PL', driverName: 'Иванов О.' }
-    ];
-    const randCar = carsList[Math.floor(Math.random() * carsList.length)];
-    
-    // Pick between repair ends or loading deadline
-    const isRepair = Math.random() > 0.5;
-
-    const dispatchers = ['Алексей', 'Татьяна', 'Сергей', 'Ольга'];
-    const randDisp = dispatchers[Math.floor(Math.random() * dispatchers.length)];
-
-    const now = new Date();
-    const d = String(now.getDate()).padStart(2, '0');
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const y = now.getFullYear();
-    const h = String(now.getHours()).padStart(2, '0');
-    const min = String(now.getMinutes()).padStart(2, '0');
-    const dateStr = `${d}.${m}.${y} ${h}:${min}`;
-
-    const newKey = 'notif_' + Date.now();
-
-    const mockNotif = isRepair ? {
-      title: `🛠️ Ремонт закончен — ${randCar.carNumber}`,
-      text: `Тягач ${randCar.carNumber} (${randCar.driverName || 'водитель не назначен'}) успешно завершил ремонт. Готов к рейсу! Свой диспетчер: ${randDisp}. Нужно грузить!`,
-      type: 'success' as const,
-      date: dateStr,
-      isRead: false,
-      dispatcher: randDisp
-    } : {
-      title: `📦 Срок готовности — ${randCar.carNumber}`,
-      text: `Машина ${randCar.carNumber} должна быть готова к ${now.getDate() + 2}.${m}.${y}. Подходит дата готовности — значит нужно грузить! Свой диспетчер: ${randDisp}.`,
-      type: 'warning' as const,
-      date: dateStr,
-      isRead: false,
-      dispatcher: randDisp
-    };
-
-    if (useFirebase) {
-      try {
-        set(ref(database, `ratipa_notifications/${newKey}`), mockNotif);
-      } catch (err) {
-        console.warn("Failed to write mock notification to Firebase", err);
-      }
-    } else {
-      setNotifications(prev => {
-        const updated = [{ id: newKey, ...mockNotif }, ...prev];
-        localStorage.setItem('ratipa_notifications_v1', JSON.stringify(updated));
-        return updated;
-      });
     }
   };
 
@@ -595,6 +566,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'baza', label: 'Учет выезда', icon: Truck, permissionKey: 'baza' },
     { key: 'dozvola', label: 'Учет Дозволов', icon: FileText, permissionKey: 'dozvola' },
     { key: 'disposition', label: 'Диспозиция', icon: Map, permissionKey: 'disposition' },
+    { key: 'analysis', label: 'Анализ', icon: LineChart, permissionKey: 'analysis' },
     { key: 'settings', label: 'Справочники', icon: Settings, permissionKey: 'settings' },
     { key: 'admin', label: 'Администрирование', icon: ShieldAlert, permissionKey: 'admin' }
   ];
@@ -677,6 +649,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         return <DozvolaModule user={user} />;
       case 'disposition':
         return <DispositionModule user={user} />;
+      case 'analysis':
+        return <AnalysisModule user={user} />;
       case 'settings':
         return <SettingsModule user={user} />;
       case 'admin':
@@ -972,14 +946,14 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                     )}
                   </div>
 
-                  {/* Informational context and Simulator trigger footer */}
+                  {/* Informational context */}
                   <div className="p-4 bg-slate-50 border-t border-slate-150 rounded-b-2xl">
-                    <div className="mb-3.5">
+                    <div>
                       <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 font-mono block mb-1">События Учёта выезда</span>
-                      <div className="flex flex-col gap-1.5 mt-1.5 border-b border-slate-200/50 pb-2.5">
+                      <div className="flex flex-col gap-1.5 mt-1.5">
                         <div className="text-[9.5px] text-slate-500 font-bold flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
-                          <span>🛠️ Ремонт успешно завершен (Оповестить своего диспетчера)</span>
+                          <span>🛠️ Ремонт успешно завершен (Оповестить диспетчера)</span>
                         </div>
                         <div className="text-[9.5px] text-slate-500 font-bold flex items-center gap-1.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 animate-pulse" />
@@ -987,15 +961,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                         </div>
                       </div>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={simulateNotif}
-                      className="w-full py-1.5 bg-[#70FC8E]/10 hover:bg-[#70FC8E]/25 text-slate-950 font-black text-[10px] uppercase tracking-wider rounded-xl border border-[#70FC8E]/30 flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer shadow-xs group"
-                    >
-                      <Sparkles size={11} className="stroke-[3] text-emerald-600 animate-pulse group-hover:rotate-12 transition-transform" />
-                      <span>Сгенерировать тест-событие</span>
-                    </button>
                   </div>
                 </motion.div>
               )}
@@ -1039,7 +1004,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       </header>
 
       {/* Main Container workspace */}
-      <div className="flex-1 flex relative">
+      <div className="flex-1 flex relative w-full max-w-full overflow-hidden">
         
         {/* Navigation Sidebar (Only displays for mobile/tablet screens in drawing mode) */}
         {isSidebarOpen && (
@@ -1088,7 +1053,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         {/* Dynamic active viewport card frame with subtle shadow and round corners */}
         <main 
           ref={mainScrollRef} 
-          className="flex-1 p-6 sm:p-10 overflow-y-auto max-w-full relative bg-[#f4f5f6]"
+          className="flex-1 p-3 sm:p-6 lg:p-10 overflow-y-auto overflow-x-hidden w-full max-w-full relative bg-[#f4f5f6]"
         >
           {allModules.map((mod) => {
             const isAllowed = user.role === 'root_admin' || (user.permissions[mod.permissionKey] && user.permissions[mod.permissionKey] !== 'none');

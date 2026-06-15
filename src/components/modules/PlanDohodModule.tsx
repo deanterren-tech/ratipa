@@ -32,7 +32,10 @@ function RouteDisplay({
   vehicleType,
   avoidKeywords,
   onRouteStatus,
-  waypoints = []
+  waypoints = [],
+  onOriginChange,
+  onDestinationChange,
+  onWaypointsChange
 }: { 
   origin: string; 
   destination: string; 
@@ -44,11 +47,22 @@ function RouteDisplay({
   avoidKeywords: string;
   onRouteStatus?: (status: { matches: string[]; isAlternative: boolean; avoidedSuccessfully: boolean; attempted: boolean }) => void;
   waypoints?: string[];
+  onOriginChange?: (addr: string) => void;
+  onDestinationChange?: (addr: string) => void;
+  onWaypointsChange?: (wps: string[]) => void;
 }) {
   const map = useMap();
+  const routesLib = useMapsLibrary('routes');
   const [debouncedOrigin, setDebouncedOrigin] = useState(origin);
   const [debouncedDestination, setDebouncedDestination] = useState(destination);
   const rendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
+  const polylinesRef = useRef<google.maps.Polyline[]>([]);
+  const [pdSettings, setPdSettings] = useState<any>({ routingProvider: 'osrm', openRouteServiceApiKey: '' });
+
+  useEffect(() => {
+    const unsub = pdService.subscribePlanDohodSettings(setPdSettings);
+    return unsub;
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -59,196 +73,471 @@ function RouteDisplay({
   }, [origin, destination]);
 
   useEffect(() => {
-    if (!map || !debouncedOrigin || !debouncedDestination) return;
+    if (!map) return;
 
-    // Initialize or re-use DirectionsRenderer
-    if (!rendererRef.current) {
-      rendererRef.current = new google.maps.DirectionsRenderer({
-        draggable: true,
-        map: map,
-        suppressMarkers: false,
-        polylineOptions: {
-          strokeColor: '#3b82f6',
-          strokeWeight: 6,
-        }
-      });
+    let active = true;
 
-      // Listen to drag adjustments
-      rendererRef.current.addListener('directions_changed', () => {
-        const directions = rendererRef.current?.getDirections();
-        if (directions) {
-          const route = directions.routes[0];
-          let totalDistance = 0;
-          route.legs.forEach((leg: any) => {
-            totalDistance += leg.distance?.value || 0;
-          });
-          const km = Math.round(totalDistance / 1000);
-          onDistance(km);
-
-          // Apply keyword checks on user manually dragged route
-          const keywords = avoidKeywords
-            ? avoidKeywords.split(',').map((k: string) => k.trim().toLowerCase()).filter(Boolean)
-            : [];
-          const normalizedKeywords = keywords.map(normalizeRoadString);
-          const matchedKws = new Set<string>();
-
-          route.legs?.forEach((leg: any) => {
-            leg.steps?.forEach((step: any) => {
-              const instructionsText = step.instructions || '';
-              const normalizedText = normalizeRoadString(instructionsText);
-              
-              const stepDetails = JSON.stringify(step);
-              const normalizedDetails = normalizeRoadString(stepDetails);
-              
-              keywords.forEach((kw: string, kwIdx: number) => {
-                const normKw = normalizedKeywords[kwIdx];
-                if (normalizedText.includes(normKw) || normalizedDetails.includes(normKw)) {
-                  matchedKws.add(kw);
-                }
-              });
-            });
-          });
-
-          if (onRouteStatus) {
-            onRouteStatus({
-              matches: Array.from(matchedKws),
-              isAlternative: false,
-              avoidedSuccessfully: keywords.length > 0 && matchedKws.size === 0,
-              attempted: keywords.length > 0
-            });
-          }
-        }
-      });
-    } else {
-      rendererRef.current.setMap(map);
-    }
-
-    const directionsService = new google.maps.DirectionsService();
-
-    // Prepare waypoints
-    const mappedWaypoints = waypoints
-      .filter(wp => wp && wp.trim() !== '')
-      .map(wp => ({
-        location: wp,
-        stopover: true
-      }));
-
-    const request: google.maps.DirectionsRequest = {
-      origin: debouncedOrigin,
-      destination: debouncedDestination,
-      waypoints: mappedWaypoints,
-      travelMode: google.maps.TravelMode.DRIVING,
-      avoidTolls: avoidTolls,
-      avoidHighways: avoidHighways,
-      avoidFerries: avoidFerries,
-      provideRouteAlternatives: true
-    };
-
-    directionsService.route(request, (result, status) => {
-      if (status === google.maps.DirectionsStatus.OK && result) {
-        const routes = result.routes;
-        const keywords = avoidKeywords
-          ? avoidKeywords.split(',').map((k: string) => k.trim().toLowerCase()).filter(Boolean)
-          : [];
-        const normalizedKeywords = keywords.map(normalizeRoadString);
-
-        const routesWithBlocks = routes.map((route: any, idx: number) => {
-          const matchedKws = new Set<string>();
-          route.legs?.forEach((leg: any) => {
-            leg.steps?.forEach((step: any) => {
-              const instructionsText = step.instructions || '';
-              const normalizedText = normalizeRoadString(instructionsText);
-              
-              const stepDetails = JSON.stringify(step);
-              const normalizedDetails = normalizeRoadString(stepDetails);
-              
-              keywords.forEach((kw: string, kwIdx: number) => {
-                const normKw = normalizedKeywords[kwIdx];
-                if (normalizedText.includes(normKw) || normalizedDetails.includes(normKw)) {
-                  matchedKws.add(kw);
-                }
-              });
-            });
-          });
-
-          return {
-            route,
-            index: idx,
-            blockedKeywords: Array.from(matchedKws)
-          };
-        });
-
-        // Find route with 0 blocked keywords
-        const firstSafeRoute = routesWithBlocks.find((r: any) => r.blockedKeywords.length === 0);
-        let selectedRouteAndInfo = routesWithBlocks[0];
-        let isAlternativeSelected = false;
-
-        if (firstSafeRoute) {
-          selectedRouteAndInfo = firstSafeRoute;
-          if (firstSafeRoute.index > 0) {
-            isAlternativeSelected = true;
-          }
-        } else if (routesWithBlocks.length > 1) {
-          const sorted = [...routesWithBlocks].sort((a, b) => a.blockedKeywords.length - b.blockedKeywords.length);
-          if (sorted[0].blockedKeywords.length < routesWithBlocks[0].blockedKeywords.length) {
-            selectedRouteAndInfo = sorted[0];
-            isAlternativeSelected = true;
-          }
-        }
-
-        rendererRef.current?.setDirections(result);
-        rendererRef.current?.setRouteIndex(selectedRouteAndInfo.index);
-
-        if (isAlternativeSelected) {
-          rendererRef.current?.setOptions({
-            polylineOptions: {
-              strokeColor: '#059669',
-              strokeWeight: 6
-            }
-          });
-        } else {
-          rendererRef.current?.setOptions({
-            polylineOptions: {
-              strokeColor: '#3b82f6',
-              strokeWeight: 6
-            }
-          });
-        }
-
-        const bounds = result.routes[selectedRouteAndInfo.index].bounds;
-        if (bounds) {
-          map.fitBounds(bounds);
-        }
-
-        let totalDistance = 0;
-        selectedRouteAndInfo.route.legs.forEach((leg: any) => {
-          totalDistance += leg.distance?.value || 0;
-        });
-        onDistance(Math.round(totalDistance / 1000));
-
-        if (onRouteStatus) {
-          onRouteStatus({
-            matches: selectedRouteAndInfo.blockedKeywords,
-            isAlternative: isAlternativeSelected,
-            avoidedSuccessfully: keywords.length > 0 && selectedRouteAndInfo.blockedKeywords.length === 0,
-            attempted: keywords.length > 0
-          });
-        }
-      } else {
-        console.warn("Direction calculation failed:", status);
+    // MANDATORY: Clear everything first to prevent old/random/accidental markers from staying on the map!
+    polylinesRef.current.forEach(p => {
+      p.setMap(null);
+      if ((p as any)._fallback_markers) {
+        (p as any)._fallback_markers.forEach((m: any) => m.setMap(null));
+      }
+      if ((p as any)._listeners) {
+        (p as any)._listeners.forEach((l: any) => google.maps.event.removeListener(l));
       }
     });
+    polylinesRef.current = [];
 
-  }, [map, debouncedOrigin, debouncedDestination, onDistance, avoidTolls, avoidHighways, avoidFerries, vehicleType, avoidKeywords, waypoints]);
+    if (rendererRef.current) {
+      rendererRef.current.setMap(null);
+    }
 
-  useEffect(() => {
+    if (!debouncedOrigin || !debouncedDestination) return;
+
+    const isOrs = pdSettings?.routingProvider === 'openrouteservice';
+
+    if (isOrs) {
+      runORS();
+    } else {
+      runOSRM();
+    }
+
+    // Helper setup function to build draggable & interactive polylines/markers
+    const setupInteractiveRoute = (
+      polylinePath: google.maps.LatLngLiteral[],
+      validCoords: google.maps.LatLng[],
+      initialDistanceKm: number
+    ) => {
+      if (!active) return;
+
+      const line = new google.maps.Polyline({
+        path: polylinePath,
+        geodesic: true,
+        strokeColor: '#3b82f6',
+        strokeWeight: 6,
+        map: map,
+        editable: false,
+        draggable: false
+      });
+      polylinesRef.current.push(line);
+
+      // Listen for path modifications
+      const path = line.getPath();
+      const onPathChanged = () => {
+        let totalMeters = 0;
+        for (let idx = 0; idx < path.getLength() - 1; idx++) {
+          const p1 = path.getAt(idx);
+          const p2 = path.getAt(idx + 1);
+          const R = 6371e3; // Earth radius in meters
+          const lat1 = (p1.lat() * Math.PI) / 180;
+          const lat2 = (p2.lat() * Math.PI) / 180;
+          const deltaLat = ((p2.lat() - p1.lat()) * Math.PI) / 180;
+          const deltaLng = ((p2.lng() - p1.lng()) * Math.PI) / 180;
+
+          const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+                    Math.cos(lat1) * Math.cos(lat2) *
+                    Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          totalMeters += R * c;
+        }
+        const updatedKm = Math.round(totalMeters / 1000);
+        onDistance(updatedKm);
+      };
+
+      const setAtListener = google.maps.event.addListener(path, 'set_at', onPathChanged);
+      const insertAtListener = google.maps.event.addListener(path, 'insert_at', onPathChanged);
+      const removeAtListener = google.maps.event.addListener(path, 'remove_at', onPathChanged);
+      (line as any)._listeners = [setAtListener, insertAtListener, removeAtListener];
+
+      // Draw markers with drag support
+      const fallbackMarkers: google.maps.Marker[] = [];
+      validCoords.forEach((coord, i) => {
+        let label = "•";
+        if (i === 0) label = "A";
+        else if (i === validCoords.length - 1) label = "B";
+        else label = String(i);
+
+        const m = new google.maps.Marker({
+          position: coord,
+          map: map,
+          label: { text: label, color: '#ffffff', fontWeight: 'bold' },
+          draggable: true
+        });
+
+        m.addListener('dragend', async () => {
+          const newPos = m.getPosition();
+          if (!newPos) return;
+
+          try {
+            const res = await fetch(`/api/reverse-geocode?lat=${newPos.lat()}&lng=${newPos.lng()}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data && data.address) {
+                if (i === 0) {
+                  if (onOriginChange) onOriginChange(data.address);
+                } else if (i === validCoords.length - 1) {
+                  if (onDestinationChange) onDestinationChange(data.address);
+                } else {
+                  const waypointIndex = i - 1;
+                  const newWps = [...waypoints];
+                  newWps[waypointIndex] = data.address;
+                  if (onWaypointsChange) onWaypointsChange(newWps);
+                }
+              }
+            }
+          } catch (err) {
+            console.error("Reverse geocoding marker failed:", err);
+          }
+        });
+
+        fallbackMarkers.push(m);
+      });
+      (line as any)._fallback_markers = fallbackMarkers;
+
+      onDistance(initialDistanceKm);
+    };
+
+    async function runORS() {
+      const apiKey = pdSettings?.openRouteServiceApiKey || '';
+      const resolve = async (address: string): Promise<google.maps.LatLng | null> => {
+        try {
+          const res = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && typeof data.lat === 'number' && typeof data.lng === 'number') {
+              return new google.maps.LatLng(data.lat, data.lng);
+            }
+          }
+        } catch (err) {
+          console.error("Geocode api failed:", err);
+        }
+        return null;
+      };
+
+      const activeWaypoints = waypoints.filter(w => w && w.trim().length > 0);
+      const coords = await Promise.all([
+        resolve(debouncedOrigin),
+        ...activeWaypoints.map(w => resolve(w)),
+        resolve(debouncedDestination)
+      ]);
+
+      if (!active) return;
+
+      const validCoords = coords.filter((c): c is google.maps.LatLng => c !== null);
+      if (validCoords.length < 2) return;
+
+      let distanceKm = 0;
+      let polylinePath: google.maps.LatLngLiteral[] = [];
+      let avoidedSuccessfully = true;
+      let matchedKeywords: string[] = [];
+      let attempted = false;
+
+      const keywordsToAvoid = avoidKeywords
+        ? avoidKeywords.split(/[\s,;]+/).map(k => normalizeRoadString(k.trim())).filter(k => k.length > 0)
+        : [];
+
+      if (keywordsToAvoid.length > 0) {
+        attempted = true;
+      }
+
+      if (apiKey && apiKey.trim() !== '') {
+        const coordinates = validCoords.map(vc => [vc.lng(), vc.lat()]);
+        try {
+          const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': apiKey
+            },
+            body: JSON.stringify({
+              coordinates: coordinates,
+              preference: 'fastest',
+              options: {
+                avoid_features: [
+                  ...(avoidTolls ? ['tollways'] : []),
+                  ...(avoidHighways ? ['highways'] : []),
+                  ...(avoidFerries ? ['ferries'] : [])
+                ]
+              }
+            })
+          });
+
+          if (!active) return;
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.features && data.features[0]) {
+              const feature = data.features[0];
+              const distanceMeters = feature.properties?.summary?.distance || 0;
+              const rawCoordinates = feature.geometry?.coordinates || [];
+              polylinePath = rawCoordinates.map((coord: any) => ({
+                lat: coord[1],
+                lng: coord[0]
+              }));
+              distanceKm = Math.round(distanceMeters / 1000);
+
+              // Basic scan for keywords in OpenRouteService response segment names
+              if (keywordsToAvoid.length > 0 && feature.properties?.segments) {
+                const matches: string[] = [];
+                for (const segment of feature.properties.segments) {
+                  if (segment.steps) {
+                    for (const step of segment.steps) {
+                      const stepName = normalizeRoadString(step.name || '').replace(/[-\s]/g, '');
+                      for (const kw of keywordsToAvoid) {
+                        const targetKw = kw.replace(/[-\s]/g, '');
+                        if (stepName.includes(targetKw)) {
+                          if (!matches.includes(kw)) matches.push(kw);
+                        }
+                      }
+                    }
+                  }
+                }
+                if (matches.length > 0) {
+                  avoidedSuccessfully = false;
+                  matchedKeywords = matches;
+                }
+              }
+            }
+          } else {
+            console.warn("OpenRouteService API returned error status:", response.status);
+          }
+        } catch (e) {
+          console.error("OpenRouteService API call failed:", e);
+        }
+      }
+
+      if (!active) return;
+
+      if (polylinePath.length === 0) {
+        polylinePath = validCoords.map(vc => ({ lat: vc.lat(), lng: vc.lng() }));
+        let totalMeters = 0;
+        for (let i = 0; i < validCoords.length - 1; i++) {
+          const p1 = validCoords[i];
+          const p2 = validCoords[i + 1];
+          const R = 6371e3;
+          const lat1 = (p1.lat() * Math.PI) / 180;
+          const lat2 = (p2.lat() * Math.PI) / 180;
+          const deltaLat = ((p2.lat() - p1.lat()) * Math.PI) / 180;
+          const deltaLng = ((p2.lng() - p1.lng()) * Math.PI) / 180;
+
+          const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+                    Math.cos(lat1) * Math.cos(lat2) *
+                    Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          totalMeters += R * c;
+        }
+        distanceKm = Math.round((totalMeters / 1000) * 1.28);
+      }
+
+      setupInteractiveRoute(polylinePath, validCoords, distanceKm);
+
+      if (onRouteStatus) {
+        onRouteStatus({
+          matches: matchedKeywords,
+          isAlternative: false,
+          avoidedSuccessfully: avoidedSuccessfully,
+          attempted: attempted
+        });
+      }
+
+      const bounds = new google.maps.LatLngBounds();
+      validCoords.forEach(c => bounds.extend(c));
+      map.fitBounds(bounds);
+    }
+
+    async function runOSRM() {
+      const resolve = async (address: string): Promise<google.maps.LatLng | null> => {
+        try {
+          const res = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && typeof data.lat === 'number' && typeof data.lng === 'number') {
+              return new google.maps.LatLng(data.lat, data.lng);
+            }
+          }
+        } catch (err) {
+          console.error("Geocode api failed:", err);
+        }
+        return null;
+      };
+
+      const activeWaypoints = waypoints.filter(w => w && w.trim().length > 0);
+      const coords = await Promise.all([
+        resolve(debouncedOrigin),
+        ...activeWaypoints.map(w => resolve(w)),
+        resolve(debouncedDestination)
+      ]);
+
+      if (!active) return;
+
+      const validCoords = coords.filter((c): c is google.maps.LatLng => c !== null);
+      if (validCoords.length < 2) return;
+
+      let distanceKm = 0;
+      let polylinePath: google.maps.LatLngLiteral[] = [];
+      let avoidedSuccessfully = true;
+      let matchedKeywords: string[] = [];
+      let attempted = false;
+
+      const keywordsToAvoid = avoidKeywords
+        ? avoidKeywords.split(/[\s,;]+/).map(k => normalizeRoadString(k.trim())).filter(k => k.length > 0)
+        : [];
+
+      if (keywordsToAvoid.length > 0) {
+        attempted = true;
+      }
+
+      const coordinates = validCoords.map(vc => `${vc.lng()},${vc.lat()}`).join(';');
+      try {
+        const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true&alternatives=true`);
+
+        if (!active) return;
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+            let selectedRoute = data.routes[0];
+
+            if (keywordsToAvoid.length > 0) {
+              let foundClearRoute = false;
+              for (const r of data.routes) {
+                const matches: string[] = [];
+                if (r.legs) {
+                  for (const leg of r.legs) {
+                    if (leg.steps) {
+                      for (const step of leg.steps) {
+                        const stepName = normalizeRoadString(step.name || '').replace(/[-\s]/g, '');
+                        const stepRef = normalizeRoadString(step.ref || '').replace(/[-\s]/g, '');
+                        for (const kw of keywordsToAvoid) {
+                          const targetKw = kw.replace(/[-\s]/g, '');
+                          if (stepName.includes(targetKw) || stepRef.includes(targetKw)) {
+                            if (!matches.includes(kw)) matches.push(kw);
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                const summaryNorm = normalizeRoadString(r.summary || '').replace(/[-\s]/g, '');
+                for (const kw of keywordsToAvoid) {
+                  const targetKw = kw.replace(/[-\s]/g, '');
+                  if (summaryNorm.includes(targetKw)) {
+                    if (!matches.includes(kw)) matches.push(kw);
+                  }
+                }
+
+                if (matches.length === 0) {
+                  selectedRoute = r;
+                  foundClearRoute = true;
+                  break;
+                }
+              }
+
+              if (!foundClearRoute) {
+                avoidedSuccessfully = false;
+                const r0 = data.routes[0];
+                const mainMatches: string[] = [];
+                if (r0.legs) {
+                  for (const leg of r0.legs) {
+                    if (leg.steps) {
+                      for (const step of leg.steps) {
+                        const stepName = normalizeRoadString(step.name || '').replace(/[-\s]/g, '');
+                        const stepRef = normalizeRoadString(step.ref || '').replace(/[-\s]/g, '');
+                        for (const kw of keywordsToAvoid) {
+                          const targetKw = kw.replace(/[-\s]/g, '');
+                          if (stepName.includes(targetKw) || stepRef.includes(targetKw)) {
+                            if (!mainMatches.includes(kw)) mainMatches.push(kw);
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                const summaryNorm = normalizeRoadString(r0.summary || '').replace(/[-\s]/g, '');
+                for (const kw of keywordsToAvoid) {
+                  const targetKw = kw.replace(/[-\s]/g, '');
+                  if (summaryNorm.includes(targetKw)) {
+                    if (!mainMatches.includes(kw)) mainMatches.push(kw);
+                  }
+                }
+                matchedKeywords = mainMatches;
+              } else {
+                avoidedSuccessfully = true;
+                matchedKeywords = [];
+              }
+            }
+
+            const distanceMeters = selectedRoute.distance || 0;
+            const rawCoordinates = selectedRoute.geometry?.coordinates || [];
+            polylinePath = rawCoordinates.map((coord: any) => ({
+              lat: coord[1],
+              lng: coord[0]
+            }));
+            distanceKm = Math.round(distanceMeters / 1000);
+          }
+        }
+      } catch (e) {
+        console.error("OSRM PlanDohodModule failed:", e);
+      }
+
+      if (!active) return;
+
+      if (polylinePath.length === 0) {
+        polylinePath = validCoords.map(vc => ({ lat: vc.lat(), lng: vc.lng() }));
+        let totalMeters = 0;
+        for (let i = 0; i < validCoords.length - 1; i++) {
+          const p1 = validCoords[i];
+          const p2 = validCoords[i + 1];
+          const R = 6371e3;
+          const lat1 = (p1.lat() * Math.PI) / 180;
+          const lat2 = (p2.lat() * Math.PI) / 180;
+          const deltaLat = ((p2.lat() - p1.lat()) * Math.PI) / 180;
+          const deltaLng = ((p2.lng() - p1.lng()) * Math.PI) / 180;
+
+          const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+                    Math.cos(lat1) * Math.cos(lat2) *
+                    Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          totalMeters += R * c;
+        }
+        distanceKm = Math.round((totalMeters / 1000) * 1.28);
+      }
+
+      setupInteractiveRoute(polylinePath, validCoords, distanceKm);
+
+      if (onRouteStatus) {
+        onRouteStatus({
+          matches: matchedKeywords,
+          isAlternative: false,
+          avoidedSuccessfully: avoidedSuccessfully,
+          attempted: attempted
+        });
+      }
+
+      const bounds = new google.maps.LatLngBounds();
+      validCoords.forEach(c => bounds.extend(c));
+      map.fitBounds(bounds);
+    }
+
     return () => {
+      active = false;
+      polylinesRef.current.forEach(p => {
+        p.setMap(null);
+        if ((p as any)._fallback_markers) {
+          (p as any)._fallback_markers.forEach((m: any) => m.setMap(null));
+        }
+        if ((p as any)._listeners) {
+          (p as any)._listeners.forEach((l: any) => google.maps.event.removeListener(l));
+        }
+      });
+      polylinesRef.current = [];
       if (rendererRef.current) {
         rendererRef.current.setMap(null);
-        rendererRef.current = null;
       }
     };
-  }, [map]);
+
+  }, [map, debouncedOrigin, debouncedDestination, onDistance, avoidTolls, avoidHighways, avoidFerries, vehicleType, avoidKeywords, waypoints, pdSettings, onOriginChange, onDestinationChange, onWaypointsChange]);
 
   return null;
 }
@@ -832,7 +1121,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [mapAvoidTolls, setMapAvoidTolls] = useState(false);
   const [mapAvoidHighways, setMapAvoidHighways] = useState(false);
   const [mapAvoidFerries, setMapAvoidFerries] = useState(false);
-  const [mapVehicleType, setMapVehicleType] = useState('CAR');
+  const [mapVehicleType, setMapVehicleType] = useState('TRUCK');
   const [mapAvoidKeywords, setMapAvoidKeywords] = useState(() => localStorage.getItem('ratipa_map_avoid_keywords') || '');
   const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
   const [mapAvoidedStatus, setMapAvoidedStatus] = useState<{
@@ -938,6 +1227,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setMapOrigin(origin);
     setMapDestination(destination);
     setMapKmResult(0);
+    setMapWaypoints([]);
     setMapIsCheckingPl(isPl);
     setMapModalOpen(true);
   };
@@ -2274,14 +2564,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       </label>
                       <div className="flex flex-col gap-0.5">
                          <span className="text-[8px] font-black uppercase text-slate-400 font-mono">Тип авто</span>
-                         <select 
-                            value={mapVehicleType} 
-                            onChange={(e) => setMapVehicleType(e.target.value)}
-                            className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold text-slate-700 outline-none focus:border-blue-500"
-                         >
-                            <option value="CAR">Легковой</option>
-                            <option value="TRUCK">Грузовой</option>
-                         </select>
+                         <span className="bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1 text-[10px] font-bold text-slate-700">
+                            Грузовой
+                         </span>
                       </div>
                    </div>
 
@@ -2322,7 +2607,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
                 
                 <div className="h-[400px] w-full bg-slate-100 relative">
-                   {!hasValidKey ? (
+                   {!(settings?.googleMapsApiKey || API_KEY || (window as any).GOOGLE_MAPS_PLATFORM_KEY) ? (
                       <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-slate-50 text-center border-t border-b border-slate-100">
                          <div className="bg-amber-50 text-amber-600 p-3 rounded-2xl mb-3 border border-amber-100 animate-pulse">
                             <MapPin className="w-6 h-6" />
