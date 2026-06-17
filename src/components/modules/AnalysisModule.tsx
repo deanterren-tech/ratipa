@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile } from '../../types';
-import { useFirebase, database } from '../../firebase';
-import { ref, onValue, set, push, remove, update } from 'firebase/database';
+import { useFirebase, database, onValue } from '../../firebase';
+import { ref, set, push, remove, update } from 'firebase/database';
 import { LineChart, Settings, Plus, X, ListPlus, Map, RefreshCw } from 'lucide-react';
 import AnalysisRegionData from './analysis/AnalysisRegionData';
 import AnalysisReport from './analysis/AnalysisReport';

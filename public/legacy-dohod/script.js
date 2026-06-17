@@ -27,7 +27,7 @@ var carouselOffset = 1;
       
       // Подключаем Firebase Local Instance
       const firebaseConfig = {
-          apiKey: "AIzaSyClwtHhyRs4v5z7fhMrcujg8qkPohgw",
+          apiKey: "AIzaSyClw_tHhyR_s4v5z7_fhMrcujg8qkPohgw",
           authDomain: "ratipa-panel.firebaseapp.com",
           databaseURL: "https://ratipa-panel-default-rtdb.firebaseio.com",
           projectId: "ratipa-panel"

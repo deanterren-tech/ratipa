@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { UserProfile, AppSettings, ChatMessage } from '../types';
-import { dbService, database, useFirebase } from '../firebase';
-import { ref, onValue, set, push, update, remove } from 'firebase/database';
+import { dbService, database, useFirebase, onValue } from '../firebase';
+import { ref, set, push, update, remove } from 'firebase/database';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   LayoutDashboard, 

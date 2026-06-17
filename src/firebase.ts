@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, signInAnonymously } from 'firebase/auth';
-import { getDatabase, ref, set, push, onValue, remove, update, off } from 'firebase/database';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getDatabase, ref, set, push, onValue as firebaseOnValue, remove, update, off } from 'firebase/database';
 import { 
   UserProfile, 
   Vehicle, 
@@ -22,7 +22,7 @@ import {
 
 // The verified production config for the Ratipa system
 export const firebaseConfig = {
-  apiKey: "AIzaSyClwtHhyRs4v5z7fhMrcujg8qkPohgw",
+  apiKey: "AIzaSyClw_tHhyR_s4v5z7_fhMrcujg8qkPohgw",
   authDomain: "ratipa-panel.firebaseapp.com",
   databaseURL: "https://ratipa-panel-default-rtdb.firebaseio.com",
   projectId: "ratipa-panel",
@@ -59,6 +59,59 @@ try {
 } catch (error) {
   console.warn("Firebase failed to initialize or client is offline, using localized sync engine:", error);
 }
+
+let authReadyPromise: Promise<any> | null = null;
+
+export const ensureAuth = (): Promise<any> => {
+  if (!useFirebase || !auth) {
+    return Promise.resolve(null);
+  }
+  if (auth.currentUser) {
+    return Promise.resolve(auth.currentUser);
+  }
+  if (authReadyPromise) {
+    return authReadyPromise;
+  }
+  
+  authReadyPromise = new Promise((resolve) => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        resolve(user);
+        unsub();
+      }
+    });
+    // Fallback of 3.5 seconds to avoid blocking local experience if network is offline
+    setTimeout(() => {
+      resolve(auth.currentUser || null);
+    }, 3500);
+  });
+  
+  return authReadyPromise;
+};
+
+// Custom onValue wrapper to ensure that the initial reading is deferred until Auth is active, preventing immediate "Permission denied" errors.
+export const onValue = (dbRef: any, callback: (snapshot: any) => void, errorCallback?: (error: any) => void) => {
+  let activeUnsubscribe: (() => void) | null = null;
+  let isCancelled = false;
+
+  ensureAuth().then((user) => {
+    if (isCancelled) return;
+    if (user && useFirebase) {
+      activeUnsubscribe = firebaseOnValue(dbRef, callback, errorCallback);
+    } else {
+      if (errorCallback) {
+        errorCallback(new Error("Firebase auth not ready"));
+      }
+    }
+  });
+
+  return () => {
+    isCancelled = true;
+    if (activeUnsubscribe) {
+      activeUnsubscribe();
+    }
+  };
+};
 
 // Resilient memory & localstorage state
 const getLocalStorageData = <T>(key: string, defaultValue: T): T => {

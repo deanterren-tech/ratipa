@@ -5,8 +5,8 @@ import DozvolaDocuments from './dozvola/DozvolaDocuments';
 import DozvolaTypesDirectory from './dozvola/DozvolaTypesDirectory';
 import DozvolaHistory from './dozvola/DozvolaHistory';
 import DozvolaScanner from './dozvola/DozvolaScanner';
-import { useFirebase, database } from '../../firebase';
-import { ref, onValue } from 'firebase/database';
+import { useFirebase, database, onValue } from '../../firebase';
+import { ref } from 'firebase/database';
 
 interface DozvolaModuleProps {
   user: UserProfile;

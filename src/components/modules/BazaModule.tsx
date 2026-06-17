@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { UserProfile } from '../../types';
-import { dbService } from '../../firebase';
-import { getDatabase, ref, set, push, onValue, remove, update, serverTimestamp, onDisconnect } from 'firebase/database';
+import { dbService, onValue } from '../../firebase';
+import { getDatabase, ref, set, push, remove, update, serverTimestamp, onDisconnect } from 'firebase/database';
 import { getApp } from 'firebase/app';
 import { 
   Trash2, 
