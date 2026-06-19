@@ -92,7 +92,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDbOnline, setIsDbOnline] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   // Notifications states
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
@@ -442,14 +441,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     };
   }, []);
 
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePos({ x: e.clientX, y: e.clientY });
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
-
   const handleUpdateMessage = (id: string) => {
     const text = editingText.trim();
     if (!text) return;
@@ -665,18 +656,13 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const activeModuleMeta = allModules.find(m => m.key === activeModule);
 
   return (
-    <div 
-      className="min-h-screen bg-[#f4f5f6] flex flex-col font-sans transition-all duration-300"
-      style={{
-        background: `radial-gradient(1200px at ${mousePos.x}px ${mousePos.y}px, rgba(112, 252, 142, 0.20), #f4f5f6 60%)`
-      }}
-    >
+    <div className="min-h-screen bg-[#f4f5f6] flex flex-col font-sans transition-all duration-300">
       
-      {/* Modern Capsule-Oriented Header corresponding to uploaded style layout */}
-      <header className="bg-white/90 backdrop-blur-md text-slate-900 border-b border-slate-200/50 h-20 flex items-center justify-between px-6 sm:px-10 shrink-0 sticky top-0 z-50 select-none shadow-xs">
+      {/* Modern Responsive Capsule Header with high-fidelity layout */}
+      <header className="bg-white/95 backdrop-blur-md text-slate-900 border-b border-slate-200/50 min-h-[4.5rem] py-2 md:py-0 md:h-20 flex items-center justify-between px-4 sm:px-8 shrink-0 sticky top-0 z-50 select-none shadow-xs gap-3">
         
-        {/* Left Brand Area: Custom minimal grid logo + title */}
-        <div className="flex items-center gap-4">
+        {/* Left Brand Area */}
+        <div className="flex items-center gap-3 shrink-0">
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="p-1 rounded-xl hover:bg-slate-50 transition lg:hidden focus:outline-none"
@@ -684,22 +670,22 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             {isSidebarOpen ? <X className="h-6 w-6 text-slate-700" /> : <Menu className="h-6 w-6 text-slate-700" />}
           </button>
           
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleNavigate('dashboard')}>
+          <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => handleNavigate('dashboard')}>
             <div className="flex items-baseline font-sans">
-              <span className="font-extrabold tracking-[-0.02em] text-lg uppercase text-slate-950 leading-none">
+              <span className="font-extrabold tracking-[-0.02em] text-base md:text-lg uppercase text-slate-950 leading-none">
                 Ratipa
               </span>
             </div>
           </div>
         </div>
 
-        {/* Center: Modern capsule-based selector tags (exactly like the reference image) */}
-        <nav className="hidden lg:flex items-center gap-1.5 bg-[#f0f2f4] p-1 rounded-full border border-slate-200/50 shadow-inner">
+        {/* Center: Modern capsule-based selector tags (now fully scrollable and visible everywhere without blocker-bugs) */}
+        <nav className="flex items-center gap-1 bg-[#f0f2f4] p-[3px] rounded-full border border-slate-200/50 shadow-inner overflow-x-auto whitespace-nowrap scrollbar-none max-w-[50vw] sm:max-w-[70vw] lg:max-w-none flex-nowrap shrink">
           {navModules.map((item) => (
             <button
               key={item.key}
               onClick={() => handleNavigate(item.key)}
-              className={`text-[10px] font-extrabold tracking-tight uppercase transition-all duration-150 py-1.5 px-4 rounded-full relative cursor-pointer ${
+              className={`text-[9.5px] md:text-[10px] font-extrabold tracking-tight uppercase transition-all duration-150 py-1.5 px-3 md:px-4 rounded-full relative cursor-pointer shrink-0 ${
                 activeModule === item.key ? 'text-white bg-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-900 hover:bg-white/40'
               }`}
             >
@@ -712,7 +698,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
               href={extTab.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[10px] font-extrabold tracking-tight uppercase transition-all duration-150 py-1.5 px-3.5 rounded-full text-slate-500 hover:text-slate-900 hover:bg-white/40 flex items-center gap-1 cursor-pointer"
+              className="text-[9.5px] md:text-[10px] font-extrabold tracking-tight uppercase transition-all duration-150 py-1.5 px-3 md:px-3.5 rounded-full text-slate-500 hover:text-slate-900 hover:bg-white/40 flex items-center gap-1 cursor-pointer shrink-0"
             >
               <span>{extTab.title}</span>
               <ExternalLink className="h-3 w-3 text-slate-400" />
