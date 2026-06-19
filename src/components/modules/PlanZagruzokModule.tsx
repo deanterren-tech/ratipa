@@ -191,12 +191,8 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
       </div>
 
       <div 
-        className={`relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col ${!isFocusMode ? 'resize-y' : ''}`}
-        style={isFocusMode ? { minHeight: 'calc(100vh - 120px)' } : { minHeight: '400px', maxHeight: '120vh', height: `${frameHeight}px` }}
-        onPointerUp={isFocusMode ? undefined : (e) => {
-           const h = e.currentTarget.offsetHeight;
-           if (h !== frameHeight) setFrameHeight(h);
-        }}
+        className="relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col"
+        style={isFocusMode ? { minHeight: 'calc(100vh - 120px)' } : { height: '680px' }}
       >
         
         {activeIsLoading && (
