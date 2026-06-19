@@ -32,41 +32,6 @@ body {
 }
 
 /* Custom scrollbars for data-loaded viewports */
-.custom-scrollbar {
-  overscroll-behavior: contain;
-}
-
-/* Global resilient layout overrides to prevent responsive horizontal blowouts */
-html, body {
-  max-width: 100vw;
-  overflow-x: hidden;
-  position: relative;
-  scroll-behavior: smooth;
-  text-rendering: optimizeLegibility;
-}
-
-/* Accessible tap-targets for mobile devices */
-@media (max-width: 768px) {
-  button, a, input, select, textarea {
-    min-height: 44px;
-    touch-action: manipulation;
-  }
-}
-
-/* Utility to force child containment inside physical card grids */
-.break-anywhere {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  hyphens: auto;
-}
-
-/* Mobile card list container reset helper */
-.mobile-card-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
-}
-
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

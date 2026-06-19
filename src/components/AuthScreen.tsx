@@ -65,7 +65,6 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
               dozvola: "write",
               documentTracking: "write",
               disposition: "write",
-              documents: "write",
               settings: "write",
               admin: "write"
             };
@@ -89,7 +88,6 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
               dozvola: "write",
               documentTracking: "write",
               disposition: "write",
-              documents: "write",
               settings: "write",
               admin: "write"
             },

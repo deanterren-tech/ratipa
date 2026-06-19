@@ -20,15 +20,8 @@ import {
   CurrencyPreset
 } from './types';
 
-const storedCustomConfig = localStorage.getItem('ratipa_custom_firebase_config');
-let customConfig = null;
-if (storedCustomConfig) {
-  try {
-    customConfig = JSON.parse(storedCustomConfig);
-  } catch(e) {}
-}
-
-const defaultFirebaseConfig = {
+// The verified production config for the Ratipa system
+export const firebaseConfig = {
   apiKey: "AIzaSyClw_tHhyR_s4v5z7_fhMrcujg8qkPohgw",
   authDomain: "ratipa-panel.firebaseapp.com",
   databaseURL: "https://ratipa-panel-default-rtdb.firebaseio.com",
@@ -37,8 +30,6 @@ const defaultFirebaseConfig = {
   messagingSenderId: "726344734944",
   appId: "1:726344734944:web:10f511be867e03f9e71885"
 };
-
-export const firebaseConfig = customConfig && customConfig.apiKey ? customConfig : defaultFirebaseConfig;
 
 // Resilient initialization
 let app;
@@ -156,7 +147,6 @@ const DEFAULT_USERS: UserProfile[] = [
       dozvola: "write",
       documentTracking: "write",
       disposition: "write",
-      documents: "write",
       settings: "write",
       admin: "write"
     },
@@ -283,7 +273,7 @@ const INITIAL_SETTINGS: AppSettings = {
   ],
   idleRate: 30,
   perDiemRate: 7,
-  moduleOrder: ['dashboard', 'dohod', 'salary', 'planDohod', 'planZagruzok', 'currentPlanning', 'baza', 'dozvola', 'disposition', 'documents', 'settings', 'admin'],
+  moduleOrder: ['dashboard', 'dohod', 'salary', 'planDohod', 'planZagruzok', 'currentPlanning', 'baza', 'dozvola', 'disposition', 'settings', 'admin'],
   customPhrases: ["Сдал отчетность", "На погрузке", "В пути", "Завершил рейс"]
 };
 
@@ -541,29 +531,6 @@ export const dbService = {
 
   // ROUTE CALCULATIONS (Dohod)
   getRouteCalculations: (callback: (calculations: RouteCalculation[]) => void) => {
-    const parseRuDateTime = (str: string): number => {
-      if (!str) return 0;
-      try {
-        const parts = str.split(',');
-        const dateParts = parts[0].trim().split('.');
-        if (dateParts.length !== 3) return 0;
-        const day = parseInt(dateParts[0], 10);
-        const month = parseInt(dateParts[1], 10) - 1;
-        const year = parseInt(dateParts[2], 10);
-        
-        let hours = 0, minutes = 0, seconds = 0;
-        if (parts[1]) {
-          const timeParts = parts[1].trim().split(':');
-          hours = parseInt(timeParts[0] || '0', 10);
-          minutes = parseInt(timeParts[1] || '0', 10);
-          seconds = parseInt(timeParts[2] || '0', 10);
-        }
-        return new Date(year, month, day, hours, minutes, seconds).getTime();
-      } catch (e) {
-        return 0;
-      }
-    };
-
     if (useFirebase) {
       const dbRef = ref(database, 'calculationsHistory');
       return onValue(dbRef, (snapshot) => {
@@ -571,12 +538,9 @@ export const dbService = {
         if (data) {
           const list: RouteCalculation[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
           list.sort((a,b) => {
-            const aTime = parseRuDateTime(a.datetime || '');
-            const bTime = parseRuDateTime(b.datetime || '');
-            if (aTime !== bTime) {
-              return bTime - aTime;
-            }
-            return (b.id || '').localeCompare(a.id || '');
+            const aTime = parseInt(a.id.replace(/\D/g, '')) || 0;
+            const bTime = parseInt(b.id.replace(/\D/g, '')) || 0;
+            return bTime - aTime;
           });
           callback(list);
         } else {
@@ -586,24 +550,18 @@ export const dbService = {
         console.warn("Calculations fetch error:", err);
         const local = getLocalStorageData<RouteCalculation[]>('ratipa_calculations', []);
         local.sort((a,b) => {
-          const aTime = parseRuDateTime(a.datetime || '');
-          const bTime = parseRuDateTime(b.datetime || '');
-          if (aTime !== bTime) {
+            const aTime = parseInt(a.id.replace(/\D/g, '')) || 0;
+            const bTime = parseInt(b.id.replace(/\D/g, '')) || 0;
             return bTime - aTime;
-          }
-          return (b.id || '').localeCompare(a.id || '');
         });
         callback(local);
       });
     } else {
       const local = getLocalStorageData<RouteCalculation[]>('ratipa_calculations', []);
       local.sort((a,b) => {
-        const aTime = parseRuDateTime(a.datetime || '');
-        const bTime = parseRuDateTime(b.datetime || '');
-        if (aTime !== bTime) {
-          return bTime - aTime;
-        }
-        return (b.id || '').localeCompare(a.id || '');
+            const aTime = parseInt(a.id.replace(/\D/g, '')) || 0;
+            const bTime = parseInt(b.id.replace(/\D/g, '')) || 0;
+            return bTime - aTime;
       });
       callback(local);
       return () => {};
@@ -1005,10 +963,6 @@ export const dbService = {
       set(pRef, item).catch(err => {
         console.warn("Silent presence set fail:", err);
       });
-      // Also update persistent lastActive on user profile
-      update(ref(database, `users_list/${user.uid}`), { lastActive: item.lastActive }).catch(err => {
-        console.warn("UserProfile lastActive update fail:", err);
-      });
       
       // Cleanup of presence on unloading if possible
       const handleUnload = () => {
@@ -1025,13 +979,6 @@ export const dbService = {
       const filtered = list.filter(p => p.uid !== user.uid);
       filtered.push(item);
       setLocalStorageData('ratipa_presence', filtered);
-
-      const localUsers = getLocalStorageData<UserProfile[]>('ratipa_users', []);
-      const idx = localUsers.findIndex(u => u.uid === user.uid);
-      if (idx !== -1) {
-        localUsers[idx].lastActive = item.lastActive;
-        setLocalStorageData('ratipa_users', localUsers);
-      }
 
       return () => {
         const current = getLocalStorageData<any[]>('ratipa_presence', []);

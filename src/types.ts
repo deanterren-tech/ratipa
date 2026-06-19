@@ -1,4 +1,4 @@
-export type UserRole = 'root_admin' | 'admin' | 'dispatcher' | 'manager' | 'accountant' | 'viewer' | 'mechanic';
+export type UserRole = 'root_admin' | 'admin' | 'dispatcher' | 'manager' | 'accountant' | 'viewer';
 
 export interface UserPermissions {
   dohod: 'none' | 'read' | 'write';
@@ -9,10 +9,8 @@ export interface UserPermissions {
   dozvola: 'none' | 'read' | 'write';
   documentTracking: 'none' | 'read' | 'write';
   disposition: 'none' | 'read' | 'write';
-  documents?: 'none' | 'read' | 'write';
   settings: 'none' | 'read' | 'write';
   admin: 'none' | 'read' | 'write';
-  analysis?: 'none' | 'read' | 'write';
 }
 
 export interface UserProfile {
@@ -264,13 +262,10 @@ export interface AppSettings {
   highlight: HighlightData | null;
   highlights?: HighlightData[];
   quickLinks: QuickLink[];
-  bamapUrl?: string;
-  asmapUrl?: string;
   idleRate: number;
   perDiemRate: number;
   moduleOrder: string[];
   customPhrases: string[];
-  drivers?: any[];
 }
 
 export interface FerryTemplate {
@@ -344,6 +339,5 @@ export const allModules = [
     { key: 'dozvola', label: 'Учет Дозволов', icon: 'FileText', permissionKey: 'dozvola' },
     { key: 'disposition', label: 'Диспозиция', icon: 'Map', permissionKey: 'disposition' },
     { key: 'settings', label: 'Справочники', icon: 'Settings', permissionKey: 'settings' },
-    { key: 'admin', label: 'Администрирование', icon: 'ShieldAlert', permissionKey: 'admin' },
-    { key: 'analysis', label: 'Анализ', icon: 'PieChart', permissionKey: 'analysis' }
+    { key: 'admin', label: 'Администрирование', icon: 'ShieldAlert', permissionKey: 'admin' }
 ];

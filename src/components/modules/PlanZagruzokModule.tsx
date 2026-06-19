@@ -33,15 +33,6 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
     return saved ? parseFloat(saved) : 1;
   });
 
-  const [frameHeight, setFrameHeight] = useState(() => {
-    const saved = localStorage.getItem('ratipa_height_planZagruzok');
-    return saved ? parseInt(saved, 10) : 600;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('ratipa_height_planZagruzok', frameHeight.toString());
-  }, [frameHeight]);
-
   useEffect(() => {
     localStorage.setItem('ratipa_zoom_planZagruzok', zoomLevel.toString());
   }, [zoomLevel]);
@@ -191,12 +182,8 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
       </div>
 
       <div 
-        className={`relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col ${!isFocusMode ? 'resize-y' : ''}`}
-        style={isFocusMode ? { minHeight: 'calc(100vh - 120px)' } : { minHeight: '400px', maxHeight: '120vh', height: `${frameHeight}px` }}
-        onPointerUp={isFocusMode ? undefined : (e) => {
-           const h = e.currentTarget.offsetHeight;
-           if (h !== frameHeight) setFrameHeight(h);
-        }}
+        className="relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col"
+        style={{ minHeight: isFocusMode ? 'calc(100vh - 120px)' : 'calc(100vh - 230px)' }}
       >
         
         {activeIsLoading && (

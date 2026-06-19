@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, AppSettings, FerryTemplate, DistancePreset, CurrencyPreset, Announcement, QuickLink, CarRateGroup, Driver } from '../../types';
-import { dbService, database, onValue } from '../../firebase';
+import { dbService } from '../../firebase';
 import { pdService } from '../../firebase/planDohodService';
-import { ref } from 'firebase/database';
 import { 
   Settings, 
   Plus, 
@@ -17,10 +16,7 @@ import {
   MapPin,
   TrendingUp,
   Edit2,
-  Users,
-  Search,
-  Check,
-  X
+  Users
 } from 'lucide-react';
 import { useDialog } from '../DialogProvider';
 import { useToast } from '../ToastProvider';
@@ -66,9 +62,6 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   // Local Form states (Quick link)
   const [linkTitle, setLinkTitle] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
-  const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
-  const [editingLinkTitle, setEditingLinkTitle] = useState('');
-  const [editingLinkUrl, setEditingLinkUrl] = useState('');
   
   // Modal for adding vehicle
   const [addingVehicleGroup, setAddingVehicleGroup] = useState<CarRateGroup | null>(null);
@@ -89,15 +82,6 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const [drRateGroupId, setDrRateGroupId] = useState('');
   const [drComment, setDrComment] = useState('');
   
-  // Dispatcher-Car Mapping States
-  const [dispatchers, setDispatchers] = useState<string[]>([]);
-  const [knownFleet, setKnownFleet] = useState<string[]>([]);
-  const [savedCars, setSavedCars] = useState<string[]>([]);
-  const [dispatchersMap, setDispatchersMap] = useState<Record<string, string>>({});
-  const [activeDispSelect, setActiveDispSelect] = useState<string>('Без диспетчера');
-  const [carSearchInMapping, setCarSearchInMapping] = useState<string>('');
-  const [dragOverDisp, setDragOverDisp] = useState<string | null>(null);
-  
   useEffect(() => {
     // Sync settings & categories
     const unsubSettings = dbService.getSettings(setSettings);
@@ -108,13 +92,6 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     const unsubCars = dbService.getCarRateGroups(setCarRateGroups);
     const unsubDirections = pdService.subscribeDirections(setDirections);
     const unsubDrivers = dbService.getDrivers(setDrivers);
-    const unsubDisp = pdService.subscribeDispatchers((disp) => setDispatchers(disp));
-    const unsubMap = pdService.subscribeDispatchersCarMapping((m) => setDispatchersMap(m));
-    const unsubBazaCarsList = onValue(ref(database, 'known_fleet'), snap => {
-      const data = snap.val() || {};
-      setKnownFleet(Object.values(data));
-    });
-    const unsubSavedCarsList = pdService.subscribeCars(setSavedCars);
 
     return () => {
       unsubSettings();
@@ -125,48 +102,8 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       unsubCars();
       unsubDirections();
       unsubDrivers();
-      unsubDisp();
-      unsubMap();
-      unsubBazaCarsList();
-      unsubSavedCarsList();
     };
   }, []);
-
-  const handleMapCarToDispatcher = (car: string, disp: string | null) => {
-    const updatedMap = { ...dispatchersMap };
-    if (!disp || disp === 'Без диспетчера') {
-      delete updatedMap[car];
-      dbService.logAction(user.name, user.role, 'Unmap Car', 'Settings', car, `Автомобиль ${car} отвязан от диспетчера`);
-    } else {
-      updatedMap[car] = disp;
-      dbService.logAction(user.name, user.role, 'Map Car', 'Settings', car, `Автомобиль ${car} привязан к диспетчеру ${disp}`);
-    }
-    pdService.updateDispatchersCarMapping(updatedMap);
-    toast(disp ? `Авто ${car} привязано к ${disp}` : `Авто ${car} отвязано`, 'success');
-  };
-
-  const handleDragStartCarMapping = (e: React.DragEvent, car: string) => {
-    e.dataTransfer.setData('plane_cartype_or_id', car);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOverDispCard = (e: React.DragEvent, dispKey: string) => {
-    e.preventDefault();
-    setDragOverDisp(dispKey);
-  };
-
-  const handleDragLeaveDispCard = (e: React.DragEvent) => {
-    setDragOverDisp(null);
-  };
-
-  const handleDropOnDispCard = (e: React.DragEvent, dispKey: string) => {
-    e.preventDefault();
-    setDragOverDisp(null);
-    const carPlates = e.dataTransfer.getData('plane_cartype_or_id');
-    if (carPlates) {
-      handleMapCarToDispatcher(carPlates, dispKey === 'Без диспетчера' ? null : dispKey);
-    }
-  };
 
   // --- Directions & Coefficients Presets handlers ---
   const handleAddDirection = (e: React.FormEvent) => {
@@ -407,39 +344,6 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     dbService.saveSettings(updated, user.name, user.role);
   };
 
-  const handleStartEditQuickLink = (link: QuickLink) => {
-    setEditingLinkId(link.id);
-    setEditingLinkTitle(link.title);
-    setEditingLinkUrl(link.url);
-  };
-
-  const handleSaveEditQuickLink = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingLinkId || !editingLinkTitle || !editingLinkUrl || !settings) return;
-
-    const updatedLinks = (settings.quickLinks || []).map((l) => {
-      if (l.id === editingLinkId) {
-        return {
-          ...l,
-          title: editingLinkTitle.trim(),
-          url: editingLinkUrl.trim()
-        };
-      }
-      return l;
-    });
-
-    const updated: AppSettings = {
-      ...settings,
-      quickLinks: updatedLinks
-    };
-
-    dbService.saveSettings(updated, user.name, user.role);
-    setEditingLinkId(null);
-    setEditingLinkTitle('');
-    setEditingLinkUrl('');
-    toast("Ссылка успешно обновлена.", 'success');
-  };
-
   // Guard view options
   if (user.permissions.settings === 'none') {
     return (
@@ -455,194 +359,8 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
 
   const isWritePermitted = user.permissions.settings === 'write';
 
-  const allCars = Array.from(new Set([
-    ...drivers.map(d => d.plate),
-    ...carRateGroups.flatMap(g => g.vehicles || []),
-    ...knownFleet,
-    ...savedCars
-  ].map(p => p?.trim().toUpperCase()).filter(Boolean)));
-
   return (
     <div className="w-full space-y-6 font-sans">
-      
-      {/* GRAPHICAL VEHICLE DISPATCHER MAPPING BLOCK */}
-      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-           <div>
-              <span className="bg-blue-500 text-white font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-widest">
-                 Диспетчеризация
-              </span>
-              <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight mt-1.5 flex items-center gap-2">
-                 <Users className="h-5 w-5 text-blue-500" /> Интерактивная привязка авто к диспетчерам
-              </h2>
-              <p className="text-xs text-slate-400 mt-1 font-mono">
-                 Перетаскивайте карточки автомобилей из правой колонки во вкладки диспетчеров слева для мгновенной привязки.
-              </p>
-           </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-           {/* LEFT COLUMN: Dispatchers Tabs */}
-           <div className="lg:col-span-2 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-1 mb-2">
-                 <span className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-wider">
-                    Диспетчеры
-                 </span>
-                 <span className="text-[10px] text-slate-400 font-mono">
-                    {dispatchers.length} активных
-                 </span>
-              </div>
-              
-              <div className="space-y-2 max-h-[450px] overflow-y-auto pr-1 custom-scrollbar">
-                 {/* "Без диспетчера" Card */}
-                 <div 
-                    onDragOver={(e) => handleDragOverDispCard(e, 'Без диспетчера')}
-                    onDragLeave={handleDragLeaveDispCard}
-                    onDrop={(e) => handleDropOnDispCard(e, 'Без диспетчера')}
-                    onClick={() => setActiveDispSelect('Без диспетчера')}
-                    className={`p-4 rounded-2xl border transition cursor-pointer select-none relative ${
-                       activeDispSelect === 'Без диспетчера'
-                       ? 'border-red-500 bg-red-50/50 text-red-950 shadow-sm'
-                       : 'border-slate-200 hover:border-slate-350 bg-slate-50 text-slate-700'
-                    } ${dragOverDisp === 'Без диспетчера' ? 'ring-2 ring-red-500 ring-dashed border-red-500 scale-[1.02]' : ''}`}
-                 >
-                    <div className="flex justify-between items-center">
-                       <div className="flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                          <strong className="text-xs font-black uppercase tracking-wider">Без диспетчера</strong>
-                       </div>
-                       <span className="bg-white/85 border border-slate-150 px-2.5 py-0.5 rounded-md font-mono text-[10px] font-black text-slate-600">
-                          {allCars.filter(c => !dispatchersMap[c]).length} авто
-                       </span>
-                    </div>
-                    <p className="text-[9px] text-slate-400 font-mono mt-1 uppercase tracking-wide">
-                       Область сброса для отмены привязки
-                    </p>
-                 </div>
-
-                 {/* Dispatchers List */}
-                 {dispatchers.map((dispName) => {
-                    const countAssigned = allCars.filter(c => dispatchersMap[c] === dispName).length;
-                    return (
-                       <div 
-                          key={dispName}
-                          onDragOver={(e) => handleDragOverDispCard(e, dispName)}
-                          onDragLeave={handleDragLeaveDispCard}
-                          onDrop={(e) => handleDropOnDispCard(e, dispName)}
-                          onClick={() => setActiveDispSelect(dispName)}
-                          className={`p-4 rounded-2xl border transition cursor-pointer select-none relative ${
-                             activeDispSelect === dispName
-                             ? 'border-blue-500 bg-blue-50/50 text-blue-950 shadow-sm'
-                             : 'border-slate-200 hover:border-slate-350 bg-white text-slate-700'
-                          } ${dragOverDisp === dispName ? 'ring-2 ring-blue-500 ring-dashed border-blue-500 scale-[1.02]' : ''}`}
-                       >
-                          <div className="flex justify-between items-center">
-                             <div className="flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                                <strong className="text-xs font-black uppercase tracking-wider">{dispName}</strong>
-                             </div>
-                             <span className="bg-slate-50 border border-slate-200/50 px-2.5 py-0.5 rounded-md font-mono text-[10px] font-black text-slate-600">
-                                {countAssigned} авто
-                             </span>
-                          </div>
-                          <p className="text-[9px] text-slate-400 font-mono mt-1 uppercase tracking-wide">
-                             Нажмите для просмотра закрепленных авто
-                          </p>
-                       </div>
-                    );
-                 })}
-              </div>
-
-              {/* Selected Dispatcher's Cars view below */}
-              <div className="bg-slate-50 border border-slate-205 rounded-2xl p-4 mt-4">
-                 <h3 className="text-[10px] font-black uppercase text-slate-500 font-mono tracking-wider mb-3">
-                    Закреплено за: <span className="text-blue-600 underline font-sans font-extrabold uppercase">{activeDispSelect}</span>
-                 </h3>
-                 <div className="space-y-1.5 max-h-[220px] overflow-y-auto custom-scrollbar">
-                    {allCars.filter(c => activeDispSelect === 'Без диспетчера' ? !dispatchersMap[c] : dispatchersMap[c] === activeDispSelect).map(c => (
-                       <div 
-                          key={c}
-                          draggable={isWritePermitted}
-                          onDragStart={(e) => handleDragStartCarMapping(e, c)}
-                          className="bg-white border border-slate-200 p-2.5 rounded-xl flex items-center justify-between text-xs font-bold hover:shadow-xs hover:border-slate-300 transition cursor-move group select-none"
-                       >
-                          <span className="font-mono text-slate-800 uppercase tracking-widest">{c}</span>
-                          {isWritePermitted && activeDispSelect !== 'Без диспетчера' && (
-                             <button 
-                                onClick={() => handleMapCarToDispatcher(c, null)}
-                                className="text-[9px] font-black text-rose-500 hover:bg-rose-50 px-2 py-1 rounded transition uppercase"
-                             >
-                                Отвязать
-                             </button>
-                          )}
-                       </div>
-                    ))}
-                    {allCars.filter(c => activeDispSelect === 'Без диспетчера' ? !dispatchersMap[c] : dispatchersMap[c] === activeDispSelect).length === 0 && (
-                       <div className="text-center py-6 text-[10px] font-black uppercase text-slate-450 tracking-widest font-mono select-none">
-                          Нет закрепленных автомобилей
-                       </div>
-                    )}
-                 </div>
-              </div>
-           </div>
-
-           {/* RIGHT COLUMN: All Cars in DB base */}
-           <div className="lg:col-span-3 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-1 mb-2">
-                 <span className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-wider block">
-                    База Автомобилей ({allCars.length} шт)
-                 </span>
-                 <div className="relative w-full sm:w-48">
-                    <input 
-                       type="text" 
-                       placeholder="Быстрый поиск авто..." 
-                       value={carSearchInMapping}
-                       onChange={(e) => setCarSearchInMapping(e.target.value)}
-                       className="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wide outline-none focus:border-blue-400"
-                    />
-                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[450px] overflow-y-auto pr-1 custom-scrollbar">
-                 {allCars
-                    .filter(plate => !carSearchInMapping.trim() || plate.toLowerCase().includes(carSearchInMapping.toLowerCase()))
-                    .map((carPlate) => {
-                       const currentDisp = dispatchersMap[carPlate];
-                       return (
-                          <div 
-                             key={carPlate}
-                             draggable={isWritePermitted}
-                             onDragStart={(e) => handleDragStartCarMapping(e, carPlate)}
-                             className={`p-3.5 rounded-2xl border transition relative select-none flex flex-col justify-between h-[85px] cursor-move shadow-xs ${
-                                currentDisp 
-                                ? 'border-indigo-150 bg-indigo-50/50' 
-                                : 'border-slate-200 bg-white hover:border-slate-350 hover:shadow-md'
-                             }`}
-                          >
-                             <div className="flex items-center justify-between">
-                                <span className="text-xs font-black font-mono tracking-wider text-slate-900 uppercase">
-                                   {carPlate}
-                                 </span>
-                                 <span className={`${currentDisp ? 'bg-indigo-100 text-indigo-800 font-black' : 'bg-slate-100 text-slate-400'} text-[8px] font-black uppercase px-2 py-0.5 rounded font-mono tracking-wider`}>
-                                   {currentDisp ? 'OK' : 'FREE'}
-                                 </span>
-                              </div>
-                              
-                              <div className="mt-2 pt-1 border-t border-slate-100 flex items-center justify-between text-[9px] font-black uppercase tracking-wide">
-                                 <span className="text-slate-400 font-mono">Диспетчер:</span>
-                                 {currentDisp ? (
-                                    <span className="text-blue-600 max-w-[70px] truncate" title={currentDisp}>{currentDisp}</span>
-                                 ) : (
-                                    <span className="text-red-500 font-mono">НЕТ ⓧ</span>
-                                 )}
-                              </div>
-                           </div>
-                        );
-                     })}
-              </div>
-           </div>
-        </div>
-      </div>
       
       {/* Global Rates Settings */}
       <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
@@ -1290,152 +1008,114 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
           </div>
         </div>
 
-        {/* ROW 3: BOOKMARKS / EXTERNAL QUICK LINKS & IFRAMES */}
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
-          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3">
-            <ExternalLink className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
-            Ссылки на Информационные Фреймы и Полезные Ссылки
+        {/* ROW 3: SYSTEM NEWS/ANNOUNCEMENTS */}
+        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
+          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
+            <Megaphone className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
+            Доска объявлений
           </h2>
 
-          {/* BAMAP & ASMAP Iframe URL Customization */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200/50">
-            <div>
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block"/> Адрес фрейма БАМАП
-              </label>
-              <input
-                type="url"
-                disabled={!isWritePermitted}
-                placeholder="https://bamap.org/information/news/"
-                defaultValue={settings?.bamapUrl || ''}
-                onBlur={(e) => {
-                  if (!settings) return;
-                  dbService.saveSettings({...settings, bamapUrl: e.target.value}, user.name, user.role);
-                  toast("Ссылка фрейма БАМАП сохранена", "success");
-                }}
-                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-400 transition"
+          {isWritePermitted && (
+            <form onSubmit={handleAddAnnouncement} className="space-y-3.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/50">
+              <textarea
+                placeholder="Инструкция: Сдавать CMR строго до вторника, 12:00..."
+                required
+                value={annText}
+                onChange={(e) => setAnnText(e.target.value)}
+                className="w-full p-3 bg-white text-xs rounded-xl border border-slate-200 h-20 resize-none focus:outline-none font-semibold text-slate-800"
               />
-            </div>
-            <div>
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"/> Адрес фрейма АСМАП
-              </label>
-              <input
-                type="url"
-                disabled={!isWritePermitted}
-                placeholder="https://www.asmap.ru/news/"
-                defaultValue={settings?.asmapUrl || ''}
-                onBlur={(e) => {
-                  if (!settings) return;
-                  dbService.saveSettings({...settings, asmapUrl: e.target.value}, user.name, user.role);
-                  toast("Ссылка фрейма АСМАП сохранена", "success");
-                }}
-                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition"
-              />
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-slate-100 space-y-4">
-            <h3 className="text-[11px] font-black uppercase text-slate-500 font-mono">Добавление пользовательских ссылок</h3>
-            {isWritePermitted && (
-              <form onSubmit={handleAddQuickLink} className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200/50 select-none">
-                <input
-                  type="text"
-                  placeholder="Служба/Название"
-                  required
-                  value={linkTitle}
-                  onChange={(e) => setLinkTitle(e.target.value)}
-                  className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-slate-450 font-bold"
-                />
-                <input
-                  type="url"
-                  placeholder="https://..."
-                  required
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-slate-450 font-bold"
-                />
-                <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-[10px] font-black uppercase transition cursor-pointer">
-                  Внедрить Ссылку
+              <div className="flex justify-between items-center bg-white p-2 px-3 border border-slate-200 rounded-xl">
+                <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-500 select-none cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={annImportant}
+                    onChange={(e) => setAnnImportant(e.target.checked)}
+                    className="rounded border border-slate-350 accent-slate-900 h-3.5 w-3.5 cursor-pointer"
+                  />
+                  Пометить как ВАЖНОЕ (рамка)
+                </label>
+                <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-[10px] font-black uppercase px-4 py-2 cursor-pointer transition">
+                  Опубликовать
                 </button>
-              </form>
-            )}
+              </div>
+            </form>
+          )}
 
-            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-              {settings?.quickLinks?.map((li) => {
-                const isEditing = editingLinkId === li.id;
-                if (isEditing) {
-                  return (
-                    <form 
-                      key={li.id} 
-                      onSubmit={handleSaveEditQuickLink} 
-                      className="flex flex-col sm:flex-row gap-2 bg-slate-100 p-3 rounded-2xl border border-slate-300"
+          <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1 text-xs">
+            {settings?.announcements?.map((ann) => (
+              <div 
+                key={ann.id} 
+                className={`p-4 rounded-2xl border flex justify-between gap-3 ${
+                  ann.important 
+                    ? 'border-amber-200 bg-amber-50/20' 
+                    : 'bg-slate-50/70 border-slate-150'
+                }`}
+              >
+                <div className="flex-1">
+                  <p className="text-slate-800 font-bold leading-normal">{ann.text}</p>
+                  <span className="text-[9px] font-bold font-mono text-slate-400 mt-2 block uppercase">От: {ann.author} • {ann.date}</span>
+                </div>
+                {isWritePermitted && (
+                  <button 
+                    onClick={() => handleDeleteAnnouncement(ann.id)} 
+                    className="text-rose-500 hover:text-rose-700 bg-white border border-slate-200 rounded-lg p-1.5 self-start shadow-3xs cursor-pointer transition"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ROW 4: BOOKMARKS / EXTERNAL QUICK LINKS */}
+        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
+          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
+            <ExternalLink className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
+            Полезные ссылки
+          </h2>
+
+          {isWritePermitted && (
+            <form onSubmit={handleAddQuickLink} className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200/50 select-none">
+              <input
+                type="text"
+                placeholder="Служба/Название"
+                required
+                value={linkTitle}
+                onChange={(e) => setLinkTitle(e.target.value)}
+                className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-slate-450 font-bold"
+              />
+              <input
+                type="url"
+                placeholder="https://..."
+                required
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-slate-450 font-bold"
+              />
+              <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-[10px] font-black uppercase transition cursor-pointer">
+                Внедрить Ссылку
+              </button>
+            </form>
+          )}
+
+          <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+            {settings?.quickLinks?.map((li) => (
+              <div key={li.id} className="flex justify-between items-center p-3.5 bg-slate-50/70 rounded-2xl text-xs font-bold border border-slate-200/20 group hover:border-slate-300/60 transition duration-100">
+                <span className="text-slate-800 uppercase tracking-tight">{li.title}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] text-slate-400 font-mono max-w-[120px] truncate">{li.url}</span>
+                  {isWritePermitted && (
+                    <button 
+                      onClick={() => handleDeleteQuickLink(li.id)} 
+                      className="text-rose-500 hover:text-rose-700 p-1 bg-white border border-slate-150 rounded-lg hover:border-rose-200 transition cursor-pointer"
                     >
-                      <input
-                        type="text"
-                        value={editingLinkTitle}
-                        onChange={(e) => setEditingLinkTitle(e.target.value)}
-                        required
-                        className="p-2 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none font-bold flex-1"
-                        placeholder="Название"
-                      />
-                      <input
-                        type="url"
-                        value={editingLinkUrl}
-                        onChange={(e) => setEditingLinkUrl(e.target.value)}
-                        required
-                        className="p-2 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none font-bold flex-1"
-                        placeholder="https://..."
-                      />
-                      <div className="flex gap-1.5 justify-end">
-                        <button 
-                          type="submit" 
-                          className="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition cursor-pointer flex items-center justify-center min-w-[36px]" 
-                          title="Сохранить"
-                        >
-                          <Check className="h-4 w-4" />
-                        </button>
-                        <button 
-                          type="button" 
-                          onClick={() => setEditingLinkId(null)} 
-                          className="p-2.5 bg-slate-400 hover:bg-slate-500 text-white rounded-xl transition cursor-pointer flex items-center justify-center min-w-[36px]" 
-                          title="Отмена"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </form>
-                  );
-                }
-
-                return (
-                  <div key={li.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-slate-50/70 rounded-2xl text-xs font-bold border border-slate-250/15 group hover:border-slate-300/60 transition duration-100 gap-2">
-                    <span className="text-slate-800 uppercase tracking-tight">{li.title}</span>
-                    <div className="flex items-center justify-between sm:justify-end gap-3 flex-wrap">
-                      <span className="text-[10px] text-slate-400 font-mono max-w-[180px] sm:max-w-[240px] truncate">{li.url}</span>
-                      {isWritePermitted && (
-                        <div className="flex items-center gap-1.5">
-                          <button 
-                            onClick={() => handleStartEditQuickLink(li)} 
-                            className="text-slate-500 hover:text-slate-800 p-1.5 bg-white border border-slate-150 rounded-lg hover:border-slate-300 transition cursor-pointer flex items-center justify-center"
-                            title="Редактировать"
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteQuickLink(li.id)} 
-                            className="text-rose-500 hover:text-rose-700 p-1.5 bg-white border border-slate-150 rounded-lg hover:border-rose-200 transition cursor-pointer flex items-center justify-center"
-                            title="Удалить"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 

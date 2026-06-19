@@ -153,23 +153,6 @@ export const pdService = {
     set(ref(database, 'dispatchers'), dispatchers);
   },
 
-  // --- DISPATCHERS CAR MAPPING ---
-  subscribeDispatchersCarMapping: (callback: (mapping: Record<string, string>) => void) => {
-    if (!useFirebase) {
-        callback({});
-        return () => {};
-    }
-    const dbRef = ref(database, 'dispatchers_car_mapping');
-    return onValue(dbRef, (s) => {
-      callback(s.val() || {});
-    });
-  },
-
-  updateDispatchersCarMapping: (mapping: Record<string, string>) => {
-    if (!useFirebase) return;
-    set(ref(database, 'dispatchers_car_mapping'), mapping);
-  },
-
   // --- DISPATCHERS COLORS ---
   subscribeDispatchersColors: (callback: (colors: Record<string, string>) => void) => {
     if (!useFirebase) return () => {};
