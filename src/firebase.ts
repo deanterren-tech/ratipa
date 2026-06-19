@@ -281,9 +281,10 @@ const INITIAL_SETTINGS: AppSettings = {
     { id: "l1", title: "Таможенные Калькуляторы", url: "https://customs.gov" },
     { id: "l2", title: "Паромные Расписания DFDS", url: "https://www.dfds.com" }
   ],
+  externalTabs: [],
   idleRate: 30,
   perDiemRate: 7,
-  moduleOrder: ['dashboard', 'dohod', 'salary', 'planDohod', 'planZagruzok', 'currentPlanning', 'baza', 'dozvola', 'disposition', 'documents', 'settings', 'admin'],
+  moduleOrder: ['dashboard', 'dohod', 'salary', 'planDohod', 'planZagruzok', 'currentPlanning', 'baza', 'dozvola', 'disposition', 'settings', 'admin'],
   customPhrases: ["Сдал отчетность", "На погрузке", "В пути", "Завершил рейс"]
 };
 

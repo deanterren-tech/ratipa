@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { UserProfile, RouteCalculation, Leg, FerryTemplate, DistancePreset, ChatMessage, RouteTemplate, DirectionPreset } from '../../types';
 import { dbService } from '../../firebase';
 import { pdService } from '../../firebase/planDohodService';
@@ -562,6 +562,37 @@ export default function DohodModule({ user }: DohodModuleProps) {
   const [routeSearch, setRouteSearch] = useState('');
   const [historySearch, setHistorySearch] = useState('');
   const [activeHistoryDirectionTab, setActiveHistoryDirectionTab] = useState('Все');
+
+  const uniqueDirections = useMemo(() => {
+    return Array.from(new Set(calculationHistory.map(c => c.globalDirection).filter(Boolean)));
+  }, [calculationHistory]);
+
+  const directionsCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    calculationHistory.forEach(c => {
+      const dir = c.globalDirection;
+      if (dir) {
+        counts[dir] = (counts[dir] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [calculationHistory]);
+
+  const filteredHistory = useMemo(() => {
+    const searchLower = historySearch.toLowerCase().trim();
+    if (!searchLower && activeHistoryDirectionTab === 'Все') {
+      return calculationHistory;
+    }
+    return calculationHistory.filter(c => {
+      const matchesSearch = !searchLower ||
+                            (c.username?.toLowerCase().includes(searchLower) || 
+                             c.logist?.toLowerCase().includes(searchLower) || 
+                             JSON.stringify(c.legs).toLowerCase().includes(searchLower) ||
+                             (c.globalDirection || '').toLowerCase().includes(searchLower));
+      const matchesTab = activeHistoryDirectionTab === 'Все' || c.globalDirection === activeHistoryDirectionTab;
+      return matchesSearch && matchesTab;
+    });
+  }, [calculationHistory, historySearch, activeHistoryDirectionTab]);
 
   useEffect(() => {
     const today = new Date();
@@ -1535,51 +1566,37 @@ export default function DohodModule({ user }: DohodModuleProps) {
           </div>
 
           {/* Directions Tabs */}
-          {(() => {
-            const uniqueDirs = Array.from(new Set(calculationHistory.map(c => c.globalDirection).filter(Boolean)));
-            return (
-              <div className="flex flex-wrap gap-2 mb-6 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+          <div className="flex flex-wrap gap-2 mb-6 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+            <button
+              onClick={() => setActiveHistoryDirectionTab('Все')}
+              className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                activeHistoryDirectionTab === 'Все'
+                  ? 'bg-slate-900 text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              Все направления ({calculationHistory.length})
+            </button>
+            {uniqueDirections.map(dir => {
+              const count = directionsCounts[dir] || 0;
+              return (
                 <button
-                  onClick={() => setActiveHistoryDirectionTab('Все')}
+                  key={dir}
+                  onClick={() => setActiveHistoryDirectionTab(dir)}
                   className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                    activeHistoryDirectionTab === 'Все'
-                      ? 'bg-slate-900 text-white shadow-sm'
+                    activeHistoryDirectionTab === dir
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
-                  Все направления ({calculationHistory.length})
+                  {dir} ({count})
                 </button>
-                {uniqueDirs.map(dir => {
-                  const count = calculationHistory.filter(c => c.globalDirection === dir).length;
-                  return (
-                    <button
-                      key={dir}
-                      onClick={() => setActiveHistoryDirectionTab(dir)}
-                      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                        activeHistoryDirectionTab === dir
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-                      }`}
-                    >
-                      {dir} ({count})
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })()}
+              );
+            })}
+          </div>
           
           <div className="overflow-y-auto pr-1 space-y-2 pb-4 custom-scrollbar max-h-[600px]">
-            {calculationHistory
-              .filter(c => {
-                const matchesSearch = c.username?.toLowerCase().includes(historySearch.toLowerCase()) || 
-                                      c.logist?.toLowerCase().includes(historySearch.toLowerCase()) || 
-                                      JSON.stringify(c.legs).toLowerCase().includes(historySearch.toLowerCase()) ||
-                                      (c.globalDirection || '').toLowerCase().includes(historySearch.toLowerCase());
-                const matchesTab = activeHistoryDirectionTab === 'Все' || c.globalDirection === activeHistoryDirectionTab;
-                return matchesSearch && matchesTab;
-              })
-              .map((calc) => {
+            {filteredHistory.map((calc) => {
               
               const routePoints: string[] = [];
               calc.legs.forEach(l => {

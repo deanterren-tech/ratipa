@@ -13,6 +13,7 @@ export interface UserPermissions {
   settings: 'none' | 'read' | 'write';
   admin: 'none' | 'read' | 'write';
   analysis?: 'none' | 'read' | 'write';
+  dashboard?: 'none' | 'read' | 'write';
 }
 
 export interface UserProfile {
@@ -231,6 +232,12 @@ export interface QuickLink {
   url: string;
 }
 
+export interface ExternalTab {
+  id: string;
+  title: string;
+  url: string;
+}
+
 export interface CurrentPlanningTab {
   id: string;
   name: string;
@@ -264,6 +271,7 @@ export interface AppSettings {
   highlight: HighlightData | null;
   highlights?: HighlightData[];
   quickLinks: QuickLink[];
+  externalTabs?: ExternalTab[];
   bamapUrl?: string;
   asmapUrl?: string;
   idleRate: number;

@@ -33,7 +33,8 @@ import {
   CheckCheck,
   AlertTriangle,
   Info,
-  LineChart
+  LineChart,
+  ExternalLink
 } from 'lucide-react';
 
 interface NotificationItem {
@@ -79,9 +80,7 @@ import BazaModule from './modules/BazaModule';
 import DozvolaModule from './modules/DozvolaModule';
 import DispositionModule from './modules/DispositionModule';
 import SettingsModule from './modules/SettingsModule';
-import DocumentsModule from './modules/DocumentsModule';
 import AdminModule from './modules/AdminModule';
-import AnalysisModule from './modules/AnalysisModule';
 
 interface AppShellProps {
   user: UserProfile;
@@ -570,8 +569,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'baza', label: 'Учет выезда', icon: Truck, permissionKey: 'baza' },
     { key: 'dozvola', label: 'Учет Дозволов', icon: FileText, permissionKey: 'dozvola' },
     { key: 'disposition', label: 'Диспозиция', icon: Map, permissionKey: 'disposition' },
-    { key: 'documents', label: 'Документы', icon: Files, permissionKey: 'documents' },
-    { key: 'analysis', label: 'Анализ', icon: LineChart, permissionKey: 'analysis' },
     { key: 'settings', label: 'Справочники', icon: Settings, permissionKey: 'settings' },
     { key: 'admin', label: 'Администрирование', icon: ShieldAlert, permissionKey: 'admin' }
   ];
@@ -656,10 +653,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         return <DozvolaModule user={user} />;
       case 'disposition':
         return <DispositionModule user={user} />;
-      case 'documents':
-        return <DocumentsModule user={user} />;
-      case 'analysis':
-        return <AnalysisModule user={user} />;
       case 'settings':
         return <SettingsModule user={user} />;
       case 'admin':
@@ -712,6 +705,18 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             >
               <span>{item.label}</span>
             </button>
+          ))}
+          {settings?.externalTabs?.map((extTab) => (
+            <a
+              key={extTab.id}
+              href={extTab.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[10px] font-extrabold tracking-tight uppercase transition-all duration-150 py-1.5 px-3.5 rounded-full text-slate-500 hover:text-slate-900 hover:bg-white/40 flex items-center gap-1 cursor-pointer"
+            >
+              <span>{extTab.title}</span>
+              <ExternalLink className="h-3 w-3 text-slate-400" />
+            </a>
           ))}
         </nav>
 
@@ -1039,6 +1044,20 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                     <IconComp className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#00E371]' : 'text-slate-400'}`} />
                     <span>{item.label}</span>
                   </button>
+                );
+              })}
+              {settings?.externalTabs?.map((extTab) => {
+                return (
+                  <a
+                    key={extTab.id}
+                    href={extTab.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-xs font-bold text-slate-600 hover:bg-slate-50 hover:text-black transition-all duration-150 cursor-pointer"
+                  >
+                    <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
+                    <span className="flex-1 truncate">{extTab.title}</span>
+                  </a>
                 );
               })}
             </div>

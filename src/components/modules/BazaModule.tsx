@@ -415,28 +415,38 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   };
 
   // --- Rendering Data ---
-  const filteredList = (currentTab === 'base' ? cars : archiveCars).filter(c => {
-     const q = searchQuery.toLowerCase();
-     if (q && !(String(c.carNumber||'').toLowerCase().includes(q) || String(c.driverName||'').toLowerCase().includes(q) || String(c.comment||'').toLowerCase().includes(q))) return false;
-     return true;
-  }).map(c => ({...c, _status: calculateCarStatus(c)})).sort((a,b) => {
-     if (sortMode === 'car_asc') return (a.carNumber||'').localeCompare(b.carNumber||'');
-     if (sortMode === 'car_desc') return (b.carNumber||'').localeCompare(a.carNumber||'');
-     if (sortMode === 'arrival_desc') return (b.dateArrival||'0000').localeCompare(a.dateArrival||'0000');
-     if (sortMode === 'arrival_asc') return (a.dateArrival||'9999').localeCompare(b.dateArrival||'9999');
-     if (sortMode === 'departure_desc') return (b.dateDeparture||'0000').localeCompare(a.dateDeparture||'0000');
-     if (sortMode === 'departure_asc') return (a.dateDeparture||'9999').localeCompare(b.dateDeparture||'9999');
-     
-     // default smart sort
-     if (currentTab === 'archive') {
-         return (b.dateDeparture||'0000').localeCompare(a.dateDeparture||'0000');
-     }
-     return (b.dateArrival||'0000').localeCompare(a.dateArrival||'0000');
-  });
+  const filteredList = useMemo(() => {
+     return (currentTab === 'base' ? cars : archiveCars).filter(c => {
+        const q = searchQuery.toLowerCase();
+        if (q && !(String(c.carNumber||'').toLowerCase().includes(q) || String(c.driverName||'').toLowerCase().includes(q) || String(c.comment||'').toLowerCase().includes(q))) return false;
+        return true;
+     }).map(c => ({...c, _status: calculateCarStatus(c)})).sort((a,b) => {
+        if (sortMode === 'car_asc') return (a.carNumber||'').localeCompare(b.carNumber||'');
+        if (sortMode === 'car_desc') return (b.carNumber||'').localeCompare(a.carNumber||'');
+        if (sortMode === 'arrival_desc') return (b.dateArrival||'0000').localeCompare(a.dateArrival||'0000');
+        if (sortMode === 'arrival_asc') return (a.dateArrival||'9999').localeCompare(b.dateArrival||'9999');
+        if (sortMode === 'departure_desc') return (b.dateDeparture||'0000').localeCompare(a.dateDeparture||'0000');
+        if (sortMode === 'departure_asc') return (a.dateDeparture||'9999').localeCompare(a.dateDeparture||'9999');
+        
+        // default smart sort
+        if (currentTab === 'archive') {
+            return (b.dateDeparture||'0000').localeCompare(a.dateDeparture||'0000');
+        }
+        return (b.dateArrival||'0000').localeCompare(a.dateArrival||'0000');
+     });
+  }, [currentTab, cars, archiveCars, searchQuery, sortMode]);
 
-  const wTotal = cars.filter(c => ['base','repair','ready'].includes(calculateCarStatus(c).code)).length;
-  const wRepair = cars.filter(c => calculateCarStatus(c).code === 'repair').length;
-  const wReady = cars.filter(c => calculateCarStatus(c).code === 'ready').length;
+  const wTotal = useMemo(() => {
+     return cars.filter(c => ['base','repair','ready'].includes(calculateCarStatus(c).code)).length;
+  }, [cars]);
+
+  const wRepair = useMemo(() => {
+     return cars.filter(c => calculateCarStatus(c).code === 'repair').length;
+  }, [cars]);
+
+  const wReady = useMemo(() => {
+     return cars.filter(c => calculateCarStatus(c).code === 'ready').length;
+  }, [cars]);
 
   return (
     <div className="w-full space-y-6 flex flex-col font-sans">

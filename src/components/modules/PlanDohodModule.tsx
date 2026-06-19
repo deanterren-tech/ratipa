@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   UserProfile,
   TripPlan,
@@ -3305,38 +3305,21 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     localStorage.setItem("ratipa_plan_trips_order", JSON.stringify(newOrder));
   };
 
-  const renderTripsGrid = (archived: boolean) => {
-    let list = trips.filter((t) => !!t.isArchived === archived);
-    if (!archived && activeDispatcherTab) {
+  const activeTripsComputed = useMemo(() => {
+    let list = trips.filter((t) => !t.isArchived);
+    if (activeDispatcherTab) {
       if (activeDispatcherTab === "Все диспетчеры") {
         list = list.filter((t) => filterDispatchers.includes(t.dispatcher));
       } else if (activeDispatcherTab !== "All") {
         list = list.filter((t) => t.dispatcher === activeDispatcherTab);
       }
     }
-    if (!archived && activeDirectionTab !== "All") {
+    if (activeDirectionTab !== "All") {
       list = list.filter((t) => t.direction === activeDirectionTab);
     }
     if (searchCarQuery.trim()) {
       const q = searchCarQuery.trim().toLowerCase();
       list = list.filter((t) => String(t.carNumber || '').toLowerCase().includes(q));
-    }
-    if (archived) {
-      const months = Array.from(
-        new Set(
-          list
-            .filter((t) => t.currentMonth)
-            .map((t) => t.currentMonth as string),
-        ),
-      );
-      let targetMonth = archiveMonth;
-      if (!targetMonth && months.length > 0) {
-        targetMonth = months[0];
-        // Delaying state update slightly or just use it locally
-      }
-      if (targetMonth) {
-        list = list.filter((t) => t.currentMonth === targetMonth);
-      }
     }
 
     // Sort logic
@@ -3381,6 +3364,80 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         return idxA - idxB;
       });
     }
+    return list;
+  }, [trips, activeDispatcherTab, filterDispatchers, activeDirectionTab, searchCarQuery, sortConfig, manualTripsOrder]);
+
+  const archiveTripsMonths = useMemo(() => {
+    return Array.from(
+      new Set(
+        trips
+          .filter((t) => t.isArchived && t.currentMonth)
+          .map((t) => t.currentMonth as string),
+      ),
+    ).sort();
+  }, [trips]);
+
+  const archiveTripsComputed = useMemo(() => {
+    let list = trips.filter((t) => !!t.isArchived);
+    if (searchCarQuery.trim()) {
+      const q = searchCarQuery.trim().toLowerCase();
+      list = list.filter((t) => String(t.carNumber || '').toLowerCase().includes(q));
+    }
+    let targetMonth = archiveMonth;
+    if (!targetMonth && archiveTripsMonths.length > 0) {
+      targetMonth = archiveTripsMonths[0];
+    }
+    if (targetMonth) {
+      list = list.filter((t) => t.currentMonth === targetMonth);
+    }
+
+    // Sort logic
+    if (sortConfig) {
+      list.sort((a, b) => {
+        let valA: string | number = 0;
+        let valB: string | number = 0;
+        if (sortConfig.key === "carNumber") {
+          valA = a.carNumber;
+          valB = b.carNumber;
+        } else if (sortConfig.key === "dateStart") {
+          valA = a.dateStart;
+          valB = b.dateStart;
+        } else if (sortConfig.key === "km") {
+          valA = a.factKm || a.totalKm || 0;
+          valB = b.factKm || b.totalKm || 0;
+        } else if (sortConfig.key === "freight") {
+          valA = a.totalFreight || 0;
+          valB = b.totalFreight || 0;
+        } else if (sortConfig.key === "expenses") {
+          valA = a.totalExpenses || 0;
+          valB = b.totalExpenses || 0;
+        } else if (sortConfig.key === "profit") {
+          valA = a.profitFact || 0;
+          valB = b.profitFact || 0;
+        } else if (sortConfig.key === "profitDay") {
+          valA = (a.profitFact || 0) / (a.days || 1);
+          valB = (b.profitFact || 0) / (b.days || 1);
+        }
+
+        if (valA < valB) return sortConfig.dir === "asc" ? -1 : 1;
+        if (valA > valB) return sortConfig.dir === "asc" ? 1 : -1;
+        return 0;
+      });
+    } else {
+      list.sort((a, b) => {
+        const idxA = manualTripsOrder.indexOf(a.id);
+        const idxB = manualTripsOrder.indexOf(b.id);
+        if (idxA === -1 && idxB === -1) return b.id.localeCompare(a.id);
+        if (idxA === -1) return 1;
+        if (idxB === -1) return -1;
+        return idxA - idxB;
+      });
+    }
+    return list;
+  }, [trips, searchCarQuery, archiveMonth, archiveTripsMonths, sortConfig, manualTripsOrder]);
+
+  const renderTripsGrid = (archived: boolean) => {
+    const list = archived ? [...archiveTripsComputed] : [...activeTripsComputed];
 
     if (list.length === 0)
       return (
@@ -3897,13 +3954,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         <div className={activeTab === "archive" ? "" : "hidden"}>
           <div className="flex items-center gap-2 border-t border-slate-100 pt-4 overflow-x-auto custom-scrollbar pb-2">
             <div className="flex gap-2">
-              {Array.from(
-                new Set(
-                  trips
-                    .filter((t) => t.isArchived && t.currentMonth)
-                    .map((t) => t.currentMonth as string),
-                ),
-              ).map((month) => (
+              {archiveTripsMonths.map((month) => (
                 <button
                   key={month}
                   onClick={() => setArchiveMonth(month)}

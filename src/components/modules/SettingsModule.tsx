@@ -69,6 +69,13 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
   const [editingLinkTitle, setEditingLinkTitle] = useState('');
   const [editingLinkUrl, setEditingLinkUrl] = useState('');
+
+  // Local Form states (External website tabs)
+  const [extTitle, setExtTitle] = useState('');
+  const [extUrl, setExtUrl] = useState('');
+  const [editingExtId, setEditingExtId] = useState<string | null>(null);
+  const [editingExtTitle, setEditingExtTitle] = useState('');
+  const [editingExtUrl, setEditingExtUrl] = useState('');
   
   // Modal for adding vehicle
   const [addingVehicleGroup, setAddingVehicleGroup] = useState<CarRateGroup | null>(null);
@@ -438,6 +445,69 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     setEditingLinkTitle('');
     setEditingLinkUrl('');
     toast("Ссылка успешно обновлена.", 'success');
+  };
+
+  const handleAddExternalTab = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!extTitle || !extUrl || !settings) return;
+
+    const newTab = {
+      id: "ext_" + Date.now(),
+      title: extTitle.trim(),
+      url: extUrl.trim()
+    };
+
+    const updated: AppSettings = {
+      ...settings,
+      externalTabs: [...(settings.externalTabs || []), newTab]
+    };
+
+    dbService.saveSettings(updated, user.name, user.role);
+    setExtTitle('');
+    setExtUrl('');
+    toast("Вкладка выведена на панель навигации.", 'success');
+  };
+
+  const handleDeleteExternalTab = (id: string) => {
+    if (!settings) return;
+    const updated: AppSettings = {
+      ...settings,
+      externalTabs: (settings.externalTabs || []).filter(t => t.id !== id)
+    };
+    dbService.saveSettings(updated, user.name, user.role);
+  };
+
+  const handleStartEditExternalTab = (tab: any) => {
+    setEditingExtId(tab.id);
+    setEditingExtTitle(tab.title);
+    setEditingExtUrl(tab.url);
+  };
+
+  const handleSaveEditExternalTab = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingExtId || !editingExtTitle || !editingExtUrl || !settings) return;
+
+    const updatedTabs = (settings.externalTabs || []).map((t) => {
+      if (t.id === editingExtId) {
+        return {
+          ...t,
+          title: editingExtTitle.trim(),
+          url: editingExtUrl.trim()
+        };
+      }
+      return t;
+    });
+
+    const updated: AppSettings = {
+      ...settings,
+      externalTabs: updatedTabs
+    };
+
+    dbService.saveSettings(updated, user.name, user.role);
+    setEditingExtId(null);
+    setEditingExtTitle('');
+    setEditingExtUrl('');
+    toast("Вкладка успешно обновлена.", 'success');
   };
 
   // Guard view options
@@ -1435,6 +1505,116 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Core dynamic external tabs section */}
+          <div className="pt-4 border-t border-slate-100 space-y-4">
+            <h3 className="text-[11px] font-black uppercase text-slate-500 font-mono">Добавление вкладок на сторонние сайты (Внешние Вкладки)</h3>
+            <p className="text-[10px] text-slate-400 font-bold leading-normal">
+              Эти вкладки будут размещены в главном меню навигации (сверху в ПК-версии и в выдвижной шторке на мобильных) рядом с системными разделами. Клик по ним откроет указанный сайт в новой вкладке браузера.
+            </p>
+            {isWritePermitted && (
+              <form onSubmit={handleAddExternalTab} className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200/50 select-none">
+                <input
+                  type="text"
+                  placeholder="Название вкладки"
+                  required
+                  value={extTitle}
+                  onChange={(e) => setExtTitle(e.target.value)}
+                  className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-slate-450 font-bold"
+                />
+                <input
+                  type="url"
+                  placeholder="https://..."
+                  required
+                  value={extUrl}
+                  onChange={(e) => setExtUrl(e.target.value)}
+                  className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-slate-450 font-bold"
+                />
+                <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-[10px] font-black uppercase transition cursor-pointer">
+                  Добавить Вкладку
+                </button>
+              </form>
+            )}
+
+            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+              {(settings?.externalTabs || []).map((t) => {
+                const isEditing = editingExtId === t.id;
+                if (isEditing) {
+                  return (
+                    <form 
+                      key={t.id} 
+                      onSubmit={handleSaveEditExternalTab} 
+                      className="flex flex-col sm:flex-row gap-2 bg-slate-100 p-3 rounded-2xl border border-slate-300"
+                    >
+                      <input
+                        type="text"
+                        value={editingExtTitle}
+                        onChange={(e) => setEditingExtTitle(e.target.value)}
+                        required
+                        className="p-2 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none font-bold flex-1"
+                        placeholder="Название вкладки"
+                      />
+                      <input
+                        type="url"
+                        value={editingExtUrl}
+                        onChange={(e) => setEditingExtUrl(e.target.value)}
+                        required
+                        className="p-2 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none font-bold flex-1"
+                        placeholder="https://..."
+                      />
+                      <div className="flex gap-1.5 justify-end">
+                        <button 
+                          type="submit" 
+                          className="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition cursor-pointer flex items-center justify-center min-w-[36px]" 
+                          title="Сохранить"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={() => setEditingExtId(null)} 
+                          className="p-2.5 bg-slate-400 hover:bg-slate-500 text-white rounded-xl transition cursor-pointer flex items-center justify-center min-w-[36px]" 
+                          title="Отмена"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </form>
+                  );
+                }
+
+                return (
+                  <div key={t.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-slate-50/70 rounded-2xl text-xs font-bold border border-slate-250/15 group hover:border-slate-300/60 transition duration-100 gap-2">
+                    <span className="text-slate-800 uppercase tracking-tight">{t.title}</span>
+                    <div className="flex items-center justify-between sm:justify-end gap-3 flex-wrap">
+                      <span className="text-[10px] text-slate-400 font-mono max-w-[180px] sm:max-w-[240px] truncate">{t.url}</span>
+                      {isWritePermitted && (
+                        <div className="flex items-center gap-1.5">
+                          <button 
+                            onClick={() => handleStartEditExternalTab(t)} 
+                            className="text-slate-500 hover:text-slate-800 p-1.5 bg-white border border-slate-150 rounded-lg hover:border-slate-300 transition cursor-pointer flex items-center justify-center flex-shrink-0"
+                            title="Редактировать"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteExternalTab(t.id)} 
+                            className="text-rose-500 hover:text-rose-700 p-1.5 bg-white border border-slate-150 rounded-lg hover:border-rose-200 transition cursor-pointer flex items-center justify-center flex-shrink-0"
+                            title="Удалить"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {!(settings?.externalTabs?.length) && (
+                <div className="text-center py-6 text-slate-400 text-[10px] font-mono font-black uppercase tracking-widest bg-slate-50 rounded-2xl border border-slate-200/10">Внешние вкладки отсутствуют.</div>
+              )}
             </div>
           </div>
         </div>
