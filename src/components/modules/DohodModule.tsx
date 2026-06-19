@@ -1001,7 +1001,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
     const cleanCityName = (city: string) => {
         let name = city.trim();
         if (name.length <= 2) return name;
-        const low = (name || '').toLowerCase();
+        const low = name.toLowerCase();
         if (low.endsWith('ска')) return name.slice(0, -1); // Минска -> Минск
         if (low.endsWith('ске')) return name.slice(0, -1); // Минске -> ...
         if (low.endsWith('ску')) return name.slice(0, -1) + 'к'; // Минску -> Минск
@@ -1021,7 +1021,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
     // Автогенерация базовых словоформ для городов из пресетов distances
     const getCityForms = (cityName: string): string[] => {
-        const lower = (cityName || '').toLowerCase().trim();
+        const lower = cityName.toLowerCase().trim();
         const forms = [lower];
         
         if (lower.includes('санкт-петербург') || lower === 'питер' || lower === 'спб') {
@@ -1053,7 +1053,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 .map(city => String(city).trim())
                 .filter(city => city.length > 1);
     
-    const lowerSource = (originalText || '').toLowerCase();
+    const lowerSource = originalText.toLowerCase();
     const mentions: any[] = [];
 
     citiesDataset.forEach(city => {
@@ -1082,8 +1082,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
     if (mentions.length >= 2) {
         for (let i = 0; i < mentions.length - 1; i++) {
-            const from = mentions[i].city || '';
-            const to = mentions[i + 1].city || '';
+            const from = mentions[i].city;
+            const to = mentions[i + 1].city;
             if (from.toLowerCase() === to.toLowerCase()) continue;
             const nextBoundary = mentions[i + 2] ? mentions[i + 2].index : originalText.length;
             const rateChunk = originalText.slice(mentions[i + 1].end, nextBoundary);
@@ -1381,7 +1381,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                <input type="text" placeholder="Поиск... " value={routeSearch} onChange={e => setRouteSearch(e.target.value)} className="text-xs px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg outline-none font-bold" />
            </div>
            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-               {routeTemplates.filter(t => (t.name || '').toLowerCase().includes((routeSearch || '').toLowerCase())).map((t, idx) => (
+               {routeTemplates.filter(t => t.name.toLowerCase().includes(routeSearch.toLowerCase())).map((t, idx) => (
                    <div key={idx} className="p-5 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col justify-between group">
                        <div className="flex justify-between items-start mb-3">
                            <span className="font-extrabold text-base text-slate-800 break-all leading-tight">📁 {t.name}</span>
@@ -1572,11 +1572,10 @@ export default function DohodModule({ user }: DohodModuleProps) {
           <div className="overflow-y-auto pr-1 space-y-2 pb-4 custom-scrollbar max-h-[600px]">
             {calculationHistory
               .filter(c => {
-                const searchLower = (historySearch || '').toLowerCase();
-                const matchesSearch = (c.username || '').toLowerCase().includes(searchLower) || 
-                                      (c.logist || '').toLowerCase().includes(searchLower) || 
-                                      JSON.stringify(c.legs || []).toLowerCase().includes(searchLower) ||
-                                      (c.globalDirection || '').toLowerCase().includes(searchLower);
+                const matchesSearch = c.username?.toLowerCase().includes(historySearch.toLowerCase()) || 
+                                      c.logist?.toLowerCase().includes(historySearch.toLowerCase()) || 
+                                      JSON.stringify(c.legs).toLowerCase().includes(historySearch.toLowerCase()) ||
+                                      (c.globalDirection || '').toLowerCase().includes(historySearch.toLowerCase());
                 const matchesTab = activeHistoryDirectionTab === 'Все' || c.globalDirection === activeHistoryDirectionTab;
                 return matchesSearch && matchesTab;
               })

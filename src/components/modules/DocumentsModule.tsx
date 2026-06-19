@@ -101,6 +101,22 @@ export default function DocumentsModule({ user }: Props) {
       selectedTemplate.placeholders.forEach(pl => {
         vars[pl] = variables[pl] || '';
       });
+      // Autofill some standard fields to make life easier
+      if (selectedTemplate.placeholders.includes('Дата') && !vars['Дата']) {
+        vars['Дата'] = new Date().toLocaleDateString('ru-RU');
+      }
+      if (selectedTemplate.placeholders.includes('Дата_Выдачи') && !vars['Дата_Выдачи']) {
+        vars['Дата_Выдачи'] = new Date().toLocaleDateString('ru-RU');
+      }
+      if (selectedTemplate.placeholders.includes('Организация') && !vars['Организация']) {
+        vars['Организация'] = 'ООО Ратипа';
+      }
+      if (selectedTemplate.placeholders.includes('Исполнитель') && !vars['Исполнитель']) {
+        vars['Исполнитель'] = 'ООО Ратипа';
+      }
+      if (selectedTemplate.placeholders.includes('Перевозчик') && !vars['Перевозчик']) {
+        vars['Перевозчик'] = 'ООО Ратипа';
+      }
       setVariables(vars);
     }
   }, [selectedTemplate]);
@@ -232,14 +248,11 @@ export default function DocumentsModule({ user }: Props) {
   };
 
   // Filter templates based on search query
-  const filterTerm = (typeof searchQuery === 'string' ? searchQuery : '').toLowerCase();
-  const filteredTemplates = Array.isArray(templates) ? templates.filter(t => {
-    if (!t) return false;
-    const title = (typeof t.title === 'string' ? t.title : '').toLowerCase();
-    const desc = (typeof t.description === 'string' ? t.description : '').toLowerCase();
-    const cat = (typeof t.category === 'string' ? t.category : '').toLowerCase();
-    return title.includes(filterTerm) || desc.includes(filterTerm) || cat.includes(filterTerm);
-  }) : [];
+  const filteredTemplates = templates.filter(t => 
+    t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
@@ -380,7 +393,7 @@ export default function DocumentsModule({ user }: Props) {
                         </label>
                         <input 
                           type="text" 
-                          placeholder={`Введите ${(typeof key === 'string' ? key.replace(/_/g, ' ').toLowerCase() : '')}...`}
+                          placeholder={`Введите ${key.replace(/_/g, ' ').toLowerCase()}...`}
                           value={variables[key] || ''}
                           onChange={e => setVariables({ ...variables, [key]: e.target.value })}
                           className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-xs font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition"

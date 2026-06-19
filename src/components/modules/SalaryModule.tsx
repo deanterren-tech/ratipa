@@ -88,7 +88,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     setDriverName(val);
     
     // Find driver in drivers pool
-    const foundDriver = drivers.find(d => (d.name || '').trim().toLowerCase() === (val || '').trim().toLowerCase());
+    const foundDriver = drivers.find(d => d.name.trim().toLowerCase() === val.trim().toLowerCase());
     if (foundDriver && foundDriver.rateGroupId) {
       const group = carsPool.find(g => g.id === foundDriver.rateGroupId);
       if (group) {
@@ -128,7 +128,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
     const trimmedDriver = driverName.trim();
     if (trimmedDriver && trimmedDriver !== 'НЕ УКАЗАНО') {
-      const exists = drivers.some(d => (d.name || '').trim().toLowerCase() === trimmedDriver.toLowerCase());
+      const exists = drivers.some(d => d.name.trim().toLowerCase() === trimmedDriver.toLowerCase());
       if (!exists) {
         const confirmAdd = await showConfirm(`Водитель "${trimmedDriver}" отсутствует в справочнике. Занести его в справочник?`);
         if (confirmAdd) {
@@ -205,7 +205,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     
     const trimmedDriver = (editingSalaryData.driver || '').trim();
     if (trimmedDriver && trimmedDriver !== 'НЕ УКАЗАНО') {
-      const exists = drivers.some(d => (d.name || '').trim().toLowerCase() === trimmedDriver.toLowerCase());
+      const exists = drivers.some(d => d.name.trim().toLowerCase() === trimmedDriver.toLowerCase());
       if (!exists) {
         const confirmAdd = await showConfirm(`Водитель "${trimmedDriver}" отсутствует в справочнике. Занести его в справочник?`);
         if (confirmAdd) {
@@ -292,7 +292,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
   const filteredHistory = logs.filter(rec => {
         const haystack = `${rec.datetime || ''} ${rec.logist || ''} ${rec.driver || ''} ${rec.car || ''} ${rec.mark || ''} ${rec.km || ''} ${rec.rate || ''} ${rec.bonus || ''} ${rec.totalSalary || ''}`.toLowerCase();
-        return !(searchQuery || '').toLowerCase() || haystack.includes((searchQuery || '').toLowerCase());
+        return !searchQuery || haystack.includes(searchQuery.toLowerCase());
   });
 
   const totalPaid = logs.reduce((s, r) => s + (r.totalSalary || 0), 0);
@@ -626,7 +626,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                 <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">ФИО Водителя</label>
                                 <input type="text" list="salary-drivers-dl" value={editingSalaryData.driver || ''} onChange={e => {
                                      const val = e.target.value;
-                                     const foundDriver = drivers.find(d => (d.name || '').trim().toLowerCase() === (val || '').trim().toLowerCase());
+                                     const foundDriver = drivers.find(d => d.name.trim().toLowerCase() === val.trim().toLowerCase());
                                      if (foundDriver && foundDriver.rateGroupId) {
                                          const group = carsPool.find(g => g.id === foundDriver.rateGroupId);
                                          if (group) {

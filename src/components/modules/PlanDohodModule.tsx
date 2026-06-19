@@ -3319,7 +3319,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     }
     if (searchCarQuery.trim()) {
       const q = searchCarQuery.trim().toLowerCase();
-      list = list.filter((t) => (t.carNumber || '').toLowerCase().includes(q));
+      list = list.filter((t) => t.carNumber.toLowerCase().includes(q));
     }
     if (archived) {
       const months = Array.from(

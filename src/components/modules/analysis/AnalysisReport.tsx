@@ -135,7 +135,7 @@ export default function AnalysisReport({ regions }: AnalysisReportProps) {
 
   const searchResults = useMemo(() => {
     if (!globalSearch.trim()) return [];
-    const lower = (globalSearch || '').toLowerCase();
+    const lower = globalSearch.toLowerCase();
     
     return allRecords.map(rec => {
        const group = allGroups.find(g => g.id === rec.groupId);

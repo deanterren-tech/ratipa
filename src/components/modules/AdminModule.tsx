@@ -73,9 +73,9 @@ export default function AdminModule({ user }: AdminModuleProps) {
 
   // Audit Logs filtering
   const filteredLogs = logs.filter(
-    l => (l.user || '').toLowerCase().includes((searchLogs || '').toLowerCase()) ||
-         (l.details || '').toLowerCase().includes((searchLogs || '').toLowerCase()) ||
-         (l.module || '').toLowerCase().includes((searchLogs || '').toLowerCase())
+    l => l.user.toLowerCase().includes(searchLogs.toLowerCase()) ||
+         l.details.toLowerCase().includes(searchLogs.toLowerCase()) ||
+         l.module.toLowerCase().includes(searchLogs.toLowerCase())
   );
 
   // Lock non-admins completely

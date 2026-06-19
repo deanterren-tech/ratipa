@@ -109,7 +109,7 @@ export default function UserManagementBlock({ user }: Props) {
     const newUser: UserProfile = {
       uid: "user_" + Date.now(),
       name: newUName.trim(),
-      email: `${(newUName || '').trim().toLowerCase()}@ratipa.com`,
+      email: `${newUName.trim().toLowerCase()}@ratipa.com`,
       createdAt: new Date().toISOString(),
       password: newUPassword.trim(),
       role: newURole as any,
@@ -126,8 +126,8 @@ export default function UserManagementBlock({ user }: Props) {
 
   const filteredUsers = users.filter(
     (u) =>
-      (u.name || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
-      (u.role || '').toLowerCase().includes((searchQuery || '').toLowerCase()),
+      u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.role.toLowerCase().includes(searchQuery.toLowerCase()),
   );
   const selectedUser = users.find((u) => u.uid === selectedUid);
 

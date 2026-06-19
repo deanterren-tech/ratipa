@@ -218,7 +218,7 @@ export const pdService = {
   // --- SYSTEM REGISTRY ---
   registerUser: (username: string) => {
     if (!useFirebase) return;
-    const lower = (username || '').toLowerCase();
+    const lower = username.toLowerCase();
     update(ref(database, `system_users_registry/${lower}`), {
       username,
       lastLogin: new Date().toISOString()
@@ -283,7 +283,7 @@ export const pdService = {
   // --- PRESENCE ---
   setPresence: (username: string) => {
     if (!useFirebase) return;
-    const lower = (username || '').toLowerCase();
+    const lower = username.toLowerCase();
     const presenceRef = ref(database, `ratipa_presence/${lower}`);
     set(presenceRef, {
       name: username,

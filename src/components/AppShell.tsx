@@ -89,10 +89,7 @@ interface AppShellProps {
 }
 
 export default function AppShell({ user, onLogout }: AppShellProps) {
-  const [activeModule, setActiveModule] = useState<string>(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('module') || 'dashboard';
-  });
+  const [activeModule, setActiveModule] = useState<string>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDbOnline, setIsDbOnline] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
@@ -110,9 +107,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     }
     return defaultNotifications;
   });
-  const notificationsRef = useRef<NotificationItem[]>(notifications);
-  useEffect(() => { notificationsRef.current = notifications; }, [notifications]);
-
   const [deletedNotifIds, setDeletedNotifIds] = useState<string[]>(() => {
     const saved = localStorage.getItem('ratipa_deleted_notif_ids');
     if (saved) {
@@ -229,7 +223,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       // 1. Repair ended (dateRepairEnd exists and is set)
       if (car.dateRepairEnd) {
         const repKey = `repair_end_${car.id}_${car.dateRepairEnd}`.replace(/[.#$[\]]/g, '_');
-        const alreadyExists = notificationsRef.current.some(n => n.id === repKey);
+        const alreadyExists = notifications.some(n => n.id === repKey);
         
         if (!alreadyExists) {
           const now = new Date();
@@ -268,7 +262,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           const hasDeparted = car.dateDeparture && car.dateDeparture <= todayStr;
           if (diffDays <= 3 && !hasDeparted) {
             const loadKey = `loading_warn_${car.id}_${car.dateLoading}`.replace(/[.#$[\]]/g, '_');
-            const alreadyExists = notificationsRef.current.some(n => n.id === loadKey);
+            const alreadyExists = notifications.some(n => n.id === loadKey);
 
             if (!alreadyExists) {
               const now = new Date();
@@ -635,7 +629,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const handleNavigate = (moduleKey: string) => {
     setActiveModule(moduleKey);
     setIsSidebarOpen(false);
-    window.history.pushState(null, '', `?module=${moduleKey}`);
   };
 
   // Render the currently selected main active workspace component
@@ -706,19 +699,15 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         {/* Center: Modern capsule-based selector tags (exactly like the reference image) */}
         <nav className="hidden lg:flex items-center gap-1.5 bg-[#f0f2f4] p-1 rounded-full border border-slate-200/50 shadow-inner">
           {navModules.map((item) => (
-            <a
+            <button
               key={item.key}
-              href={`?module=${item.key}`}
-              onClick={(e) => {
-                e.preventDefault();
-                handleNavigate(item.key);
-              }}
+              onClick={() => handleNavigate(item.key)}
               className={`text-[10px] font-extrabold tracking-tight uppercase transition-all duration-150 py-1.5 px-4 rounded-full relative cursor-pointer ${
                 activeModule === item.key ? 'text-white bg-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-900 hover:bg-white/40'
               }`}
             >
               <span>{item.label}</span>
-            </a>
+            </button>
           ))}
         </nav>
 
@@ -920,7 +909,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                               </p>
                               {notif.dispatcher && (
                                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                  {(user?.name || '').toLowerCase() === (notif.dispatcher || '').toLowerCase() ? (
+                                  {user.name.toLowerCase() === notif.dispatcher.toLowerCase() ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8.5px] font-black tracking-wide bg-[#c3fb12] text-[#2f4201] uppercase border border-[#c3fb12]/40 animate-pulse-slow">
                                       <span className="w-1 h-1 rounded-full bg-[#2f4201]" />
                                       ДЛЯ ВАС (Ваша машина)
@@ -1034,13 +1023,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                 const IconComp = item.icon;
                 const isActive = activeModule === item.key;
                 return (
-                  <a
+                  <button
                     key={item.key}
-                    href={`?module=${item.key}`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleNavigate(item.key);
-                    }}
+                    onClick={() => handleNavigate(item.key)}
                     className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-xs font-bold transition-all duration-150 cursor-pointer ${
                       isActive 
                         ? 'bg-slate-950 text-white shadow-lg shadow-black/10 scale-102 border-l-4 border-[#00E371]' 
@@ -1049,7 +1034,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                   >
                     <IconComp className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#00E371]' : 'text-slate-400'}`} />
                     <span>{item.label}</span>
-                  </a>
+                  </button>
                 );
               })}
             </div>

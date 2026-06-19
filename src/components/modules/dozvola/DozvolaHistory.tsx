@@ -32,13 +32,13 @@ export default function DozvolaHistory({ user }: DozvolaHistoryProps) {
 
   const filteredHistory = useMemo(() => {
     if (!searchTerm.trim()) return history;
-    const lower = (searchTerm || '').toLowerCase();
+    const lower = searchTerm.toLowerCase();
     return history.filter(h => 
-      ((h.doc || '').toLowerCase().includes(lower)) ||
-      ((h.action || '').toLowerCase().includes(lower)) ||
-      ((h.logist || '').toLowerCase().includes(lower)) ||
-      ((h.meta || '').toLowerCase().includes(lower)) ||
-      ((h.time || '').toLowerCase().includes(lower))
+      (h.doc && h.doc.toLowerCase().includes(lower)) ||
+      (h.action && h.action.toLowerCase().includes(lower)) ||
+      (h.logist && h.logist.toLowerCase().includes(lower)) ||
+      (h.meta && h.meta.toLowerCase().includes(lower)) ||
+      (h.time && h.time.toLowerCase().includes(lower))
     );
   }, [history, searchTerm]);
 

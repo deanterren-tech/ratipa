@@ -44,16 +44,16 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
     dbService.getUsers((users) => {
       // Check legacy/default password
       const match = users.find(
-        (u) => u && u.name && u.name.toLowerCase() === username.trim().toLowerCase()
+        (u) => u.name.toLowerCase() === username.trim().toLowerCase()
       );
 
       setTimeout(() => {
         setIsLoading(false);
-        const isPasswordCorrect = match && ((match.password && password === match.password) || password === "ratipa2026" || password === "admin");
+        const isPasswordCorrect = (match.password && password === match.password) || password === "ratipa2026" || password === "admin";
         if (match && isPasswordCorrect) {
           // Success!
           let userToLogin = { ...match };
-          const nameLower = (userToLogin.name || '').toLowerCase();
+          const nameLower = userToLogin.name.toLowerCase();
           if (nameLower === "сергей" || nameLower === "сергей терез") {
             userToLogin.role = "root_admin";
             userToLogin.permissions = {
