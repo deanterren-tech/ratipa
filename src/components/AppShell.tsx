@@ -89,6 +89,14 @@ interface AppShellProps {
 
 export default function AppShell({ user, onLogout }: AppShellProps) {
   const [activeModule, setActiveModule] = useState<string>('dashboard');
+  const [loadedModules, setLoadedModules] = useState<string[]>(['dashboard']);
+
+  useEffect(() => {
+    if (!loadedModules.includes(activeModule)) {
+      setLoadedModules((prev) => [...prev, activeModule]);
+    }
+  }, [activeModule, loadedModules]);
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDbOnline, setIsDbOnline] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
@@ -1072,6 +1080,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           {allModules.map((mod) => {
             const isAllowed = user.role === 'root_admin' || (user.permissions && user.permissions[mod.permissionKey] && user.permissions[mod.permissionKey] !== 'none');
             if (!isAllowed) return null;
+
+            const isLoaded = loadedModules.includes(mod.key);
+            if (!isLoaded) return null;
 
             const isActive = activeModule === mod.key;
 

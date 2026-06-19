@@ -120,12 +120,8 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
 
       {/* Frame */}
       <div 
-         className="flex-1 bg-slate-100 rounded-[2rem] overflow-hidden border border-slate-200/60 shadow-sm relative resize-y min-h-[400px] max-h-[90vh]"
-         style={{ height: `${frameHeight}px` }}
-         onPointerUp={(e) => {
-            const h = e.currentTarget.offsetHeight;
-            if (h !== frameHeight) setFrameHeight(h);
-         }}
+         className="flex-1 bg-slate-100 rounded-[2rem] overflow-hidden border border-slate-200/60 shadow-sm relative"
+         style={isFocusMode ? { minHeight: 'calc(100vh - 120px)' } : { height: '680px' }}
       >
          {allowedTabs.some(t => t.sheetUrl) ? (
             <div style={{
