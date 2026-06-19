@@ -101,22 +101,6 @@ export default function DocumentsModule({ user }: Props) {
       selectedTemplate.placeholders.forEach(pl => {
         vars[pl] = variables[pl] || '';
       });
-      // Autofill some standard fields to make life easier
-      if (selectedTemplate.placeholders.includes('Дата') && !vars['Дата']) {
-        vars['Дата'] = new Date().toLocaleDateString('ru-RU');
-      }
-      if (selectedTemplate.placeholders.includes('Дата_Выдачи') && !vars['Дата_Выдачи']) {
-        vars['Дата_Выдачи'] = new Date().toLocaleDateString('ru-RU');
-      }
-      if (selectedTemplate.placeholders.includes('Организация') && !vars['Организация']) {
-        vars['Организация'] = 'ООО Ратипа';
-      }
-      if (selectedTemplate.placeholders.includes('Исполнитель') && !vars['Исполнитель']) {
-        vars['Исполнитель'] = 'ООО Ратипа';
-      }
-      if (selectedTemplate.placeholders.includes('Перевозчик') && !vars['Перевозчик']) {
-        vars['Перевозчик'] = 'ООО Ратипа';
-      }
       setVariables(vars);
     }
   }, [selectedTemplate]);
@@ -249,9 +233,9 @@ export default function DocumentsModule({ user }: Props) {
 
   // Filter templates based on search query
   const filteredTemplates = templates.filter(t => 
-    t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.category.toLowerCase().includes(searchQuery.toLowerCase())
+    (t.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (t.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (t.category || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
