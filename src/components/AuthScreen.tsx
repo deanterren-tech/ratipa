@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, UserRole } from '../types';
 import { dbService } from '../firebase';
 import { Truck, Shield, Key, Eye, EyeOff } from 'lucide-react';
@@ -9,19 +9,26 @@ interface AuthScreenProps {
 }
 
 export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
-  const [username, setUsername] = useState('');
+  const [username, setUsernameState] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [users, setUsers] = useState<UserProfile[]>([]);
 
+  const usernameRef = useRef('');
+
+  const setUsername = (val: string) => {
+    usernameRef.current = val;
+    setUsernameState(val);
+  };
+
   useEffect(() => {
     const unsub = dbService.getUsers((fetchedUsers) => {
       // Exclude viewers role from selectable users at login
       const filtered = fetchedUsers.filter((u) => u.role !== 'viewer');
       setUsers(filtered);
-      if (filtered.length > 0 && !username) {
+      if (filtered.length > 0 && !usernameRef.current) {
         setUsername(filtered[0].name);
       }
     });
