@@ -232,11 +232,14 @@ export default function DocumentsModule({ user }: Props) {
   };
 
   // Filter templates based on search query
-  const filteredTemplates = templates.filter(t => 
-    (t.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (t.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (t.category || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filterTerm = (typeof searchQuery === 'string' ? searchQuery : '').toLowerCase();
+  const filteredTemplates = Array.isArray(templates) ? templates.filter(t => {
+    if (!t) return false;
+    const title = (typeof t.title === 'string' ? t.title : '').toLowerCase();
+    const desc = (typeof t.description === 'string' ? t.description : '').toLowerCase();
+    const cat = (typeof t.category === 'string' ? t.category : '').toLowerCase();
+    return title.includes(filterTerm) || desc.includes(filterTerm) || cat.includes(filterTerm);
+  }) : [];
 
   return (
     <div className="space-y-6">
@@ -377,7 +380,7 @@ export default function DocumentsModule({ user }: Props) {
                         </label>
                         <input 
                           type="text" 
-                          placeholder={`Введите ${key.replace(/_/g, ' ').toLowerCase()}...`}
+                          placeholder={`Введите ${(typeof key === 'string' ? key.replace(/_/g, ' ').toLowerCase() : '')}...`}
                           value={variables[key] || ''}
                           onChange={e => setVariables({ ...variables, [key]: e.target.value })}
                           className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-xs font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition"

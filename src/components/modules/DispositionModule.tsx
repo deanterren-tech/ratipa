@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, AppSettings } from '../../types';
 import { dbService } from '../../firebase';
 import { 
@@ -30,33 +30,96 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
     return saved ? parseFloat(saved) : 1;
   });
 
+  const [frameHeight, setFrameHeight] = useState(() => {
+    const saved = localStorage.getItem('ratipa_height_disposition');
+    return saved ? parseInt(saved, 10) : 600;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('ratipa_height_disposition', frameHeight.toString());
+  }, [frameHeight]);
+
   // Beltranssputnik GPS Notebook State
   const [isGpsOpen, setIsGpsOpen] = useState(() => localStorage.getItem('ratipa_gps_visible') === 'true');
   const [isGpsMinimized, setIsGpsMinimized] = useState(() => localStorage.getItem('ratipa_gps_minimized') === 'true');
   const [gpsTab, setGpsTab] = useState<'beltranssputnik' | 'wialon' | 'era_glonass'>('beltranssputnik');
-  const [gpsPos, setGpsPos] = useState({ x: 20, y: 100 });
-  const [gpsSize, setGpsSize] = useState({ width: 380, height: 450 });
+  
+  const [gpsPos, setGpsPos] = useState<{ x: number; y: number }>(() => {
+    try {
+      const saved = localStorage.getItem('ratipa_gps_pos');
+      return saved ? JSON.parse(saved) : { x: 20, y: 100 };
+    } catch {
+      return { x: 20, y: 100 };
+    }
+  });
+
+  const [gpsSize, setGpsSize] = useState<{ width: number; height: number }>(() => {
+    try {
+      const saved = localStorage.getItem('ratipa_gps_size');
+      return saved ? JSON.parse(saved) : { width: 380, height: 450 };
+    } catch {
+      return { width: 380, height: 450 };
+    }
+  });
+
   const [isGpsDragging, setIsGpsDragging] = useState(false);
-  const [isGpsResizing, setIsGpsResizing] = useState(false);
+  const [isGpsResizing, setIsGpsResizing] = useState<string | false>(false);
   const [gpsDragOffset, setGpsDragOffset] = useState({ x: 0, y: 0 });
+  const [gpsResizeStart, setGpsResizeStart] = useState({ x: 0, y: 0, w: 0, h: 0, mouseX: 0, mouseY: 0 });
+
+  const gpsPosRef = React.useRef(gpsPos);
+  const gpsSizeRef = React.useRef(gpsSize);
+  React.useEffect(() => { gpsPosRef.current = gpsPos; }, [gpsPos]);
+  React.useEffect(() => { gpsSizeRef.current = gpsSize; }, [gpsSize]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isGpsDragging) {
-        setGpsPos({
-          x: Math.max(0, Math.min(window.innerWidth - 50, e.clientX - gpsDragOffset.x)),
-          y: Math.max(0, Math.min(window.innerHeight - 50, e.clientY - gpsDragOffset.y))
-        });
+        const nextPos = {
+          x: Math.max(0, Math.min(window.innerWidth - 100, e.clientX - gpsDragOffset.x)),
+          y: Math.max(0, Math.min(window.innerHeight - 100, e.clientY - gpsDragOffset.y))
+        };
+        setGpsPos(nextPos);
       } else if (isGpsResizing) {
-        setGpsSize(prev => ({
-          width: Math.max(250, Math.min(800, e.clientX - gpsPos.x + 10)),
-          height: Math.max(150, Math.min(800, e.clientY - gpsPos.y + 10))
-        }));
+        const deltaX = e.clientX - gpsResizeStart.mouseX;
+        const deltaY = e.clientY - gpsResizeStart.mouseY;
+
+        let newW = gpsResizeStart.w;
+        let newH = gpsResizeStart.h;
+        let newX = gpsResizeStart.x;
+        let newY = gpsResizeStart.y;
+
+        if (isGpsResizing.includes('e')) {
+          newW = Math.max(250, gpsResizeStart.w + deltaX);
+        }
+        if (isGpsResizing.includes('s')) {
+          newH = Math.max(150, gpsResizeStart.h + deltaY);
+        }
+        if (isGpsResizing.includes('w')) {
+          newW = Math.max(250, gpsResizeStart.w - deltaX);
+          if (newW > 250) newX = gpsResizeStart.x + deltaX;
+        }
+        if (isGpsResizing.includes('n')) {
+          newH = Math.max(150, gpsResizeStart.h - deltaY);
+          if (newH > 150) newY = gpsResizeStart.y + deltaY;
+        }
+
+        const sizeObj = { width: newW, height: newH };
+        setGpsSize(sizeObj);
+
+        const posObj = { x: newX, y: newY };
+        setGpsPos(posObj);
       }
     };
     const handleMouseUp = () => {
       setIsGpsDragging(false);
       setIsGpsResizing(false);
+      try {
+        localStorage.setItem('ratipa_gps_pos', JSON.stringify(gpsPosRef.current));
+        localStorage.setItem('ratipa_gps_size', JSON.stringify(gpsSizeRef.current));
+      } catch (err) {
+        console.error('Error saving GPS coords to storage:', err);
+      }
     };
 
     if (isGpsDragging || isGpsResizing) {
@@ -67,7 +130,7 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isGpsDragging, isGpsResizing, gpsDragOffset, gpsPos]);
+  }, [isGpsDragging, isGpsResizing, gpsDragOffset, gpsResizeStart]);
 
   useEffect(() => {
     localStorage.setItem('ratipa_zoom_disposition', zoomLevel.toString());
@@ -167,21 +230,30 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
              <iframe
                src={settings?.gpsBeltranssputnikUrl || "https://beltranssputnik.by"}
                className="w-full h-full border-0 absolute inset-0"
-               style={{ display: gpsTab === 'beltranssputnik' ? 'block' : 'none' }}
+               style={{ 
+                 display: gpsTab === 'beltranssputnik' ? 'block' : 'none',
+                 pointerEvents: (isGpsDragging || isGpsResizing) ? 'none' : 'auto'
+               }}
                referrerPolicy="no-referrer"
                title="Белтрансспутник"
              />
              <iframe
                src={settings?.gpsWialonUrl || "https://hosting.wialon.com/"}
                className="w-full h-full border-0 absolute inset-0"
-               style={{ display: gpsTab === 'wialon' ? 'block' : 'none' }}
+               style={{ 
+                 display: gpsTab === 'wialon' ? 'block' : 'none',
+                 pointerEvents: (isGpsDragging || isGpsResizing) ? 'none' : 'auto'
+               }}
                referrerPolicy="no-referrer"
                title="Wialon"
              />
              <iframe
                src={settings?.gpsEraGlonassUrl || "https://aoglonass.ru/"}
                className="w-full h-full border-0 absolute inset-0"
-               style={{ display: gpsTab === 'era_glonass' ? 'block' : 'none' }}
+               style={{ 
+                 display: gpsTab === 'era_glonass' ? 'block' : 'none',
+                 pointerEvents: (isGpsDragging || isGpsResizing) ? 'none' : 'auto'
+               }}
                referrerPolicy="no-referrer"
                title="ЭРА ГЛОНАСС"
              />
@@ -191,15 +263,41 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
           </div>
         </div>
 
-        <div 
-          onMouseDown={(e) => {
-            e.stopPropagation();
-            setIsGpsResizing(true);
-          }}
-          className="absolute right-0 bottom-0 w-4 h-4 cursor-se-resize z-50 flex items-end justify-end p-1"
-        >
-          <div className="w-2 h-2 bg-slate-300 rounded-tl-sm"/>
-        </div>
+        {/* Multi-angle Resize Handles for GPS window */}
+        {[
+          { dir: 'n', cursor: 'ns-resize', className: 'absolute top-0 left-3 right-3 h-2 z-50' },
+          { dir: 's', cursor: 'ns-resize', className: 'absolute bottom-0 left-3 right-3 h-2 z-50' },
+          { dir: 'w', cursor: 'ew-resize', className: 'absolute top-3 bottom-3 left-0 w-2 z-50' },
+          { dir: 'e', cursor: 'ew-resize', className: 'absolute top-3 bottom-3 right-0 w-2 z-50' },
+          { dir: 'nw', cursor: 'nwse-resize', className: 'absolute top-0 left-0 w-4 h-4 z-50' },
+          { dir: 'ne', cursor: 'nesw-resize', className: 'absolute top-0 right-0 w-4 h-4 z-50' },
+          { dir: 'sw', cursor: 'nesw-resize', className: 'absolute bottom-0 left-0 w-4 h-4 z-50' },
+          { dir: 'se', cursor: 'nwse-resize', className: 'absolute bottom-0 right-0 w-5 h-5 flex items-end justify-end p-1.5 group z-50' }
+        ].map(handle => (
+          <div 
+            key={handle.dir}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsGpsResizing(handle.dir);
+              setGpsResizeStart({
+                x: gpsPos.x,
+                y: gpsPos.y,
+                w: gpsSize.width,
+                h: gpsSize.height,
+                mouseX: e.clientX,
+                mouseY: e.clientY
+              });
+            }}
+            className={handle.className}
+            style={{ cursor: handle.cursor }}
+            title={handle.dir === 'se' ? "Растянуть GPS блокнот" : ""}
+          >
+            {handle.dir === 'se' && (
+              <div className="w-2.5 h-2.5 border-r-2 border-b-2 border-slate-400 group-hover:border-slate-700 transition-colors pointer-events-none" />
+            )}
+          </div>
+        ))}
       </div>
     );
   };
@@ -282,8 +380,12 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
       </div>
 
       <div 
-        className="relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col"
-        style={{ minHeight: isFocusMode ? 'calc(100vh - 120px)' : 'calc(100vh - 230px)' }}
+        className={`relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col ${!isFocusMode ? 'resize-y' : ''}`}
+        style={isFocusMode ? { minHeight: 'calc(100vh - 120px)' } : { minHeight: '400px', maxHeight: '120vh', height: `${frameHeight}px` }}
+        onPointerUp={isFocusMode ? undefined : (e) => {
+           const h = e.currentTarget.offsetHeight;
+           if (h !== frameHeight) setFrameHeight(h);
+        }}
       >
         
         {isIframeLoading && (
@@ -304,7 +406,7 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
             <span className="text-sm font-black text-slate-900 uppercase tracking-tight">Доступ Заблокирован</span>
           </div>
         ) : (
-          <div className="w-full h-full relative overflow-auto bg-slate-100/50" style={{ minHeight: isFocusMode ? 'calc(100vh - 130px)' : 'calc(100vh - 240px)' }}>
+          <div className="w-full h-full relative overflow-auto bg-slate-100/50 overscroll-contain" style={{ minHeight: isFocusMode ? 'calc(100vh - 130px)' : 'calc(100vh - 240px)' }}>
             <div style={{
                width: `${100 / zoomLevel}%`,
                height: `${100 / zoomLevel}%`,

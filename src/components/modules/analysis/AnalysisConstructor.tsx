@@ -664,7 +664,7 @@ export default function AnalysisConstructor() {
 
   const parseRecordRate = (rateStr: string) => {
     if (!rateStr) return null;
-    const clean = rateStr.replace(/\s/g, '').replace(',', '.').toLowerCase();
+    const clean = (rateStr || '').replace(/\s/g, '').replace(',', '.').toLowerCase();
     const numericMatch = clean.match(/\d+(?:\.\d+)?/);
     if (!numericMatch) return null;
     const value = parseFloat(numericMatch[0]);
@@ -709,11 +709,11 @@ export default function AnalysisConstructor() {
   // Lookup distance in common distances template pool
   const findDistanceInPool = (c1: string, c2: string): number => {
     if (!c1 || !c2) return 0;
-    const from = c1.trim().toLowerCase();
-    const to = c2.trim().toLowerCase();
+    const from = (c1 || '').trim().toLowerCase();
+    const to = (c2 || '').trim().toLowerCase();
     const found = distances.find(d => {
-        const a = d.from.trim().toLowerCase();
-        const b = d.to.trim().toLowerCase();
+        const a = (d.from || '').trim().toLowerCase();
+        const b = (d.to || '').trim().toLowerCase();
         return (a === from && b === to) || (a === to && b === from);
     });
     return found ? Number(found.distance) : 0;
@@ -723,8 +723,8 @@ export default function AnalysisConstructor() {
   const getDirCoeff = (dest: string): number => {
     if (!dest) return 0.8;
     const found = directions.find(d => 
-      d.name?.trim().toLowerCase().includes(dest.trim().toLowerCase()) || 
-      dest.trim().toLowerCase().includes(d.name?.trim().toLowerCase())
+      (d.name || '').trim().toLowerCase().includes((dest || '').trim().toLowerCase()) || 
+      (dest || '').trim().toLowerCase().includes((d.name || '').trim().toLowerCase())
     );
     return found ? found.coeff : 0.8;
   };
@@ -990,23 +990,23 @@ export default function AnalysisConstructor() {
 
   // Search filter for picker (directions / groups)
   const filteredPickerGroups = useMemo(() => {
-    const query = pickerSearch.toLowerCase().trim();
+    const query = (pickerSearch || '').toLowerCase().trim();
     if (!query) return allGroups;
     return allGroups.filter(g => 
-      (g.name || '').toLowerCase().includes(query) ||
-      (g.regionName || '').toLowerCase().includes(query)
+      ((g.name || '')).toLowerCase().includes(query) ||
+      ((g.regionName || '')).toLowerCase().includes(query)
     );
   }, [allGroups, pickerSearch]);
 
   // Search filter for picker (pro-working records)
   const filteredPickerRecords = useMemo(() => {
-    const query = pickerSearch.toLowerCase().trim();
+    const query = (pickerSearch || '').toLowerCase().trim();
     if (!query) return allRecords;
     return allRecords.filter(r => 
-      (r.route || '').toLowerCase().includes(query) ||
-      (r.regionName || '').toLowerCase().includes(query) ||
-      (r.rate || '').toLowerCase().includes(query) ||
-      (r.notes || '').toLowerCase().includes(query)
+      ((r.route || '')).toLowerCase().includes(query) ||
+      ((r.regionName || '')).toLowerCase().includes(query) ||
+      ((r.rate || '')).toLowerCase().includes(query) ||
+      ((r.notes || '')).toLowerCase().includes(query)
     );
   }, [allRecords, pickerSearch]);
 
@@ -1072,7 +1072,7 @@ export default function AnalysisConstructor() {
                      // Detect if route has end-to-start disconnect with next item
                      const nextLeg = legs[idx + 1];
                      const hasDisconnect = nextLeg && leg.to && nextLeg.from && 
-                        leg.to.trim().toLowerCase() !== nextLeg.from.trim().toLowerCase();
+                        ((leg.to || '')).trim().toLowerCase() !== ((nextLeg.from || '')).trim().toLowerCase();
 
                      return (
                         <div key={idx} className="relative">

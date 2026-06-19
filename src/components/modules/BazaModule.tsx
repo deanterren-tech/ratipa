@@ -247,7 +247,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 
     const trimmedDriver = formData.driverName.trim();
     if (trimmedDriver) {
-      const exists = drivers.some(d => d.name.trim().toLowerCase() === trimmedDriver.toLowerCase());
+      const exists = drivers.some(d => (d.name || '').trim().toLowerCase() === trimmedDriver.toLowerCase());
       if (!exists) {
         if (await showConfirm(`Водитель "${trimmedDriver}" отсутствует в справочнике. Занести его в справочник?`)) {
           const newDriver = {
@@ -294,7 +294,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 
       if (field === 'driverName' && val.trim() !== '') {
         const trimmedDriver = val.trim();
-        const exists = drivers.some(d => d.name.trim().toLowerCase() === trimmedDriver.toLowerCase());
+        const exists = drivers.some(d => (d.name || '').trim().toLowerCase() === trimmedDriver.toLowerCase());
         if (!exists) {
           const confirmAdd = await showConfirm(`Водитель "${trimmedDriver}" отсутствует в справочнике. Занести его в справочник?`);
           if (confirmAdd) {
@@ -416,7 +416,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 
   // --- Rendering Data ---
   const filteredList = (currentTab === 'base' ? cars : archiveCars).filter(c => {
-     const q = searchQuery.toLowerCase();
+     const q = (searchQuery || '').toLowerCase();
      if (q && !((c.carNumber||'').toLowerCase().includes(q) || (c.driverName||'').toLowerCase().includes(q) || (c.comment||'').toLowerCase().includes(q))) return false;
      return true;
   }).map(c => ({...c, _status: calculateCarStatus(c)})).sort((a,b) => {

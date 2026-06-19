@@ -134,7 +134,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
     return () => clearInterval(interval);
   }, [isEditingHighlight, currentHighlights.length, isHovered]);
 
-  const [newsTab, setNewsTab] = useState<'bamap' | 'system'>('bamap');
+  const [newsTab, setNewsTab] = useState<'bamap' | 'asmap' | 'system'>('bamap');
 
   const [bamapNews, setBamapNews] = useState<any[]>([]);
   const [bamapLoading, setBamapLoading] = useState(true);
@@ -641,8 +641,8 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
         {/* News Section */}
         <div className="lg:col-span-2 bg-white rounded-[2.2rem] p-8 border border-slate-200 shadow-sm flex flex-col">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <h2 className="text-xl font-black uppercase tracking-tighter text-slate-900">Новости БАМАП</h2>
-                <div className="flex gap-2">
+                <h2 className="text-xl font-black uppercase tracking-tighter text-slate-900">Информационная Лента</h2>
+                <div className="flex gap-2 flex-wrap">
                     <button 
                         onClick={() => setNewsTab('bamap')} 
                         className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition cursor-pointer ${
@@ -651,7 +651,17 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                             : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
                         }`}
                     >
-                        Лента БАМАП
+                        Сайт БАМАП
+                    </button>
+                    <button 
+                        onClick={() => setNewsTab('asmap')} 
+                        className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition cursor-pointer ${
+                            newsTab === 'asmap' 
+                            ? 'bg-slate-950 text-[#70FC8E]' 
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                        }`}
+                    >
+                        Сайт АСМАП
                     </button>
                     <button 
                         onClick={() => setNewsTab('system')} 
@@ -668,42 +678,54 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
 
             {newsTab === 'bamap' ? (
                 <div className="space-y-4 flex-1 flex flex-col">
-                    <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200/60 rounded-xl text-xs select-none">
-                        <span className="text-slate-500 font-mono font-bold">ОФИЦИАЛЬНЫЙ САЙТ БАМАП</span>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-indigo-50 border border-indigo-100 rounded-xl text-xs gap-2 select-none">
+                        <div>
+                          <span className="text-indigo-800 font-bold block">ОФИЦИАЛЬНЫЙ САЙТ БАМАП</span>
+                          <span className="text-[10px] text-indigo-500">Для прямого и быстрого просмотра новостей организации</span>
+                        </div>
                         <a 
-                            href="https://bamap.org/information/news/" 
+                            href={settings?.bamapUrl || "https://bamap.org/information/news/"} 
                             target="_blank" 
                             rel="noopener noreferrer" 
-                            className="flex items-center gap-1 text-blue-600 hover:underline font-black uppercase text-[10px] tracking-wider"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[9px] tracking-wide px-3 py-2 rounded-lg flex items-center gap-1.5 self-start sm:self-center transition shadow-sm"
                         >
-                            Все новости <ExternalLink size={12} />
+                            Открыть в новой вкладке <ExternalLink size={11} />
                         </a>
                     </div>
-                    <div className="w-full relative bg-slate-50 rounded-2xl border border-slate-200 h-[450px] overflow-y-auto p-4 custom-scrollbar">
-                        {bamapLoading ? (
-                            <div className="flex items-center justify-center h-full text-slate-400 font-bold uppercase text-xs tracking-widest animate-pulse">
-                                Загрузка новостей...
-                            </div>
-                        ) : bamapNews.length > 0 ? (
-                            <div className="space-y-4">
-                                {bamapNews.map((news, i) => (
-                                    <a key={i} href={news.link} target="_blank" rel="noopener noreferrer" className="block p-4 bg-white border border-slate-200 rounded-xl hover:shadow-md hover:border-slate-300 transition group">
-                                        <div className="text-[10px] text-slate-400 font-mono mb-2">
-                                            {formatDateTimeToRu(news.pubDate)}
-                                        </div>
-                                        <h3 className="font-bold text-sm text-slate-800 group-hover:text-blue-600 transition leading-tight mb-2">
-                                            {news.title}
-                                        </h3>
-                                        <div className="text-xs text-slate-500 line-clamp-2" dangerouslySetInnerHTML={{ __html: news.description }} />
-                                    </a>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-2">
-                                <span className="font-bold uppercase text-xs tracking-widest">Не удалось загрузить новости</span>
-                                <a href="https://bamap.org/information/news/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">Перейти на сайт БАМАП ↗</a>
-                            </div>
-                        )}
+                    <div className="w-full relative bg-slate-100 rounded-2xl border border-slate-200 h-[500px] overflow-hidden">
+                        <iframe 
+                            src={settings?.bamapUrl || "https://bamap.org/information/news/"} 
+                            className="w-full h-full border-0 rounded-2xl bg-white" 
+                            title="Сайт БАМАП"
+                            referrerPolicy="no-referrer"
+                            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                        />
+                    </div>
+                </div>
+            ) : newsTab === 'asmap' ? (
+                <div className="space-y-4 flex-1 flex flex-col">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-emerald-50 border border-emerald-150 rounded-xl text-xs gap-2 select-none">
+                        <div>
+                          <span className="text-emerald-800 font-bold block">ОФИЦИАЛЬНЫЙ САЙТ АСМАП</span>
+                          <span className="text-[10px] text-emerald-600">Ассоциация международных автомобильных перевозчиков РФ</span>
+                        </div>
+                        <a 
+                            href={settings?.asmapUrl || "https://www.asmap.ru/news/"} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[9px] tracking-wide px-3 py-2 rounded-lg flex items-center gap-1.5 self-start sm:self-center transition shadow-sm"
+                        >
+                            Открыть в новой вкладке <ExternalLink size={11} />
+                        </a>
+                    </div>
+                    <div className="w-full relative bg-slate-100 rounded-2xl border border-slate-200 h-[500px] overflow-hidden">
+                        <iframe 
+                            src={settings?.asmapUrl || "https://www.asmap.ru/news/"} 
+                            className="w-full h-full border-0 rounded-2xl bg-white" 
+                            title="Сайт АСМАП"
+                            referrerPolicy="no-referrer"
+                            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                        />
                     </div>
                 </div>
             ) : (

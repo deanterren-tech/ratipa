@@ -11,6 +11,7 @@ import {
   FileSpreadsheet, 
   Truck, 
   FileText, 
+  Files,
   Clock, 
   Map,
   Settings, 
@@ -78,6 +79,7 @@ import BazaModule from './modules/BazaModule';
 import DozvolaModule from './modules/DozvolaModule';
 import DispositionModule from './modules/DispositionModule';
 import SettingsModule from './modules/SettingsModule';
+import DocumentsModule from './modules/DocumentsModule';
 import AdminModule from './modules/AdminModule';
 import AnalysisModule from './modules/AnalysisModule';
 
@@ -566,6 +568,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'baza', label: 'Учет выезда', icon: Truck, permissionKey: 'baza' },
     { key: 'dozvola', label: 'Учет Дозволов', icon: FileText, permissionKey: 'dozvola' },
     { key: 'disposition', label: 'Диспозиция', icon: Map, permissionKey: 'disposition' },
+    { key: 'documents', label: 'Документы', icon: Files, permissionKey: 'documents' },
     { key: 'analysis', label: 'Анализ', icon: LineChart, permissionKey: 'analysis' },
     { key: 'settings', label: 'Справочники', icon: Settings, permissionKey: 'settings' },
     { key: 'admin', label: 'Администрирование', icon: ShieldAlert, permissionKey: 'admin' }
@@ -649,6 +652,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         return <DozvolaModule user={user} />;
       case 'disposition':
         return <DispositionModule user={user} />;
+      case 'documents':
+        return <DocumentsModule user={user} />;
       case 'analysis':
         return <AnalysisModule user={user} />;
       case 'settings':
@@ -904,7 +909,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                               </p>
                               {notif.dispatcher && (
                                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                  {user.name.toLowerCase() === notif.dispatcher.toLowerCase() ? (
+                                  {(user?.name || '').toLowerCase() === (notif.dispatcher || '').toLowerCase() ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8.5px] font-black tracking-wide bg-[#c3fb12] text-[#2f4201] uppercase border border-[#c3fb12]/40 animate-pulse-slow">
                                       <span className="w-1 h-1 rounded-full bg-[#2f4201]" />
                                       ДЛЯ ВАС (Ваша машина)
@@ -1088,10 +1093,11 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
-        className="fixed bottom-6 right-6 z-[1000] flex items-center justify-center h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-slate-950 text-[#70FC8E] shadow-[0_8px_30px_rgba(0,0,0,0.30)] hover:scale-105 active:scale-95 transition-all duration-300 border border-slate-850 cursor-pointer"
+        className="fixed bottom-0 right-0 z-[1000] flex items-center justify-center gap-1.5 px-4 py-2.5 bg-slate-950 text-[#70FC8E] border-t border-l border-slate-800 hover:bg-slate-900 transition-all duration-200 select-none cursor-pointer rounded-tl-xl shadow-[-4px_-4px_15px_rgba(0,0,0,0.2)] tracking-widest uppercase font-mono text-[9px] font-black"
         title="Наверх"
       >
-        <ArrowUp className="h-4 sm:h-5 w-4 sm:w-5" />
+        <ArrowUp className="h-3 w-3" />
+        наверх
       </button>
 
       {/* Global floating chat button & widget (Relocated to bottom-left) */}

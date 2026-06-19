@@ -270,13 +270,13 @@ export default function DozvolaRegistryList({
   }
 
   if (searchQuery) {
-      const s = searchQuery.toLowerCase();
-      items = items.filter(i => 
+      const s = String(searchQuery || '').toLowerCase();
+      items = items.filter(i => i && (
           (i.number || i.permitNumber || '').toLowerCase().includes(s) || 
           (i.car || i.assignedVehicle || '').toLowerCase().includes(s) ||
           (i.comment || i.comments || '').toLowerCase().includes(s) ||
           (i.type || '').toLowerCase().includes(s)
-      );
+      ));
   }
 
   items.sort((a, b) => {

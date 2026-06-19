@@ -173,7 +173,7 @@ export default function AnalysisRegionData({ regionId, regionName, user }: Analy
 
   const filteredGroups = useMemo(() => {
     if (!searchTerm.trim()) return groups.map(g => ({ group: g, recs: records.filter(r => r.groupId === g.id) }));
-    const lower = searchTerm.toLowerCase();
+    const lower = (searchTerm || '').toLowerCase();
     
     return groups.map(group => {
       const groupRecords = records.filter(r => r.groupId === group.id);
