@@ -561,6 +561,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
   const [aiSuggestions, setAiSuggestions] = useState<string>('Вставьте рабочий текст вроде «Минск — Стамбул 4300 евро». Система добавит плечи и найдет километраж.');
   const [routeSearch, setRouteSearch] = useState('');
   const [historySearch, setHistorySearch] = useState('');
+  const [activeHistoryDirectionTab, setActiveHistoryDirectionTab] = useState('Все');
 
   useEffect(() => {
     const today = new Date();
@@ -1526,13 +1527,59 @@ export default function DohodModule({ user }: DohodModuleProps) {
       {/* History of Saved Calculations - FULL WIDTH BOTTOM */}
       <div className="xl:col-span-12">
         <div className="bg-white rounded-[2rem] p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col">
-          <div className="flex justify-between items-center border-b border-slate-100 pb-5 mb-6">
-               <h2 className="text-sm font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-2"><FileSpreadsheet className="h-5 w-5" /> Журнал расчетов</h2>
-               <input type="text" placeholder="Поиск..." value={historySearch} onChange={e => setHistorySearch(e.target.value)} className="text-xs font-bold px-4 py-2 w-48 bg-slate-50 border border-slate-200 rounded-lg outline-none" />
+          <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 mb-6">
+               <div className="flex justify-between items-center">
+                    <h2 className="text-sm font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-2"><FileSpreadsheet className="h-5 w-5" /> Журнал расчетов</h2>
+               </div>
+               <input type="text" placeholder="Поиск по направлениям, дате, логисту..." value={historySearch} onChange={e => setHistorySearch(e.target.value)} className="text-xs font-bold px-4 py-3.5 w-full bg-slate-50 border border-slate-200/60 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
           </div>
+
+          {/* Directions Tabs */}
+          {(() => {
+            const uniqueDirs = Array.from(new Set(calculationHistory.map(c => c.globalDirection).filter(Boolean)));
+            return (
+              <div className="flex flex-wrap gap-2 mb-6 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+                <button
+                  onClick={() => setActiveHistoryDirectionTab('Все')}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    activeHistoryDirectionTab === 'Все'
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  Все направления ({calculationHistory.length})
+                </button>
+                {uniqueDirs.map(dir => {
+                  const count = calculationHistory.filter(c => c.globalDirection === dir).length;
+                  return (
+                    <button
+                      key={dir}
+                      onClick={() => setActiveHistoryDirectionTab(dir)}
+                      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                        activeHistoryDirectionTab === dir
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                      }`}
+                    >
+                      {dir} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
           
           <div className="overflow-y-auto pr-1 space-y-2 pb-4 custom-scrollbar max-h-[600px]">
-            {calculationHistory.filter(c => c.username?.toLowerCase().includes(historySearch.toLowerCase()) || c.logist?.toLowerCase().includes(historySearch.toLowerCase()) || JSON.stringify(c.legs).toLowerCase().includes(historySearch.toLowerCase())).map((calc) => {
+            {calculationHistory
+              .filter(c => {
+                const matchesSearch = c.username?.toLowerCase().includes(historySearch.toLowerCase()) || 
+                                      c.logist?.toLowerCase().includes(historySearch.toLowerCase()) || 
+                                      JSON.stringify(c.legs).toLowerCase().includes(historySearch.toLowerCase()) ||
+                                      (c.globalDirection || '').toLowerCase().includes(historySearch.toLowerCase());
+                const matchesTab = activeHistoryDirectionTab === 'Все' || c.globalDirection === activeHistoryDirectionTab;
+                return matchesSearch && matchesTab;
+              })
+              .map((calc) => {
               
               const routePoints: string[] = [];
               calc.legs.forEach(l => {
@@ -1541,50 +1588,73 @@ export default function DohodModule({ user }: DohodModuleProps) {
               });
               const routeTitle = routePoints.join(' ➔ ');
 
+              // Result metrics calculations
+              const totalKmValue = calc.km || calc.legs.reduce((acc, leg) => acc + Number(leg.dist || leg.distance || 0), 0);
+              const daysValue = calc.days || 1;
+              const profitValue = calc.netProfit || 0;
+              const dailyProfitValue = calc.dailyProfit || (daysValue > 0 ? profitValue / daysValue : 0);
+
               return (
-              <div key={calc.id} className="p-5 bg-slate-50 rounded-xl border border-slate-100 flex flex-col group hover:bg-slate-100 transition">
-                <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-200">
+              <div key={calc.id} className="p-6 bg-white rounded-2xl border border-slate-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col group hover:border-slate-300 transition">
+                <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
                   <div className="flex flex-col gap-1 overflow-hidden">
-                      <div className="text-sm font-black text-slate-800 truncate">{routeTitle || 'Без названия'}</div>
-                      <div className="text-xs font-mono text-slate-400 uppercase tracking-widest">{calc.datetime} · {calc.netProfit ? Math.round(calc.netProfit).toLocaleString('ru-RU') : '0'} € · {calc.totalKm || calc.legs.reduce((acc, leg) => acc + (leg.dist || leg.distance || 0), 0)} км · {calc.globalDirection}</div>
+                      <div className="text-sm font-black text-slate-900 truncate uppercase mt-0.5 tracking-tight">{routeTitle || 'Без названия'}</div>
+                      <div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">
+                        {calc.datetime} · Направление: {calc.globalDirection || 'Не указано'} · Логист: {calc.username || calc.logist || 'Система'}
+                      </div>
                   </div>
-                  <div className="flex gap-2 flex-shrink-0 opacity-0 group-hover:opacity-100 transition">
-                      <button title="Дублировать в форму" onClick={() => copyHistoryToForm(calc)} className="text-slate-400 hover:text-green-600 p-2"><Copy className="h-5 w-5"/></button>
-                      <button title="Изменить" onClick={() => openEditCalcModal(calc)} className="text-slate-400 hover:text-emerald-500 p-2"><Edit className="h-5 w-5"/></button>
+                  <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition">
+                      <button title="Дублировать в форму" onClick={() => copyHistoryToForm(calc)} className="text-slate-400 hover:text-green-600 hover:bg-slate-50 p-2 rounded-xl transition"><Copy className="h-4.5 w-4.5"/></button>
+                      <button title="Изменить" onClick={() => openEditCalcModal(calc)} className="text-slate-400 hover:text-emerald-500 hover:bg-slate-50 p-2 rounded-xl transition"><Edit className="h-4.5 w-4.5"/></button>
                       {user.role === 'root_admin' && (
-                          <button onClick={() => dbService.deleteRouteCalculation(calc.id, user.name, user.role)} className="text-slate-400 hover:text-rose-600 p-2"><Trash2 className="h-5 w-5"/></button>
+                          <button onClick={() => dbService.deleteRouteCalculation(calc.id, user.name, user.role)} className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-2 rounded-xl transition"><Trash2 className="h-4.5 w-4.5"/></button>
                       )}
                   </div>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-1">
-                  {calc.legs.map((l, i) => (
-                    <div key={i} className="bg-white p-4 rounded-[1.5rem] border border-slate-200 shadow-sm flex flex-col group/leg hover:border-blue-200 transition">
-                      <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-3">
-                         <span className="bg-slate-900 text-[#70FC8E] px-2.5 py-1 rounded-lg text-[9px] font-black uppercase font-mono tracking-widest shadow-xs">Плечо {i + 1}</span>
-                         <span className="text-slate-800 font-black text-xs max-w-[160px] truncate uppercase tracking-tight" title={`${l.from || '?'} ➔ ${l.to || '?'}`}>{l.from || '?'} ➔ {l.to || '?'}</span>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="flex flex-col bg-slate-50 p-2.5 rounded-xl border border-slate-100 col-span-2">
-                           <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 font-mono mb-0.5">Километраж</span>
-                           <span className="text-sm font-black text-slate-700 font-mono">{Math.round((l.dist || l.distance) || 0).toLocaleString('ru-RU')} <span className="text-slate-400 text-[10px]">км</span></span>
-                        </div>
-                        
-                        {(l.freight || 0) > 0 && <div className="flex flex-col bg-[#70FC8E]/10 p-2.5 rounded-xl border border-[#70FC8E]/30 col-span-2">
-                           <span className="text-[9px] font-black uppercase tracking-widest text-[#143e1d] font-mono mb-0.5">Ставка</span>
-                           <span className="text-base font-black text-[#143e1d] font-mono tracking-tight">{Math.round(l.freight || 0).toLocaleString('ru-RU')} <span className="text-[#143e1d]/50 text-[10px]">€</span></span>
-                        </div>}
 
-                        {((l.ferryCost || 0) > 0 || (l.otherExpenses || 0) > 0) && (
-                          <div className="flex flex-col bg-rose-50 p-2.5 rounded-xl border border-rose-100 col-span-2">
-                             <span className="text-[9px] font-black uppercase tracking-widest text-rose-500 font-mono mb-0.5">Доп. расходы / Паром</span>
-                             <span className="text-sm font-black text-rose-600 font-mono tracking-tight">{(Math.round((l.ferryCost || 0) + (l.otherExpenses || 0))).toLocaleString('ru-RU')} <span className="text-rose-400 text-[10px]">€</span></span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                {/* Accented metrics block (bento style) */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+                  <div className="bg-[#70FC8E]/10 border border-[#70FC8E]/30 p-3.5 rounded-2xl flex flex-col justify-between">
+                     <span className="text-[8px] font-black uppercase tracking-widest text-[#154620] font-mono mb-1">Доход (Чистый)</span>
+                     <span className="text-base font-black text-[#154620] font-mono tracking-tight">{Math.round(profitValue).toLocaleString('ru-RU')} <span className="text-[10px] font-normal">€</span></span>
+                  </div>
+
+                  <div className="bg-blue-50/50 border border-blue-105 p-3.5 rounded-2xl flex flex-col justify-between">
+                     <span className="text-[8px] font-black uppercase tracking-widest text-blue-700 font-mono mb-1">Доход в день</span>
+                     <span className="text-base font-black text-blue-800 font-mono tracking-tight">{Math.round(dailyProfitValue).toLocaleString('ru-RU')} <span className="text-[10px] font-normal">€/дн</span></span>
+                  </div>
+
+                  <div className="bg-amber-50/50 border border-amber-105 p-3.5 rounded-2xl flex flex-col justify-between">
+                     <span className="text-[8px] font-black uppercase tracking-widest text-amber-700 font-mono mb-1">Количество дней</span>
+                     <span className="text-base font-black text-amber-800 font-mono tracking-tight">{daysValue} <span className="text-[10px] text-amber-600 font-normal">дн.</span></span>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200/60 p-3.5 rounded-2xl flex flex-col justify-between">
+                     <span className="text-[8px] font-black uppercase tracking-widest text-slate-500 font-mono mb-1">Километраж</span>
+                     <span className="text-base font-black text-slate-800 font-mono tracking-tight">{Math.round(totalKmValue).toLocaleString('ru-RU')} <span className="text-[10px] text-slate-500 font-normal">км</span></span>
+                  </div>
+                </div>
+                
+                {/* Visual rendering of calculation legs steps inside drop list */}
+                <div className="mt-2 border-t border-slate-100 pt-3">
+                   <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 font-mono block mb-2">Детализация по плечам</span>
+                   <div className="space-y-1.5">
+                      {calc.legs.map((l, i) => (
+                         <div key={i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-slate-55 border border-slate-100 rounded-xl hover:border-slate-200 transition text-[11px] font-bold text-slate-600 font-sans">
+                            <div className="flex items-center gap-2">
+                               <span className="bg-slate-900 text-[#70FC8E] px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest font-mono">Плечо {i + 1}</span>
+                               <span className="text-slate-900 uppercase font-extrabold tracking-tight" title={`${l.from || '?'} ➔ ${l.to || '?'}`}>{l.from || '?'} &rarr; {l.to || '?'}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-slate-400 text-[10px] font-mono justify-end">
+                               <span>Расстояние: <strong className="text-slate-700">{Math.round(l.dist || l.distance || 0).toLocaleString('ru-RU')} км</strong></span>
+                               {Number(l.coeff || 0) > 0 && <span>Коэфф: <strong className="text-slate-700">{l.coeff}</strong></span>}
+                               {Number(l.freight || 0) > 0 && <span>Ставка: <strong className="text-emerald-600">{Math.round(l.freight).toLocaleString('ru-RU')} €</strong></span>}
+                               {Number(l.ferryCost || 0) > 0 && <span>Паром: <strong className="text-rose-600">{Math.round(l.ferryCost).toLocaleString('ru-RU')} €</strong></span>}
+                               {Number(l.otherExpenses || 0) > 0 && <span>Доп: <strong className="text-rose-600">{Math.round(l.otherExpenses).toLocaleString('ru-RU')} €</strong></span>}
+                            </div>
+                         </div>
+                      ))}
+                   </div>
                 </div>
 
               </div>
@@ -1913,6 +1983,10 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         <div className="flex flex-col gap-1.5">
                             <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Дата</label>
                             <input type="text" value={editingCalcData.datetime || ''} onChange={e => setEditingCalcData({...editingCalcData, datetime: e.target.value})} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Логист / Кто внёс</label>
+                            <input type="text" value={editingCalcData.username || editingCalcData.logist || ''} onChange={e => setEditingCalcData({...editingCalcData, username: e.target.value, logist: e.target.value})} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
                         </div>
                     </div>
                     

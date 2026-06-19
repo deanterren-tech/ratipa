@@ -7,6 +7,8 @@ import AdminOnlinePresenceBlock from './AdminOnlinePresenceBlock';
 import CurrentPlanningSettingsBlock from './CurrentPlanningSettingsBlock';
 import PlanZagruzokSettingsBlock from './PlanZagruzokSettingsBlock';
 import PlanDohodDispatchersSettingsBlock from './PlanDohodDispatchersSettingsBlock';
+import AdminAnnouncementsBlock from './AdminAnnouncementsBlock';
+import AdminFirebaseConfigBlock from './AdminFirebaseConfigBlock';
 import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Map, Truck, FileText, Clock, Settings } from 'lucide-react';
 
 interface AdminModuleProps {
@@ -89,72 +91,95 @@ export default function AdminModule({ user }: AdminModuleProps) {
     );
   }
 
+  const [activeTab, setActiveTab] = useState<'users' | 'planning' | 'income' | 'system'>('users');
+
   return (
     <div className="w-full space-y-6 font-sans">
       
       {/* Banner */}
-      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] select-none">
-        <span className="bg-rose-500 text-white font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-wider">
-          Secured Root Console
-        </span>
-        <h1 className="text-2xl lg:text-3xl font-black text-slate-900 mt-1.5 flex items-center gap-2 uppercase tracking-tight">
-          <ShieldAlert className="h-6 w-6 text-slate-900" style={{ fill: '#c3fb12' }} />
-          Разграничение доступа {user.role === 'admin' && '(Admin View)'}
-        </h1>
-        <p className="text-xs text-slate-500 mt-1 font-semibold">
-          Управление учетными записями, правами доступа, визуальными параметрами и логирование системы.
-        </p>
+      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] select-none flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <span className="bg-rose-500 text-white font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-wider">
+            Secured Root Console
+          </span>
+          <h1 className="text-2xl lg:text-3xl font-black text-slate-900 mt-1.5 flex items-center gap-2 uppercase tracking-tight">
+            <ShieldAlert className="h-6 w-6 text-slate-900" style={{ fill: '#c3fb12' }} />
+            Администрирование
+          </h1>
+          <p className="text-xs text-slate-500 mt-1 font-semibold">
+            Управление системой, доступом и конфигурациями.
+          </p>
+        </div>
+        <div className="flex bg-slate-100 p-1.5 rounded-2xl w-full md:w-auto overflow-x-auto custom-scrollbar">
+           <button onClick={() => setActiveTab('users')} className={`px-4 py-2 text-xs font-black uppercase tracking-widest whitespace-nowrap rounded-xl transition ${activeTab === 'users' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}>Пользователи</button>
+           <button onClick={() => setActiveTab('planning')} className={`px-4 py-2 text-xs font-black uppercase tracking-widest whitespace-nowrap rounded-xl transition ${activeTab === 'planning' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}>Планирование</button>
+           <button onClick={() => setActiveTab('income')} className={`px-4 py-2 text-xs font-black uppercase tracking-widest whitespace-nowrap rounded-xl transition ${activeTab === 'income' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}>План Дохода</button>
+           <button onClick={() => setActiveTab('system')} className={`px-4 py-2 text-xs font-black uppercase tracking-widest whitespace-nowrap rounded-xl transition ${activeTab === 'system' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}>Система</button>
+        </div>
       </div>
 
-      <UserManagementBlock user={user} />
-
-      <AdminOnlinePresenceBlock user={user} />
-      
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
+        
+        {/* Left Column (Tabbed Config) */}
         <div className="space-y-6">
-          <CurrentPlanningSettingsBlock user={user} />
-          <PlanZagruzokSettingsBlock user={user} />
-          <PlanDohodDispatchersSettingsBlock user={user} />
-          
-          <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
-             <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-5">
-               Порядок модулей в меню
-             </h2>
-             {allModules.slice().sort((a,b) => {
-               if(!settings || !settings.moduleOrder) return 0;
-               const orderA = settings.moduleOrder.indexOf(a.key);
-               const orderB = settings.moduleOrder.indexOf(b.key);
-               return (orderA === -1 ? 99 : orderA) - (orderB === -1 ? 99 : orderB);
-             }).map((item, idx) => (
-                <div key={item.key} className="flex justify-between items-center py-2 px-3 border border-slate-100 rounded-xl mb-2 bg-slate-50">
-                  <span className="text-xs font-bold capitalize flex items-center gap-2">
-                     <item.icon size={14} className="text-slate-400"/> {item.label}
-                  </span>
-                  <div className="flex gap-1">
-                    <button onClick={() => moveModule(item.key, 'up')} disabled={idx === 0} className="p-1.5 hover:bg-white border border-transparent hover:border-slate-200 transition rounded-lg text-slate-400 disabled:opacity-30 cursor-pointer"><ArrowUp size={14}/></button>
-                    <button onClick={() => moveModule(item.key, 'down')} disabled={idx === allModules.length - 1} className="p-1.5 hover:bg-white border border-transparent hover:border-slate-200 transition rounded-lg text-slate-400 disabled:opacity-30 cursor-pointer"><ArrowDown size={14}/></button>
-                  </div>
-                </div>
-             ))}
+          <div className={activeTab === 'users' ? 'space-y-6' : 'hidden'}>
+            <UserManagementBlock user={user} />
+            <AdminOnlinePresenceBlock user={user} />
           </div>
 
-          <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
-            <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-5">
-               Фразы для анимированного текста (по 1 в строке)
-            </h2>
-            <textarea
-              className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 font-mono"
-              rows={5}
-              value={settings?.customPhrases?.join('\n') || ''}
-              onChange={(e) => {
-                if(!settings) return;
-                saveSettings({...settings, customPhrases: e.target.value.split('\n')});
-              }}
-            />
+          <div className={activeTab === 'planning' ? 'space-y-6' : 'hidden'}>
+            <CurrentPlanningSettingsBlock user={user} />
+            <PlanZagruzokSettingsBlock user={user} />
+          </div>
+
+          <div className={activeTab === 'income' ? 'space-y-6' : 'hidden'}>
+            <PlanDohodDispatchersSettingsBlock user={user} />
+          </div>
+
+          <div className={activeTab === 'system' ? 'space-y-6' : 'hidden'}>
+            <AdminAnnouncementsBlock user={user} settings={settings} />
+            <AdminFirebaseConfigBlock />
+            
+            <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
+               <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-5">
+                 Порядок модулей в меню
+               </h2>
+               {allModules.slice().sort((a,b) => {
+                 if(!settings || !settings.moduleOrder) return 0;
+                 const orderA = settings.moduleOrder.indexOf(a.key);
+                 const orderB = settings.moduleOrder.indexOf(b.key);
+                 return (orderA === -1 ? 99 : orderA) - (orderB === -1 ? 99 : orderB);
+               }).map((item, idx) => (
+                  <div key={item.key} className="flex justify-between items-center py-2 px-3 border border-slate-100 rounded-xl mb-2 bg-slate-50">
+                    <span className="text-xs font-bold capitalize flex items-center gap-2">
+                       <item.icon size={14} className="text-slate-400"/> {item.label}
+                    </span>
+                    <div className="flex gap-1">
+                      <button onClick={() => moveModule(item.key, 'up')} disabled={idx === 0} className="p-1.5 hover:bg-white border border-transparent hover:border-slate-200 transition rounded-lg text-slate-400 disabled:opacity-30 cursor-pointer"><ArrowUp size={14}/></button>
+                      <button onClick={() => moveModule(item.key, 'down')} disabled={idx === allModules.length - 1} className="p-1.5 hover:bg-white border border-transparent hover:border-slate-200 transition rounded-lg text-slate-400 disabled:opacity-30 cursor-pointer"><ArrowDown size={14}/></button>
+                    </div>
+                  </div>
+               ))}
+            </div>
+
+            <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
+              <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-5">
+                 Фразы для анимированного текста (по 1 в строке)
+              </h2>
+              <textarea
+                className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 font-mono"
+                rows={5}
+                value={settings?.customPhrases?.join('\n') || ''}
+                onChange={(e) => {
+                  if(!settings) return;
+                  saveSettings({...settings, customPhrases: e.target.value.split('\n')});
+                }}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Right Column: Global AuditTrail stream (Slate design structure) */}
+        {/* Right Column: Global AuditTrail stream */ }
         <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col h-[750px]">
           <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 mb-3 border-b border-slate-100 pb-3.5">
             <Activity className="h-4.5 w-4.5 text-rose-500 animate-pulse" />

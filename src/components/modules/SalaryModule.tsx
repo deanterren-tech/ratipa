@@ -396,10 +396,6 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                 <input type="number" step="0.001" value={ratePerKm} onChange={e => setRatePerKm(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
                             </div>
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Суточные (€/день)</label>
-                                <input type="number" value={ratePerDiem ?? settings?.perDiemRate ?? 7} onChange={e => setRatePerDiem(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
                                 <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Общий пробег (км)</label>
                                 <input type="number" value={totalKm} onChange={e => setTotalKm(Number(e.target.value))} placeholder="5500" className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
                             </div>
@@ -514,7 +510,12 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4">
-                                     <div className="text-xs font-mono font-bold text-slate-400 tracking-wider hidden sm:block">{rec.datetime}</div>
+                                     <div className="text-xs font-mono font-bold text-slate-400 tracking-wider hidden sm:block">
+                                        {rec.datetime} · Логист: {rec.logist || 'Система'}
+                                     </div>
+                                     <div className="text-[10px] font-mono font-bold text-slate-400 tracking-wider sm:hidden">
+                                        {rec.logist || 'Система'}
+                                     </div>
                                      <div className="flex gap-2">
                                          <button onClick={() => copyHistoryToForm(rec)} title="Дублировать в форму" className="text-slate-400 hover:text-green-600 transition opacity-0 group-hover:opacity-100">
                                              <Copy className="w-4 h-4" />
@@ -567,9 +568,15 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                         <span className="text-base font-black text-slate-700 font-mono">{Math.round(rec.kmMoney || 0).toLocaleString('ru-RU')} €</span>
                                     </div>
                                     <div className="flex flex-col">
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-1">Суточные + Простой</span>
-                                        <span className="text-base font-black text-slate-700 font-mono">{Math.round((rec.daysMoney || 0) + (rec.idleMoney || 0)).toLocaleString('ru-RU')} €</span>
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-1">Суточные</span>
+                                        <span className="text-base font-black text-slate-700 font-mono">{Math.round(rec.daysMoney || 0).toLocaleString('ru-RU')} €</span>
                                     </div>
+                                    {(rec.idleMoney || 0) > 0 && (
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-1">Простой</span>
+                                        <span className="text-base font-black text-slate-700 font-mono">{Math.round(rec.idleMoney || 0).toLocaleString('ru-RU')} €</span>
+                                    </div>
+                                    )}
                                     {(rec.bonus || 0) > 0 && (
                                     <div className="flex flex-col px-3 py-1 bg-yellow-50 rounded-xl border border-yellow-200">
                                         <span className="text-[10px] font-black uppercase tracking-widest text-yellow-600 font-mono mb-0.5">Премия</span>
@@ -670,6 +677,10 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                             <div className="flex flex-col gap-1.5 col-span-2">
                                 <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Комментарий</label>
                                 <input type="text" value={editingSalaryData.comment || ''} onChange={e => setEditingSalaryData({...editingSalaryData, comment: e.target.value})} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
+                            </div>
+                            <div className="flex flex-col gap-1.5 col-span-2">
+                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Логист / Кто внёс</label>
+                                <input type="text" value={editingSalaryData.logist || ''} onChange={e => setEditingSalaryData({...editingSalaryData, logist: e.target.value})} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
                             </div>
                         </div>
                     </div>

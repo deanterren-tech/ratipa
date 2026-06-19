@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, AppSettings } from '../../types';
 import { dbService } from '../../firebase';
-import { ZoomIn, ZoomOut, Maximize2, Minimize2 } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, Minimize2, RefreshCw } from 'lucide-react';
 
 interface CurrentPlanningModuleProps {
   user: UserProfile;
@@ -11,6 +11,16 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [refreshKeys, setRefreshKeys] = useState<Record<string, number>>({});
+
+  const [frameHeight, setFrameHeight] = useState(() => {
+    const saved = localStorage.getItem('ratipa_height_currentPlanning');
+    return saved ? parseInt(saved, 10) : 600;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('ratipa_height_currentPlanning', frameHeight.toString());
+  }, [frameHeight]);
 
   const [zoomLevel, setZoomLevel] = useState(() => {
     const saved = localStorage.getItem('ratipa_zoom_currentPlanning');
@@ -39,6 +49,12 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
   }, [tabs, activeTabId, user]);
 
   const allowedTabs = tabs.filter(t => user.role === 'root_admin' || user.permissions[`currentPlanning_${t.id}`] !== 'none');
+
+  const handleRefresh = () => {
+    if (activeTabId) {
+      setRefreshKeys(prev => ({ ...prev, [activeTabId]: (prev[activeTabId] || 0) + 1 }));
+    }
+  };
 
   if (allowedTabs.length === 0) {
     return (
@@ -76,6 +92,13 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
         
         {/* Controls */}
         <div className="flex items-center gap-2 shrink-0">
+          <button 
+            onClick={handleRefresh}
+            className="flex items-center justify-center w-10 h-10 bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-600 rounded-xl transition cursor-pointer"
+            title="Обновить"
+          >
+             <RefreshCw className="w-4 h-4" />
+          </button>
           <div className="flex bg-slate-100 p-1 rounded-xl items-center">
              <button onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600 cursor-pointer"><ZoomOut className="w-4 h-4"/></button>
              <span className="text-[10px] font-black w-10 text-center font-mono text-slate-700">{Math.round(zoomLevel * 100)}%</span>
@@ -96,7 +119,14 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
       </div>
 
       {/* Frame */}
-      <div className="flex-1 bg-slate-100 rounded-[2rem] overflow-hidden border border-slate-200/60 shadow-sm relative min-h-[600px]">
+      <div 
+         className="flex-1 bg-slate-100 rounded-[2rem] overflow-hidden border border-slate-200/60 shadow-sm relative resize-y min-h-[400px] max-h-[90vh]"
+         style={{ height: `${frameHeight}px` }}
+         onPointerUp={(e) => {
+            const h = e.currentTarget.offsetHeight;
+            if (h !== frameHeight) setFrameHeight(h);
+         }}
+      >
          {allowedTabs.some(t => t.sheetUrl) ? (
             <div style={{
                 width: `${100 / zoomLevel}%`,
@@ -108,7 +138,7 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
             >
                {allowedTabs.map(tab => tab.sheetUrl ? (
                  <iframe 
-                   key={tab.id}
+                   key={`${tab.id}-${refreshKeys[tab.id] || 0}`}
                    src={tab.sheetUrl}
                    className="w-full h-full border-none"
                    style={{ display: activeTabId === tab.id ? 'block' : 'none' }}
