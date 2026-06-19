@@ -163,7 +163,7 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
             }}
             className="bg-indigo-500 hover:bg-indigo-600 font-sans text-white text-xs font-black uppercase tracking-widest py-3 px-6 rounded-full flex items-center gap-2 shadow-[0_10px_25px_rgba(99,102,241,0.4)] border border-indigo-600 transition-all duration-150 transform hover:scale-105 active:scale-95 cursor-pointer"
           >
-            <Navigation size={14} className="animate-bounce" />
+            <Navigation size={14} />
             <span>GPS: Белтрансспутник</span>
           </button>
         </div>

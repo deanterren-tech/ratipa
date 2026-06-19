@@ -1200,7 +1200,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             }}
             className="bg-amber-500 hover:bg-amber-600 font-sans text-white text-xs font-black uppercase tracking-widest py-3 px-6 rounded-full flex items-center gap-2 shadow-[0_10px_25px_rgba(245,158,11,0.4)] border border-amber-600 transition-all duration-150 transform hover:scale-105 active:scale-95 cursor-pointer"
           >
-            <BookOpen size={14} className="animate-bounce" />
+            <BookOpen size={14} />
             <span>📋 Блокнот ({cars.length})</span>
           </button>
         </div>
@@ -2500,7 +2500,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
                   {/* Swipe Help Badge for Mobile */}
                   <div className="block lg:hidden text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 mb-3 text-center uppercase tracking-wider select-none">
-                    <span className="inline-block animate-pulse text-blue-500 mr-1.5 font-sans">
+                    <span className="inline-block text-blue-500 mr-1.5 font-sans">
                       ↔
                     </span>{" "}
                     Таблица прокручивается вправо для изменения км, ставок,

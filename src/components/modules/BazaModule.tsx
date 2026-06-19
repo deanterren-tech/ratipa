@@ -178,7 +178,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   const calculateCarStatus = (car: any) => {
       const todayStr = new Date().toISOString().split('T')[0];
       if (car.dateDeparture && car.dateDeparture <= todayStr) {
-          return { code: 'transit', text: 'В рейсе', class: 'bg-slate-900 text-slate-100', icon: <Truck className="h-3 w-3 animate-bounce"/> };
+          return { code: 'transit', text: 'В рейсе', class: 'bg-slate-900 text-slate-100', icon: <Truck className="h-3 w-3"/> };
       }
       if (car.dateRepairStart) {
           if (!car.dateRepairEnd || todayStr < car.dateRepairEnd) {
@@ -444,7 +444,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
       {/* Top Internal Tab Navigation for Baza module */}
       <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-slate-200/50 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex items-center gap-2 self-start md:self-auto">
-          <span className="bg-[#70FC8E] text-slate-950 font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono border border-black/5 animate-pulse">
+          <span className="bg-[#70FC8E] text-slate-950 font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono border border-black/5">
             Учет выезда
           </span>
         </div>
@@ -609,7 +609,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 
                  {/* Swipe Help Badge for Mobile */}
                  <div className="block lg:hidden text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 mb-3 text-center uppercase tracking-wider select-none">
-                    <span className="inline-block animate-pulse text-[#107c41] mr-1.5 font-sans">↔</span> Таблица прокручивается вправо для просмотра деталей (Ремонт, Сроки готовности, Выезд)
+                    <span className="inline-block text-[#107c41] mr-1.5 font-sans">↔</span> Таблица прокручивается вправо для просмотра деталей (Ремонт, Сроки готовности, Выезд)
                  </div>
 
                  <div className="overflow-x-auto custom-scrollbar">

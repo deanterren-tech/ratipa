@@ -1298,7 +1298,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
           {/* New message badge count */}
           {!isChatOpen && unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 bg-rose-500 text-white font-black text-[9px] h-5 w-5 rounded-full flex items-center justify-center border-2 border-slate-950 animate-bounce">
+            <span className="absolute -top-1 -right-1 bg-rose-500 text-white font-black text-[9px] h-5 w-5 rounded-full flex items-center justify-center border-2 border-slate-950">
               {unreadCount}
             </span>
           )}
