@@ -301,7 +301,7 @@ export const dbService = {
       return onValue(dbRef, (snapshot) => {
         const data = snapshot.val();
         if (data) {
-          const list: AuditLog[] = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+          const list: AuditLog[] = Object.keys(data).map(key => ({ ...data[key], id: key }));
           list.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
           callback(list);
         } else {

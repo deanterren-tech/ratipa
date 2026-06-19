@@ -73,9 +73,9 @@ export default function AdminModule({ user }: AdminModuleProps) {
 
   // Audit Logs filtering
   const filteredLogs = logs.filter(
-    l => l.user.toLowerCase().includes(searchLogs.toLowerCase()) ||
-         l.details.toLowerCase().includes(searchLogs.toLowerCase()) ||
-         l.module.toLowerCase().includes(searchLogs.toLowerCase())
+    l => String(l.user || '').toLowerCase().includes(searchLogs.toLowerCase()) ||
+         String(l.details || '').toLowerCase().includes(searchLogs.toLowerCase()) ||
+         String(l.module || '').toLowerCase().includes(searchLogs.toLowerCase())
   );
 
   // Lock non-admins completely
@@ -198,8 +198,8 @@ export default function AdminModule({ user }: AdminModuleProps) {
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
-            {filteredLogs.map((log) => (
-              <div key={log.id} className="text-xs border-l-3 border-[#c3fb12] bg-slate-50/50 hover:bg-slate-50 p-3.5 rounded-r-2xl transition duration-100">
+            {filteredLogs.map((log, idx) => (
+              <div key={`${log.id || 'log'}_${idx}`} className="text-xs border-l-3 border-[#c3fb12] bg-slate-50/50 hover:bg-slate-50 p-3.5 rounded-r-2xl transition duration-100">
                 <div className="flex justify-between font-black text-slate-550 mb-1.5 font-mono text-[9px] uppercase tracking-wider">
                   <span className="text-slate-900">{log.user} ({log.role})</span>
                   <span className="text-slate-400">{new Date(log.date).toLocaleString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</span>

@@ -156,7 +156,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   }, []);
 
   // Auth mapping: figure out our internal role & perms based on users_list mapped to ratipaUser.name
-  const matchedUser = systemUsers.find(u => u.name.toLowerCase() === ratipaUser.name.toLowerCase() || u.id === ratipaUser.uid) || {
+  const matchedUser = systemUsers.find(u => String(u.name || '').toLowerCase() === String(ratipaUser?.name || '').toLowerCase() || u.id === ratipaUser?.uid) || {
     name: ratipaUser.name,
     role: ratipaUser.role === 'root_admin' ? 'Диспетчер' : 'Механик',
     permissions: {},
@@ -417,7 +417,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   // --- Rendering Data ---
   const filteredList = (currentTab === 'base' ? cars : archiveCars).filter(c => {
      const q = searchQuery.toLowerCase();
-     if (q && !((c.carNumber||'').toLowerCase().includes(q) || (c.driverName||'').toLowerCase().includes(q) || (c.comment||'').toLowerCase().includes(q))) return false;
+     if (q && !(String(c.carNumber||'').toLowerCase().includes(q) || String(c.driverName||'').toLowerCase().includes(q) || String(c.comment||'').toLowerCase().includes(q))) return false;
      return true;
   }).map(c => ({...c, _status: calculateCarStatus(c)})).sort((a,b) => {
      if (sortMode === 'car_asc') return (a.carNumber||'').localeCompare(b.carNumber||'');

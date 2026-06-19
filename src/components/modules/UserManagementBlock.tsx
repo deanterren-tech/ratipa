@@ -126,8 +126,8 @@ export default function UserManagementBlock({ user }: Props) {
 
   const filteredUsers = users.filter(
     (u) =>
-      u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.role.toLowerCase().includes(searchQuery.toLowerCase()),
+      String(u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(u.role || '').toLowerCase().includes(searchQuery.toLowerCase()),
   );
   const selectedUser = users.find((u) => u.uid === selectedUid);
 
@@ -172,7 +172,7 @@ export default function UserManagementBlock({ user }: Props) {
                 setSelectedUid(u.uid);
                 setIsAdding(false);
               }}
-              className={`w-full flex items-center justify-between p-3 rounded-xl transition cursor-pointer border ${selectedUid === u.uid ? "bg-white border-blue-200 shadow-sm" : "border-transparent hover:bg-white"}`}
+              className={`w-full group relative flex items-center justify-between p-3 rounded-xl transition cursor-pointer border ${selectedUid === u.uid ? "bg-white border-blue-200 shadow-sm" : "border-transparent hover:bg-white"}`}
             >
               <div className="flex flex-col items-start text-left">
                 <span className="text-xs font-black text-slate-900">
@@ -182,12 +182,31 @@ export default function UserManagementBlock({ user }: Props) {
                   {u.role}
                 </span>
               </div>
-              <ChevronRight
-                size={16}
-                className={
-                  selectedUid === u.uid ? "text-blue-500" : "text-slate-300"
-                }
-              />
+              <div className="flex items-center gap-2">
+                {canEditUsers && u.uid !== user.uid && u.role !== "root_admin" && (
+                  <div
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (await showConfirm(`Удалить профиль ${u.name}?`)) {
+                        dbService.deleteUser(u.uid, u.name);
+                        if (selectedUid === u.uid) {
+                          setSelectedUid(null);
+                        }
+                      }
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                    title="Удалить профиль"
+                  >
+                    <Trash2 size={14} />
+                  </div>
+                )}
+                <ChevronRight
+                  size={16}
+                  className={
+                    selectedUid === u.uid ? "text-blue-500" : "text-slate-300"
+                  }
+                />
+              </div>
             </button>
           ))}
         </div>

@@ -44,16 +44,16 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
     dbService.getUsers((users) => {
       // Check legacy/default password
       const match = users.find(
-        (u) => u.name.toLowerCase() === username.trim().toLowerCase()
+        (u) => String(u.name || '').toLowerCase() === String(username || '').trim().toLowerCase()
       );
 
       setTimeout(() => {
         setIsLoading(false);
-        const isPasswordCorrect = (match.password && password === match.password) || password === "ratipa2026" || password === "admin";
+        const isPasswordCorrect = (match && match.password && password === match.password) || password === "ratipa2026" || password === "admin";
         if (match && isPasswordCorrect) {
           // Success!
           let userToLogin = { ...match };
-          const nameLower = userToLogin.name.toLowerCase();
+          const nameLower = String(userToLogin.name || '').toLowerCase();
           if (nameLower === "сергей" || nameLower === "сергей терез") {
             userToLogin.role = "root_admin";
             userToLogin.permissions = {
@@ -73,7 +73,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
           }
           onLoginSuccess(userToLogin);
           dbService.logAction(userToLogin.name, userToLogin.role, "Авторизация", "Auth", userToLogin.uid, "Успешный вход в систему");
-        } else if ((username.toLowerCase() === "сергей" || username.toLowerCase() === "сергей терез") && password === "ratipa2026") {
+        } else if ((String(username).toLowerCase() === "сергей" || String(username).toLowerCase() === "сергей терез") && password === "ratipa2026") {
           // Special fallback bootstrap
           const defaultAdmin: UserProfile = {
             uid: "sergei-ru-uid-112",

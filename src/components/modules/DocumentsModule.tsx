@@ -249,9 +249,9 @@ export default function DocumentsModule({ user }: Props) {
 
   // Filter templates based on search query
   const filteredTemplates = templates.filter(t => 
-    t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.category.toLowerCase().includes(searchQuery.toLowerCase())
+    String(t.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    String(t.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    String(t.category || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (

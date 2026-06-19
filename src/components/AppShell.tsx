@@ -153,7 +153,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             const tA = a.id.startsWith('notif_') ? parseInt(a.id.replace('notif_', '')) : (a.id.includes('_') ? parseInt(a.id.split('_').slice(-1)[0]) || 0 : 0);
             const tB = b.id.startsWith('notif_') ? parseInt(b.id.replace('notif_', '')) : (b.id.includes('_') ? parseInt(b.id.split('_').slice(-1)[0]) || 0 : 0);
             if (tA && tB) return tB - tA;
-            return b.date.localeCompare(a.date);
+            const dateA = a.date || '';
+            const dateB = b.date || '';
+            return dateB.localeCompare(dateA);
           });
           
           setNotifications(list);
@@ -580,10 +582,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       if (user.role === 'root_admin') return true; // root admin sees all
       
       // Check specific module level perm
+      if (!user.permissions) return false;
       const userPerm = user.permissions[mod.permissionKey];
       return userPerm && userPerm !== 'none';
     });
   }, [user.role, user.permissions]);
+
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
 
@@ -909,7 +913,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                               </p>
                               {notif.dispatcher && (
                                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                                  {user.name.toLowerCase() === notif.dispatcher.toLowerCase() ? (
+                                  {String(user?.name || '').toLowerCase() === String(notif.dispatcher || '').toLowerCase() ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8.5px] font-black tracking-wide bg-[#c3fb12] text-[#2f4201] uppercase border border-[#c3fb12]/40 animate-pulse-slow">
                                       <span className="w-1 h-1 rounded-full bg-[#2f4201]" />
                                       ДЛЯ ВАС (Ваша машина)
@@ -1061,7 +1065,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           className="flex-1 p-3 sm:p-6 lg:p-10 overflow-y-auto overflow-x-hidden w-full max-w-full relative bg-[#f4f5f6]"
         >
           {allModules.map((mod) => {
-            const isAllowed = user.role === 'root_admin' || (user.permissions[mod.permissionKey] && user.permissions[mod.permissionKey] !== 'none');
+            const isAllowed = user.role === 'root_admin' || (user.permissions && user.permissions[mod.permissionKey] && user.permissions[mod.permissionKey] !== 'none');
             if (!isAllowed) return null;
 
             const isActive = activeModule === mod.key;

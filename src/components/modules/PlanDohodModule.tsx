@@ -3319,7 +3319,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     }
     if (searchCarQuery.trim()) {
       const q = searchCarQuery.trim().toLowerCase();
-      list = list.filter((t) => t.carNumber.toLowerCase().includes(q));
+      list = list.filter((t) => String(t.carNumber || '').toLowerCase().includes(q));
     }
     if (archived) {
       const months = Array.from(
@@ -3759,9 +3759,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             .sort(
               (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
             )
-            .map((log) => (
+            .map((log, idx) => (
               <div
-                key={log.id}
+                key={`${log.id || 'log'}_${idx}`}
                 className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4"
               >
                 <div className="flex flex-col">
