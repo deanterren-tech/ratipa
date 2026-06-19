@@ -1648,15 +1648,15 @@ export default function AnalysisConstructor() {
       {/* FULL FEATURE INTERACTIVE GPS DIRECTIONS CALCULATION MODAL */}
       {distanceModalOpen && distanceTargetLegIdx !== null && (
          <div className="fixed inset-0 z-[700] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col pt-1">
+            <div className="bg-white rounded-3xl w-[95vw] lg:w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                
-               <div className="px-6 py-5 border-b border-slate-100 flex flex-col gap-4">
+               <div className="px-6 py-4 border-b border-slate-100 flex flex-col gap-4 sticky top-0 bg-white z-10">
                   <div className="flex items-center justify-between">
                      <div className="flex items-center gap-3">
                         <div className="bg-rose-50 text-rose-600 p-2 rounded-xl"><MapPin className="w-5 h-5"/></div>
                         <div>
-                           <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Расчет Плеча на Интерактивной Карте</h3>
-                           <div className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-widest">Прокладка оптимальных трасс через Google Maps</div>
+                           <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Расчет Плеча</h3>
+                           <div className="text-[9px] font-black uppercase text-slate-400 font-mono tracking-widest">Интерактивный расчет</div>
                         </div>
                      </div>
                      <button onClick={() => setDistanceModalOpen(false)} className="w-10 h-10 rounded-full bg-slate-50 text-slate-500 hover:bg-slate-100 flex items-center justify-center transition cursor-pointer"><X className="w-5 h-5"/></button>
@@ -1763,7 +1763,7 @@ export default function AnalysisConstructor() {
                </div>
 
                {/* MAP DISPLAYER */}
-               <div className="h-[380px] bg-slate-100 relative border-b border-slate-100">
+               <div className="h-[250px] lg:h-[380px] bg-slate-100 relative border-b border-slate-100">
                   {!resolvedApiKey ? (
                      <div className="absolute inset-0 flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
                         <AlertCircle className="text-rose-500 mb-2" size={36} />
