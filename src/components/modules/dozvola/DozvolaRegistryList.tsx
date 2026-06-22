@@ -5,7 +5,9 @@ import { ref, onValue, set, push, update, remove } from "firebase/database";
 import {
   Trash2,
   Search,
-  Plus
+  Plus,
+  Edit,
+  X
 } from "lucide-react";
 import DozvolaWidgets from "./DozvolaWidgets";
 import DozvolaAIAssistant from "./DozvolaAIAssistant";
@@ -43,6 +45,25 @@ export default function DozvolaRegistryList({
   const [currentSortOrder, setCurrentSortOrder] = useState<"asc" | "desc">("desc");
   const [originalCars, setOriginalCars] = useState<Record<string, string>>({});
   const [originalComments, setOriginalComments] = useState<Record<string, string>>({});
+
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editStatus, setEditStatus] = useState("available");
+  const [editCar, setEditCar] = useState("");
+
+  useEffect(() => {
+    if (editingItem) {
+      setType(editingItem.type || "");
+      setPermitNumber(editingItem.number || editingItem.permitNumber || "");
+      setComments(editingItem.comment || editingItem.comments || "");
+      setEditStatus(editingItem.status || "available");
+      setEditCar(editingItem.car || "");
+    } else {
+      setComments("");
+      setPermitNumber("");
+      setEditStatus("available");
+      setEditCar("");
+    }
+  }, [editingItem]);
 
   useEffect(() => {
     if (!useFirebase) return;
@@ -108,22 +129,51 @@ export default function DozvolaRegistryList({
       return;
     }
 
-    if (useFirebase) {
-      const newKey = push(ref(database, 'dozvolsRegistryV4')).key;
-      if (newKey) {
-        set(ref(database, 'dozvolsRegistryV4/' + newKey), {
-          id: newKey, country, type, number: permitNumber.trim().toUpperCase(),
-          status: "available", issueDate: new Date().toISOString().split("T")[0],
-          car: "", comment: comments, isCopy: false
+    if (editingItem) {
+      if (useFirebase) {
+        update(ref(database, `dozvolsRegistryV4/${editingItem.id}`), {
+          type,
+          number: permitNumber.trim().toUpperCase(),
+          status: editStatus,
+          car: editCar.toUpperCase(),
+          comment: comments
         });
-        logAction(type, permitNumber.trim().toUpperCase(), "Ручное внесение", `Статус: ${getStatusLabel("available")}`);
+        
+        let diffs = [];
+        if (editingItem.type !== type) diffs.push(`Вид: [${editingItem.type}] ➔ [${type}]`);
+        if (editingItem.number !== permitNumber) diffs.push(`Номер: [${editingItem.number}] ➔ [${permitNumber.trim().toUpperCase()}]`);
+        if (editingItem.status !== editStatus) diffs.push(`Статус: [${getStatusLabel(editingItem.status)}] ➔ [${getStatusLabel(editStatus)}]`);
+        if (editingItem.car !== editCar) diffs.push(`Автомобиль: [${editingItem.car || '—'}] ➔ [${editCar || '—'}]`);
+        if (editingItem.comment !== comments) diffs.push(`Примечание изменено`);
+        
+        logAction(type, permitNumber.trim().toUpperCase(), "Изменение через форму", diffs.join(" | ") || "Изменение параметров формы");
+        if (editCar) {
+          await verifyOrCreateCar(editCar);
+        }
       }
+      setEditingItem(null);
+      setIsCreatorOpen(false);
+      setPermitNumber("");
+      setComments("");
+      alert("Изменения в бланке квоты сохранены.");
+    } else {
+      if (useFirebase) {
+        const newKey = push(ref(database, 'dozvolsRegistryV4')).key;
+        if (newKey) {
+          set(ref(database, 'dozvolsRegistryV4/' + newKey), {
+            id: newKey, country, type, number: permitNumber.trim().toUpperCase(),
+            status: "available", issueDate: new Date().toISOString().split("T")[0],
+            car: "", comment: comments, isCopy: false
+          });
+          logAction(type, permitNumber.trim().toUpperCase(), "Ручное внесение", `Статус: ${getStatusLabel("available")}`);
+        }
+      }
+      
+      setIsCreatorOpen(false);
+      setPermitNumber("");
+      setComments("");
+      alert("Бланк квоты дозвола добавлен и готов к выдаче.");
     }
-    
-    setIsCreatorOpen(false);
-    setPermitNumber("");
-    setComments("");
-    alert("Бланк квоты дозвола добавлен и готов к выдаче.");
   };
 
   const handleBatchCreate = (e: React.FormEvent) => {
@@ -308,6 +358,17 @@ export default function DozvolaRegistryList({
             customTypesOrder={customTypesOrder} 
             customTypes={customTypes} 
             knownFleetCars={unifiedFleetCars} 
+            onOpenEditPermit={(item, prefilledChanges) => {
+                setEditingItem(item);
+                if (prefilledChanges) {
+                    if (prefilledChanges.type) setType(prefilledChanges.type);
+                    if (prefilledChanges.number) setPermitNumber(prefilledChanges.number);
+                    if (prefilledChanges.comment !== undefined) setComments(prefilledChanges.comment || "");
+                    if (prefilledChanges.status) setEditStatus(prefilledChanges.status);
+                    if (prefilledChanges.car !== undefined) setEditCar(prefilledChanges.car || "");
+                }
+                setIsCreatorOpen(true);
+            }}
         />
 
         <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col md:flex-row items-center justify-between gap-6">
@@ -511,13 +572,26 @@ export default function DozvolaRegistryList({
                     </select>
                   </td>
                   <td className="p-4 pr-6 text-right">
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-1.5">
+                      {user.permissions.dozvola === "write" && (
+                        <button
+                          onClick={() => {
+                            setEditingItem(item);
+                            setIsCreatorOpen(true);
+                          }}
+                          className="w-7 h-7 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                          title="Редактировать параметры бланка"
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       {user.role === "root_admin" && (
                         <button
                           onClick={() => handleDeletePermit(item.id)}
                           className="w-7 h-7 flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                          title="Удалить"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       )}
                     </div>
@@ -561,14 +635,17 @@ export default function DozvolaRegistryList({
             <div className="p-6 border-b border-slate-200/55 flex items-center justify-between select-none">
               <div>
                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block font-mono">
-                  Permit Form
+                  {editingItem ? "Edit Permit" : "Permit Form"}
                 </span>
                 <h2 className="text-base font-black text-slate-900 uppercase tracking-tight">
-                  Ручной ввод бланка
+                  {editingItem ? "Редактирование бланка дозвола" : "Ручной ввод бланка"}
                 </h2>
               </div>
               <button
-                onClick={() => setIsCreatorOpen(false)}
+                onClick={() => {
+                  setEditingItem(null);
+                  setIsCreatorOpen(false);
+                }}
                 className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 text-xs font-black flex items-center justify-center cursor-pointer transition"
               >
                 ✕
@@ -618,10 +695,49 @@ export default function DozvolaRegistryList({
                 />
               </div>
 
+              {editingItem && (
+                <>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+                      Статус бланка
+                    </label>
+                    <select
+                      value={editStatus}
+                      onChange={(e) => setEditStatus(e.target.value)}
+                      className="block w-full mt-1.5 px-3 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                    >
+                      <option value="office">В офисе</option>
+                      <option value="hand">В рейсе</option>
+                      <option value="office_return">Сдан в офис</option>
+                      <option value="used">Сдан в ИТ</option>
+                      <option value="expired">Аннулирован</option>
+                      <option value="available">В наличии</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+                      Автомобиль / Локация
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Например, AB 9271-7"
+                      value={editCar}
+                      onChange={(e) => setEditCar(e.target.value)}
+                      list="fleet-cars-dl"
+                      className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-black text-slate-800 placeholder:text-slate-350 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                    />
+                  </div>
+                </>
+              )}
+
               <div className="pt-3 border-t border-slate-200/55 flex justify-end gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setIsCreatorOpen(false)}
+                  onClick={() => {
+                    setEditingItem(null);
+                    setIsCreatorOpen(false);
+                  }}
                   className="px-4 py-2.5 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-extrabold text-slate-700 transition cursor-pointer"
                 >
                   Отмена
@@ -630,7 +746,7 @@ export default function DozvolaRegistryList({
                   type="submit"
                   className="px-5 py-2.5 bg-slate-950 hover:bg-slate-800 text-[#70FC8E] font-black rounded-xl text-xs uppercase tracking-wide cursor-pointer transition shadow-sm"
                 >
-                  Сохранить +
+                  Сохранить
                 </button>
               </div>
             </form>

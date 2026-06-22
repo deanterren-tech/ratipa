@@ -10,9 +10,10 @@ interface DozvolaAIAssistantProps {
     customTypesOrder: string[];
     customTypes: Record<string, any>;
     knownFleetCars: Record<string, any>;
+    onOpenEditPermit?: (item: any, prefilledChanges?: any) => void;
 }
 
-export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder, customTypes, knownFleetCars }: DozvolaAIAssistantProps) {
+export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder, customTypes, knownFleetCars, onOpenEditPermit }: DozvolaAIAssistantProps) {
     const [rawText, setRawText] = useState('');
     const [tempBatchItems, setTempBatchItems] = useState<any[]>([]);
 
@@ -64,8 +65,8 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
 
         if (/(аннулирован|аннулировать|ошибка|списать|списан|брак)/i.test(text)) return { status: "expired", clearCar: false };
         if (/(транспортн|инспекц|реестр|возврат).{0,25}(сдан|сдали|сдать|возврат)|сдан.{0,25}(транспортн|инспекц)/i.test(text)) return { status: "used", clearCar: true };
-        if (/(сдан[ао]?|сдали|сдать|вернули|возврат).{0,18}(на|в)?\s*офис|сдан\s+оригинал|оригинал\s+сдан|использован|закрыт/i.test(text)) return { status: "office_return", clearCar: true };
-        if (/(выдан|выдать|рейс|отдан|у\s+водителя|на\s+машину|на\s+\d{4})/i.test(text)) return { status: "hand", clearCar: false };
+        if (/(сдан[ао]?|сдали|сдать|вернули|возврат|оставили|привезли).{0,18}(на|в)?\s*(офис|баз)/i.test(text) || /(сдан\s+оригинал|оригинал\s+сдан|использован|закрыт)/i.test(text)) return { status: "office_return", clearCar: true };
+        if (/(выдан|выдать|рейс|отдан|отдали|передан|передали|у\s+водителя|на\s+машину|на\s+\d{4}|на\s+руках|оставили|оставили\s+у|отдать|отдал)/i.test(text)) return { status: "hand", clearCar: false };
         if (/(принят|получен|пришел|поступил|в\s+офисе|лежит\s+в\s+офисе)/i.test(text)) return { status: "office", clearCar: true };
 
         return { status, clearCar: false };
@@ -94,24 +95,101 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
             const directMatch = lineForParsing.match(/(?:rus|tr a|tr b|uz \d|uz|ge|am\d|kz\d|chn \d)\s*(\d{3,8})/i);
             if (directMatch && directMatch[1] && !numberCandidates.includes(directMatch[1])) numberCandidates.unshift(directMatch[1]);
             numberCandidates = [...new Set(numberCandidates)];
-            if(!numberCandidates.length) return;
 
-            let foundCar = "";
-            const fullCarMatch = lineForParsing.toUpperCase().match(/\b[A-ZА-Я]{1,3}\s?\d{3,5}[-\s]?\d\b/);
-            if (fullCarMatch) foundCar = fullCarMatch[0].replace(/\s+/g, ' ').trim();
+            // Smart car mapping (detect source vs target)
+            let sourceCar = "";
+            let destCar = "";
+            const normalizedTextForCars = normalizeAIText(lineForParsing);
+
+            const carsFound: string[] = [];
+            Object.keys(knownFleetCars).forEach(car => {
+                const digits = car.replace(/\D/g, '');
+                const cleanCar = car.replace(/[-\s]/g, '');
+                if (digits && digits.length === 4 && normalizedTextForCars.includes(digits)) {
+                    if (!carsFound.includes(car)) carsFound.push(car);
+                } else if (cleanCar && normalizedTextForCars.toUpperCase().includes(cleanCar)) {
+                    if (!carsFound.includes(car)) carsFound.push(car);
+                }
+            });
+
+            if (carsFound.length > 0) {
+                if (carsFound.length === 1) {
+                    const car = carsFound[0];
+                    const digits = car.replace(/\D/g, '');
+                    const sourceRegex = new RegExp(`(?:с|со|от)\\s*(?:машины|машину|авто|автомобиля|номера)?\\s*${digits}`, 'i');
+                    if (sourceRegex.test(lineForParsing)) {
+                        sourceCar = car;
+                    } else {
+                        destCar = car;
+                    }
+                } else if (carsFound.length >= 2) {
+                    carsFound.forEach(car => {
+                        const digits = car.replace(/\D/g, '');
+                        const sourceRegex = new RegExp(`(?:с|со|от)\\s*(?:машины|машину|авто|автомобиля|номера)?\\s*${digits}`, 'i');
+                        const destRegex = new RegExp(`(?:на|в|к)\\s*(?:машину|авто|автомобиль|номера|водителя)?\\s*${digits}`, 'i');
+                        if (sourceRegex.test(lineForParsing)) {
+                            sourceCar = car;
+                        } else if (destRegex.test(lineForParsing)) {
+                            destCar = car;
+                        }
+                    });
+                    if (!sourceCar && !destCar) {
+                        sourceCar = carsFound[0];
+                        destCar = carsFound[1];
+                    } else if (sourceCar && !destCar) {
+                        destCar = carsFound.find(c => c !== sourceCar) || "";
+                    } else if (!sourceCar && destCar) {
+                        sourceCar = carsFound.find(c => c !== destCar) || "";
+                    }
+                }
+            }
+
+            // Find active permit assigned to sourceCar if no permit number is provided in the prompt
+            let foundExistingPermitByCar: any = null;
+            if (sourceCar) {
+                const cleanSourceCar = sourceCar.replace(/[^A-Z0-9]/g, '').toUpperCase();
+                foundExistingPermitByCar = Object.values(dozvolsData).find((d: any) => {
+                    if (!d.car) return false;
+                    const cleanDozvolCar = d.car.replace(/[^A-Z0-9]/g, '').toUpperCase();
+                    return cleanDozvolCar === cleanSourceCar && d.status !== 'used' && d.status !== 'expired';
+                });
+            }
+
+            if (numberCandidates.length === 0 && foundExistingPermitByCar) {
+                const fetchedNum = foundExistingPermitByCar.number || foundExistingPermitByCar.permitNumber;
+                if (fetchedNum) numberCandidates.push(fetchedNum);
+            }
+
+            if(!numberCandidates.length) {
+                // If we didn't specify a permit number, but we matched some text with "оставили в офисе" or "сдан", but don't know the permit, skip
+                return;
+            }
+
+            let foundCar = destCar || "";
             if (!foundCar) {
-                const carMatches = lineForParsing.match(/\b\d{4}\b/g);
-                if (carMatches) {
-                    let candidate = carMatches.find(digits => !numberCandidates.includes(digits));
-                    if (candidate) {
-                        const fullCarFromFleet = Object.keys(knownFleetCars).find(car => car.includes(candidate));
-                        foundCar = fullCarFromFleet ? fullCarFromFleet : candidate;
+                const fullCarMatch = lineForParsing.toUpperCase().match(/\b[A-ZА-Я]{1,3}\s?\d{3,5}[-\s]?\d\b/);
+                if (fullCarMatch) foundCar = fullCarMatch[0].replace(/\s+/g, ' ').trim();
+                if (!foundCar) {
+                    const carMatches = lineForParsing.match(/\b\d{4}\b/g);
+                    if (carMatches) {
+                        let candidate = carMatches.find(digits => !numberCandidates.includes(digits));
+                        if (candidate) {
+                            const fullCarFromFleet = Object.keys(knownFleetCars).find(car => car.includes(candidate));
+                            foundCar = fullCarFromFleet ? fullCarFromFleet : candidate;
+                        }
                     }
                 }
             }
 
             numberCandidates.forEach(number => {
-                const existingDozvol = Object.values(dozvolsData).find((d: any) => d.number === number);
+                // Fuzzy/Flexible lookup to see if the permit is ALREADY entered
+                const existingDozvol = Object.values(dozvolsData).find((d: any) => {
+                    const dbNum = String(d.number || d.permitNumber || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                    const candNum = String(number).toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (!dbNum || !candNum) return false;
+                    return dbNum.includes(candNum) || candNum.includes(dbNum);
+                });
+
                 let mode = existingDozvol ? "update" : "create";
                 let recognizedType = detectPermitTypeFromAI(lineForParsing, existingDozvol ? existingDozvol.type : recognizedTypeForLine); 
 
@@ -127,11 +205,35 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                 }
 
                 newBatchItems.push({
-                    id: existingDozvol ? existingDozvol.id : null, mode, type: recognizedType, number, status, isCopy, car: itemCar || (existingDozvol ? existingDozvol.car : ""), comment: comment || (existingDozvol ? (existingDozvol.comment || "") : "")
+                    id: existingDozvol ? existingDozvol.id : null, 
+                    mode, 
+                    type: recognizedType, 
+                    number: existingDozvol ? (existingDozvol.number || existingDozvol.permitNumber) : number, 
+                    status, 
+                    isCopy, 
+                    car: itemCar || (existingDozvol ? (existingDozvol.car || "") : ""), 
+                    comment: comment || (existingDozvol ? (existingDozvol.comment || "") : ""),
+                    existingRef: existingDozvol || null
                 });
             });
         });
+
         setTempBatchItems(newBatchItems);
+
+        // AUTO-OPEN WINDOW FOR EXISING PERMIT:
+        // If exactly ONE permit was processed, and it's already in the database (mode is 'update'), 
+        // open the editing window directly.
+        if (newBatchItems.length === 1 && newBatchItems[0].mode === 'update' && newBatchItems[0].existingRef && onOpenEditPermit) {
+            const parsed = newBatchItems[0];
+            onOpenEditPermit(parsed.existingRef, {
+                type: parsed.type,
+                number: parsed.number,
+                car: parsed.car,
+                status: parsed.status,
+                comment: parsed.comment,
+                isCopy: parsed.isCopy
+            });
+        }
     };
 
     const getStatusLabel = (status: string) => {
@@ -252,7 +354,28 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                     
                                     return (
                                         <tr key={index} className="border-t border-slate-100 hover:bg-slate-50/50">
-                                            <td className="p-2 text-slate-600">{item.mode === 'update' ? '🔄 Обновить' : '📥 Новый'}</td>
+                                            <td className="p-2 text-slate-600">
+                                                <div className="flex flex-col gap-1.5 items-start">
+                                                    <span>{item.mode === 'update' ? '🔄 Обновить' : '📥 Новый'}</span>
+                                                    {item.mode === 'update' && item.existingRef && onOpenEditPermit && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => onOpenEditPermit(item.existingRef, {
+                                                                type: item.type,
+                                                                number: item.number,
+                                                                car: item.car,
+                                                                status: item.status,
+                                                                comment: item.comment,
+                                                                isCopy: item.isCopy
+                                                            })}
+                                                            className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1.5 rounded-[6px] text-[10px] font-black uppercase tracking-wider cursor-pointer shadow-xs transition"
+                                                            title="Открыть подробное окно редактирования"
+                                                        >
+                                                            Редактировать 📝
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
                                             <td className="p-2">
                                                 <select 
                                                     className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-[11px] focus:outline-none"
