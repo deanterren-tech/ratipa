@@ -88,8 +88,8 @@ interface AppShellProps {
 }
 
 export default function AppShell({ user, onLogout }: AppShellProps) {
-  const [activeModule, setActiveModule] = useState<string>('dashboard');
-  const [loadedModules, setLoadedModules] = useState<string[]>(['dashboard']);
+  const [activeModule, setActiveModule] = useState<string>(user && user.role === 'mechanic' ? 'baza' : 'dashboard');
+  const [loadedModules, setLoadedModules] = useState<string[]>(user && user.role === 'mechanic' ? ['baza'] : ['dashboard']);
 
   useEffect(() => {
     if (!loadedModules.includes(activeModule)) {
@@ -574,6 +574,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
   // Filter modules based on user's permission (not 'none' and matching admin fields)
   const allowedModules = useMemo(() => {
+    if (user.role === 'mechanic') {
+      return allModules.filter(mod => mod.key === 'baza');
+    }
     return allModules.filter(mod => {
       if (user.role === 'root_admin') return true; // root admin sees all
       
@@ -678,7 +681,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             {isSidebarOpen ? <X className="h-6 w-6 text-slate-700" /> : <Menu className="h-6 w-6 text-slate-700" />}
           </button>
           
-          <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => handleNavigate('dashboard')}>
+          <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => handleNavigate(user.role === 'mechanic' ? 'baza' : 'dashboard')}>
             <div className="flex items-baseline font-sans">
               <span className="font-extrabold tracking-[-0.02em] text-base md:text-lg uppercase text-slate-950 leading-none">
                 Ratipa
@@ -1078,7 +1081,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           className="flex-1 p-3 sm:p-6 lg:p-10 overflow-y-auto overflow-x-hidden w-full max-w-full relative bg-[#f4f5f6]"
         >
           {allModules.map((mod) => {
-            const isAllowed = user.role === 'root_admin' || (user.permissions && user.permissions[mod.permissionKey] && user.permissions[mod.permissionKey] !== 'none');
+            const isAllowed = user.role === 'mechanic' ? (mod.key === 'baza') : (user.role === 'root_admin' || (user.permissions && user.permissions[mod.permissionKey] && user.permissions[mod.permissionKey] !== 'none'));
             if (!isAllowed) return null;
 
             const isLoaded = loadedModules.includes(mod.key);
