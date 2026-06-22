@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, AppSettings } from '../../types';
 import { dbService } from '../../firebase';
 import { ZoomIn, ZoomOut, Maximize2, Minimize2, RefreshCw } from 'lucide-react';
@@ -18,9 +18,23 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
     return saved ? parseInt(saved, 10) : 600;
   });
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     localStorage.setItem('ratipa_height_currentPlanning', frameHeight.toString());
   }, [frameHeight]);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+    };
+  }, [activeTabId]);
 
   const [zoomLevel, setZoomLevel] = useState(() => {
     const saved = localStorage.getItem('ratipa_zoom_currentPlanning');
@@ -120,6 +134,7 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
 
       {/* Frame */}
       <div 
+         ref={scrollContainerRef}
          className="flex-1 bg-slate-100 rounded-[2rem] overflow-hidden border border-slate-200/60 shadow-sm relative"
          style={isFocusMode ? { minHeight: 'calc(100vh - 120px)' } : { height: '680px' }}
       >

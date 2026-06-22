@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { UserProfile, AppSettings } from '../../types';
 import { dbService } from '../../firebase';
 import { 
@@ -38,9 +38,24 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
     return saved ? parseInt(saved, 10) : 600;
   });
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     localStorage.setItem('ratipa_height_planZagruzok', frameHeight.toString());
   }, [frameHeight]);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      // Prevent scrolling the main body/parent page while scroll starts/happens over google sheets
+      e.preventDefault();
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+    };
+  }, [activeTabId]); // Re-attach when tab changes or ref is ready
 
   useEffect(() => {
     localStorage.setItem('ratipa_zoom_planZagruzok', zoomLevel.toString());
@@ -213,7 +228,7 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
             <span className="text-sm font-black text-slate-900 uppercase tracking-tight">Доступ Заблокирован</span>
           </div>
         ) : (
-          <div className="w-full h-full relative overflow-auto bg-slate-100/50" style={{ minHeight: isFocusMode ? 'calc(100vh - 130px)' : 'calc(100vh - 240px)' }}>
+          <div ref={scrollContainerRef} className="w-full h-full relative overflow-auto bg-slate-100/50" style={{ minHeight: isFocusMode ? 'calc(100vh - 130px)' : 'calc(100vh - 240px)' }}>
             <div style={{
                width: `${100 / zoomLevel}%`,
                height: `${100 / zoomLevel}%`,

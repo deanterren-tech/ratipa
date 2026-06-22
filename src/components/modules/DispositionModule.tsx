@@ -35,14 +35,41 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
     return saved ? parseInt(saved, 10) : 600;
   });
 
+   const scrollContainerRef = useRef<HTMLDivElement>(null);
+   const gpsContainerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     localStorage.setItem('ratipa_height_disposition', frameHeight.toString());
   }, [frameHeight]);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+    };
+  }, [iframeKey]);
 
   // Beltranssputnik GPS Notebook State
   const [isGpsOpen, setIsGpsOpen] = useState(() => localStorage.getItem('ratipa_gps_visible') === 'true');
   const [isGpsMinimized, setIsGpsMinimized] = useState(() => localStorage.getItem('ratipa_gps_minimized') === 'true');
   const [gpsTab, setGpsTab] = useState<'beltranssputnik' | 'wialon' | 'era_glonass'>('beltranssputnik');
+
+  useEffect(() => {
+    const el = gpsContainerRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+    };
+  }, [gpsTab, isGpsOpen]);
   
   const [gpsPos, setGpsPos] = useState<{ x: number; y: number }>(() => {
     try {
@@ -226,7 +253,7 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
              <button onClick={() => setGpsTab('era_glonass')} className={`flex-1 text-[10px] font-black uppercase tracking-wider py-1.5 rounded-lg transition ${gpsTab === 'era_glonass' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:bg-slate-100'}`}>ЭРА ГЛОНАСС</button>
           </div>
 
-          <div className="flex-1 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 relative">
+          <div ref={gpsContainerRef} className="flex-1 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 relative">
              <iframe
                src={settings?.gpsBeltranssputnikUrl || "https://beltranssputnik.by"}
                className="w-full h-full border-0 absolute inset-0"
@@ -402,7 +429,7 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
             <span className="text-sm font-black text-slate-900 uppercase tracking-tight">Доступ Заблокирован</span>
           </div>
         ) : (
-          <div className="w-full h-full relative overflow-auto bg-slate-100/50 overscroll-contain" style={{ minHeight: isFocusMode ? 'calc(100vh - 130px)' : 'calc(100vh - 240px)' }}>
+          <div ref={scrollContainerRef} className="w-full h-full relative overflow-auto bg-slate-100/50 overscroll-contain" style={{ minHeight: isFocusMode ? 'calc(100vh - 130px)' : 'calc(100vh - 240px)' }}>
             <div style={{
                width: `${100 / zoomLevel}%`,
                height: `${100 / zoomLevel}%`,
