@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, AuditLog, AppSettings, Vehicle, TripPlan, Permit, HighlightData } from '../../types';
 import { dbService, firebaseConfig } from '../../firebase';
 import { motion, AnimatePresence } from 'motion/react';
@@ -135,6 +135,33 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
   }, [isEditingHighlight, currentHighlights.length, isHovered]);
 
   const [newsTab, setNewsTab] = useState<'bamap' | 'asmap' | 'system'>('bamap');
+
+  const bamapContainerRef = useRef<HTMLDivElement>(null);
+  const asmapContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = bamapContainerRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      if (el) el.removeEventListener('wheel', handleWheel);
+    };
+  }, [newsTab]);
+
+  useEffect(() => {
+    const el = asmapContainerRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      if (el) el.removeEventListener('wheel', handleWheel);
+    };
+  }, [newsTab]);
 
   const [bamapNews, setBamapNews] = useState<any[]>([]);
   const [bamapLoading, setBamapLoading] = useState(true);
@@ -692,7 +719,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                             Открыть в новой вкладке <ExternalLink size={11} />
                         </a>
                     </div>
-                    <div className="w-full relative bg-slate-100 rounded-2xl border border-slate-200 h-[500px] overflow-hidden">
+                    <div ref={bamapContainerRef} className="w-full relative bg-slate-100 rounded-2xl border border-slate-200 h-[500px] overflow-hidden">
                         <iframe 
                             src={settings?.bamapUrl || "https://bamap.org/information/news/"} 
                             className="w-full h-full border-0 rounded-2xl bg-white" 
@@ -718,7 +745,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                             Открыть в новой вкладке <ExternalLink size={11} />
                         </a>
                     </div>
-                    <div className="w-full relative bg-slate-100 rounded-2xl border border-slate-200 h-[500px] overflow-hidden">
+                    <div ref={asmapContainerRef} className="w-full relative bg-slate-100 rounded-2xl border border-slate-200 h-[500px] overflow-hidden">
                         <iframe 
                             src={settings?.asmapUrl || "https://www.asmap.ru/news/"} 
                             className="w-full h-full border-0 rounded-2xl bg-white" 

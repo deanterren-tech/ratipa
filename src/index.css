@@ -33,7 +33,8 @@ body {
 
 /* Custom scrollbars for data-loaded viewports */
 .custom-scrollbar {
-  overscroll-behavior: contain;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
 }
 
 /* Global resilient layout overrides to prevent responsive horizontal blowouts */
