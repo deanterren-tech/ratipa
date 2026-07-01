@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, Suspense, lazy } from 'react';
 import { UserProfile, AppSettings, ChatMessage } from '../types';
 import { dbService, database, useFirebase, onValue } from '../firebase';
 import { ref, set, push, update, remove } from 'firebase/database';
 import { motion, AnimatePresence } from 'motion/react';
+import CommandCenter from './CommandCenter';
 import { 
   LayoutDashboard, 
   Calculator, 
@@ -70,17 +71,18 @@ const defaultNotifications: NotificationItem[] = [
 ];
 
 // Import newly created business modules
-import DashboardModule from './modules/DashboardModule';
-import DohodModule from './modules/DohodModule';
-import SalaryModule from './modules/SalaryModule';
-import PlanDohodModule from './modules/PlanDohodModule';
-import PlanZagruzokModule from './modules/PlanZagruzokModule';
-import CurrentPlanningModule from './modules/CurrentPlanningModule';
-import BazaModule from './modules/BazaModule';
-import DozvolaModule from './modules/DozvolaModule';
-import DispositionModule from './modules/DispositionModule';
-import SettingsModule from './modules/SettingsModule';
-import AdminModule from './modules/AdminModule';
+const DashboardModule = lazy(() => import('./modules/DashboardModule'));
+const DohodModule = lazy(() => import('./modules/DohodModule'));
+const SalaryModule = lazy(() => import('./modules/SalaryModule'));
+const PlanDohodModule = lazy(() => import('./modules/PlanDohodModule'));
+const PlanZagruzokModule = lazy(() => import('./modules/PlanZagruzokModule'));
+const CurrentPlanningModule = lazy(() => import('./modules/CurrentPlanningModule'));
+const BazaModule = lazy(() => import('./modules/BazaModule'));
+const DozvolaModule = lazy(() => import('./modules/DozvolaModule'));
+const DispositionModule = lazy(() => import('./modules/DispositionModule'));
+const SettingsModule = lazy(() => import('./modules/SettingsModule'));
+const AdminModule = lazy(() => import('./modules/AdminModule'));
+const DocumentsModule = lazy(() => import('./modules/DocumentsModule'));
 
 interface AppShellProps {
   user: UserProfile;
@@ -90,6 +92,18 @@ interface AppShellProps {
 export default function AppShell({ user, onLogout }: AppShellProps) {
   const [activeModule, setActiveModule] = useState<string>(user && user.role === 'mechanic' ? 'baza' : 'dashboard');
   const [loadedModules, setLoadedModules] = useState<string[]>(user && user.role === 'mechanic' ? ['baza'] : ['dashboard']);
+  const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCommandCenterOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (!loadedModules.includes(activeModule)) {
@@ -102,24 +116,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
 
   // Notifications states
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
-    const saved = localStorage.getItem('ratipa_notifications_v1');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return defaultNotifications;
-      }
-    }
-    return defaultNotifications;
-  });
-  const [deletedNotifIds, setDeletedNotifIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem('ratipa_deleted_notif_ids');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { return []; }
-    }
-    return [];
-  });
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [userNotifState, setUserNotifState] = useState<Record<string, {isRead: boolean, isDeleted: boolean}>>({});
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [notifTab, setNotifTab] = useState<'all' | 'unread'>('all');
   const notifRef = useRef<HTMLDivElement>(null);
@@ -143,10 +141,10 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
   // Sync notifications from Firebase Realtime Database
   useEffect(() => {
-    if (!useFirebase) return;
+    if (!useFirebase || !user) return;
     try {
       const notifRef = ref(database, 'ratipa_notifications');
-      const unsub = onValue(notifRef, snap => {
+      const unsubNotif = onValue(notifRef, snap => {
         const val = snap.val();
         if (val) {
           const list: NotificationItem[] = Object.keys(val).map(key => ({
@@ -154,7 +152,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             ...val[key]
           }));
           
-          // Sort by timestamp descending
           list.sort((a, b) => {
             const tA = a.id.startsWith('notif_') ? parseInt(a.id.replace('notif_', '')) : (a.id.includes('_') ? parseInt(a.id.split('_').slice(-1)[0]) || 0 : 0);
             const tB = b.id.startsWith('notif_') ? parseInt(b.id.replace('notif_', '')) : (b.id.includes('_') ? parseInt(b.id.split('_').slice(-1)[0]) || 0 : 0);
@@ -165,17 +162,24 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           });
           
           setNotifications(list);
-          localStorage.setItem('ratipa_notifications_v1', JSON.stringify(list));
         } else {
           setNotifications([]);
-          localStorage.setItem('ratipa_notifications_v1', JSON.stringify([]));
         }
       });
-      return () => unsub();
+      
+      const userNotifRef = ref(database, `users/${user.uid}/notificationStates`);
+      const unsubUserNotif = onValue(userNotifRef, snap => {
+        setUserNotifState(snap.val() || {});
+      });
+
+      return () => {
+        unsubNotif();
+        unsubUserNotif();
+      }
     } catch (e) {
       console.warn("Error subscribing to ratipa_notifications in Firebase", e);
     }
-  }, [useFirebase]);
+  }, [useFirebase, user]);
 
   // Subscribe to baza_cars and trips_dashboard
   useEffect(() => {
@@ -200,156 +204,37 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     }
   }, [useFirebase]);
 
-  // Auto-generate notifications based on base vehicle milestones and departure dates
-  useEffect(() => {
-    if (!useFirebase || bazaCars.length === 0) return;
-    
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const todayStr = today.toISOString().split('T')[0];
-
-    const formatDeadlineToRu = (dateStr: string) => {
-      if (!dateStr) return '';
-      try {
-        const parts = dateStr.split('-');
-        if (parts.length === 3) {
-          return `${parts[2]}.${parts[1]}.${parts[0]}`;
-        }
-      } catch (e) {}
-      return dateStr;
-    };
-
-    bazaCars.forEach(car => {
-      // Find dispatcher assigned to this vehicle
-      const matchedTrip = tripsDashboard.find((t: any) => 
-        t.carNumber && car.carNumber && 
-        String(t.carNumber).trim().toUpperCase() === String(car.carNumber).trim().toUpperCase() &&
-        !t.isArchived
-      );
-      const dispatcherName = matchedTrip?.dispatcher || matchedTrip?.logist || "Не назначен";
-
-      // 1. Repair ended (dateRepairEnd exists and is set)
-      if (car.dateRepairEnd) {
-        const repKey = `repair_end_${car.id}_${car.dateRepairEnd}`.replace(/[.#$[\]]/g, '_');
-        const alreadyExists = notifications.some(n => n.id === repKey);
-        
-        if (!alreadyExists) {
-          const now = new Date();
-          const d = String(now.getDate()).padStart(2, '0');
-          const m = String(now.getMonth() + 1).padStart(2, '0');
-          const y = now.getFullYear();
-          const h = String(now.getHours()).padStart(2, '0');
-          const min = String(now.getMinutes()).padStart(2, '0');
-
-          const repNotif = {
-            title: `🛠️ Ремонт закончен — ${car.carNumber}`,
-            text: `Тягач ${car.carNumber} (водитель ${car.driverName || 'не назначен'}) успешно прошел ремонт. Готов к рейсу! Диспетчер: ${dispatcherName}. Нужно грузить!`,
-            type: 'success',
-            date: `${d}.${m}.${y} ${h}:${min}`,
-            isRead: false,
-            dispatcher: dispatcherName
-          };
-
-          try {
-            set(ref(database, `ratipa_notifications/${repKey}`), repNotif);
-          } catch(e) {
-            console.warn("Failed pushing repair notification", e);
-          }
-        }
-      }
-
-      // 2. dateLoading deadline starts approaching ("подходит дата к какому числу должна быть готова машина")
-      if (car.dateLoading) {
-        try {
-          const loadDate = new Date(car.dateLoading);
-          loadDate.setHours(0,0,0,0);
-          const diffTime = loadDate.getTime() - today.getTime();
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-          // If the date is approaching (<= 3 days left or passed) AND the vehicle has NOT left yet
-          const hasDeparted = car.dateDeparture && car.dateDeparture <= todayStr;
-          if (diffDays <= 3 && !hasDeparted) {
-            const loadKey = `loading_warn_${car.id}_${car.dateLoading}`.replace(/[.#$[\]]/g, '_');
-            const alreadyExists = notifications.some(n => n.id === loadKey);
-
-            if (!alreadyExists) {
-              const now = new Date();
-              const d = String(now.getDate()).padStart(2, '0');
-              const m = String(now.getMonth() + 1).padStart(2, '0');
-              const y = now.getFullYear();
-              const h = String(now.getHours()).padStart(2, '0');
-              const min = String(now.getMinutes()).padStart(2, '0');
-
-              let alertText = `Машина ${car.carNumber} должна быть готова к ${formatDeadlineToRu(car.dateLoading)}. Подходит дата готовности — значит нужно грузить! Диспетчер: ${dispatcherName}.`;
-              if (diffDays < 0) {
-                alertText = `Внимание! Машина ${car.carNumber} должна была быть готова к ${formatDeadlineToRu(car.dateLoading)} (просрочено на ${Math.abs(diffDays)} дн.). Нужно срочно грузить! Диспетчер: ${dispatcherName}.`;
-              } else if (diffDays === 0) {
-                alertText = `Внимание! Машина ${car.carNumber} должна быть готова СЕГОДНЯ (${formatDeadlineToRu(car.dateLoading)}). Нужно её срочно грузить! Диспетчер: ${dispatcherName}.`;
-              }
-
-              const loadNotif = {
-                title: `📦 Срок готовности — ${car.carNumber}`,
-                text: alertText,
-                type: diffDays < 0 ? 'alert' : 'warning',
-                date: `${d}.${m}.${y} ${h}:${min}`,
-                isRead: false,
-                dispatcher: dispatcherName
-              };
-
-              try {
-                set(ref(database, `ratipa_notifications/${loadKey}`), loadNotif);
-              } catch(e) {
-                console.warn("Failed pushing loading notification", e);
-              }
-            }
-          }
-        } catch (e) {
-          console.warn("Invalid dateLoading parsing in notification checker", e);
-        }
-      }
-    });
-
-  }, [useFirebase, bazaCars, tripsDashboard, notifications]);
-
   const unreadNotifsCount = useMemo(() => {
-    return notifications.filter(n => !n.isRead && !deletedNotifIds.includes(n.id)).length;
-  }, [notifications, deletedNotifIds]);
+    return notifications.filter(n => !userNotifState[n.id]?.isRead && !userNotifState[n.id]?.isDeleted).length;
+  }, [notifications, userNotifState]);
 
   const filteredNotifications = useMemo(() => {
-    const visible = notifications.filter(n => !deletedNotifIds.includes(n.id));
+    const visible = notifications.filter(n => !userNotifState[n.id]?.isDeleted);
     if (notifTab === 'unread') {
-      return visible.filter(n => !n.isRead);
+      return visible.filter(n => !userNotifState[n.id]?.isRead);
     }
     return visible;
-  }, [notifications, notifTab, deletedNotifIds]);
+  }, [notifications, notifTab, userNotifState]);
 
   const markNotifAsRead = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const item = notifications.find(n => n.id === id);
-    if (!item) return;
-
-    if (useFirebase) {
+    if (useFirebase && user) {
       try {
-        update(ref(database, `ratipa_notifications/${id}`), { isRead: !item.isRead });
+        const currentReadState = userNotifState[id]?.isRead || false;
+        update(ref(database, `users/${user.uid}/notificationStates/${id}`), { isRead: !currentReadState });
       } catch (err) {
         console.warn("Failed to mark read in firebase", err);
       }
-    } else {
-      setNotifications(prev => {
-        const updated = prev.map(n => n.id === id ? { ...n, isRead: !n.isRead } : n);
-        localStorage.setItem('ratipa_notifications_v1', JSON.stringify(updated));
-        return updated;
-      });
     }
   };
 
   const markAllNotifsAsRead = () => {
-    if (useFirebase) {
+    if (useFirebase && user) {
       try {
         const updates: Record<string, any> = {};
         notifications.forEach(n => {
-          if (!n.isRead && !deletedNotifIds.includes(n.id)) {
-            updates[`ratipa_notifications/${n.id}/isRead`] = true;
+          if (!userNotifState[n.id]?.isRead && !userNotifState[n.id]?.isDeleted) {
+            updates[`users/${user.uid}/notificationStates/${n.id}/isRead`] = true;
           }
         });
         if (Object.keys(updates).length > 0) {
@@ -358,56 +243,33 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       } catch (err) {
         console.warn("Failed to mark all read in firebase", err);
       }
-    } else {
-      setNotifications(prev => {
-        const updated = prev.map(n => ({ ...n, isRead: true }));
-        localStorage.setItem('ratipa_notifications_v1', JSON.stringify(updated));
-        return updated;
-      });
     }
   };
 
   const deleteNotif = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    
-    setDeletedNotifIds(prev => {
-      const updated = [...prev, id];
-      localStorage.setItem('ratipa_deleted_notif_ids', JSON.stringify(updated));
-      return updated;
-    });
-
-    if (useFirebase) {
+    if (useFirebase && user) {
       try {
-        remove(ref(database, `ratipa_notifications/${id}`));
+        update(ref(database, `users/${user.uid}/notificationStates/${id}`), { isDeleted: true });
       } catch (err) {
-        console.warn("Failed to delete notification in firebase", err);
+        console.warn("Failed to mark deleted in firebase", err);
       }
-    } else {
-      setNotifications(prev => {
-        const updated = prev.filter(n => n.id !== id);
-        localStorage.setItem('ratipa_notifications_v1', JSON.stringify(updated));
-        return updated;
-      });
     }
   };
 
   const clearAllNotifications = () => {
-    const currentIds = notifications.map(n => n.id);
-    setDeletedNotifIds(prev => {
-      const updated = Array.from(new Set([...prev, ...currentIds]));
-      localStorage.setItem('ratipa_deleted_notif_ids', JSON.stringify(updated));
-      return updated;
-    });
-
-    if (useFirebase) {
+    if (useFirebase && user) {
       try {
-        set(ref(database, 'ratipa_notifications'), null);
+        const updates: Record<string, any> = {};
+        notifications.forEach(n => {
+          updates[`users/${user.uid}/notificationStates/${n.id}/isDeleted`] = true;
+        });
+        if (Object.keys(updates).length > 0) {
+          update(ref(database), updates);
+        }
       } catch (err) {
         console.warn("Failed to clear notifications in firebase", err);
       }
-    } else {
-      setNotifications([]);
-      localStorage.setItem('ratipa_notifications_v1', JSON.stringify([]));
     }
   };
 
@@ -567,6 +429,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'currentPlanning', label: 'Текущее планирование', icon: Calendar, permissionKey: 'currentPlanning' },
     { key: 'baza', label: 'Учет выезда', icon: Truck, permissionKey: 'baza' },
     { key: 'dozvola', label: 'Учет Дозволов', icon: FileText, permissionKey: 'dozvola' },
+    { key: 'documents', label: 'Документы', icon: Files, permissionKey: 'documents' },
     { key: 'disposition', label: 'Диспозиция', icon: Map, permissionKey: 'disposition' },
     { key: 'settings', label: 'Справочники', icon: Settings, permissionKey: 'settings' },
     { key: 'admin', label: 'Администрирование', icon: ShieldAlert, permissionKey: 'admin' }
@@ -653,6 +516,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         return <BazaModule user={user} />;
       case 'dozvola':
         return <DozvolaModule user={user} />;
+      case 'documents':
+        return <DocumentsModule user={user} />;
       case 'disposition':
         return <DispositionModule user={user} />;
       case 'settings':
@@ -670,7 +535,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     <div className="min-h-screen bg-[#f4f5f6] flex flex-col font-sans transition-all duration-300">
       
       {/* Modern Responsive Capsule Header with high-fidelity layout */}
-      <header className="bg-white/95 backdrop-blur-md text-slate-900 border-b border-slate-200/50 min-h-[4.5rem] py-2 md:py-0 md:h-20 flex items-center justify-between px-4 sm:px-8 shrink-0 sticky top-0 z-50 select-none shadow-xs gap-3">
+      <header className="bg-white/95 backdrop-blur-md text-slate-900 border-b border-slate-200/50 min-h-[3.5rem] py-1 md:py-0 md:h-14 flex items-center justify-between px-4 sm:px-8 shrink-0 sticky top-0 z-50 select-none shadow-xs gap-3">
         
         {/* Left Brand Area */}
         <div className="flex items-center gap-3 shrink-0">
@@ -891,7 +756,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                             key={notif.id} 
                             onClick={() => markNotifAsRead(notif.id)}
                             className={`flex group items-start gap-3 p-3.5 transition hover:bg-slate-50/80 relative cursor-pointer ${
-                              notif.isRead ? 'opacity-55' : ''
+                              userNotifState[notif.id]?.isRead ? 'opacity-55' : ''
                             }`}
                           >
                             {/* Color bar on left edge */}
@@ -1101,7 +966,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                   transition={{ duration: 0.15, ease: "easeOut" }}
                   className="h-full"
                 >
-                  {renderModuleByKey(mod.key)}
+                  <Suspense fallback={<div className="p-8 flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900"></div></div>}>
+                    {renderModuleByKey(mod.key)}
+                  </Suspense>
                 </motion.div>
               </div>
             );
@@ -1325,6 +1192,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
       </div>
 
+      <CommandCenter 
+        user={user} 
+        isOpen={isCommandCenterOpen} 
+        onClose={() => setIsCommandCenterOpen(false)} 
+        onNavigate={handleNavigate} 
+      />
     </div>
   );
 }

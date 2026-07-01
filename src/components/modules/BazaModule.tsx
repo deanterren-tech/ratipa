@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { TableVirtuoso } from 'react-virtuoso';
 import { UserProfile } from '../../types';
 import { dbService, onValue } from '../../firebase';
 import { getDatabase, ref, set, push, remove, update, serverTimestamp, onDisconnect } from 'firebase/database';
@@ -623,47 +624,55 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                  </div>
 
                  <div className="overflow-x-auto custom-scrollbar">
-                    <table className="w-full text-left min-w-[1450px] border-separate border-spacing-y-2">
-                       <thead>
-                          <tr>
-                             <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">Госномер</th>
-                             <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">Водитель</th>
-                             <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">Прибыл на базу</th>
-                             <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">К какому числу должна быть готова машина</th>
-                             <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">Дата подачи заявки на ремонт</th>
-                             <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">Дата окончания ремонта</th>
-                             <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">Фактический выезд</th>
-                             <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">Примечание</th>
-                             <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3"></th>
-                          </tr>
-                       </thead>
-                       <tbody>
-                          {filteredList.map(v => (
-                             <tr key={v.id} onClick={() => openCarModal(v)} className="group cursor-pointer">
-                                <td className="bg-slate-50 rounded-l-2xl px-5 py-5 border-y border-l border-slate-200/50 group-hover:bg-slate-100/60 transition duration-150">
+                     <TableVirtuoso
+                       style={{ minHeight: '600px' }}
+                       useWindowScroll
+                       data={filteredList}
+                       components={{
+                         Table: (props) => <table {...props} className="w-full text-left min-w-[1450px] border-separate border-spacing-y-2" />,
+                         TableHead: (props) => (
+                           <thead {...props}>
+                             <tr>
+                               <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">Госномер</th>
+                               <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">Водитель</th>
+                               <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">Прибыл на базу</th>
+                               <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">К какому числу должна быть готова машина</th>
+                               <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">Дата подачи заявки на ремонт</th>
+                               <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">Дата окончания ремонта</th>
+                               <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">Фактический выезд</th>
+                               <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3">Примечание</th>
+                               <th className="text-[10px] font-black uppercase tracking-widest text-slate-400 pb-2 px-3"></th>
+                             </tr>
+                           </thead>
+                         ),
+                         TableRow: (props) => <tr {...props} className="group cursor-pointer" />
+                       }}
+                       itemContent={(index, v) => (
+                         <>
+                                <td onClick={() => openCarModal(v)} className="bg-slate-50 rounded-l-2xl px-5 py-5 border-y border-l border-slate-200/50 group-hover:bg-slate-100/60 transition duration-150">
                                    <span className="font-extrabold text-slate-950 text-xs sm:text-sm bg-white px-2.5 py-1.5 rounded-xl border border-slate-300 group-hover:border-slate-400 group-hover:bg-[#70FC8E]/10 transition-all font-mono tracking-wider shadow-xs whitespace-nowrap inline-block select-all">{v.carNumber}</span>
                                 </td>
-                                <td className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-sm font-black text-slate-800 group-hover:bg-slate-100/60 transition">{v.driverName || '—'}</td>
-                                <td className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-xs font-bold text-slate-700 group-hover:bg-slate-100/60 transition">
+                                <td onClick={() => openCarModal(v)} className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-sm font-black text-slate-800 group-hover:bg-slate-100/60 transition">{v.driverName || '—'}</td>
+                                <td onClick={() => openCarModal(v)} className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-xs font-bold text-slate-700 group-hover:bg-slate-100/60 transition">
                                    <span className="bg-white/80 border border-slate-200/60 px-2.5 py-1.5 rounded-lg whitespace-nowrap">{v.dateArrival ? v.dateArrival.split('-').reverse().join('.') : '—'}</span>
                                 </td>
-                                <td className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-xs font-bold text-slate-700 group-hover:bg-slate-100/60 transition">
+                                <td onClick={() => openCarModal(v)} className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-xs font-bold text-slate-700 group-hover:bg-slate-100/60 transition">
                                    <span className="bg-white/80 border border-slate-200/60 px-2.5 py-1.5 rounded-lg whitespace-nowrap">{v.dateLoading ? v.dateLoading.split('-').reverse().join('.') : '—'}</span>
                                 </td>
-                                <td className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-xs font-bold text-slate-700 group-hover:bg-slate-100/60 transition">
+                                <td onClick={() => openCarModal(v)} className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-xs font-bold text-slate-700 group-hover:bg-slate-100/60 transition">
                                    <span className="bg-white/80 border border-slate-200/60 px-2.5 py-1.5 rounded-lg whitespace-nowrap">{v.dateRepairStart ? v.dateRepairStart.split('-').reverse().join('.') : '—'}</span>
                                 </td>
-                                <td className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-xs font-bold text-slate-700 group-hover:bg-slate-100/60 transition">
+                                <td onClick={() => openCarModal(v)} className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-xs font-bold text-slate-700 group-hover:bg-slate-100/60 transition">
                                    <span className="bg-white/80 border border-slate-200/60 px-2.5 py-1.5 rounded-lg whitespace-nowrap">{v.dateRepairEnd ? v.dateRepairEnd.split('-').reverse().join('.') : '—'}</span>
                                 </td>
-                                <td className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-xs font-bold text-slate-700 group-hover:bg-slate-100/60 transition">
+                                <td onClick={() => openCarModal(v)} className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-xs font-bold text-slate-700 group-hover:bg-slate-100/60 transition">
                                    <span className={`px-2.5 py-1.5 rounded-lg border whitespace-nowrap ${
                                       v.dateDeparture 
                                          ? 'bg-emerald-50 border-emerald-300 text-emerald-800 font-extrabold' 
                                          : 'bg-white/80 border-slate-200/60 text-slate-400'
                                    }`}>{v.dateDeparture ? v.dateDeparture.split('-').reverse().join('.') : '—'}</span>
                                  </td>
-                                <td className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-xs font-medium text-slate-500 truncate max-w-[200px] group-hover:bg-slate-100/60 transition">{v.comment || '...'}</td>
+                                <td onClick={() => openCarModal(v)} className="bg-slate-50 px-5 py-5 border-y border-slate-200/50 text-xs font-medium text-slate-500 truncate max-w-[200px] group-hover:bg-slate-100/60 transition">{v.comment || '...'}</td>
                                 <td className="bg-slate-50 rounded-r-2xl px-5 py-5 border-y border-r border-slate-200/50 text-right group-hover:bg-slate-100/60 transition">
                                    <button 
                                      disabled={(currentTab === 'archive' && !isRootAdmin) || isMechanic}
@@ -673,13 +682,9 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                                      <Trash2 className="h-4 w-4"/>
                                    </button>
                                 </td>
-                             </tr>
-                          ))}
-                          {filteredList.length === 0 && (
-                            <tr><td colSpan={9} className="text-center py-10 text-slate-400 font-bold text-sm bg-slate-50 rounded-xl border border-slate-200/50 italic">Записей не найдено</td></tr>
-                          )}
-                       </tbody>
-                    </table>
+                         </>
+                       )}
+                     />
                  </div>
              </div>
           </div>

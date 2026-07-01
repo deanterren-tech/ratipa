@@ -68,7 +68,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
         const currentPercent = quotaTypesPercents[typeName] || 0;
         const percentLimit = Math.round((quotaGlobalDriversCount * currentPercent) / 100);
         const quarterLimit = parseInt(quotaQuarterLimits[typeName]) || 0;
-        const useQuarter = isRusType(typeName) && quarterLimit > 0;
+        const useQuarter = quarterLimit > 0;
         const calculatedLimit = useQuarter ? quarterLimit : percentLimit;
         
         let receivedCount = 0;
@@ -100,7 +100,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
             limit: calculatedLimit,
             received: receivedCount,
             inTrip: inTripCount,
-            remaining: unlimited ? Infinity : Math.max(0, calculatedLimit - receivedCount),
+            remaining: unlimited ? 999999 : Math.max(0, calculatedLimit - receivedCount),
             unlimited
         };
     };
@@ -137,9 +137,8 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
     const plannerSummary = calcPlannerCost();
 
     const handleAddTodoTask = () => {
-        const car = plannerCar.trim().toUpperCase();
+        const car = plannerCar.trim().toUpperCase() || 'БЕЗ АВТО';
         const entries = Object.entries(plannerQuantities) as [string, number][];
-        if (!car) return alert('Выберите или введите машину для заявки.');
         if (!entries.length) return alert('Укажите количество хотя бы по одному виду разрешений.');
 
         const items = entries.map(([typeName, qty]) => ({ type: typeName, qty, quota: getPermitQuotaInfo(typeName) }));
@@ -235,12 +234,10 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
                             <label className="text-[10px] font-bold text-slate-500 mb-1 block">Целевой процент выдачи (%):</label>
                             <input type="number" value={quotaTypesPercents[currentSelectedTab] || ''} onChange={handleSaveTypeQuotaPercent} className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-black" placeholder="Процент" />
                         </div>
-                        {isRusType(currentSelectedTab) && (
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-500 mb-1 block">Квартальная квота RUS (шт.):</label>
-                                <input type="number" value={quotaQuarterLimits[currentSelectedTab] || ''} onChange={handleSaveTypeQuarterQuota} className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-black" placeholder="Квартальная квота" />
-                            </div>
-                        )}
+                        <div>
+                            <label className="text-[10px] font-bold text-slate-500 mb-1 block">Квартальная квота (шт.):</label>
+                            <input type="number" value={quotaQuarterLimits[currentSelectedTab] || ''} onChange={handleSaveTypeQuarterQuota} className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-black" placeholder="Квартальная квота" />
+                        </div>
                         <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs font-semibold leading-relaxed mt-2">
                             <div className="flex justify-between mb-1"><span>Лимит квоты по штату:</span><span className="font-black text-blue-600">{getPermitQuotaInfo(currentSelectedTab).limit} шт.</span></div>
                             <div className="flex justify-between mb-1"><span>Выдано / на руках (не сдано в ТИ):</span><span className="font-black text-slate-800">{getPermitQuotaInfo(currentSelectedTab).inTrip} шт.</span></div>
@@ -288,6 +285,62 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
                     </div>
                 </div>
             )}
+
+            {/* 30 Days Copy Original tracking control */}
+            {(() => {
+                const todayVal = new Date(); todayVal.setHours(0,0,0,0);
+                const copyTrackingItems: any[] = [];
+                Object.values(dozvolsData).forEach((item: any) => {
+                    if (item.isCopy && item.status !== 'used' && item.status !== 'expired') {
+                        const baseDateStr = item.copySubmittedAt || item.issueDate || new Date().toISOString().split('T')[0];
+                        const baseDate = new Date(baseDateStr);
+                        const targetDate = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+                        targetDate.setHours(0,0,0,0);
+                        
+                        const timeDiff = targetDate.getTime() - todayVal.getTime();
+                        const daysLeft = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+                        copyTrackingItems.push({ ...item, daysLeft });
+                    }
+                });
+                
+                if (copyTrackingItems.length === 0) return null;
+                
+                // Sort so most urgent ones are first
+                copyTrackingItems.sort((a, b) => a.daysLeft - b.daysLeft);
+
+                return (
+                    <div className="bg-white rounded-[2rem] p-6 border-l-4 border-l-purple-600 border-y border-r border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col gap-3">
+                        <div className="text-[10px] font-black uppercase text-purple-700 tracking-widest font-mono border-b border-purple-100 pb-2 mb-1">
+                        ⏳ Контроль оригиналов (30 дней)
+                        </div>
+                        <div className="text-[10px] text-slate-500 italic font-medium -mt-1 leading-normal">
+                            По китайским дозволам разница между сдачей копии и сдачей оригинала не должна превышать 30 дней.
+                        </div>
+                        <div className="bg-purple-50/40 rounded-xl p-3 text-xs font-semibold max-h-56 overflow-y-auto custom-scrollbar space-y-2">
+                            {copyTrackingItems.map((c, idx) => (
+                                <div key={idx} className="flex flex-col py-2 border-b border-purple-100/50 border-dashed last:border-0 last:pb-0">
+                                    <div className="flex justify-between items-center text-[11px]">
+                                        <span className="font-mono font-bold text-slate-800">№ {c.number} <span className="text-[9px] bg-purple-100/70 text-purple-700 px-1.5 py-0.5 rounded font-black">{c.type}</span></span>
+                                        <span>
+                                            {c.daysLeft < 0 ? (
+                                                <span className="text-rose-600 font-black animate-pulse uppercase text-[9px] tracking-tight bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">просрочен на {Math.abs(c.daysLeft)} дн.!</span>
+                                            ) : c.daysLeft === 0 ? (
+                                                <span className="text-amber-600 font-extrabold animate-bounce uppercase text-[10px] tracking-tight bg-amber-50 px-1.5 py-0.5 rounded">Сдача сегодня!</span>
+                                            ) : (
+                                                <span className="text-purple-700 font-bold bg-purple-100/75 px-1.5 py-0.5 rounded text-[10px]">осталось: {c.daysLeft} дн.</span>
+                                            )}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-center mt-1 text-[9px] text-slate-400 font-mono">
+                                        <span>Авто: {c.car || 'не привязано'}</span>
+                                        <span>Сдана: {c.copySubmittedAt ? new Date(c.copySubmittedAt).toLocaleDateString("ru-RU") : '—'}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            })()}
 
             <div className="bg-white rounded-[2rem] p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col gap-4">
                 <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest font-mono border-b border-slate-100 pb-2">

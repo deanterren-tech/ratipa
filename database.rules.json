@@ -1,0 +1,18 @@
+{
+  "rules": {
+    ".read": "auth != null",
+    "baza": {
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'root_admin'"
+    },
+    "users": {
+      "$uid": {
+        ".read": "$uid === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'root_admin'",
+        ".write": "$uid === auth.uid || root.child('users').child(auth.uid).child('role').val() === 'root_admin'"
+      }
+    },
+    "ratipa_notifications": {
+      ".read": "auth != null",
+      ".write": "root.child('users').child(auth.uid).child('role').val() === 'root_admin' || root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    }
+  }
+}

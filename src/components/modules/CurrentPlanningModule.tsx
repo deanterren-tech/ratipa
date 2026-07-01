@@ -135,8 +135,7 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
       {/* Frame */}
       <div 
          ref={scrollContainerRef}
-         className="flex-1 bg-slate-100 rounded-[2rem] overflow-hidden border border-slate-200/60 shadow-sm relative"
-         style={isFocusMode ? { minHeight: 'calc(100vh - 120px)' } : { height: '680px' }}
+         className="flex-1 min-h-0 bg-slate-100 rounded-[2rem] overflow-hidden border border-slate-200/60 shadow-sm relative"
       >
          {allowedTabs.some(t => t.sheetUrl) ? (
             <div style={{

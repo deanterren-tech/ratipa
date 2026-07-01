@@ -99,14 +99,19 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
   React.useEffect(() => { gpsPosRef.current = gpsPos; }, [gpsPos]);
   React.useEffect(() => { gpsSizeRef.current = gpsSize; }, [gpsSize]);
 
+  const gpsWindowRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
+      const el = gpsWindowRef.current;
+      if (!el) return;
+      
       if (isGpsDragging) {
-        const nextPos = {
-          x: Math.max(0, Math.min(window.innerWidth - 100, e.clientX - gpsDragOffset.x)),
-          y: Math.max(0, Math.min(window.innerHeight - 100, e.clientY - gpsDragOffset.y))
-        };
-        setGpsPos(nextPos);
+        const nextX = Math.max(0, Math.min(window.innerWidth - 100, e.clientX - gpsDragOffset.x));
+        const nextY = Math.max(0, Math.min(window.innerHeight - 100, e.clientY - gpsDragOffset.y));
+        el.style.left = `${nextX}px`;
+        el.style.top = `${nextY}px`;
+        gpsPosRef.current = { x: nextX, y: nextY };
       } else if (isGpsResizing) {
         const deltaX = e.clientX - gpsResizeStart.mouseX;
         const deltaY = e.clientY - gpsResizeStart.mouseY;
@@ -124,23 +129,32 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
         }
         if (isGpsResizing.includes('w')) {
           newW = Math.max(250, gpsResizeStart.w - deltaX);
-          if (newW > 250) newX = gpsResizeStart.x + deltaX;
+          newX = gpsResizeStart.x + (gpsResizeStart.w - newW);
         }
         if (isGpsResizing.includes('n')) {
           newH = Math.max(150, gpsResizeStart.h - deltaY);
-          if (newH > 150) newY = gpsResizeStart.y + deltaY;
+          newY = gpsResizeStart.y + (gpsResizeStart.h - newH);
         }
 
-        const sizeObj = { width: newW, height: newH };
-        setGpsSize(sizeObj);
-
-        const posObj = { x: newX, y: newY };
-        setGpsPos(posObj);
+        el.style.width = `${newW}px`;
+        el.style.height = `${newH}px`;
+        el.style.left = `${newX}px`;
+        el.style.top = `${newY}px`;
+        
+        gpsSizeRef.current = { width: newW, height: newH };
+        gpsPosRef.current = { x: newX, y: newY };
       }
     };
     const handleMouseUp = () => {
-      setIsGpsDragging(false);
-      setIsGpsResizing(false);
+      if (isGpsDragging) {
+        setGpsPos(gpsPosRef.current);
+        setIsGpsDragging(false);
+      }
+      if (isGpsResizing) {
+        setGpsSize(gpsSizeRef.current);
+        setGpsPos(gpsPosRef.current);
+        setIsGpsResizing(false);
+      }
       try {
         localStorage.setItem('ratipa_gps_pos', JSON.stringify(gpsPosRef.current));
         localStorage.setItem('ratipa_gps_size', JSON.stringify(gpsSizeRef.current));
@@ -199,6 +213,7 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
 
     return (
       <div 
+        ref={gpsWindowRef}
         style={{
           position: 'fixed',
           left: `${gpsPos.x}px`,
@@ -407,8 +422,7 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
       </div>
 
       <div 
-        className="relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col"
-        style={isFocusMode ? { minHeight: 'calc(100vh - 120px)' } : { height: '680px' }}
+        className="relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col min-h-0"
       >
         
         {isIframeLoading && (
@@ -429,7 +443,7 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
             <span className="text-sm font-black text-slate-900 uppercase tracking-tight">Доступ Заблокирован</span>
           </div>
         ) : (
-          <div ref={scrollContainerRef} className="w-full h-full relative overflow-auto bg-slate-100/50 overscroll-contain" style={{ minHeight: isFocusMode ? 'calc(100vh - 130px)' : 'calc(100vh - 240px)' }}>
+          <div ref={scrollContainerRef} className="w-full h-full relative overflow-auto bg-slate-100/50 overscroll-contain">
             <div style={{
                width: `${100 / zoomLevel}%`,
                height: `${100 / zoomLevel}%`,

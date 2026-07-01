@@ -49,6 +49,8 @@ export default function DozvolaRegistryList({
   const [editingItem, setEditingItem] = useState<any>(null);
   const [editStatus, setEditStatus] = useState("available");
   const [editCar, setEditCar] = useState("");
+  const [editIsCopy, setEditIsCopy] = useState(false);
+  const [editCopySubmittedAt, setEditCopySubmittedAt] = useState("");
 
   useEffect(() => {
     if (editingItem) {
@@ -57,11 +59,15 @@ export default function DozvolaRegistryList({
       setComments(editingItem.comment || editingItem.comments || "");
       setEditStatus(editingItem.status || "available");
       setEditCar(editingItem.car || "");
+      setEditIsCopy(editingItem.isCopy || false);
+      setEditCopySubmittedAt(editingItem.copySubmittedAt || "");
     } else {
       setComments("");
       setPermitNumber("");
       setEditStatus("available");
       setEditCar("");
+      setEditIsCopy(false);
+      setEditCopySubmittedAt("");
     }
   }, [editingItem]);
 
@@ -106,7 +112,7 @@ export default function DozvolaRegistryList({
   };
 
   const getStatusLabel = (status: string) => {
-      const map: any = { office: 'В офисе', hand: 'В рейсе / на руках', office_return: 'Сдан в офис', used: 'Сдан в транспортную инспекцию', expired: 'Аннулирован' };
+      const map: any = { office: 'В офисе', available: 'В наличии', hand: 'В рейсе / на руках', office_return: 'Сдан в офис', used: 'Сдан в транспортную инспекцию', expired: 'Аннулирован' };
       return map[status] || status || '—';
   };
 
@@ -136,7 +142,9 @@ export default function DozvolaRegistryList({
           number: permitNumber.trim().toUpperCase(),
           status: editStatus,
           car: editCar.toUpperCase(),
-          comment: comments
+          comment: comments,
+          isCopy: editIsCopy,
+          copySubmittedAt: editIsCopy ? (editCopySubmittedAt || new Date().toISOString().split("T")[0]) : null
         });
         
         let diffs = [];
@@ -287,29 +295,34 @@ export default function DozvolaRegistryList({
       if (!old || (old.type !== 'CHN 2' && old.type !== 'CHN 3')) return;
       const nextVal = !currentCopyVal;
       if (useFirebase) {
-          update(ref(database, `dozvolsRegistryV4/${id}`), { isCopy: nextVal });
+          update(ref(database, `dozvolsRegistryV4/${id}`), { 
+              isCopy: nextVal,
+              copySubmittedAt: nextVal ? new Date().toISOString().split("T")[0] : null
+          });
           logAction(old.type, old.number, "Изменена отметка копии", `Копия сдана: [${currentCopyVal ? 'Да' : 'Нет'}] ➔ [${nextVal ? 'Да' : 'Нет'}]`);
       }
   };
 
-  let items = Object.values(dozvolsData) as any[];
-  const total = items.length;
-  const office = items.filter(i=>i.status==='office').length;
-  const hand = items.filter(i=>i.status==='hand' || i.status==='office_return').length;
-  const officeReturnCount = items.filter(i=>i.status==='office_return').length;
-  const usedCount = items.filter(i=>i.status==='used').length;
-  const expiredCount = items.filter(i=>i.status==='expired').length;
-  const copies = items.filter(i=>i.isCopy===true).length;
+  let rawItems = Object.values(dozvolsData) as any[];
+  if (currentSelectedTab !== 'all' && currentSelectedTab !== 'archive' && currentSelectedTab !== 'office_returns') {
+      rawItems = rawItems.filter(i => i.type === currentSelectedTab);
+  }
+  
+  const total = rawItems.length;
+  const office = rawItems.filter(i=>i.status==='office' || i.status==='available').length;
+  const hand = rawItems.filter(i=>i.status==='hand' || i.status==='office_return').length;
+  const officeReturnCount = rawItems.filter(i=>i.status==='office_return').length;
+  const usedCount = rawItems.filter(i=>i.status==='used').length;
+  const expiredCount = rawItems.filter(i=>i.status==='expired').length;
+  const copies = rawItems.filter(i=>i.isCopy===true).length;
 
+  let items = rawItems;
   if (currentSelectedTab === 'archive') {
       items = items.filter(i => i.status === 'used' || i.status === 'expired');
   } else if (currentSelectedTab === 'office_returns') {
       items = items.filter(i => i.status === 'office_return');
   } else {
       items = items.filter(i => i.status !== 'used' && i.status !== 'expired' && i.status !== 'office_return');
-      if (currentSelectedTab !== 'all') {
-          items = items.filter(i => i.type === currentSelectedTab);
-      }
   }
 
   if (selectedCountryFilter !== "all") {
@@ -490,6 +503,7 @@ export default function DozvolaRegistryList({
                 <th className="p-4 cursor-pointer hover:bg-slate-100 hover:text-slate-800 transition" onClick={() => { setCurrentSortField("status"); setCurrentSortOrder(currentSortOrder === "asc" ? "desc" : "asc"); }}>Статус оригинала</th>
                 <th className="p-4 cursor-pointer hover:bg-slate-100 hover:text-slate-800 transition" onClick={() => { setCurrentSortField("car"); setCurrentSortOrder(currentSortOrder === "asc" ? "desc" : "asc"); }}>Привязка к авто / Локация</th>
                 <th className="p-4">Сдан по копии?</th>
+                <th className="p-4 cursor-pointer hover:bg-slate-100 hover:text-slate-800 transition" onClick={() => { setCurrentSortField("copySubmittedAt"); setCurrentSortOrder(currentSortOrder === "asc" ? "desc" : "asc"); }}>Дата сдачи по копии</th>
                 <th className="p-4">Быстрый статус</th>
                 <th className="p-4 pr-6 text-right">Управление</th>
               </tr>
@@ -550,9 +564,42 @@ export default function DozvolaRegistryList({
                   </td>
                   <td className="p-4">
                     {(item.type === 'CHN 2' || item.type === 'CHN 3') ? (
-                        item.isCopy 
-                        ? <button onClick={() => toggleDozvolCopyInline(item.id, true)} className="bg-purple-100 text-purple-700 font-black text-[10px] uppercase px-2.5 py-1 rounded-full cursor-pointer hover:bg-purple-200 transition">📋 Сдана</button>
-                        : <button onClick={() => toggleDozvolCopyInline(item.id, false)} className="bg-slate-100 text-slate-500 font-bold text-[10px] uppercase px-2.5 py-1 rounded-full cursor-pointer hover:bg-slate-200 transition">❌ Нет копии</button>
+                      <div className="flex flex-col gap-1">
+                        {item.isCopy ? (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button onClick={() => toggleDozvolCopyInline(item.id, true)} className="bg-purple-100 text-purple-700 font-black text-[10px] uppercase px-2 py-0.5 rounded-full cursor-pointer hover:bg-purple-200 transition">📋 Сдана</button>
+                            {(() => {
+                              if (item.status === 'used' || item.status === 'expired') return null;
+                              const baseDateStr = item.copySubmittedAt || item.issueDate || new Date().toISOString().split('T')[0];
+                              const baseDate = new Date(baseDateStr);
+                              const targetDate = new Date(baseDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+                              targetDate.setHours(0,0,0,0);
+                              const today = new Date(); today.setHours(0,0,0,0);
+                              const diffTime = targetDate.getTime() - today.getTime();
+                              const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                              
+                              if (daysLeft < 0) {
+                                return <span className="text-rose-600 bg-rose-50 border border-rose-100 text-[9px] font-black uppercase px-2 py-0.5 rounded font-mono animate-pulse">🔥 Просрочено {Math.abs(daysLeft)} дн.!</span>;
+                              } else if (daysLeft === 0) {
+                                return <span className="text-amber-600 bg-amber-50 border border-amber-200 text-[9px] font-black uppercase px-2 py-0.5 rounded font-mono animate-bounce">⚠️ Крайний день!</span>;
+                              } else if (daysLeft <= 10) {
+                                return <span className="text-amber-500 bg-amber-50 border border-amber-100 text-[9px] font-black uppercase px-2 py-0.5 rounded font-mono">⌛ {daysLeft} дней</span>;
+                              } else {
+                                return <span className="text-purple-600 bg-purple-50 border border-purple-150 text-[9px] font-bold uppercase px-2 py-0.5 rounded font-mono">⌛ {daysLeft} дн.</span>;
+                              }
+                            })()}
+                          </div>
+                        ) : (
+                          <button onClick={() => toggleDozvolCopyInline(item.id, false)} className="bg-slate-100 text-slate-500 font-bold text-[10px] uppercase px-2.5 py-1 rounded-full cursor-pointer hover:bg-slate-200 transition w-max">❌ Нет копии</button>
+                        )}
+                      </div>
+                    ) : <span className="text-slate-300 font-medium text-[11px]">—</span>}
+                  </td>
+                  <td className="p-4 whitespace-nowrap">
+                    {item.isCopy && item.copySubmittedAt ? (
+                      <div className="font-mono text-[11px] text-slate-700 font-bold">
+                        {new Date(item.copySubmittedAt).toLocaleDateString("ru-RU")}
+                      </div>
                     ) : <span className="text-slate-300 font-medium text-[11px]">—</span>}
                   </td>
                   <td className="p-4">
@@ -728,6 +775,41 @@ export default function DozvolaRegistryList({
                       className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-black text-slate-800 placeholder:text-slate-350 focus:outline-none focus:bg-white focus:border-slate-300 transition"
                     />
                   </div>
+
+                  {(type === 'CHN 2' || type === 'CHN 3') && (
+                    <div className="bg-purple-50/50 border border-purple-100/50 p-4 rounded-2xl space-y-3.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black text-purple-950 uppercase tracking-widest font-mono">
+                          Сдана копия (CHN 2/3)?
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={editIsCopy}
+                          onChange={(e) => {
+                            setEditIsCopy(e.target.checked);
+                            if (e.target.checked && !editCopySubmittedAt) {
+                              setEditCopySubmittedAt(new Date().toISOString().split("T")[0]);
+                            }
+                          }}
+                          className="w-4 h-4 rounded text-purple-600 border-slate-300 focus:ring-purple-500 cursor-pointer"
+                        />
+                      </div>
+
+                      {editIsCopy && (
+                        <div>
+                          <label className="text-[10px] font-black text-purple-700 uppercase tracking-widest block font-mono">
+                            Дата сдачи копии
+                          </label>
+                          <input
+                            type="date"
+                            value={editCopySubmittedAt}
+                            onChange={(e) => setEditCopySubmittedAt(e.target.value)}
+                            className="block w-full mt-1.5 px-3 py-2 bg-white border border-purple-200 rounded-xl text-xs font-black text-purple-950 focus:outline-none focus:border-purple-450 transition"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
 
