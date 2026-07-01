@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { UserProfile } from "../../../types";
-import { FileText, Download, Printer, Plus, Trash2, CheckCircle } from "lucide-react";
+import { FileText, Download, Printer, Plus, Trash2, CheckCircle, Search, Sparkles, RefreshCw, Sliders, Settings, Layers, Eye } from "lucide-react";
 import { useFirebase, database } from "../../../firebase";
 import { ref, onValue, push, update } from "firebase/database";
 import JSZip from "jszip";
+import * as pdfjsLib from "pdfjs-dist";
 import {
   PERMIT_APPLICATION_TEMPLATE_BASE64,
   RETURN_REGISTRY_TEMPLATE_BASE64,
   CHINA_COPY_TEMPLATE_BASE64
 } from "./DozvolaTemplates";
+
+// Configure PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 interface DozvolaDocumentsProps {
   user: UserProfile;
@@ -27,9 +31,14 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
 
   const [returnRows, setReturnRows] = useState<any[]>([]);
   const [selectedReturnItems, setSelectedReturnItems] = useState<Record<string, boolean>>({});
+  const [showArchiveReturns, setShowArchiveReturns] = useState(false);
 
   const [chinaRows, setChinaRows] = useState<any[]>([]);
   const [selectedChinaItems, setSelectedChinaItems] = useState<Record<string, boolean>>({});
+  const [showArchiveChina, setShowArchiveChina] = useState(false);
+
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [lastAssembledStatement, setLastAssembledStatement] = useState<any>(null);
 
   useEffect(() => {
     if (!useFirebase) return;
@@ -42,6 +51,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
     listen("dozvolsRegistryV4", setDozvolsData);
     listen("dozvolsTodoTasksV4", setTodoTasks);
     listen("dozvolsPermitPrintMappingsV1", setPermitPrintMappings);
+    listen("lastAssembledStatementPermitsV1", setLastAssembledStatement);
     return () => subs.forEach((s) => s());
   }, []);
 
@@ -57,6 +67,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
   const getStatusLabel = (status: string) => {
     const map: any = {
       office: 'В офисе',
+      available: 'В наличии',
       hand: 'В рейсе / на руках',
       office_return: 'Сдан в офис',
       used: 'Сдан в транспортную инспекцию',
@@ -97,9 +108,13 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
   };
 
   // Get active return/China items lists
-  const getReturnItems = () => Object.values(dozvolsData).filter((i: any) => i.status === 'office_return');
+  const getReturnItems = () => Object.values(dozvolsData)
+    .filter((i: any) => i.status === 'office_return' || (showArchiveReturns && i.status === 'used'))
+    .sort((a: any, b: any) => (b.issueDate || '').localeCompare(a.issueDate || ''));
   
-  const getChinaCopyItems = () => Object.values(dozvolsData).filter((i: any) => (i.type === 'CHN 2' || i.type === 'CHN 3') && i.isCopy === true && i.status !== 'used' && i.status !== 'expired');
+  const getChinaCopyItems = () => Object.values(dozvolsData)
+    .filter((i: any) => (i.type === 'CHN 2' || i.type === 'CHN 3') && i.isCopy === true && (i.status !== 'used' || showArchiveChina) && i.status !== 'expired')
+    .sort((a: any, b: any) => (b.copySubmittedAt || '').localeCompare(a.copySubmittedAt || ''));
 
   // Pre-select items as they load from Firebase
   useEffect(() => {
@@ -118,11 +133,11 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
     setSelectedReturnItems(prev => {
       const next = { ...prev };
       items.forEach((item: any) => {
-        if (next[item.id] === undefined) next[item.id] = true;
+        if (next[item.id] === undefined) next[item.id] = item.status === 'office_return';
       });
       return next;
     });
-  }, [dozvolsData]);
+  }, [dozvolsData, showArchiveReturns]);
 
   useEffect(() => {
     const items = getChinaCopyItems();
@@ -130,12 +145,12 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
       const next = { ...prev };
       items.forEach((item: any) => {
         if (next[item.id] === undefined) {
-          next[item.id] = !item.chinaCopySubmitted;
+          next[item.id] = item.status !== 'used' && !item.chinaCopySubmitted;
         }
       });
       return next;
     });
-  }, [dozvolsData]);
+  }, [dozvolsData, showArchiveChina]);
 
   // Initial rows construction
   useEffect(() => {
@@ -187,6 +202,15 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
 
   const rebuildReturnRows = () => {
     const checkedItems = getReturnItems().filter((item: any) => selectedReturnItems[item.id]);
+    if (checkedItems.length > 0 && useFirebase) {
+      update(ref(database), {
+        lastAssembledStatementPermitsV1: {
+          itemIds: checkedItems.map((i: any) => i.id),
+          timestamp: new Date().toLocaleString("ru-RU")
+        }
+      });
+    }
+
     const grouped: Record<string, any> = {};
     checkedItems.forEach((item: any) => {
       const map = getPermitPrintMapping(item.type);
@@ -210,6 +234,54 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
       numbers: r.numbers.join(', ')
     }));
     setReturnRows(newRows);
+  };
+
+  const loadLastAssembledStatement = () => {
+    if (!lastAssembledStatement || !lastAssembledStatement.itemIds || !lastAssembledStatement.itemIds.length) {
+      alert("Предыдущих заявлений не найдено.");
+      return;
+    }
+    
+    // Enable archive view to make sure used items are included in selection list
+    setShowArchiveReturns(true);
+    
+    // Update selection state
+    setSelectedReturnItems(prev => {
+      const next = { ...prev };
+      lastAssembledStatement.itemIds.forEach((id: string) => {
+        next[id] = true;
+      });
+      return next;
+    });
+    
+    // Build rows directly using the loaded itemIds from database
+    const allItems = Object.values(dozvolsData);
+    const targetItems = allItems.filter((i: any) => lastAssembledStatement.itemIds.includes(i.id));
+    
+    const grouped: Record<string, any> = {};
+    targetItems.forEach((item: any) => {
+      const map = getPermitPrintMapping(item.type);
+      const key = `${map.country || item.type}|${map.category || ''}|${map.year || new Date().getFullYear()}`;
+      if (!grouped[key]) {
+        grouped[key] = {
+          country: map.country || item.type,
+          category: map.category || '',
+          year: map.year || new Date().getFullYear(),
+          numbers: []
+        };
+      }
+      grouped[key].numbers.push(item.number);
+    });
+
+    const newRows = Object.values(grouped).map((r: any) => ({
+      country: r.country,
+      category: r.category,
+      year: r.year,
+      qty: r.numbers.length,
+      numbers: r.numbers.join(', ')
+    }));
+    setReturnRows(newRows);
+    alert(`Успешно восстановлено последнее заявление: ${targetItems.length} бланков. Нажмите "Печать" или "Списать".`);
   };
 
   const rebuildChinaRows = () => {
@@ -621,8 +693,20 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
             return alert("Нет строк реестра возврата.");
         }
 
-        let blob: Blob;
         const timestamp = formatApplicationDate(applicationDate).replace(/\./g, '-');
+        
+        if (docType === "Заявление об утере") {
+            const a = document.createElement("a");
+            a.href = "/loss_declaration.html";
+            a.download = `Заявление_об_утере_${timestamp}.html`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            logDocumentHistory(docType, 'Скачан как HTML (' + a.download + ')', 'HTML');
+            return;
+        }
+
+        let blob: Blob;
         let filename = "Document";
 
         if (docType === "Заявление на получение разрешений") {
@@ -652,7 +736,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
               update(ref(database), updates);
             }
           }
-        } else {
+        } else if (docType === "Реестр возврата разрешений") {
           blob = await buildReturnRegistryDocxBlob();
           filename = `Реестр_сдачи_дозволов_${timestamp}.docx`;
         }
@@ -704,6 +788,20 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
         if (docType === "Реестр возврата разрешений" && returnRows.length === 0) {
             return alert("Нет строк реестра возврата.");
         }
+        
+        if (docType === "Заявление об утере") {
+            const printWindow = window.open("/loss_declaration.html", "_blank");
+            if (printWindow) {
+                printWindow.focus();
+                printWindow.onload = () => {
+                    setTimeout(() => printWindow.print(), 500);
+                };
+                logDocumentHistory(docType, 'Отправлен на печать', 'Печать');
+            }
+            return;
+        }
+
+        // Loss declaration has no rows to validate
 
         const printWindow = window.open("", "_blank");
         if (printWindow) {
@@ -806,6 +904,10 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                 <option value="Заявление по китайским копиям">
                   Заявление на китайские разрешения
                 </option>
+                <option value="Заявление об утере">
+                  Заявление об утере (Loss declaration)
+                </option>
+
               </select>
             </div>
 
@@ -826,6 +928,8 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                     {docType === "Заявление на получение разрешений" && "Документ формируется на основе активных заявок блока Планерки."}
                     {docType === "Реестр возврата разрешений" && "В реестр возвращаемых бланков попадают бланки со статусом 'Сдан в офис'."}
                     {docType === "Заявление по китайским копиям" && "Собирается из китайских дозволов (СHN 2, CHN 3) со сданной копией."}
+                    {docType === "Заявление об утере" && "Стандартный бланк заявления об утере разрешений. Выводится статичный шаблон для печати или скачивания."}
+
                 </p>
             </div>
           </div>
@@ -942,10 +1046,15 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
         <div className="bg-white rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] p-6 space-y-6">
           <div className="space-y-2">
             <h3 className="text-sm font-black text-slate-900 uppercase">1. Выбор бланков, сданных в офис</h3>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 items-center">
               <button onClick={() => setAllReturnsChecked(true)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase rounded-lg">Выбрать все</button>
               <button onClick={() => setAllReturnsChecked(false)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase rounded-lg">Снять все</button>
               <button onClick={rebuildReturnRows} className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black uppercase rounded-lg">Собрать по выбранным</button>
+              <button onClick={loadLastAssembledStatement} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase rounded-lg">Собрать по предыдущим</button>
+              <label className="flex items-center gap-2 text-[10px] font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg cursor-pointer">
+                <input type="checkbox" checked={showArchiveReturns} onChange={(e) => setShowArchiveReturns(e.target.checked)} className="accent-amber-500" />
+                Включить уже сданные в ТИ (Архив)
+              </label>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-3 bg-slate-50 border border-slate-200/50 rounded-2xl">
@@ -1023,10 +1132,14 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
         <div className="bg-white rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] p-6 space-y-6">
           <div className="space-y-2">
             <h3 className="text-sm font-black text-slate-900 uppercase">1. Выбор сданных китайских копий</h3>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 items-center">
               <button onClick={() => setAllChinaChecked(true)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase rounded-lg">Выбрать все</button>
               <button onClick={() => setAllChinaChecked(false)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase rounded-lg">Снять все</button>
               <button onClick={rebuildChinaRows} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-black uppercase rounded-lg">Собрать по выбранным</button>
+              <label className="flex items-center gap-2 text-[10px] font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg cursor-pointer">
+                <input type="checkbox" checked={showArchiveChina} onChange={(e) => setShowArchiveChina(e.target.checked)} className="accent-purple-600" />
+                Включить уже сданные в ТИ (Архив)
+              </label>
               <button onClick={() => markSelectedChinaCopiesAsSubmitted(true)} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase rounded-lg">Пометить как отправленные в ТИ</button>
               <button onClick={() => markSelectedChinaCopiesAsSubmitted(false)} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase rounded-lg">Сбросить отметку сдачи</button>
             </div>
@@ -1093,6 +1206,8 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
           </div>
         </div>
       )}
+
+
     </div>
   );
 }

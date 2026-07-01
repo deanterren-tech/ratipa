@@ -105,8 +105,11 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
             Object.keys(knownFleetCars).forEach(car => {
                 const digits = car.replace(/\D/g, '');
                 const cleanCar = car.replace(/[-\s]/g, '');
-                if (digits && digits.length === 4 && normalizedTextForCars.includes(digits)) {
-                    if (!carsFound.includes(car)) carsFound.push(car);
+                if (digits && digits.length === 4) {
+                    const regex = new RegExp(`\\b${digits}\\b`);
+                    if (regex.test(normalizedTextForCars)) {
+                        if (!carsFound.includes(car)) carsFound.push(car);
+                    }
                 } else if (cleanCar && normalizedTextForCars.toUpperCase().includes(cleanCar)) {
                     if (!carsFound.includes(car)) carsFound.push(car);
                 }

@@ -118,6 +118,7 @@ export interface LegPlan {
   from: string;
   to: string;
   km: number;
+  emptyRunKm?: number;
   rate: number;
   referenceRate?: string;
   referenceCurrency?: string;
@@ -154,6 +155,7 @@ export interface TripPlan {
   totalExpenses: number;
   extraExpense: number;
   extraExpenseNote: string;
+  emptyRunKm?: number;
   ferryCost?: number;
   referenceRate?: number;
   referenceCurrency?: 'EUR' | 'USD' | 'RUB' | 'BYN';

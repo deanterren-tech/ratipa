@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { UserProfile, AppSettings } from '../../types';
 import { dbService } from '../../firebase';
 import { ShieldAlert, ArrowUp, ArrowDown, Search, Activity, Lock } from 'lucide-react';
+import { Virtuoso } from 'react-virtuoso';
 import UserManagementBlock from './UserManagementBlock';
 import AdminOnlinePresenceBlock from './AdminOnlinePresenceBlock';
 import CurrentPlanningSettingsBlock from './CurrentPlanningSettingsBlock';
@@ -197,21 +198,26 @@ export default function AdminModule({ user }: AdminModuleProps) {
             />
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
-            {filteredLogs.map((log, idx) => (
-              <div key={`${log.id || 'log'}_${idx}`} className="text-xs border-l-3 border-[#c3fb12] bg-slate-50/50 hover:bg-slate-50 p-3.5 rounded-r-2xl transition duration-100">
-                <div className="flex justify-between font-black text-slate-550 mb-1.5 font-mono text-[9px] uppercase tracking-wider">
-                  <span className="text-slate-900">{log.user} ({log.role})</span>
-                  <span className="text-slate-400">{new Date(log.date).toLocaleString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</span>
-                </div>
-                <p className="text-slate-800 font-bold leading-normal">{log.details}</p>
-                <div className="text-[9px] text-[#c3fb12] font-mono tracking-normal bg-slate-950 p-1.5 rounded-lg mt-2 flex items-center justify-between">
-                  <span>MODULE: {log.module}</span>
-                  <span className="text-slate-400 text-[8px]">ACTION: {log.actionType}</span>
-                </div>
-              </div>
-            ))}
-            {!filteredLogs.length && (
+          <div className="flex-1 min-h-0">
+            {filteredLogs.length > 0 ? (
+              <Virtuoso
+                data={filteredLogs}
+                className="h-full custom-scrollbar pr-1"
+                itemContent={(idx, log) => (
+                  <div className="text-xs border-l-3 border-[#c3fb12] bg-slate-50/50 hover:bg-slate-50 p-3.5 rounded-r-2xl transition duration-100 mb-4">
+                    <div className="flex justify-between font-black text-slate-550 mb-1.5 font-mono text-[9px] uppercase tracking-wider">
+                      <span className="text-slate-900">{log.user} ({log.role})</span>
+                      <span className="text-slate-400">{new Date(log.date).toLocaleString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</span>
+                    </div>
+                    <p className="text-slate-800 font-bold leading-normal">{log.details}</p>
+                    <div className="text-[9px] text-[#c3fb12] font-mono tracking-normal bg-slate-950 p-1.5 rounded-lg mt-2 flex items-center justify-between">
+                      <span>MODULE: {log.module}</span>
+                      <span className="text-slate-400 text-[8px]">ACTION: {log.actionType}</span>
+                    </div>
+                  </div>
+                )}
+              />
+            ) : (
               <div className="text-center py-16 text-slate-400 text-xs font-mono font-black uppercase tracking-widest bg-slate-50 rounded-2xl border border-slate-250/20">
                 Логов не обнаружено.
               </div>

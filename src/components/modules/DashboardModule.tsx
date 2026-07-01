@@ -71,33 +71,6 @@ interface DashboardModuleProps {
   onNavigate: (module: string) => void;
 }
 
-const getFallbackBamapNews = () => [
-  {
-    title: 'О введении временных ограничений движения транспортных средств по автомобильным дорогам общего пользования',
-    link: 'https://bamap.org/information/news/2026/06/seasonal_limits/',
-    pubDate: new Date().toISOString(),
-    description: 'Министерством транспорта и коммуникаций Республики Беларусь введены временные весенне-летние ограничения нагрузок на оси транспортных средств на республиканских автомобильных дорогах общего пользования.'
-  },
-  {
-    title: 'Об изменениях в порядке оформления и использования разрешений ЕКМТ на международные автомобильные перевозки грузов',
-    link: 'https://bamap.org/information/news/2026/05/ecmt_permits_news/',
-    pubDate: new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString(),
-    description: 'Ассоциация «БАМАП» информирует перевозчиков об уточнении правил заполнения бортовых журналов к разрешениям ЕКМТ при выполнении транзитных рейсов.'
-  },
-  {
-    title: 'Разъяснения ГТК Республики Беларусь по вопросам применения таможенной процедуры таможенного транзита при перевозках по книжкам МДП (TIR)',
-    link: 'https://bamap.org/information/news/2026/05/tir_customs_guide/',
-    pubDate: new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString(),
-    description: 'Государственным таможенным комитетом подготовлены инструкции для международных перевозчиков о порядке электронного предварительного декларирования товаров при въезде на таможенную территорию ЕАЭС.'
-  },
-  {
-    title: 'Информационный семинар БАМАП: Актуальные вопросы осуществления международных автомобильных перевозок в современных условиях',
-    link: 'https://bamap.org/information/news/2026/04/seminar_results/',
-    pubDate: new Date(Date.now() - 15 * 24 * 3600 * 1000).toISOString(),
-    description: 'Состоялся онлайн-семинар с участием представителей Минтранса, ГТК и Транспортной инспекции, посвященный оптимизации логистических маршрутов.'
-  }
-];
-
 export default function DashboardModule({ user, onNavigate }: DashboardModuleProps) {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -133,38 +106,6 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
 
     return () => clearInterval(interval);
   }, [isEditingHighlight, currentHighlights.length, isHovered]);
-
-  const [newsTab, setNewsTab] = useState<'bamap' | 'asmap' | 'system'>('bamap');
-
-  const bamapContainerRef = useRef<HTMLDivElement>(null);
-  const asmapContainerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = bamapContainerRef.current;
-    if (!el) return;
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-    };
-    el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => {
-      if (el) el.removeEventListener('wheel', handleWheel);
-    };
-  }, [newsTab]);
-
-  useEffect(() => {
-    const el = asmapContainerRef.current;
-    if (!el) return;
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-    };
-    el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => {
-      if (el) el.removeEventListener('wheel', handleWheel);
-    };
-  }, [newsTab]);
-
-  const [bamapNews, setBamapNews] = useState<any[]>([]);
-  const [bamapLoading, setBamapLoading] = useState(true);
 
   const [highlightHeight, setHighlightHeight] = useState<number>(() => {
     return 240;
@@ -229,22 +170,6 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
 
     // Is DB connected
     setIsDbOnline(dbService.isOnline());
-
-    // Fetch Bamap News via public RSS-to-JSON
-    fetch('https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fbamap.org%2Frss%2Fnews.xml')
-      .then(r => r.json())
-      .then(res => {
-        if (res.status === 'ok' && res.items && res.items.length > 0) {
-          setBamapNews(res.items);
-        } else {
-          setBamapNews(getFallbackBamapNews());
-        }
-      })
-      .catch(err => {
-        console.warn('Could not retrieve news feed, using offline BAMAP news');
-        setBamapNews(getFallbackBamapNews());
-      })
-      .finally(() => setBamapLoading(false));
 
     return () => {
       if (typeof unsubscribeAudit === 'function') unsubscribeAudit();
@@ -432,17 +357,56 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                         {editHighlights.map((slide, idx) => (
                            <div 
                               key={slide.id || idx}
-                              className={`group/btn flex items-center gap-1.5 pl-3 pr-2 py-1 rounded-xl text-xs font-bold transition cursor-pointer select-none ${
+                              className={`group/btn flex items-center gap-1.5 pl-2 pr-2 py-1 rounded-xl text-xs font-bold transition select-none ${
                                  selectedEditIndex === idx 
                                     ? 'bg-[#70FC8E] text-slate-950 font-black' 
                                     : 'bg-white/5 text-slate-300 hover:bg-white/10 border border-white/10'
                               }`}
-                              onClick={() => setSelectedEditIndex(idx)}
                            >
-                              <span className="font-mono text-[9px]">#{idx + 1}</span>
-                              <span className="truncate max-w-[80px]">
-                                 {slide.title || 'Без названия'}
-                              </span>
+                              <div className="flex flex-col gap-[2px]">
+                                <button
+                                   type="button"
+                                   onClick={(e) => {
+                                     e.stopPropagation();
+                                     if (idx > 0) {
+                                       const nl = [...editHighlights];
+                                       [nl[idx - 1], nl[idx]] = [nl[idx], nl[idx - 1]];
+                                       setEditHighlights(nl);
+                                       if (selectedEditIndex === idx) setSelectedEditIndex(idx - 1);
+                                       else if (selectedEditIndex === idx - 1) setSelectedEditIndex(idx);
+                                     }
+                                   }}
+                                   className={`w-3.5 h-2.5 flex items-center justify-center rounded-[3px] transition cursor-pointer hover:bg-white/20 ${idx === 0 ? 'opacity-20 pointer-events-none' : ''}`}
+                                >
+                                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-2.5 h-2.5 stroke-[4]"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                                </button>
+                                <button
+                                   type="button"
+                                   onClick={(e) => {
+                                     e.stopPropagation();
+                                     if (idx < editHighlights.length - 1) {
+                                       const nl = [...editHighlights];
+                                       [nl[idx], nl[idx + 1]] = [nl[idx + 1], nl[idx]];
+                                       setEditHighlights(nl);
+                                       if (selectedEditIndex === idx) setSelectedEditIndex(idx + 1);
+                                       else if (selectedEditIndex === idx + 1) setSelectedEditIndex(idx);
+                                     }
+                                   }}
+                                   className={`w-3.5 h-2.5 flex items-center justify-center rounded-[3px] transition cursor-pointer hover:bg-white/20 ${idx === editHighlights.length - 1 ? 'opacity-20 pointer-events-none' : ''}`}
+                                >
+                                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-2.5 h-2.5 stroke-[4]"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                                </button>
+                              </div>
+
+                              <div 
+                                className="flex items-center gap-1.5 cursor-pointer py-1"
+                                onClick={() => setSelectedEditIndex(idx)}
+                              >
+                                <span className="font-mono text-[9px]">#{idx + 1}</span>
+                                <span className="truncate max-w-[80px]">
+                                   {slide.title || 'Без названия'}
+                                </span>
+                              </div>
                               {editHighlights.length > 1 && (
                                  <button
                                     type="button"
@@ -663,125 +627,17 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
         </div>
       )}
 
-      {/* SECTION MIDDLE: News and Bookmarks */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* News Section */}
-        <div className="lg:col-span-2 bg-white rounded-[2.2rem] p-8 border border-slate-200 shadow-sm flex flex-col">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <h2 className="text-xl font-black uppercase tracking-tighter text-slate-900">Информационная Лента</h2>
-                <div className="flex gap-2 flex-wrap">
-                    <button 
-                        onClick={() => setNewsTab('bamap')} 
-                        className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition cursor-pointer ${
-                            newsTab === 'bamap' 
-                            ? 'bg-slate-950 text-[#70FC8E]' 
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                        }`}
-                    >
-                        Сайт БАМАП
-                    </button>
-                    <button 
-                        onClick={() => setNewsTab('asmap')} 
-                        className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition cursor-pointer ${
-                            newsTab === 'asmap' 
-                            ? 'bg-slate-950 text-[#70FC8E]' 
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                        }`}
-                    >
-                        Сайт АСМАП
-                    </button>
-                    <button 
-                        onClick={() => setNewsTab('system')} 
-                        className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition cursor-pointer ${
-                            newsTab === 'system' 
-                            ? 'bg-slate-950 text-[#70FC8E]' 
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
-                        }`}
-                    >
-                        Объявления ({settings?.announcements?.length || 0})
-                    </button>
-                </div>
-            </div>
-
-            {newsTab === 'bamap' ? (
-                <div className="space-y-4 flex-1 flex flex-col">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-indigo-50 border border-indigo-100 rounded-xl text-xs gap-2 select-none">
-                        <div>
-                          <span className="text-indigo-800 font-bold block">ОФИЦИАЛЬНЫЙ САЙТ БАМАП</span>
-                          <span className="text-[10px] text-indigo-500">Для прямого и быстрого просмотра новостей организации</span>
-                        </div>
-                        <a 
-                            href={settings?.bamapUrl || "https://bamap.org/information/news/"} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[9px] tracking-wide px-3 py-2 rounded-lg flex items-center gap-1.5 self-start sm:self-center transition shadow-sm"
-                        >
-                            Открыть в новой вкладке <ExternalLink size={11} />
-                        </a>
-                    </div>
-                    <div ref={bamapContainerRef} className="w-full relative bg-slate-100 rounded-2xl border border-slate-200 h-[500px] overflow-hidden">
-                        <iframe 
-                            src={settings?.bamapUrl || "https://bamap.org/information/news/"} 
-                            className="w-full h-full border-0 rounded-2xl bg-white" 
-                            title="Сайт БАМАП"
-                            referrerPolicy="no-referrer"
-                            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-                        />
-                    </div>
-                </div>
-            ) : newsTab === 'asmap' ? (
-                <div className="space-y-4 flex-1 flex flex-col">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-emerald-50 border border-emerald-150 rounded-xl text-xs gap-2 select-none">
-                        <div>
-                          <span className="text-emerald-800 font-bold block">ОФИЦИАЛЬНЫЙ САЙТ АСМАП</span>
-                          <span className="text-[10px] text-emerald-600">Ассоциация международных автомобильных перевозчиков РФ</span>
-                        </div>
-                        <a 
-                            href={settings?.asmapUrl || "https://www.asmap.ru/news/"} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[9px] tracking-wide px-3 py-2 rounded-lg flex items-center gap-1.5 self-start sm:self-center transition shadow-sm"
-                        >
-                            Открыть в новой вкладке <ExternalLink size={11} />
-                        </a>
-                    </div>
-                    <div ref={asmapContainerRef} className="w-full relative bg-slate-100 rounded-2xl border border-slate-200 h-[500px] overflow-hidden">
-                        <iframe 
-                            src={settings?.asmapUrl || "https://www.asmap.ru/news/"} 
-                            className="w-full h-full border-0 rounded-2xl bg-white" 
-                            title="Сайт АСМАП"
-                            referrerPolicy="no-referrer"
-                            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-                        />
-                    </div>
-                </div>
-            ) : (
-                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                  {settings?.announcements?.map((ann) => (
-                    <div key={ann.id} className={`p-4 rounded-2xl border ${ann.important ? 'border-amber-200 bg-amber-50' : 'border-slate-100 bg-slate-50'}`}>
-                        <small className="text-slate-500 font-mono">{formatDateToRu(ann.date)} - {ann.author}</small>
-                        <p className="font-semibold text-slate-800">{ann.text}</p>
-                    </div>
-                  ))}
-                  {(!settings?.announcements || settings.announcements.length === 0) && (
-                      <div className="p-8 text-center text-slate-400 font-bold text-xs uppercase tracking-wider font-mono">Объявления отсутствуют</div>
-                  )}
-                </div>
-            )}
-        </div>
-
-        {/* Bookmarks Section */}
-        <div className="lg:col-span-1 bg-white rounded-[2.2rem] p-8 border border-slate-200 shadow-sm">
-            <h2 className="text-xl font-black uppercase tracking-tighter text-slate-900 mb-6">Полезные ссылки</h2>
-            <div className="space-y-3">
-              {settings?.quickLinks?.map((link) => (
-                <a key={link.id} href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition">
-                  <ExternalLink size={16} className="text-slate-400" />
-                  <span className="font-semibold text-slate-700">{link.title}</span>
-                </a>
-              ))}
-            </div>
-        </div>
+      {/* SECTION MIDDLE: Bookmarks */}
+      <div className="bg-white rounded-[2.2rem] p-8 border border-slate-200 shadow-sm">
+          <h2 className="text-xl font-black uppercase tracking-tighter text-slate-900 mb-6">Полезные ссылки</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {settings?.quickLinks?.map((link) => (
+              <a key={link.id} href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition border border-slate-100">
+                <ExternalLink size={16} className="text-slate-400 shrink-0" />
+                <span className="font-semibold text-slate-700 truncate">{link.title}</span>
+              </a>
+            ))}
+          </div>
       </div>
 
       {/* Decorative spacing line */}

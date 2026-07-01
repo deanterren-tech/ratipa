@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { Virtuoso } from 'react-virtuoso';
 import {
   UserProfile,
   TripPlan,
@@ -1531,6 +1532,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [dateEnd, setDateEnd] = useState("");
   const [extraExpense, setExtraExpense] = useState<number>(0);
   const [extraExpenseNote, setExtraExpenseNote] = useState("");
+  
   const [ferryCost, setFerryCost] = useState(0);
   const [referenceRate, setReferenceRate] = useState<number | undefined>(
     undefined,
@@ -1824,12 +1826,12 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
   const calculateTotals = () => {
     const days = getTripDays();
-    const totalKm = legs.reduce((acc, l) => acc + Number(l.km || 0), 0);
+    const totalKm = legs.reduce((acc, l) => acc + Number(l.km || 0) + Number(l.emptyRunKm || 0), 0);
     const totalFreight = legs.reduce((acc, l) => acc + Number(l.rate || 0), 0);
 
     let baseExpenses = legs.reduce(
       (acc, l) =>
-        acc + (Number(l.km || 0) * Number(l.coeff || 0) + Number(l.ferry || 0)),
+        acc + (Number(l.km || 0) * Number(l.coeff || 0) + Number(l.emptyRunKm || 0) * Number(l.coeff || 0) + Number(l.ferry || 0)),
       0,
     );
     const totalExpensesPlan =
@@ -1859,6 +1861,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setDateEnd("");
     setExtraExpense(0);
     setExtraExpenseNote("");
+    
     setFerryCost(0);
     setReferenceRate(undefined);
     setReferenceCurrency("EUR");
@@ -1997,6 +2000,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setDateEnd(trip.dateEnd || "");
     setExtraExpense(trip.extraExpense || 0);
     setExtraExpenseNote(trip.extraExpenseNote || "");
+    
     setFerryCost(trip.ferryCost || 0);
     setReferenceRate(trip.referenceRate);
     setReferenceCurrency(trip.referenceCurrency || "EUR");
@@ -2122,13 +2126,13 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   };
 
   const calculatePlTotals = () => {
-    const totalKm = plLegs.reduce((acc, l) => acc + Number(l.km || 0), 0);
+    const totalKm = plLegs.reduce((acc, l) => acc + Number(l.km || 0) + Number(l.emptyRunKm || 0), 0);
     const totalFreight = plLegs.reduce(
       (acc, l) => acc + Number(l.rate || 0),
       0,
     );
     const baseExpenses = plLegs.reduce(
-      (acc, l) => acc + Number(l.km || 0) * Number(l.coeff || 0),
+      (acc, l) => acc + Number(l.km || 0) * Number(l.coeff || 0) + Number(l.emptyRunKm || 0) * Number(l.coeff || 0),
       0,
     );
     const totalExpensesPlan =
@@ -2261,6 +2265,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       totalExpenses: totals.totalExpenses,
       extraExpense: Number(extraExpense || 0),
       extraExpenseNote,
+      
       ferryCost: Number(ferryCost || 0),
       referenceRate,
       referenceCurrency,
@@ -2527,6 +2532,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                             Км
                           </th>
                           <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-24">
+                            Доезд (км)
+                          </th>
+                          <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-24">
                             Фрахт €
                           </th>
                           <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-32">
@@ -2609,6 +2617,16 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                                 <MapPin className="w-4 h-4" />
                               </button>
                             </td>
+                            <td className="p-2 relative">
+                              <input
+                                type="number"
+                                value={leg.emptyRunKm || ""}
+                                onChange={(e) =>
+                                  updateLeg(idx, { emptyRunKm: Number(e.target.value) })
+                                }
+                                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none"
+                              />
+                            </td>
                             <td className="p-2">
                               <input
                                 type="number"
@@ -2667,7 +2685,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                             <td className="p-2">
                               <input
                                 type="number"
-                                step="0.1"
+                                step="0.01"
                                 value={leg.coeff}
                                 onChange={(e) =>
                                   updateLeg(idx, {
@@ -2706,7 +2724,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   <div className="lg:col-span-8 bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col justify-between">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-4">
                       <div>
                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">
                           Доп Расходы €
@@ -3163,6 +3181,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                           <th className="p-2 text-[10px] uppercase font-black text-slate-400 w-24">
                             КМ
                           </th>
+                          <th className="p-2 text-[10px] uppercase font-black text-slate-400 w-24">
+                            Доезд (КМ)
+                          </th>
                           <th className="p-2 text-[10px] uppercase font-black text-slate-400 w-28">
                             Ставка €
                           </th>
@@ -3217,6 +3238,18 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                               >
                                 <MapPin className="w-3.5 h-3.5" />
                               </button>
+                            </td>
+                            <td className="p-1 relative">
+                              <input
+                                type="number"
+                                value={leg.emptyRunKm || ""}
+                                onChange={(e) => {
+                                  const nl = [...plLegs];
+                                  nl[i].emptyRunKm = Number(e.target.value);
+                                  setPlLegs(nl);
+                                }}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none"
+                              />
                             </td>
                             <td className="p-1">
                               <input
@@ -3532,7 +3565,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
           </div>
         </div>
 
-        {list.map((trip, idx) => {
+        <Virtuoso 
+          useWindowScroll 
+          data={list} 
+          itemContent={(idx, trip) => {
           const firstLeg = trip.legs?.[0];
           const lastLeg = trip.legs?.[trip.legs.length - 1];
           const routeTitle =
@@ -3744,7 +3780,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               </div>
             </div>
           );
-        })}
+        }} />
 
         {/* Сводка (Summary Box) */}
         <div className="mt-4 grid grid-cols-2 lg:grid-cols-5 gap-3">

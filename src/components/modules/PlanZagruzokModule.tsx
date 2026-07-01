@@ -206,8 +206,7 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
       </div>
 
       <div 
-        className="relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col"
-        style={isFocusMode ? { minHeight: 'calc(100vh - 120px)' } : { height: '680px' }}
+        className="relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col min-h-0"
       >
         
         {activeIsLoading && (
@@ -228,7 +227,7 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
             <span className="text-sm font-black text-slate-900 uppercase tracking-tight">Доступ Заблокирован</span>
           </div>
         ) : (
-          <div ref={scrollContainerRef} className="w-full h-full relative overflow-auto bg-slate-100/50" style={{ minHeight: isFocusMode ? 'calc(100vh - 130px)' : 'calc(100vh - 240px)' }}>
+          <div ref={scrollContainerRef} className="w-full h-full relative overflow-auto bg-slate-100/50">
             <div style={{
                width: `${100 / zoomLevel}%`,
                height: `${100 / zoomLevel}%`,

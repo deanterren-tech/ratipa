@@ -1376,7 +1376,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                                    </div>
                                </td>
                                <td className="p-2">
-                                   <input type="number" step="0.1" value={leg.coeff === undefined ? getDirCoeff() : leg.coeff} onChange={(e) => updateLeg(idx, {coeff: Number(e.target.value)})} className="w-full px-1 py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none text-center" />
+                                   <input type="number" step="0.01" value={leg.coeff === undefined ? getDirCoeff() : leg.coeff} onChange={(e) => updateLeg(idx, {coeff: Number(e.target.value)})} className="w-full px-1 py-2 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none text-center" />
                                </td>
                                <td className="p-2 text-right space-x-1 whitespace-nowrap">
                                   <button onClick={() => addLegRowAfter(idx)} className="w-7 h-7 inline-flex items-center justify-center rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 transition"><Plus className="w-4 h-4"/></button>
