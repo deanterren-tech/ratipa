@@ -231,11 +231,11 @@ export const pdService = {
 
     let notes: Record<string, string> = {};
     let order: string[] = [];
-    const unsubWidgets = onValue(ref(database, `user_widgets/${username}`), (s) => {
+    const unsubWidgets = onValue(ref(database, `user_widgets/${key}`), (s) => {
       notes = s.val() || {};
       callback(notes, order);
     });
-    const unsubOrder = onValue(ref(database, `user_widgets_order/${username}`), (s) => {
+    const unsubOrder = onValue(ref(database, `user_widgets_order/${key}`), (s) => {
       order = s.val() || [];
       callback(notes, order);
     });
@@ -251,7 +251,7 @@ export const pdService = {
       window.dispatchEvent(new Event(`ratipa_nb_changed_${key}`));
       return;
     }
-    set(ref(database, `user_widgets/${username}/${carNumber}`), text);
+    set(ref(database, `user_widgets/${key}/${carNumber}`), text);
   },
 
   removeNotebookCar: (username: string, carNumber: string) => {
@@ -263,7 +263,7 @@ export const pdService = {
       window.dispatchEvent(new Event(`ratipa_nb_changed_${key}`));
       return;
     }
-    remove(ref(database, `user_widgets/${username}/${carNumber}`));
+    remove(ref(database, `user_widgets/${key}/${carNumber}`));
   },
 
   saveNotebookOrder: (username: string, order: string[]) => {
@@ -273,7 +273,7 @@ export const pdService = {
       window.dispatchEvent(new Event(`ratipa_nb_changed_${key}`));
       return;
     }
-    set(ref(database, `user_widgets_order/${username}`), order);
+    set(ref(database, `user_widgets_order/${key}`), order);
   },
 
   subscribeNotebookStatuses: (username: string, callback: (statuses: Record<string, "base" | "trip">) => void) => {
@@ -293,7 +293,7 @@ export const pdService = {
       };
     }
 
-    const unsubStatuses = onValue(ref(database, `user_widgets_status/${username}`), (s) => {
+    const unsubStatuses = onValue(ref(database, `user_widgets_status/${key}`), (s) => {
       callback(s.val() || {});
     });
     return unsubStatuses;
@@ -313,17 +313,17 @@ export const pdService = {
       return;
     }
     if (status === null) {
-      remove(ref(database, `user_widgets_status/${username}/${carNumber}`));
+      remove(ref(database, `user_widgets_status/${key}/${carNumber}`));
     } else {
-      set(ref(database, `user_widgets_status/${username}/${carNumber}`), status);
+      set(ref(database, `user_widgets_status/${key}/${carNumber}`), status);
     }
   },
 
   // --- SYSTEM REGISTRY ---
   registerUser: (username: string) => {
     if (!useFirebase) return;
-    const lower = String(username || '').toLowerCase();
-    update(ref(database, `system_users_registry/${lower}`), {
+    const key = safeUserKey(username);
+    update(ref(database, `system_users_registry/${key}`), {
       username,
       lastLogin: new Date().toISOString()
     });
@@ -337,11 +337,12 @@ export const pdService = {
     }
     let isAdmin = false;
     let isViewer = false;
-    const unsubAdmin = onValue(ref(database, `permitted_admin_users/${username}`), (s) => {
+    const key = safeUserKey(username);
+    const unsubAdmin = onValue(ref(database, `permitted_admin_users/${key}`), (s) => {
       isAdmin = !!s.val();
       callback(isAdmin, isViewer);
     });
-    const unsubView = onValue(ref(database, `permitted_notebook_viewers/${username}`), (s) => {
+    const unsubView = onValue(ref(database, `permitted_notebook_viewers/${key}`), (s) => {
       isViewer = !!s.val();
       callback(isAdmin, isViewer);
     });
@@ -391,8 +392,8 @@ export const pdService = {
   // --- PRESENCE ---
   setPresence: (username: string) => {
     if (!useFirebase) return;
-    const lower = String(username || '').toLowerCase();
-    const presenceRef = ref(database, `ratipa_presence/${lower}`);
+    const key = safeUserKey(username);
+    const presenceRef = ref(database, `ratipa_presence/${key}`);
     set(presenceRef, {
       name: username,
       app: 'Plan-dohod',
