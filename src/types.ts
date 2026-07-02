@@ -1,19 +1,28 @@
-export type UserRole = 'root_admin' | 'admin' | 'dispatcher' | 'manager' | 'accountant' | 'viewer' | 'mechanic';
+export type UserRole =
+  | "root_admin"
+  | "admin"
+  | "dispatcher"
+  | "manager"
+  | "accountant"
+  | "viewer"
+  | "mechanic";
 
 export interface UserPermissions {
-  dohod: 'none' | 'read' | 'write';
-  salary: 'none' | 'read' | 'write';
-  planDohod: 'none' | 'read' | 'write';
-  planZagruzok: 'none' | 'read' | 'write';
-  baza: 'none' | 'read' | 'write';
-  dozvola: 'none' | 'read' | 'write';
-  documentTracking: 'none' | 'read' | 'write';
-  disposition: 'none' | 'read' | 'write';
-  documents?: 'none' | 'read' | 'write';
-  settings: 'none' | 'read' | 'write';
-  admin: 'none' | 'read' | 'write';
-  analysis?: 'none' | 'read' | 'write';
-  dashboard?: 'none' | 'read' | 'write';
+  dohod: "none" | "read" | "write";
+  salary: "none" | "read" | "write";
+  planDohod: "none" | "read" | "write";
+  planZagruzok: "none" | "read" | "write";
+  baza: "none" | "read" | "write";
+  dozvola: "none" | "read" | "write";
+  documentTracking: "none" | "read" | "write";
+  disposition: "none" | "read" | "write";
+  documents?: "none" | "read" | "write";
+  settings: "none" | "read" | "write";
+  admin: "none" | "read" | "write";
+  analysis?: "none" | "read" | "write";
+  dashboard?: "none" | "read" | "write";
+  vehicleDriverData?: "none" | "read" | "write";
+  currentPlanning?: "none" | "read" | "write";
 }
 
 export interface UserProfile {
@@ -49,7 +58,7 @@ export interface Vehicle {
   dateRepairEnd: string;
   dateDeparture: string;
   comment: string;
-  status: 'base' | 'loading' | 'repair' | 'departure' | 'archive';
+  status: "base" | "loading" | "repair" | "departure" | "archive";
   history?: VehicleHistoryItem[];
 }
 
@@ -57,8 +66,9 @@ export interface Leg {
   id: string;
   from: string;
   to: string;
-  dist?: number;     // legacy field
+  dist?: number; // legacy field
   distance?: number; // fallback
+  emptyRun?: number;
   freight: number;
   infoRate?: number;
   infoCurrency?: string;
@@ -71,7 +81,7 @@ export interface Leg {
 
 export interface RouteCalculation {
   id: string;
-  legs: Omit<Leg, 'id'>[]; // legacy doesn't have id on history legs securely
+  legs: Omit<Leg, "id">[]; // legacy doesn't have id on history legs securely
   from?: string;
   to?: string;
   distance?: number;
@@ -158,7 +168,7 @@ export interface TripPlan {
   emptyRunKm?: number;
   ferryCost?: number;
   referenceRate?: number;
-  referenceCurrency?: 'EUR' | 'USD' | 'RUB' | 'BYN';
+  referenceCurrency?: "EUR" | "USD" | "RUB" | "BYN";
   profit: number;
   factKm: number;
   profitFact: number;
@@ -177,7 +187,7 @@ export interface Permit {
   country: string;
   type: string;
   permitNumber: string;
-  status: 'available' | 'used' | 'lost' | 'archive';
+  status: "available" | "used" | "lost" | "archive";
   dateIssued: string;
   assignedVehicle: string;
   comments: string;
@@ -257,6 +267,16 @@ export interface CurrencyPreset {
   code: string;
 }
 
+export interface MenuStructureGroup {
+  id: string;
+  label: string;
+  isDropdown: boolean;
+  icon?: string;
+  subtabKeys?: string[];
+  singleModuleKey?: string;
+  customLabels?: Record<string, string>; // to rename subtabs/modules individually
+}
+
 export interface AppSettings {
   googleSheetsId: string;
   googleSheetsUrl: string;
@@ -280,7 +300,9 @@ export interface AppSettings {
   perDiemRate: number;
   moduleOrder: string[];
   customPhrases: string[];
+  customPhrasesRoles?: string[];
   drivers?: any[];
+  menuStructure?: MenuStructureGroup[];
 }
 
 export interface FerryTemplate {
@@ -297,7 +319,15 @@ export interface RouteTemplate {
   id?: string;
   name: string;
   globalDir?: string;
-  legs: (Omit<Leg, 'id'> & {from: string; to: string; distance?: number; dist?: number; infoCurrency?: string; ferrySelectValue?: string; customFerryCost?: number})[];
+  legs: (Omit<Leg, "id"> & {
+    from: string;
+    to: string;
+    distance?: number;
+    dist?: number;
+    infoCurrency?: string;
+    ferrySelectValue?: string;
+    customFerryCost?: number;
+  })[];
 }
 
 export interface DistancePreset {
@@ -332,28 +362,173 @@ export interface Driver {
 }
 
 export const DISPATCHER_COLORS_PRESETS = [
-  { key: 'blue', name: 'Синий', bg: 'bg-[#EFF6FF] border-blue-200/80', darkText: 'text-blue-900', colorCode: '#3b82f6' },
-  { key: 'emerald', name: 'Изумрудный', bg: 'bg-[#ECFDF5] border-emerald-300/80', darkText: 'text-emerald-950', colorCode: '#10b981' },
-  { key: 'purple', name: 'Фиолетовый', bg: 'bg-[#FAF5FF] border-purple-200/80', darkText: 'text-purple-950', colorCode: '#a855f7' },
-  { key: 'amber', name: 'Янтарный', bg: 'bg-[#FFFBEB] border-amber-200/80', darkText: 'text-amber-950', colorCode: '#f59e0b' },
-  { key: 'rose', name: 'Розовый', bg: 'bg-[#FFF1F2] border-rose-200/80', darkText: 'text-rose-950', colorCode: '#f43f5e' },
-  { key: 'indigo', name: 'Индиго', bg: 'bg-[#F5F3FF] border-indigo-200/80', darkText: 'text-indigo-950', colorCode: '#6366f1' },
-  { key: 'teal', name: 'Бирюзовый', bg: 'bg-[#F0FDFA] border-teal-300/80', darkText: 'text-teal-950', colorCode: '#14b8a6' },
-  { key: 'orange', name: 'Оранжевый', bg: 'bg-[#FFF7ED] border-orange-200/80', darkText: 'text-orange-950', colorCode: '#f97316' },
-  { key: 'slate', name: 'Серый', bg: 'bg-[#F8FAFC] border-slate-200/80', darkText: 'text-slate-900', colorCode: '#64748b' },
-  { key: 'yellow', name: 'Желтый', bg: 'bg-[#FEFCE8] border-yellow-200/80', darkText: 'text-yellow-950', colorCode: '#eab308' }
+  {
+    key: "blue",
+    name: "Синий",
+    bg: "bg-[#EFF6FF] border-blue-200/80",
+    darkText: "text-blue-900",
+    colorCode: "#3b82f6",
+  },
+  {
+    key: "emerald",
+    name: "Изумрудный",
+    bg: "bg-[#ECFDF5] border-emerald-300/80",
+    darkText: "text-emerald-950",
+    colorCode: "#10b981",
+  },
+  {
+    key: "purple",
+    name: "Фиолетовый",
+    bg: "bg-[#FAF5FF] border-purple-200/80",
+    darkText: "text-purple-950",
+    colorCode: "#a855f7",
+  },
+  {
+    key: "amber",
+    name: "Янтарный",
+    bg: "bg-[#FFFBEB] border-amber-200/80",
+    darkText: "text-amber-950",
+    colorCode: "#f59e0b",
+  },
+  {
+    key: "rose",
+    name: "Розовый",
+    bg: "bg-[#FFF1F2] border-rose-200/80",
+    darkText: "text-rose-950",
+    colorCode: "#f43f5e",
+  },
+  {
+    key: "indigo",
+    name: "Индиго",
+    bg: "bg-[#F5F3FF] border-indigo-200/80",
+    darkText: "text-indigo-950",
+    colorCode: "#6366f1",
+  },
+  {
+    key: "teal",
+    name: "Бирюзовый",
+    bg: "bg-[#F0FDFA] border-teal-300/80",
+    darkText: "text-teal-950",
+    colorCode: "#14b8a6",
+  },
+  {
+    key: "orange",
+    name: "Оранжевый",
+    bg: "bg-[#FFF7ED] border-orange-200/80",
+    darkText: "text-orange-950",
+    colorCode: "#f97316",
+  },
+  {
+    key: "slate",
+    name: "Серый",
+    bg: "bg-[#F8FAFC] border-slate-200/80",
+    darkText: "text-slate-900",
+    colorCode: "#64748b",
+  },
+  {
+    key: "yellow",
+    name: "Желтый",
+    bg: "bg-[#FEFCE8] border-yellow-200/80",
+    darkText: "text-yellow-950",
+    colorCode: "#eab308",
+  },
+  {
+    key: "cyan",
+    name: "Голубой",
+    bg: "bg-[#ECFEFF] border-cyan-300/80",
+    darkText: "text-cyan-950",
+    colorCode: "#06b6d4",
+  },
+  {
+    key: "lime",
+    name: "Салатовый",
+    bg: "bg-[#F7FEE7] border-lime-300/80",
+    darkText: "text-lime-950",
+    colorCode: "#84cc16",
+  },
+  {
+    key: "fuchsia",
+    name: "Фуксия",
+    bg: "bg-[#FDF4FF] border-fuchsia-200/80",
+    darkText: "text-fuchsia-950",
+    colorCode: "#d946ef",
+  },
+  {
+    key: "pink",
+    name: "Светло-розовый",
+    bg: "bg-[#FDF2F8] border-pink-200/80",
+    darkText: "text-pink-950",
+    colorCode: "#ec4899",
+  },
+  {
+    key: "red",
+    name: "Красный",
+    bg: "bg-[#FEF2F2] border-red-200/80",
+    darkText: "text-red-950",
+    colorCode: "#ef4444",
+  },
 ];
 
 export const allModules = [
-    { key: 'dashboard', label: 'Главная', icon: 'LayoutDashboard', permissionKey: 'dashboard' },
-    { key: 'dohod', label: 'Калькуляция', icon: 'Calculator', permissionKey: 'dohod' },
-    { key: 'salary', label: 'Зарплата Водителей', icon: 'Wallet', permissionKey: 'salary' },
-    { key: 'planDohod', label: 'План Дохода', icon: 'TrendingUp', permissionKey: 'planDohod' },
-    { key: 'planZagruzok', label: 'План Загрузок', icon: 'FileSpreadsheet', permissionKey: 'planZagruzok' },
-    { key: 'baza', label: 'Учет выезда', icon: 'Truck', permissionKey: 'baza' },
-    { key: 'dozvola', label: 'Учет Дозволов', icon: 'FileText', permissionKey: 'dozvola' },
-    { key: 'disposition', label: 'Диспозиция', icon: 'Map', permissionKey: 'disposition' },
-    { key: 'settings', label: 'Справочники', icon: 'Settings', permissionKey: 'settings' },
-    { key: 'admin', label: 'Администрирование', icon: 'ShieldAlert', permissionKey: 'admin' },
-    { key: 'analysis', label: 'Анализ', icon: 'PieChart', permissionKey: 'analysis' }
+  {
+    key: "dashboard",
+    label: "Главная",
+    icon: "LayoutDashboard",
+    permissionKey: "dashboard",
+  },
+  {
+    key: "dohod",
+    label: "Калькуляция",
+    icon: "Calculator",
+    permissionKey: "dohod",
+  },
+  {
+    key: "salary",
+    label: "Зарплата Водителей",
+    icon: "Wallet",
+    permissionKey: "salary",
+  },
+  {
+    key: "planDohod",
+    label: "План Дохода",
+    icon: "TrendingUp",
+    permissionKey: "planDohod",
+  },
+  {
+    key: "planZagruzok",
+    label: "План Загрузок",
+    icon: "FileSpreadsheet",
+    permissionKey: "planZagruzok",
+  },
+  { key: "baza", label: "Учет выезда", icon: "Truck", permissionKey: "baza" },
+  {
+    key: "dozvola",
+    label: "Учет Дозволов",
+    icon: "FileText",
+    permissionKey: "dozvola",
+  },
+  {
+    key: "disposition",
+    label: "Диспозиция",
+    icon: "Map",
+    permissionKey: "disposition",
+  },
+  {
+    key: "settings",
+    label: "Справочники",
+    icon: "Settings",
+    permissionKey: "settings",
+  },
+  {
+    key: "admin",
+    label: "Администрирование",
+    icon: "ShieldAlert",
+    permissionKey: "admin",
+  },
+  {
+    key: "analysis",
+    label: "Анализ",
+    icon: "PieChart",
+    permissionKey: "analysis",
+  },
 ];

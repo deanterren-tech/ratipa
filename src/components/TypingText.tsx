@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-export default function TypingText({ phrases }: { phrases: string[] }) {
+export default function TypingText({ phrases, className }: { phrases: string[]; className?: string }) {
     const [text, setText] = useState('');
     const [isDeleting, setIsDeleting] = useState(false);
     const [loopNum, setLoopNum] = useState(0);
@@ -28,7 +28,7 @@ export default function TypingText({ phrases }: { phrases: string[] }) {
     }, [text, isDeleting, loopNum, phrases, typingSpeed]);
 
     return (
-        <span className="text-xl font-mono text-slate-500 font-bold ml-4 inline-block tracking-tight">
+        <span className={className || "text-xl font-mono text-slate-500 font-bold ml-4 inline-block tracking-tight"}>
             {text}
             <span className="animate-pulse">|</span>
         </span>

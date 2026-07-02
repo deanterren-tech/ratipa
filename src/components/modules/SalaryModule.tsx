@@ -293,6 +293,29 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const filteredHistory = logs.filter(rec => {
         const haystack = `${rec.datetime || ''} ${rec.logist || ''} ${rec.driver || ''} ${rec.car || ''} ${rec.mark || ''} ${rec.km || ''} ${rec.rate || ''} ${rec.bonus || ''} ${rec.totalSalary || ''}`.toLowerCase();
         return !searchQuery || haystack.includes(searchQuery.toLowerCase());
+  }).sort((a, b) => {
+    // Parse date strings formatted as "DD.MM.YYYY" or standard ISO strings
+    const parseDate = (dStr: string) => {
+      if (!dStr) return 0;
+      const parts = dStr.split('.');
+      if (parts.length === 3) {
+        const d = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        const y = parseInt(parts[2], 10);
+        return new Date(y, m, d).getTime();
+      }
+      return new Date(dStr).getTime() || 0;
+    };
+    
+    const dateA = parseDate(a.datetime);
+    const dateB = parseDate(b.datetime);
+    
+    if (dateA !== dateB) {
+      return dateB - dateA; // Descending by date
+    }
+    
+    // Within the same day, compare IDs descending
+    return (b.id || "").localeCompare(a.id || "");
   });
 
   const totalPaid = logs.reduce((s, r) => s + (r.totalSalary || 0), 0);
@@ -301,16 +324,10 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const uniqueDrivers = new Set(logs.map(r => r.driver || '').filter(Boolean)).size;
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-4">
         {/* Header Block */}
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col sm:flex-row justify-between gap-4 select-none items-center">
+        <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col sm:flex-row justify-between gap-4 select-none items-center">
             <div>
-                 <div className="flex items-center gap-2 mb-1.5">
-                  <span className="bg-[#70FC8E] text-slate-950 font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono border border-black/5">
-                    Расчет Выплат
-                  </span>
-                  <span className="text-[9px] text-slate-400 font-extrabold uppercase font-mono">Взаиморасчеты с Водителями</span>
-                </div>
                 <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
                   <Wallet className="h-6 w-6 text-slate-800" style={{ fill: '#70FC8E' }} />
                   Зарплата водителей

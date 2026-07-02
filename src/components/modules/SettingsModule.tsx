@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { UserProfile, AppSettings, FerryTemplate, DistancePreset, CurrencyPreset, Announcement, QuickLink, CarRateGroup, Driver } from '../../types';
 import { dbService, database, onValue } from '../../firebase';
 import { pdService } from '../../firebase/planDohodService';
-import { ref } from 'firebase/database';
+import { ref, set, push, remove } from 'firebase/database';
 import { 
   Settings, 
   Plus, 
@@ -96,10 +96,24 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const [drRateGroupId, setDrRateGroupId] = useState('');
   const [drComment, setDrComment] = useState('');
   
+  // Driver Editing State
+  const [editingDriverId, setEditingDriverId] = useState<string | null>(null);
+  const [editDrName, setEditDrName] = useState('');
+  const [editDrPhone, setEditDrPhone] = useState('');
+  const [editDrLicense, setEditDrLicense] = useState('');
+  const [editDrRateGroupId, setEditDrRateGroupId] = useState('');
+  const [editDrComment, setEditDrComment] = useState('');
+
   // Dispatcher-Car Mapping States
   const [dispatchers, setDispatchers] = useState<string[]>([]);
   const [knownFleet, setKnownFleet] = useState<string[]>([]);
+  const [knownFleetObjects, setKnownFleetObjects] = useState<{ key: string; plate: string }[]>([]);
   const [savedCars, setSavedCars] = useState<string[]>([]);
+  
+  // Car Editing State
+  const [editingCarKey, setEditingCarKey] = useState<string | null>(null);
+  const [editCarPlate, setEditCarPlate] = useState('');
+  const [newCarPlate, setNewCarPlate] = useState('');
   const [dispatchersMap, setDispatchersMap] = useState<Record<string, string>>({});
   const [activeDispSelect, setActiveDispSelect] = useState<string>('Без диспетчера');
   const [carSearchInMapping, setCarSearchInMapping] = useState<string>('');
@@ -119,7 +133,12 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     const unsubMap = pdService.subscribeDispatchersCarMapping((m) => setDispatchersMap(m));
     const unsubBazaCarsList = onValue(ref(database, 'known_fleet'), snap => {
       const data = snap.val() || {};
-      setKnownFleet(Object.values(data));
+      const list = Object.entries(data).map(([key, val]) => ({
+        key,
+        plate: String(val)
+      }));
+      setKnownFleetObjects(list);
+      setKnownFleet(list.map(x => x.plate));
     });
     const unsubSavedCarsList = pdService.subscribeCars(setSavedCars);
 
@@ -278,6 +297,71 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     if (await showConfirm(`Вы действительно хотите удалить водителя "${name}" из справочника?`)) {
       dbService.deleteDriver(id, user.name, user.role);
     }
+  };
+
+  const handleStartEditDriver = (drv: Driver) => {
+    setEditingDriverId(drv.id);
+    setEditDrName(drv.name || '');
+    setEditDrPhone(drv.phone || '');
+    setEditDrLicense(drv.license || '');
+    setEditDrRateGroupId(drv.rateGroupId || '');
+    setEditDrComment(drv.comment || '');
+  };
+
+  const handleSaveEditDriver = (id: string) => {
+    if (!editDrName.trim()) {
+      toast("ФИО водителя не может быть пустым!", 'error');
+      return;
+    }
+    const updated: Driver = {
+      id,
+      name: editDrName.trim(),
+      phone: editDrPhone.trim(),
+      license: editDrLicense.trim(),
+      rateGroupId: editDrRateGroupId,
+      comment: editDrComment.trim()
+    };
+    dbService.saveDriver(updated, user.name, user.role);
+    setEditingDriverId(null);
+    toast("Данные водителя сохранены.", 'success');
+  };
+
+  // Known Cars (Fleet Directory) Handlers
+  const handleAddKnownCar = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCarPlate.trim()) return;
+    const cPlate = newCarPlate.trim().toUpperCase();
+    if (knownFleet.includes(cPlate)) {
+      toast("Этот автомобиль уже есть в справочнике!", 'error');
+      return;
+    }
+    const dbRef = ref(database, 'known_fleet');
+    push(dbRef, cPlate);
+    setNewCarPlate('');
+    toast("Автомобиль добавлен в справочник.", 'success');
+  };
+
+  const handleDeleteKnownCar = async (key: string, plate: string) => {
+    if (await showConfirm(`Вы действительно хотите удалить автомобиль "${plate}" из справочника?`)) {
+      remove(ref(database, `known_fleet/${key}`));
+      toast("Автомобиль удален из справочника.", 'success');
+    }
+  };
+
+  const handleStartEditCar = (key: string, plate: string) => {
+    setEditingCarKey(key);
+    setEditCarPlate(plate);
+  };
+
+  const handleSaveEditCar = (key: string) => {
+    if (!editCarPlate.trim()) {
+      toast("Номер автомобиля не может быть пустым!", 'error');
+      return;
+    }
+    const updatedPlate = editCarPlate.trim().toUpperCase();
+    set(ref(database, `known_fleet/${key}`), updatedPlate);
+    setEditingCarKey(null);
+    toast("Номер автомобиля сохранен.", 'success');
   };
 
   // Save/Delete Ferries
@@ -526,22 +610,28 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const isWritePermitted = user.permissions.settings === 'write';
 
   const allCars = Array.from(new Set([
-    ...drivers.map(d => d.plate),
-    ...carRateGroups.flatMap(g => g.vehicles || []),
-    ...knownFleet,
-    ...savedCars
-  ].map(p => p?.trim().toUpperCase()).filter(Boolean)));
+    ...drivers.map(d => (typeof d === 'object' ? d?.plate || d?.carNumber || d?.number : d)),
+    ...carRateGroups.flatMap(g => (g.vehicles || []).map(v => (typeof v === 'object' ? v?.plate || v?.carNumber || v?.number : v))),
+    ...knownFleet.map(v => (typeof v === 'object' ? v?.plate || v?.carNumber || v?.number || v?.name : v)),
+    ...savedCars.map(v => (typeof v === 'object' ? v?.plate || v?.carNumber || v?.number || v?.name : v))
+  ]
+    .map(p => {
+      if (typeof p === 'object' && p !== null) {
+        return (p.plate || p.carNumber || p.number || p.name || '').toString();
+      }
+      return p ? String(p) : '';
+    })
+    .map(p => p.trim().toUpperCase())
+    .filter(Boolean)
+  ));
 
   return (
     <div className="w-full space-y-6 font-sans">
       
       {/* GRAPHICAL VEHICLE DISPATCHER MAPPING BLOCK */}
-      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
+      <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
            <div>
-              <span className="bg-blue-500 text-white font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-widest">
-                 Диспетчеризация
-              </span>
               <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight mt-1.5 flex items-center gap-2">
                  <Users className="h-5 w-5 text-blue-500" /> Интерактивная привязка авто к диспетчерам
               </h2>
@@ -673,7 +763,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                  </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[450px] overflow-y-auto pr-1 custom-scrollbar">
+              <div className="flex flex-col gap-2 max-h-[450px] overflow-y-auto pr-1 custom-scrollbar">
                  {allCars
                     .filter(plate => !carSearchInMapping.trim() || plate.toLowerCase().includes(carSearchInMapping.toLowerCase()))
                     .map((carPlate) => {
@@ -683,28 +773,39 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                              key={carPlate}
                              draggable={isWritePermitted}
                              onDragStart={(e) => handleDragStartCarMapping(e, carPlate)}
-                             className={`p-3.5 rounded-2xl border transition relative select-none flex flex-col justify-between h-[85px] cursor-move shadow-xs ${
-                                currentDisp 
-                                ? 'border-indigo-150 bg-indigo-50/50' 
-                                : 'border-slate-200 bg-white hover:border-slate-350 hover:shadow-md'
-                             }`}
-                          >
-                             <div className="flex items-center justify-between">
-                                <span className="text-xs font-black font-mono tracking-wider text-slate-900 uppercase">
-                                   {carPlate}
-                                 </span>
-                                 <span className={`${currentDisp ? 'bg-indigo-100 text-indigo-800 font-black' : 'bg-slate-100 text-slate-400'} text-[8px] font-black uppercase px-2 py-0.5 rounded font-mono tracking-wider`}>
-                                   {currentDisp ? 'OK' : 'FREE'}
+                             className={`p-3 px-4 rounded-xl border transition relative select-none flex items-center justify-between cursor-move shadow-xs hover:shadow-sm ${
+                                 currentDisp 
+                                 ? "border-indigo-150 bg-indigo-50/30" 
+                                 : "border-slate-200 bg-white hover:border-slate-350"
+                              }`}
+                           >
+                              <div className="flex items-center gap-3">
+                                 <div className="flex flex-col gap-0.5 text-slate-300">
+                                    <div className="flex gap-0.5">
+                                       <span className="w-1 h-1 rounded-full bg-slate-400/60" />
+                                       <span className="w-1 h-1 rounded-full bg-slate-400/60" />
+                                    </div>
+                                    <div className="flex gap-0.5">
+                                       <span className="w-1 h-1 rounded-full bg-slate-400/60" />
+                                       <span className="w-1 h-1 rounded-full bg-slate-400/60" />
+                                    </div>
+                                 </div>
+                                 <span className="text-xs font-black font-mono tracking-wider text-slate-900 uppercase">
+                                    {carPlate}
                                  </span>
                               </div>
                               
-                              <div className="mt-2 pt-1 border-t border-slate-100 flex items-center justify-between text-[9px] font-black uppercase tracking-wide">
-                                 <span className="text-slate-400 font-mono">Диспетчер:</span>
-                                 {currentDisp ? (
-                                    <span className="text-blue-600 max-w-[70px] truncate" title={currentDisp}>{currentDisp}</span>
-                                 ) : (
-                                    <span className="text-red-500 font-mono">НЕТ ⓧ</span>
-                                 )}
+                              <div className="flex items-center gap-3">
+                                 <span className="text-[10px] font-mono">
+                                    {currentDisp ? (
+                                       <span className="text-blue-600 font-bold">Диспетчер: {currentDisp}</span>
+                                    ) : (
+                                       <span className="text-slate-400 font-medium">Свободен</span>
+                                    )}
+                                 </span>
+                                 <span className={`${currentDisp ? "bg-indigo-100 text-indigo-800" : "bg-slate-100 text-slate-500"} text-[8px] font-black uppercase px-2 py-0.5 rounded font-mono tracking-wider`}>
+                                    {currentDisp ? "OK" : "FREE"}
+                                 </span>
                               </div>
                            </div>
                         );
@@ -715,7 +816,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       </div>
       
       {/* Global Rates Settings */}
-      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
+      <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
         <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3">
           <Settings className="h-4 w-4 text-slate-900" style={{ fill: '#70FC8E' }} />
           Глобальные настройки и Таблицы
@@ -826,7 +927,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       </div>
 
       {/* Google Maps API Settings */}
-      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
+      <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
         <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
           <MapPin className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
           Настройки интеграции карт и расчета расстояний
@@ -936,7 +1037,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       </div>
 
       {/* ROW 0: TARIFF GROUPS */}
-      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
+      <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
         <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
           <Truck className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
           Тарифные группы (Зарплата и Авто)
@@ -1054,25 +1155,58 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       </div>
 
       {/* ROW 1: DRIVERS DIRECTORY */}
-      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
+      <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
         <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
           <Users className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
           Справочник водителей (Активная база)
         </h2>
 
         {isWritePermitted && (
-          <form onSubmit={handleAddDriver} className="flex gap-2.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/50">
+          <form onSubmit={handleAddDriver} className="grid grid-cols-1 md:grid-cols-5 gap-2.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/50">
             <input
               type="text"
-              placeholder="ФИО Водителя (Иванов И.И.)"
+              placeholder="ФИО Водителя"
               required
               value={drName}
               onChange={(e) => setDrName(e.target.value)}
-              className="flex-1 p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400"
+              className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400 text-slate-800"
             />
-            <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-xs font-black uppercase tracking-tight py-2.5 px-6 transition cursor-pointer shrink-0">
-              Добавить водителя
-            </button>
+            <input
+              type="text"
+              placeholder="Телефон"
+              value={drPhone}
+              onChange={(e) => setDrPhone(e.target.value)}
+              className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400 text-slate-800"
+            />
+            <input
+              type="text"
+              placeholder="Удостоверение"
+              value={drLicense}
+              onChange={(e) => setDrLicense(e.target.value)}
+              className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400 text-slate-800"
+            />
+            <select
+              value={drRateGroupId}
+              onChange={(e) => setDrRateGroupId(e.target.value)}
+              className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold text-slate-700"
+            >
+              <option value="">Тарифная группа</option>
+              {carRateGroups.map(g => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Комментарий"
+                value={drComment}
+                onChange={(e) => setDrComment(e.target.value)}
+                className="flex-1 p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400 text-slate-800"
+              />
+              <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-[10px] font-black uppercase tracking-wider px-4 transition cursor-pointer shrink-0">
+                Добавить
+              </button>
+            </div>
           </form>
         )}
 
@@ -1081,23 +1215,119 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
             <thead>
               <tr className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 font-mono border-b border-slate-250/30">
                 <th className="px-4 py-3">ФИО водителя</th>
+                <th className="px-4 py-3">Телефон</th>
+                <th className="px-4 py-3">Удостоверение</th>
+                <th className="px-4 py-3">Тарифная группа</th>
+                <th className="px-4 py-3">Комментарий</th>
                 {isWritePermitted && <th className="px-4 py-3 text-right">Действия</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
               {drivers.map((drv) => {
+                const isEditing = editingDriverId === drv.id;
                 return (
                   <tr key={drv.id} className="hover:bg-slate-50/40 transition">
-                    <td className="px-4 py-3 font-black text-slate-900">{drv.name}</td>
+                    <td className="px-4 py-3 font-black text-slate-900">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editDrName}
+                          onChange={(e) => setEditDrName(e.target.value)}
+                          className="p-1.5 bg-white text-xs rounded-lg border border-slate-300 font-bold w-full outline-none"
+                        />
+                      ) : (
+                        drv.name
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editDrPhone}
+                          onChange={(e) => setEditDrPhone(e.target.value)}
+                          className="p-1.5 bg-white text-xs rounded-lg border border-slate-300 font-bold w-full outline-none"
+                        />
+                      ) : (
+                        drv.phone || <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editDrLicense}
+                          onChange={(e) => setEditDrLicense(e.target.value)}
+                          className="p-1.5 bg-white text-xs rounded-lg border border-slate-300 font-bold w-full outline-none"
+                        />
+                      ) : (
+                        drv.license || <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {isEditing ? (
+                        <select
+                          value={editDrRateGroupId}
+                          onChange={(e) => setEditDrRateGroupId(e.target.value)}
+                          className="p-1.5 bg-white text-xs rounded-lg border border-slate-300 font-bold w-full outline-none text-slate-700"
+                        >
+                          <option value="">Не назначена</option>
+                          {carRateGroups.map(g => (
+                            <option key={g.id} value={g.id}>{g.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        carRateGroups.find(g => g.id === drv.rateGroupId)?.name || <span className="text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editDrComment}
+                          onChange={(e) => setEditDrComment(e.target.value)}
+                          className="p-1.5 bg-white text-xs rounded-lg border border-slate-300 font-bold w-full outline-none"
+                        />
+                      ) : (
+                        drv.comment || <span className="text-slate-300">—</span>
+                      )}
+                    </td>
                     {isWritePermitted && (
                       <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleDeleteDriver(drv.id, drv.name)}
-                          className="text-rose-500 p-1.5 hover:bg-rose-50 rounded-lg transition"
-                          title="Удалить из базы"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {isEditing ? (
+                          <div className="flex gap-1 justify-end">
+                            <button
+                              onClick={() => handleSaveEditDriver(drv.id)}
+                              className="text-emerald-600 p-1.5 hover:bg-emerald-50 rounded-lg transition"
+                              title="Сохранить изменения"
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => setEditingDriverId(null)}
+                              className="text-slate-400 p-1.5 hover:bg-slate-100 rounded-lg transition"
+                              title="Отмена"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-1 justify-end">
+                            <button
+                              onClick={() => handleStartEditDriver(drv)}
+                              className="text-indigo-600 p-1.5 hover:bg-indigo-50 rounded-lg transition"
+                              title="Редактировать водителя"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteDriver(drv.id, drv.name)}
+                              className="text-rose-500 p-1.5 hover:bg-rose-50 rounded-lg transition"
+                              title="Удалить из базы"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     )}
                   </tr>
@@ -1105,7 +1335,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
               })}
               {drivers.length === 0 && (
                 <tr>
-                  <td colSpan={isWritePermitted ? 2 : 1} className="text-center py-6 text-slate-400 text-xs font-mono font-black uppercase tracking-widest bg-slate-50">
+                  <td colSpan={isWritePermitted ? 6 : 5} className="text-center py-6 text-slate-400 text-xs font-mono font-black uppercase tracking-widest bg-slate-50">
                     Водители не зарегистрированы.
                   </td>
                 </tr>
@@ -1116,10 +1346,112 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
 
       </div>
 
+      {/* ROW 1.5: VEHICLES DIRECTORY */}
+      <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
+        <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
+          <Truck className="h-4.5 w-4.5 text-slate-900 font-bold" />
+          Справочник автомобилей (База автопарка)
+        </h2>
+
+        {isWritePermitted && (
+          <form onSubmit={handleAddKnownCar} className="flex gap-2.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/50">
+            <input
+              type="text"
+              placeholder="Гос. Номер автомобиля (например, 1234 AB-7)"
+              required
+              value={newCarPlate}
+              onChange={(e) => setNewCarPlate(e.target.value)}
+              className="flex-1 p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400 text-slate-800 uppercase"
+            />
+            <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-xs font-black uppercase tracking-tight py-2.5 px-6 transition cursor-pointer shrink-0">
+              Добавить автомобиль
+            </button>
+          </form>
+        )}
+
+        <div className="overflow-x-auto border border-slate-200/60 rounded-2xl">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 font-mono border-b border-slate-250/30">
+                <th className="px-4 py-3">Государственный Номер</th>
+                {isWritePermitted && <th className="px-4 py-3 text-right w-[150px]">Действия</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+              {knownFleetObjects.map((item) => {
+                const isEditing = editingCarKey === item.key;
+                return (
+                  <tr key={item.key} className="hover:bg-slate-50/40 transition">
+                    <td className="px-4 py-3 font-black text-slate-900 font-mono tracking-wider uppercase">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editCarPlate}
+                          onChange={(e) => setEditCarPlate(e.target.value)}
+                          className="p-1.5 bg-white text-xs rounded-lg border border-slate-300 font-bold w-full max-w-[250px] outline-none uppercase font-mono tracking-wider text-slate-800"
+                        />
+                      ) : (
+                        item.plate
+                      )}
+                    </td>
+                    {isWritePermitted && (
+                      <td className="px-4 py-3 text-right w-[150px]">
+                        {isEditing ? (
+                          <div className="flex gap-1 justify-end">
+                            <button
+                              onClick={() => handleSaveEditCar(item.key)}
+                              className="text-emerald-600 p-1.5 hover:bg-emerald-50 rounded-lg transition"
+                              title="Сохранить изменения"
+                            >
+                              <Check className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => setEditingCarKey(null)}
+                              className="text-slate-400 p-1.5 hover:bg-slate-100 rounded-lg transition"
+                              title="Отмена"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-1 justify-end">
+                            <button
+                              onClick={() => handleStartEditCar(item.key, item.plate)}
+                              className="text-indigo-600 p-1.5 hover:bg-indigo-50 rounded-lg transition"
+                              title="Редактировать номер"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteKnownCar(item.key, item.plate)}
+                              className="text-rose-500 p-1.5 hover:bg-rose-50 rounded-lg transition"
+                              title="Удалить из базы"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+              {knownFleetObjects.length === 0 && (
+                <tr>
+                  <td colSpan={isWritePermitted ? 2 : 1} className="text-center py-6 text-slate-400 text-xs font-mono font-black uppercase tracking-widest bg-slate-50">
+                    Автомобили не зарегистрированы.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-12">
 
         {/* ROW 0: DIRECTION EXPENSE COEFFICIENTS */}
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
+        <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
           <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
             <TrendingUp className="h-4.5 w-4.5 text-slate-900 font-bold" />
             Районы/направления и коэффициенты расходов
@@ -1199,7 +1531,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
         </div>
         
         {/* ROW 1: FERRY PRICING PRESSETS */}
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
+        <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
           <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
             <Anchor className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
             Тарифы Паромных Линий (DFS)
@@ -1254,7 +1586,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
         </div>
 
         {/* ROW 2: DISTANCES PRESETS */}
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
+        <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
           <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
             <Compass className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
             База стандартных расстояний (КМ)
@@ -1316,7 +1648,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
         </div>
 
         {/* CURRENCIES PRESETS */}
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
+        <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
           <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
             <Wallet className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
             Справочник Валют
@@ -1361,7 +1693,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
         </div>
 
         {/* ROW 3: BOOKMARKS / EXTERNAL QUICK LINKS & IFRAMES */}
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
+        <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
           <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3">
             <ExternalLink className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
             Ссылки на Информационные Фреймы и Полезные Ссылки

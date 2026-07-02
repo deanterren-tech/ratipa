@@ -59,7 +59,23 @@ export default function UserManagementBlock({ user }: Props) {
       documents: "none",
       admin: "none",
     };
-    if (newURole === "manager" || newURole === "admin") {
+    if (newURole === "root_admin") {
+      perms = {
+        dashboard: "write",
+        settings: "write",
+        dohod: "write",
+        salary: "write",
+        planDohod: "write",
+        planZagruzok: "write",
+        baza: "write",
+        vehicleDriverData: "write",
+        dozvola: "write",
+        disposition: "write",
+        documents: "write",
+        analysis: "write",
+        admin: "write",
+      };
+    } else if (newURole === "manager" || newURole === "admin") {
       perms = {
         ...perms,
         dohod: "write",
@@ -67,6 +83,7 @@ export default function UserManagementBlock({ user }: Props) {
         planDohod: "write",
         planZagruzok: "write",
         baza: "write",
+        vehicleDriverData: "write",
         dozvola: "write",
         disposition: "write",
         documents: "write",
@@ -82,6 +99,7 @@ export default function UserManagementBlock({ user }: Props) {
         planDohod: "read",
         planZagruzok: "none",
         baza: "read",
+        vehicleDriverData: "read",
         dozvola: "read",
         disposition: "write",
         documents: "read",
@@ -97,6 +115,7 @@ export default function UserManagementBlock({ user }: Props) {
         planDohod: "read",
         planZagruzok: "read",
         baza: "read",
+        vehicleDriverData: "read",
         dozvola: "read",
         disposition: "read",
         documents: "write",
@@ -126,12 +145,21 @@ export default function UserManagementBlock({ user }: Props) {
 
   const filteredUsers = users.filter(
     (u) =>
-      String(u.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      String(u.role || '').toLowerCase().includes(searchQuery.toLowerCase()),
+      String(u.name || "")
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase()) ||
+      String(u.role || "")
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase()),
   );
   const selectedUser = users.find((u) => u.uid === selectedUid);
 
   const canEditUsers = user.role === "admin" || user.role === "root_admin";
+  const isEditingSelf = selectedUser?.uid === user.uid;
+  const isProtectedRoot =
+    selectedUser?.role === "root_admin" && user.role !== "root_admin";
+  const canEditSelectedUser =
+    canEditUsers && (!isProtectedRoot || isEditingSelf);
 
   return (
     <div className="bg-white rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col md:flex-row overflow-hidden min-h-[600px] mt-6">
@@ -183,23 +211,25 @@ export default function UserManagementBlock({ user }: Props) {
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {canEditUsers && u.uid !== user.uid && u.role !== "root_admin" && (
-                  <div
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      if (await showConfirm(`Удалить профиль ${u.name}?`)) {
-                        dbService.deleteUser(u.uid, u.name);
-                        if (selectedUid === u.uid) {
-                          setSelectedUid(null);
+                {canEditUsers &&
+                  u.uid !== user.uid &&
+                  u.role !== "root_admin" && (
+                    <div
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (await showConfirm(`Удалить профиль ${u.name}?`)) {
+                          dbService.deleteUser(u.uid, u.name);
+                          if (selectedUid === u.uid) {
+                            setSelectedUid(null);
+                          }
                         }
-                      }
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                    title="Удалить профиль"
-                  >
-                    <Trash2 size={14} />
-                  </div>
-                )}
+                      }}
+                      className="opacity-0 group-hover:opacity-100 p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                      title="Удалить профиль"
+                    >
+                      <Trash2 size={14} />
+                    </div>
+                  )}
                 <ChevronRight
                   size={16}
                   className={
@@ -259,6 +289,9 @@ export default function UserManagementBlock({ user }: Props) {
                   <option value="accountant">Бухгалтер</option>
                   <option value="mechanic">Механик</option>
                   <option value="admin">Администратор</option>
+                  {user.role === "root_admin" && (
+                    <option value="root_admin">Root Admin</option>
+                  )}
                 </select>
               </div>
               <button
@@ -374,12 +407,7 @@ export default function UserManagementBlock({ user }: Props) {
                   </label>
                   <select
                     value={selectedUser.role}
-                    disabled={
-                      !canEditUsers ||
-                      selectedUser.role === "root_admin" ||
-                      (user.role === "admin" &&
-                        selectedUser.role === "root_admin")
-                    }
+                    disabled={!canEditSelectedUser}
                     onChange={(e) => {
                       dbService.saveUser({
                         ...selectedUser,
@@ -472,6 +500,10 @@ export default function UserManagementBlock({ user }: Props) {
                       })) || [],
                   },
                   { key: "baza", label: "Учет выезда (База)" },
+                  {
+                    key: "vehicleDriverData",
+                    label: "Данные авто и водителей",
+                  },
                   { key: "dozvola", label: "Дозволы" },
                   { key: "disposition", label: "Диспозиция" },
                   { key: "documents", label: "Шаблоны документов" },
@@ -538,10 +570,7 @@ export default function UserManagementBlock({ user }: Props) {
                             return (
                               <button
                                 key={perm}
-                                disabled={
-                                  !canEditUsers ||
-                                  selectedUser.role === "root_admin"
-                                }
+                                disabled={!canEditSelectedUser}
                                 onClick={() => {
                                   dbService.saveUser({
                                     ...selectedUser,
@@ -612,10 +641,7 @@ export default function UserManagementBlock({ user }: Props) {
                                       return (
                                         <button
                                           key={perm}
-                                          disabled={
-                                            !canEditUsers ||
-                                            selectedUser.role === "root_admin"
-                                          }
+                                          disabled={!canEditSelectedUser}
                                           onClick={() => {
                                             dbService.saveUser({
                                               ...selectedUser,

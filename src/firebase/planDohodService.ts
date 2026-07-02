@@ -2,6 +2,31 @@ import { ref, set, remove, push, update, onDisconnect } from 'firebase/database'
 import { database, useFirebase, dbService, onValue } from '../firebase';
 import { TripPlan } from '../types';
 
+const safeUserKey = (name: string) =>
+  String(name || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .replace(/[.#$[\]\/]/g, "_");
+
+const getLocalData = <T>(key: string, defaultValue: T): T => {
+  try {
+    const val = localStorage.getItem(key);
+    return val ? JSON.parse(val) : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+};
+
+const setLocalData = <T>(key: string, value: T) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.warn(e);
+  }
+};
+
+
 // The new methods specifically for Plan Dohod matching exact schema requested
 
 export const pdService = {
@@ -31,7 +56,7 @@ export const pdService = {
       const newRef = push(dbRef);
       const cleanTrip = JSON.parse(JSON.stringify({ ...trip, id: newRef.key }, (k, v) => v === undefined ? null : v));
       set(newRef, cleanTrip);
-      dbService.logAction(user, role, 'Create Trip Plan', 'PlanDohod', newRef.key!, `Created trip plan for ${trip.carNumber}`);
+      dbService.logAction(user, role, 'Создание плана рейса', 'PlanDohod', newRef.key!, `Создан план рейса для ТС ${trip.carNumber}`);
     } catch (e) {
       console.error("Error creating trip in Firebase:", e);
       alert("Ошибка при сохранении в БД: " + (e as Error).message);
@@ -43,7 +68,7 @@ export const pdService = {
     try {
       const cleanInfo = JSON.parse(JSON.stringify(tripInfo, (k, v) => v === undefined ? null : v));
       update(ref(database, `trips_dashboard/${id}`), cleanInfo);
-      dbService.logAction(user, role, 'Update Trip Plan', 'PlanDohod', id, `Updated trip plan for ${tripInfo.carNumber || id}`);
+      dbService.logAction(user, role, 'Обновление плана рейса', 'PlanDohod', id, `Обновлен план рейса для ТС ${tripInfo.carNumber || id}`);
     } catch (e) {
       console.error("Error updating trip in Firebase:", e);
       alert("Ошибка при обновлении в БД: " + (e as Error).message);
@@ -53,19 +78,19 @@ export const pdService = {
   archiveTrip: (id: string, currentMonth: string, user: string, role: string) => {
     if (!useFirebase) return;
     update(ref(database, `trips_dashboard/${id}`), { isArchived: true, currentMonth });
-    dbService.logAction(user, role, 'Archive Trip Plan', 'PlanDohod', id, `Archived trip plan ${id}`);
+    dbService.logAction(user, role, 'Архивирование плана рейса', 'PlanDohod', id, `Архивирован план рейса ${id}`);
   },
 
   restoreTrip: (id: string, user: string, role: string) => {
     if (!useFirebase) return;
     update(ref(database, `trips_dashboard/${id}`), { isArchived: false });
-    dbService.logAction(user, role, 'Restore Trip Plan', 'PlanDohod', id, `Restored trip plan ${id}`);
+    dbService.logAction(user, role, 'Восстановление плана рейса', 'PlanDohod', id, `Восстановлен план рейса ${id}`);
   },
 
   deleteTrip: (id: string, user: string, role: string) => {
     if (!useFirebase) return;
     remove(ref(database, `trips_dashboard/${id}`));
-    dbService.logAction(user, role, 'Delete Trip Plan', 'PlanDohod', id, `Deleted trip plan ${id}`);
+    dbService.logAction(user, role, 'Удаление плана рейса', 'PlanDohod', id, `Удален план рейса ${id}`);
   },
 
   // --- SAVED VEHICLES LIST ---
@@ -186,7 +211,24 @@ export const pdService = {
 
   // --- USER NOTEBOOK ---
   subscribeNotebook: (username: string, callback: (notes: Record<string, string>, order: string[]) => void) => {
-    if (!useFirebase) return () => {};
+    const key = safeUserKey(username);
+    if (!useFirebase) {
+      const notes = getLocalData<Record<string, string>>(`ratipa_nb_notes_${key}`, {});
+      const order = getLocalData<string[]>(`ratipa_nb_order_${key}`, []);
+      callback(notes, order);
+
+      const handleLocalChange = () => {
+        const updatedNotes = getLocalData<Record<string, string>>(`ratipa_nb_notes_${key}`, {});
+        const updatedOrder = getLocalData<string[]>(`ratipa_nb_order_${key}`, []);
+        callback(updatedNotes, updatedOrder);
+      };
+
+      window.addEventListener(`ratipa_nb_changed_${key}`, handleLocalChange);
+      return () => {
+        window.removeEventListener(`ratipa_nb_changed_${key}`, handleLocalChange);
+      };
+    }
+
     let notes: Record<string, string> = {};
     let order: string[] = [];
     const unsubWidgets = onValue(ref(database, `user_widgets/${username}`), (s) => {
@@ -201,18 +243,80 @@ export const pdService = {
   },
 
   saveNotebookNote: (username: string, carNumber: string, text: string) => {
-    if (!useFirebase) return;
+    const key = safeUserKey(username);
+    if (!useFirebase) {
+      const notes = getLocalData<Record<string, string>>(`ratipa_nb_notes_${key}`, {});
+      notes[carNumber] = text;
+      setLocalData(`ratipa_nb_notes_${key}`, notes);
+      window.dispatchEvent(new Event(`ratipa_nb_changed_${key}`));
+      return;
+    }
     set(ref(database, `user_widgets/${username}/${carNumber}`), text);
   },
 
   removeNotebookCar: (username: string, carNumber: string) => {
-    if (!useFirebase) return;
+    const key = safeUserKey(username);
+    if (!useFirebase) {
+      const notes = getLocalData<Record<string, string>>(`ratipa_nb_notes_${key}`, {});
+      delete notes[carNumber];
+      setLocalData(`ratipa_nb_notes_${key}`, notes);
+      window.dispatchEvent(new Event(`ratipa_nb_changed_${key}`));
+      return;
+    }
     remove(ref(database, `user_widgets/${username}/${carNumber}`));
   },
 
   saveNotebookOrder: (username: string, order: string[]) => {
-    if (!useFirebase) return;
+    const key = safeUserKey(username);
+    if (!useFirebase) {
+      setLocalData(`ratipa_nb_order_${key}`, order);
+      window.dispatchEvent(new Event(`ratipa_nb_changed_${key}`));
+      return;
+    }
     set(ref(database, `user_widgets_order/${username}`), order);
+  },
+
+  subscribeNotebookStatuses: (username: string, callback: (statuses: Record<string, "base" | "trip">) => void) => {
+    const key = safeUserKey(username);
+    if (!useFirebase) {
+      const statuses = getLocalData<Record<string, "base" | "trip">>(`ratipa_nb_statuses_${key}`, {});
+      callback(statuses);
+
+      const handleLocalChange = () => {
+        const updatedStatuses = getLocalData<Record<string, "base" | "trip">>(`ratipa_nb_statuses_${key}`, {});
+        callback(updatedStatuses);
+      };
+
+      window.addEventListener(`ratipa_nb_statuses_changed_${key}`, handleLocalChange);
+      return () => {
+        window.removeEventListener(`ratipa_nb_statuses_changed_${key}`, handleLocalChange);
+      };
+    }
+
+    const unsubStatuses = onValue(ref(database, `user_widgets_status/${username}`), (s) => {
+      callback(s.val() || {});
+    });
+    return unsubStatuses;
+  },
+
+  saveNotebookStatus: (username: string, carNumber: string, status: "base" | "trip" | null) => {
+    const key = safeUserKey(username);
+    if (!useFirebase) {
+      const statuses = getLocalData<Record<string, "base" | "trip">>(`ratipa_nb_statuses_${key}`, {});
+      if (status === null) {
+        delete statuses[carNumber];
+      } else {
+        statuses[carNumber] = status;
+      }
+      setLocalData(`ratipa_nb_statuses_${key}`, statuses);
+      window.dispatchEvent(new Event(`ratipa_nb_statuses_changed_${key}`));
+      return;
+    }
+    if (status === null) {
+      remove(ref(database, `user_widgets_status/${username}/${carNumber}`));
+    } else {
+      set(ref(database, `user_widgets_status/${username}/${carNumber}`), status);
+    }
   },
 
   // --- SYSTEM REGISTRY ---
@@ -226,7 +330,11 @@ export const pdService = {
   },
 
   subscribePermissions: (username: string, callback: (isAdmin: boolean, isNotebookViewer: boolean) => void) => {
-    if (!useFirebase) return () => {};
+    if (!useFirebase) {
+      // Offline mode defaults to full privileges for the developer/user
+      callback(true, true);
+      return () => {};
+    }
     let isAdmin = false;
     let isViewer = false;
     const unsubAdmin = onValue(ref(database, `permitted_admin_users/${username}`), (s) => {

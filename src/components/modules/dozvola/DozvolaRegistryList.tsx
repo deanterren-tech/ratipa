@@ -386,20 +386,9 @@ export default function DozvolaRegistryList({
 
         <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col md:flex-row items-center justify-between gap-6">
           <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="bg-[#70FC8E] text-slate-950 font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono border border-black/5">
-                Транзитные дозволы ЕС
-              </span>
-              <span className="text-[9px] text-slate-400 font-extrabold uppercase font-mono">
-                Журнал Квот
-              </span>
-            </div>
             <h1 className="text-2xl lg:text-3xl font-black text-slate-900 uppercase tracking-tight">
               Дозвола
             </h1>
-            <p className="text-xs text-slate-500 mt-1 max-w-xl font-medium">
-              Оперативное распределение квот на международные автоперевозки
-            </p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -542,7 +531,7 @@ export default function DozvolaRegistryList({
                     {item.status === 'office' && <span className="bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">В офисе</span>}
                     {item.status === 'hand' && <span className="bg-blue-50 text-blue-600 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">В рейсе</span>}
                     {item.status === 'office_return' && <span className="bg-amber-50 text-amber-600 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">Сдан в офис</span>}
-                    {item.status === 'used' && <span className="bg-[#fef3c7] text-[#b45309] px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">Сдан в ИТ</span>}
+                    {item.status === 'used' && <span className="bg-[#fef3c7] text-[#b45309] px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">Сдан в ТИ</span>}
                     {item.status === 'expired' && <span className="bg-rose-50 text-rose-600 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">Аннулирован</span>}
                     {item.status === 'available' && <span className="bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">В наличии</span>}
                   </td>
@@ -614,7 +603,7 @@ export default function DozvolaRegistryList({
                         <option value="office">В офис</option>
                         <option value="hand">Выдать в рейс</option>
                         <option value="office_return">Сдан в офис</option>
-                        <option value="used">Сдан в ИТ</option>
+                        <option value="used">Сдан в ТИ</option>
                         <option value="expired">Аннулировать</option>
                     </select>
                   </td>
@@ -632,7 +621,7 @@ export default function DozvolaRegistryList({
                           <Edit className="h-3.5 w-3.5" />
                         </button>
                       )}
-                      {user.role === "root_admin" && (
+                      {(user.role === "root_admin" || user.permissions?.dozvola === "write") && (
                         <button
                           onClick={() => handleDeletePermit(item.id)}
                           className="w-7 h-7 flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer"

@@ -55,14 +55,14 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
   useEffect(() => {
     if (tabs.length > 0 && !activeTabId) {
        // Also check permissions
-       const allowedTabs = tabs.filter(t => user.role === 'root_admin' || user.permissions[`currentPlanning_${t.id}`] !== 'none');
+       const allowedTabs = tabs.filter(t => user.role === 'root_admin' || user.role === 'admin' || (user.permissions && user.permissions[`currentPlanning_${t.id}`] !== 'none'));
        if (allowedTabs.length > 0) {
          setActiveTabId(allowedTabs[0].id);
        }
     }
   }, [tabs, activeTabId, user]);
 
-  const allowedTabs = tabs.filter(t => user.role === 'root_admin' || user.permissions[`currentPlanning_${t.id}`] !== 'none');
+  const allowedTabs = tabs.filter(t => user.role === 'root_admin' || user.role === 'admin' || (user.permissions && user.permissions[`currentPlanning_${t.id}`] !== 'none'));
 
   const handleRefresh = () => {
     if (activeTabId) {
@@ -84,16 +84,16 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
   const activeTab = allowedTabs.find(t => t.id === activeTabId) || allowedTabs[0];
 
   return (
-    <div className={`w-full flex flex-col space-y-4 font-sans ${isFocusMode ? 'fixed inset-0 z-50 bg-slate-900/10 backdrop-blur-md p-2 lg:p-6' : 'h-full'}`}>
+    <div className={`w-full flex flex-col space-y-2 font-sans ${isFocusMode ? 'fixed inset-0 z-50 bg-slate-900/10 backdrop-blur-md p-2 lg:p-4' : 'h-full'}`}>
       
       {/* Header & Tabs */}
-      <div className="bg-white rounded-[2rem] p-4 border border-slate-200/60 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
-        <div className="flex overflow-x-auto custom-scrollbar gap-2 w-full sm:w-auto">
+      <div className="bg-white rounded-2xl p-2 px-3 border border-slate-200/60 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3">
+        <div className="flex overflow-x-auto custom-scrollbar gap-1.5 w-full sm:w-auto">
           {allowedTabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTabId(tab.id)}
-              className={`px-4 py-2 rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-wider transition whitespace-nowrap outline-none ${
+              className={`px-3 py-1.5 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider transition whitespace-nowrap outline-none ${
                 activeTabId === tab.id 
                   ? 'bg-blue-100 text-blue-900 shadow-sm'
                   : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
@@ -108,25 +108,25 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
         <div className="flex items-center gap-2 shrink-0">
           <button 
             onClick={handleRefresh}
-            className="flex items-center justify-center w-10 h-10 bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-600 rounded-xl transition cursor-pointer"
+            className="flex items-center justify-center w-8 h-8 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200/50 transition cursor-pointer"
             title="Обновить"
           >
-             <RefreshCw className="w-4 h-4" />
+             <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
           </button>
-          <div className="flex bg-slate-100 p-1 rounded-xl items-center">
-             <button onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600 cursor-pointer"><ZoomOut className="w-4 h-4"/></button>
-             <span className="text-[10px] font-black w-10 text-center font-mono text-slate-700">{Math.round(zoomLevel * 100)}%</span>
-             <button onClick={() => setZoomLevel(z => Math.min(2, z + 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600 cursor-pointer"><ZoomIn className="w-4 h-4"/></button>
+          <div className="flex bg-slate-100 p-0.5 rounded-lg items-center">
+             <button onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600 cursor-pointer"><ZoomOut className="w-3.5 h-3.5"/></button>
+             <span className="text-[9px] font-black w-8 text-center font-mono text-slate-700">{Math.round(zoomLevel * 100)}%</span>
+             <button onClick={() => setZoomLevel(z => Math.min(2, z + 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600 cursor-pointer"><ZoomIn className="w-3.5 h-3.5"/></button>
           </div>
           <button
             onClick={() => setIsFocusMode(!isFocusMode)}
-            className={`flex items-center gap-2 text-[10px] sm:text-xs font-black px-4 py-2.5 rounded-xl border transition cursor-pointer uppercase tracking-tight ${
+            className={`flex items-center gap-1.5 text-[10px] font-black px-2.5 py-1.5 rounded-lg border transition cursor-pointer uppercase tracking-tight ${
               isFocusMode 
                 ? 'bg-blue-500 border-blue-500 text-white shadow-sm' 
-                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                : 'bg-white border-slate-250 text-slate-705 lg:hover:bg-slate-50'
             }`}
           >
-            {isFocusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            {isFocusMode ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             <span className="hidden sm:inline">{isFocusMode ? 'Свернуть' : 'Экран'}</span>
           </button>
         </div>
@@ -135,7 +135,7 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
       {/* Frame */}
       <div 
          ref={scrollContainerRef}
-         className="flex-1 min-h-0 bg-slate-100 rounded-[2rem] overflow-hidden border border-slate-200/60 shadow-sm relative"
+         className={`relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col min-h-0 ${isFocusMode ? '' : 'h-[880px]'}`}
       >
          {allowedTabs.some(t => t.sheetUrl) ? (
             <div style={{

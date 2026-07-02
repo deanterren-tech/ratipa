@@ -13,6 +13,10 @@
     "ratipa_notifications": {
       ".read": "auth != null",
       ".write": "root.child('users').child(auth.uid).child('role').val() === 'root_admin' || root.child('users').child(auth.uid).child('role').val() === 'admin'"
+    },
+    "broadcastNotifications": {
+      ".read": "auth != null",
+      ".write": "root.child('users').child(auth.uid).child('role').val() === 'root_admin' || root.child('users').child(auth.uid).child('role').val() === 'admin'"
     }
   }
 }

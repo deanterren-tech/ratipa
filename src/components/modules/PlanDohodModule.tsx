@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Virtuoso } from 'react-virtuoso';
+import { Virtuoso } from "react-virtuoso";
 import {
   UserProfile,
   TripPlan,
@@ -694,6 +694,18 @@ interface PlanDohodModuleProps {
   user: UserProfile;
 }
 
+// Helper to match user name with dispatcher name case-insensitively and stripping titles
+const matchUserAndDispatcher = (user: string, dispatcher: string): boolean => {
+  if (!user || !dispatcher) return false;
+  const clean = (name: string) => {
+    return name
+      .toLowerCase()
+      .replace(/^(диспетчер|логист|водитель|dispatcher|logist|driver)\s+/gi, "")
+      .trim();
+  };
+  return clean(user) === clean(dispatcher);
+};
+
 export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [tableScale, setTableScale] = useState<number>(() => {
@@ -999,6 +1011,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [notebookNotes, setNotebookNotes] = useState<Record<string, string>>(
     {},
   );
+  const [notebookStatuses, setNotebookStatuses] = useState<Record<string, "base" | "trip">>(
+    {},
+  );
   const [notebookOrder, setNotebookOrder] = useState<string[]>([]);
   const [notebookCarInput, setNotebookCarInput] = useState<string>("");
 
@@ -1094,7 +1109,16 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         setNotebookOrder(order || []);
       },
     );
-    return () => unsubNotebook();
+    const unsubStatuses = pdService.subscribeNotebookStatuses(
+      selectedNotebookUser,
+      (statuses) => {
+        setNotebookStatuses(statuses || {});
+      },
+    );
+    return () => {
+      unsubNotebook();
+      unsubStatuses();
+    };
   }, [selectedNotebookUser]);
 
   const handleNoteChange = (car: string, val: string) => {
@@ -1122,6 +1146,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
   const handleRemoveCarFromNotebook = (car: string) => {
     pdService.removeNotebookCar(selectedNotebookUser, car);
+    pdService.saveNotebookStatus(selectedNotebookUser, car, null);
     const newOrder = notebookOrder.filter((c) => c !== car);
     pdService.saveNotebookOrder(selectedNotebookUser, newOrder);
   };
@@ -1130,7 +1155,8 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     const myCars: string[] = [];
     trips.forEach((trip) => {
       if (
-        (trip.logist === user.name || trip.dispatcher === user.name) &&
+        (matchUserAndDispatcher(user.name, trip.logist || "") ||
+          matchUserAndDispatcher(user.name, trip.dispatcher || "")) &&
         trip.carNumber
       ) {
         myCars.push(trip.carNumber.trim().toUpperCase());
@@ -1145,10 +1171,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     const newOrder = [...notebookOrder];
     let addedCount = 0;
     uniqueCars.forEach((car) => {
-      if (notebookNotes[car] === undefined) {
-        pdService.saveNotebookNote(selectedNotebookUser, car, "");
-        if (!newOrder.includes(car)) {
-          newOrder.push(car);
+      if (!newOrder.includes(car)) {
+        newOrder.push(car);
+        if (notebookNotes[car] === undefined) {
+          pdService.saveNotebookNote(selectedNotebookUser, car, "");
         }
         addedCount++;
       }
@@ -1188,7 +1214,12 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     // All cars that are in order or have notes
     const cars = Array.from(
       new Set([...notebookOrder, ...Object.keys(notebookNotes)]),
-    ).filter((car) => notebookNotes[car] !== undefined);
+    ).filter((car) => notebookOrder.includes(car) || (notebookNotes[car] !== undefined && notebookNotes[car] !== null));
+
+    const realCars = cars.filter((car) => car !== 'ПЛАН');
+    const totalCarsCount = realCars.length;
+    const baseCount = realCars.filter((car) => notebookStatuses[car] === 'base').length;
+    const tripCount = realCars.filter((car) => notebookStatuses[car] === 'trip').length;
 
     if (isNbMinimized) {
       return (
@@ -1314,6 +1345,22 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               : `Просмотр блокнота: ${selectedNotebookUser}`}
           </div>
 
+          {/* Counters Banner */}
+          <div className="grid grid-cols-3 gap-1.5 p-2 bg-slate-50 rounded-2xl border border-slate-200/40">
+            <div className="flex flex-col items-center justify-center p-1.5 bg-white rounded-xl border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+              <span className="text-[8px] font-black uppercase text-slate-400 font-mono tracking-widest leading-none mb-1">Машин</span>
+              <span className="text-xs font-black text-slate-800 leading-none">{totalCarsCount}</span>
+            </div>
+            <div className="flex flex-col items-center justify-center p-1.5 bg-white rounded-xl border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+              <span className="text-[8px] font-black uppercase text-emerald-500 font-mono tracking-widest leading-none mb-1">На базе</span>
+              <span className="text-xs font-black text-emerald-600 leading-none">{baseCount}</span>
+            </div>
+            <div className="flex flex-col items-center justify-center p-1.5 bg-white rounded-xl border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+              <span className="text-[8px] font-black uppercase text-blue-500 font-mono tracking-widest leading-none mb-1">В рейсе</span>
+              <span className="text-xs font-black text-blue-600 leading-none">{tripCount}</span>
+            </div>
+          </div>
+
           <div className="flex gap-1.5 border-t border-slate-100 pt-2.5">
             <button
               type="button"
@@ -1408,6 +1455,41 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         </div>
                       </div>
                     </button>
+
+                    {car !== "ПЛАН" && (
+                      <div className="flex items-center gap-1 mx-2 flex-1 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const current = notebookStatuses[car];
+                            const nextStatus = current === "base" ? null : "base";
+                            pdService.saveNotebookStatus(selectedNotebookUser, car, nextStatus);
+                          }}
+                          className={`px-2 py-1 text-[8px] font-black uppercase tracking-wider rounded-lg border transition duration-150 cursor-pointer ${
+                            notebookStatuses[car] === "base"
+                              ? "bg-emerald-500 border-emerald-600 text-white shadow-sm font-extrabold"
+                              : "bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          на базе
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const current = notebookStatuses[car];
+                            const nextStatus = current === "trip" ? null : "trip";
+                            pdService.saveNotebookStatus(selectedNotebookUser, car, nextStatus);
+                          }}
+                          className={`px-2 py-1 text-[8px] font-black uppercase tracking-wider rounded-lg border transition duration-150 cursor-pointer ${
+                            notebookStatuses[car] === "trip"
+                              ? "bg-blue-500 border-blue-600 text-white shadow-sm font-extrabold"
+                              : "bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          в рейсе
+                        </button>
+                      </div>
+                    )}
 
                     <button
                       type="button"
@@ -1532,7 +1614,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [dateEnd, setDateEnd] = useState("");
   const [extraExpense, setExtraExpense] = useState<number>(0);
   const [extraExpenseNote, setExtraExpenseNote] = useState("");
-  
+
   const [ferryCost, setFerryCost] = useState(0);
   const [referenceRate, setReferenceRate] = useState<number | undefined>(
     undefined,
@@ -1593,6 +1675,35 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   useEffect(() => {
     localStorage.setItem("ratipa_map_avoid_keywords", mapAvoidKeywords);
   }, [mapAvoidKeywords]);
+
+  // Sync coefficient if directions change
+  useEffect(() => {
+    const c = directions[direction];
+    if (c !== undefined) {
+      setLegs((prev) => {
+        let changed = false;
+        const newLegs = prev.map((l) => {
+          if (l.coeff !== c) {
+             changed = true;
+             return { ...l, coeff: c };
+          }
+          return l;
+        });
+        return changed ? newLegs : prev;
+      });
+      setPlLegs((prev) => {
+        let changed = false;
+        const newLegs = prev.map((l) => {
+          if (l.coeff !== c) {
+             changed = true;
+             return { ...l, coeff: c };
+          }
+          return l;
+        });
+        return changed ? newLegs : prev;
+      });
+    }
+  }, [directions, direction]);
 
   // Potential Load Form States
   const [plEditingId, setPlEditingId] = useState<string | null>(null);
@@ -1663,6 +1774,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       orange: "bg-orange-500/10",
       slate: "bg-slate-500/10",
       yellow: "bg-yellow-500/10",
+      cyan: "bg-cyan-500/10",
+      lime: "bg-lime-500/10",
+      fuchsia: "bg-fuchsia-500/10",
+      pink: "bg-pink-500/10",
+      red: "bg-red-500/10",
     };
     return highlightBgs[colorKey] || "bg-blue-500/10";
   };
@@ -1826,12 +1942,18 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
   const calculateTotals = () => {
     const days = getTripDays();
-    const totalKm = legs.reduce((acc, l) => acc + Number(l.km || 0) + Number(l.emptyRunKm || 0), 0);
+    const totalKm = legs.reduce(
+      (acc, l) => acc + Number(l.km || 0) + Number(l.emptyRunKm || 0),
+      0,
+    );
     const totalFreight = legs.reduce((acc, l) => acc + Number(l.rate || 0), 0);
 
     let baseExpenses = legs.reduce(
       (acc, l) =>
-        acc + (Number(l.km || 0) * Number(l.coeff || 0) + Number(l.emptyRunKm || 0) * Number(l.coeff || 0) + Number(l.ferry || 0)),
+        acc +
+        (Number(l.km || 0) * Number(l.coeff || 0) +
+          Number(l.emptyRunKm || 0) * Number(l.coeff || 0) +
+          Number(l.ferry || 0)),
       0,
     );
     const totalExpensesPlan =
@@ -1861,7 +1983,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setDateEnd("");
     setExtraExpense(0);
     setExtraExpenseNote("");
-    
+
     setFerryCost(0);
     setReferenceRate(undefined);
     setReferenceCurrency("EUR");
@@ -1900,96 +2022,54 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     return parseFloat(val.replace(/\s/g, "").replace(",", ".")) || 0;
   };
 
-  const processAiRoute = () => {
+  const processAiRoute = async () => {
     const raw = aiRouteInput.trim();
     if (!raw) {
       setAiRouteFeedback("Вставьте текст маршрута...");
       return;
     }
 
-    const chunks = raw
-      .split(/\n|;/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const parsedRows = chunks
-      .map((line) => {
-        let from = "";
-        let to = "";
-        const routePatterns = [
-          /(?:из|от)\s+([а-яёa-z\s.-]+?)\s+(?:в|на|до|—|->|→|-)\s+([а-яёa-z\s.-]+)/i,
-          /^([а-яёa-z\s.-]+?)\s*(?:—|->|→|-)\s*([а-яёa-z\s.-]+)/i,
-          /^([а-яёa-z\s.-]+?)\s+(?:в|на|до)\s+([а-яёa-z\s.-]+)/i,
-        ];
-        for (const pattern of routePatterns) {
-          const match = line.match(pattern);
-          if (match) {
-            from = match[1]
-              .replace(
-                /\b(ставка|фрахт|цена|паром|переправа|коэф|коэффициент|км|евро|eur|usd|долл|руб).*/i,
-                "",
-              )
-              .replace(/[,:;]+$/g, "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .replace(/^./, (ch) => ch.toUpperCase());
-            to = match[2]
-              .replace(
-                /\b(ставка|фрахт|цена|паром|переправа|коэф|коэффициент|км|евро|eur|usd|долл|руб).*/i,
-                "",
-              )
-              .replace(/[,:;]+$/g, "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .replace(/^./, (ch) => ch.toUpperCase());
-            break;
-          }
-        }
-        const rateMatch = line.match(
-          /(?:ставка|фрахт|цена)?\D*?(\d[\d\s.,]*)\s*(?:€|евро|eur)\b/i,
+    try {
+      const res = await fetch("/api/parse-plandohod-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: raw }),
+      });
+      if (!res.ok) throw new Error("API failed");
+      const data = await res.json();
+
+      const parsedRows = data.legs || [];
+      if (parsedRows.length === 0) {
+        setAiRouteFeedback(
+          "Не удалось распознать маршрут. Попробуйте формат: Минск — Стамбул, ставка 4300 евро, 2450 км.",
         );
-        const kmMatch = line.match(/(\d[\d\s.,]*)\s*(?:км|km)\b/i);
-        const ferryMatch = line.match(/(?:паром|переправа)\D*?(\d[\d\s.,]*)/i);
-        const coeffMatch = line.match(
-          /(?:коэф|коэффициент)\D*?(\d+(?:[.,]\d+)?)/i,
-        );
-
-        return {
-          from,
-          to,
-          km: kmMatch ? parseSmartNumber(kmMatch[1]) : 0,
-          rate: rateMatch ? parseSmartNumber(rateMatch[1]) : 0,
-          ferry: ferryMatch ? parseSmartNumber(ferryMatch[1]) : 0,
-          coeff: coeffMatch
-            ? parseSmartNumber(coeffMatch[1])
-            : directions[direction] || 0,
-          referenceRate: "",
-        };
-      })
-      .filter((r) => r.from !== "" || r.to !== "" || r.km > 0 || r.rate > 0);
-
-    if (parsedRows.length === 0) {
-      setAiRouteFeedback(
-        "Не удалось распознать маршрут. Попробуйте формат: Минск — Стамбул, ставка 4300 евро, 2450 км.",
-      );
-      return;
-    }
-
-    setLegs((prev) => {
-      // If only one blank leg exists, replace it
-      if (
-        prev.length === 1 &&
-        !prev[0].from &&
-        !prev[0].to &&
-        !prev[0].rate &&
-        !prev[0].km
-      ) {
-        return parsedRows;
+        return;
       }
-      return [...prev, ...parsedRows];
-    });
-    setAiRouteInput("");
-    setAiRouteFeedback(`Добавлено плеч: ${parsedRows.length}`);
-    setTimeout(() => setAiRouteFeedback(""), 5000);
+
+      // Apply fallback coefficients if 0
+      parsedRows.forEach((r: any) => {
+        if (!r.coeff) r.coeff = directions[direction] || 0;
+        if (!r.referenceRate) r.referenceRate = "";
+      });
+
+      setLegs((prev) => {
+        if (
+          prev.length === 1 &&
+          !prev[0].from &&
+          !prev[0].to &&
+          !prev[0].rate &&
+          !prev[0].km
+        ) {
+          return parsedRows;
+        }
+        return [...prev, ...parsedRows];
+      });
+      setAiRouteInput("");
+      setAiRouteFeedback(`Добавлено плеч: ${parsedRows.length}`);
+      setTimeout(() => setAiRouteFeedback(""), 5000);
+    } catch (e) {
+      setAiRouteFeedback("Ошибка распознавания ИИ");
+    }
   };
 
   const loadTripToForm = (trip: TripPlan) => {
@@ -2000,7 +2080,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setDateEnd(trip.dateEnd || "");
     setExtraExpense(trip.extraExpense || 0);
     setExtraExpenseNote(trip.extraExpenseNote || "");
-    
+
     setFerryCost(trip.ferryCost || 0);
     setReferenceRate(trip.referenceRate);
     setReferenceCurrency(trip.referenceCurrency || "EUR");
@@ -2036,86 +2116,35 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setIsModalOpen(true);
   };
 
-  const parseAiRouteClient = (
-    raw: string,
-    defaultDir: string,
-    directionsMap: Record<string, number>,
-  ): LegPlan[] => {
-    const chunks = raw
-      .split(/\n|;/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const parsedRows = chunks
-      .map((line) => {
-        let from = "";
-        let to = "";
-        const routePatterns = [
-          /(?:из|от)\s+([а-яёa-z\s.-]+?)\s+(?:в|на|до|—|->|→|-)\s+([а-яёa-z\s.-]+)/i,
-          /^([а-яёa-z\s.-]+?)\s*(?:—|->|→|-)\s*([а-яёa-z\s.-]+)/i,
-          /^([а-яёa-z\s.-]+?)\s+(?:в|на|до)\s+([а-яёa-z\s.-]+)/i,
-        ];
-        for (const pattern of routePatterns) {
-          const match = line.match(pattern);
-          if (match) {
-            from = match[1]
-              .replace(
-                /\b(ставка|фрахт|цена|паром|переправа|коэф|коэффициент|км|евро|eur|usd|долл|руб).*/i,
-                "",
-              )
-              .replace(/[,:;]+$/g, "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .replace(/^./, (ch) => ch.toUpperCase());
-            to = match[2]
-              .replace(
-                /\b(ставка|фрахт|цена|паром|переправа|коэф|коэффициент|км|евро|eur|usd|долл|руб).*/i,
-                "",
-              )
-              .replace(/[,:;]+$/g, "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .replace(/^./, (ch) => ch.toUpperCase());
-            break;
-          }
-        }
-        const rateMatch = line.match(
-          /(?:ставка|фрахт|цена)?\D*?(\d[\d\s.,]*)\s*(?:€|евро|eur)\b/i,
-        );
-        const kmMatch = line.match(/(\d[\d\s.,]*)\s*(?:км|km)\b/i);
-        const ferryMatch = line.match(/(?:паром|переправа)\D*?(\d[\d\s.,]*)/i);
-        const coeffMatch = line.match(
-          /(?:коэф|коэффициент)\D*?(\d+(?:[.,]\d+)?)/i,
-        );
-
-        return {
-          from,
-          to,
-          km: kmMatch ? parseSmartNumber(kmMatch[1]) : 0,
-          rate: rateMatch ? parseSmartNumber(rateMatch[1]) : 0,
-          ferry: ferryMatch ? parseSmartNumber(ferryMatch[1]) : 0,
-          coeff: coeffMatch
-            ? parseSmartNumber(coeffMatch[1])
-            : directionsMap[defaultDir] || 0,
-          referenceRate: "",
-        };
-      })
-      .filter((r) => r.from !== "" || r.to !== "" || r.km > 0 || r.rate > 0);
-    return parsedRows;
-  };
-
   const processPlAiRoute = async () => {
     if (!plAiInput.trim()) return;
     setPlAiFeedback("");
     try {
-      const parsedRows = parseAiRouteClient(
-        plAiInput,
-        Object.keys(directions)[0] || "",
-        directions,
-      );
+      const res = await fetch("/api/parse-plandohod-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: plAiInput.trim() }),
+      });
+      if (!res.ok) throw new Error("API failed");
+      const data = await res.json();
+
+      const parsedRows = data.legs || [];
+
       if (parsedRows.length === 0) {
         setPlAiFeedback("Не удалось распознать маршрут.");
         return;
       }
+
+      // Apply fallback coefficients if 0
+      parsedRows.forEach((r: any) => {
+        if (!r.coeff)
+          r.coeff =
+            Object.keys(directions).length > 0
+              ? directions[Object.keys(directions)[0]]
+              : 0;
+        if (!r.referenceRate) r.referenceRate = "";
+      });
+
       setPlLegs(parsedRows);
       setPlAiInput("");
       setPlAiFeedback(`Успешно распознано ${parsedRows.length} плечей`);
@@ -2126,13 +2155,19 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   };
 
   const calculatePlTotals = () => {
-    const totalKm = plLegs.reduce((acc, l) => acc + Number(l.km || 0) + Number(l.emptyRunKm || 0), 0);
+    const totalKm = plLegs.reduce(
+      (acc, l) => acc + Number(l.km || 0) + Number(l.emptyRunKm || 0),
+      0,
+    );
     const totalFreight = plLegs.reduce(
       (acc, l) => acc + Number(l.rate || 0),
       0,
     );
     const baseExpenses = plLegs.reduce(
-      (acc, l) => acc + Number(l.km || 0) * Number(l.coeff || 0) + Number(l.emptyRunKm || 0) * Number(l.coeff || 0),
+      (acc, l) =>
+        acc +
+        Number(l.km || 0) * Number(l.coeff || 0) +
+        Number(l.emptyRunKm || 0) * Number(l.coeff || 0),
       0,
     );
     const totalExpensesPlan =
@@ -2265,7 +2300,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       totalExpenses: totals.totalExpenses,
       extraExpense: Number(extraExpense || 0),
       extraExpenseNote,
-      
+
       ferryCost: Number(ferryCost || 0),
       referenceRate,
       referenceCurrency,
@@ -2312,9 +2347,27 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   };
 
   const finishTripToArchive = (trip: TripPlan, isModal: boolean = false) => {
-    const month =
-      trip.currentMonth ||
-      new Date().toLocaleString("ru-RU", { month: "long", year: "numeric" });
+    let month = "";
+    if (trip.dateEnd) {
+      const date = new Date(trip.dateEnd);
+      if (!isNaN(date.getTime())) {
+        const raw = date.toLocaleString("ru-RU", {
+          month: "long",
+          year: "numeric",
+        });
+        let formatted = raw.replace(/\s*г\.?$/, "");
+        formatted = formatted.charAt(0).toUpperCase() + formatted.slice(1);
+        month = formatted;
+      }
+    }
+    if (!month) {
+      const fallbackMonth =
+        trip.currentMonth ||
+        new Date().toLocaleString("ru-RU", { month: "long", year: "numeric" });
+      let formatted = fallbackMonth.replace(/\s*г\.?$/, "");
+      formatted = formatted.charAt(0).toUpperCase() + formatted.slice(1);
+      month = formatted;
+    }
     pdService.archiveTrip(trip.id, month, user.name, user.role);
     if (isModal) setIsModalOpen(false);
   };
@@ -2382,10 +2435,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             </button>
           </div>
 
-          <div className="p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto custom-scrollbar max-h-[80vh]">
+          <div className="p-4 sm:p-5 lg:p-6 space-y-6 overflow-y-auto custom-scrollbar max-h-[80vh]">
             {modalTab === "main" ? (
               <>
-                <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
                   <div>
                     <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">
                       Автомобиль
@@ -2461,7 +2514,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden">
+                <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden">
                   <div className="mb-6 p-4 bg-blue-50/50 border border-blue-100 rounded-2xl flex flex-col gap-3">
                     <div className="flex flex-col">
                       <h4 className="text-xs font-black uppercase text-blue-900 tracking-widest font-mono">
@@ -2622,7 +2675,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                                 type="number"
                                 value={leg.emptyRunKm || ""}
                                 onChange={(e) =>
-                                  updateLeg(idx, { emptyRunKm: Number(e.target.value) })
+                                  updateLeg(idx, {
+                                    emptyRunKm: Number(e.target.value),
+                                  })
                                 }
                                 className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none"
                               />
@@ -2723,7 +2778,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                  <div className="lg:col-span-8 bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col justify-between">
+                  <div className="lg:col-span-8 bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col justify-between">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-4">
                       <div>
                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">
@@ -2835,9 +2890,18 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                           "bg-blue-300",
                           "bg-blue-500",
                           "bg-[#70FC8E]",
+                          "bg-emerald-500",
+                          "bg-teal-400",
+                          "bg-cyan-400",
                           "bg-amber-300",
+                          "bg-orange-400",
                           "bg-rose-300",
+                          "bg-pink-400",
                           "bg-purple-500",
+                          "bg-indigo-400",
+                          "bg-fuchsia-400",
+                          "bg-lime-400",
+                          "bg-red-500",
                           "bg-slate-800",
                         ].map((cc) => (
                           <button
@@ -2976,7 +3040,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 </div>
               </>
             ) : modalTab === "potential" ? (
-              <div className="bg-slate-100/50 rounded-[2rem] p-6 lg:p-8 flex flex-col xl:flex-row gap-6 min-h-[500px]">
+              <div className="bg-slate-100/50 rounded-[2rem] p-5 lg:p-6 flex flex-col xl:flex-row gap-6 min-h-[500px]">
                 {/* Left side: List of saved Potential Loads */}
                 <div className="flex-1 w-full xl:w-1/3 xl:max-w-[400px] bg-white rounded-2xl p-6 border border-slate-200/60 shadow-sm flex flex-col gap-4">
                   <h3 className="text-sm font-black uppercase text-purple-700 font-mono tracking-widest border-b border-purple-100 pb-3">
@@ -3352,7 +3416,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     }
     if (searchCarQuery.trim()) {
       const q = searchCarQuery.trim().toLowerCase();
-      list = list.filter((t) => String(t.carNumber || '').toLowerCase().includes(q));
+      list = list.filter((t) =>
+        String(t.carNumber || "")
+          .toLowerCase()
+          .includes(q),
+      );
     }
 
     // Sort logic
@@ -3391,14 +3459,23 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       list.sort((a, b) => {
         const idxA = manualTripsOrder.indexOf(a.id);
         const idxB = manualTripsOrder.indexOf(b.id);
-        if (idxA === -1 && idxB === -1) return b.id.localeCompare(a.id);
-        if (idxA === -1) return 1;
-        if (idxB === -1) return -1;
+        if (idxA === -1 && idxB === -1)
+          return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+        if (idxA === -1) return -1; // New trips go to the top
+        if (idxB === -1) return 1; // New trips go to the top
         return idxA - idxB;
       });
     }
     return list;
-  }, [trips, activeDispatcherTab, filterDispatchers, activeDirectionTab, searchCarQuery, sortConfig, manualTripsOrder]);
+  }, [
+    trips,
+    activeDispatcherTab,
+    filterDispatchers,
+    activeDirectionTab,
+    searchCarQuery,
+    sortConfig,
+    manualTripsOrder,
+  ]);
 
   const archiveTripsMonths = useMemo(() => {
     return Array.from(
@@ -3414,7 +3491,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     let list = trips.filter((t) => !!t.isArchived);
     if (searchCarQuery.trim()) {
       const q = searchCarQuery.trim().toLowerCase();
-      list = list.filter((t) => String(t.carNumber || '').toLowerCase().includes(q));
+      list = list.filter((t) =>
+        String(t.carNumber || "")
+          .toLowerCase()
+          .includes(q),
+      );
     }
     let targetMonth = archiveMonth;
     if (!targetMonth && archiveTripsMonths.length > 0) {
@@ -3457,20 +3538,38 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         return 0;
       });
     } else {
-      list.sort((a, b) => {
-        const idxA = manualTripsOrder.indexOf(a.id);
-        const idxB = manualTripsOrder.indexOf(b.id);
-        if (idxA === -1 && idxB === -1) return b.id.localeCompare(a.id);
-        if (idxA === -1) return 1;
-        if (idxB === -1) return -1;
-        return idxA - idxB;
-      });
+      list.sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
     }
     return list;
-  }, [trips, searchCarQuery, archiveMonth, archiveTripsMonths, sortConfig, manualTripsOrder]);
+  }, [
+    trips,
+    searchCarQuery,
+    archiveMonth,
+    archiveTripsMonths,
+    sortConfig,
+    manualTripsOrder,
+  ]);
 
   const renderTripsGrid = (archived: boolean) => {
-    const list = archived ? [...archiveTripsComputed] : [...activeTripsComputed];
+    const list = archived
+      ? [...archiveTripsComputed]
+      : [...activeTripsComputed];
+
+    const normalizeCarNum = (num: string) => String(num || "").trim().replace(/\s+/g, "").toUpperCase();
+
+    const getCarNotebookStatus = (car: string) => {
+      if (!car) return null;
+      const normalized = normalizeCarNum(car);
+      const foundKey = Object.keys(notebookStatuses).find(k => normalizeCarNum(k) === normalized);
+      return foundKey ? notebookStatuses[foundKey] : null;
+    };
+
+    const getCarNotebookNote = (car: string) => {
+      if (!car) return null;
+      const normalized = normalizeCarNum(car);
+      const foundKey = Object.keys(notebookNotes).find(k => normalizeCarNum(k) === normalized);
+      return foundKey ? notebookNotes[foundKey] : null;
+    };
 
     if (list.length === 0)
       return (
@@ -3521,7 +3620,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     };
 
     return (
-      <div className="flex flex-col gap-3 relative w-full overflow-x-auto transition-all duration-150" style={{ zoom: tableScale / 100 } as any}>
+      <div
+        className="flex flex-col gap-3 relative w-full overflow-x-auto transition-all duration-150"
+        style={{ zoom: tableScale / 100 } as any}
+      >
         {/* Table Headers */}
         <div className="hidden lg:flex px-6 pb-2 border-b border-slate-200/50 text-[10px] uppercase font-black tracking-widest text-slate-400 font-mono self-start w-full cursor-pointer select-none">
           <div
@@ -3565,222 +3667,268 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
           </div>
         </div>
 
-        <Virtuoso 
-          useWindowScroll 
-          data={list} 
+        <Virtuoso
+          useWindowScroll
+          data={list}
           itemContent={(idx, trip) => {
-          const firstLeg = trip.legs?.[0];
-          const lastLeg = trip.legs?.[trip.legs.length - 1];
-          const routeTitle =
-            firstLeg?.from && lastLeg?.to
-              ? `${firstLeg.from} ➔ ${lastLeg.to}`
-              : "Плечи маршрута";
-          const cardBg = getDispatcherColor(trip.dispatcher || "");
+            const firstLeg = trip.legs?.[0];
+            const lastLeg = trip.legs?.[trip.legs.length - 1];
+            const routeTitle =
+              firstLeg?.from && lastLeg?.to
+                ? `${firstLeg.from} ➔ ${lastLeg.to}`
+                : "Плечи маршрута";
+            const cardBg = getDispatcherColor(trip.dispatcher || "");
 
-          const isHighlighted =
-            trip.carNumber &&
-            highlightedCar === trip.carNumber.trim().toUpperCase();
-          return (
-            <div
-              key={trip.id}
-              data-trip-id={trip.id}
-              onClick={() => loadTripToForm(trip)}
-              className={`car-strip-item ${cardBg} rounded-2xl p-4 pl-5 border hover:shadow-md transition group relative flex flex-col lg:flex-row gap-6 items-start lg:items-center cursor-pointer ${isHighlighted ? "border-amber-500 ring-2 ring-amber-500/20 shadow-[0_10px_25px_rgba(245,158,11,0.08)] scale-[1.01]" : "border-slate-200/50"}`}
-              draggable={true}
-              onDragStart={(e) => {
-                e.dataTransfer.setData("tripId", trip.id);
-                e.stopPropagation();
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-              }}
-              onDrop={(e) => {
-                handleTripDrop(e, trip.id);
-                e.stopPropagation();
-              }}
-            >
+            const isHighlighted =
+              trip.carNumber &&
+              highlightedCar === trip.carNumber.trim().toUpperCase();
+            return (
               <div
-                className={`absolute left-0 top-0 bottom-0 w-1.5 ${trip.stripColor || "bg-slate-200"} rounded-l-2xl`}
-              />
+                key={trip.id}
+                data-trip-id={trip.id}
+                onClick={() => loadTripToForm(trip)}
+                className={`car-strip-item ${cardBg} rounded-2xl p-4 pl-5 border hover:shadow-md transition group relative flex flex-col lg:flex-row gap-6 items-start lg:items-center cursor-pointer ${isHighlighted ? "border-amber-500 ring-2 ring-amber-500/20 shadow-[0_10px_25px_rgba(245,158,11,0.08)] scale-[1.01]" : "border-slate-200/50"}`}
+                draggable={true}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("tripId", trip.id);
+                  e.stopPropagation();
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  handleTripDrop(e, trip.id);
+                  e.stopPropagation();
+                }}
+              >
+                <div
+                  className={`absolute left-0 top-0 bottom-0 w-1.5 ${trip.stripColor || "bg-slate-200"} rounded-l-2xl`}
+                />
 
-              <div className="flex flex-col gap-1 min-w-[200px]">
-                <div className="flex items-center gap-3 mb-1">
-                  <span className="text-lg font-black text-slate-900 tracking-tight">
-                    {trip.carNumber}
-                  </span>
-                  <span className="bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md font-mono">
-                    {trip.direction}
-                  </span>
-                </div>
-                <div className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-widest">
-                  Диспетчер:{" "}
-                  <span className="text-slate-600">
-                    {trip.dispatcher || trip.logist || "—"}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1.5 mt-2 opacity-100 lg:opacity-0 group-hover:opacity-100 transition">
-                  {!archived && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        finishTripToArchive(trip);
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 rounded-lg transition"
-                      title="В архив"
-                    >
-                      <Archive className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  {user.role === "root_admin" && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteTrip(trip.id);
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 rounded-lg transition"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1.5 min-w-[140px] text-[11px] font-bold text-slate-500 font-mono">
-                <div className="flex justify-between gap-4">
-                  <span>ст.</span>{" "}
-                  <span className="text-slate-800">
-                    {trip.dateStart
-                      ? new Date(trip.dateStart).toLocaleDateString("ru-RU")
-                      : "-"}
-                  </span>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <span>фн.</span>{" "}
-                  <span className="text-slate-800">
-                    {trip.dateEnd
-                      ? new Date(trip.dateEnd).toLocaleDateString("ru-RU")
-                      : "-"}
-                  </span>
-                </div>
-                {trip.currentMonth && archived && (
-                  <div className="flex justify-between gap-4 text-blue-500">
-                    <span>архив</span> <span>{trip.currentMonth}</span>
+                <div className="flex flex-col gap-1 min-w-[200px]">
+                  <div className="flex items-center gap-3 mb-1">
+                    <span className="text-lg font-black text-slate-900 tracking-tight">
+                      {trip.carNumber}
+                    </span>
+                    <span className="bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md font-mono">
+                      {trip.direction}
+                    </span>
                   </div>
-                )}
-              </div>
 
-              <div className="flex-1 w-full bg-slate-50/50 rounded-2xl p-4 border border-slate-100 min-w-[220px]">
-                <div className="text-sm font-black text-slate-900 mb-3">
-                  {routeTitle}
-                </div>
-                {trip.legs && trip.legs.length > 0 ? (
-                  <div className="flex flex-col gap-2">
-                    {trip.legs.map((leg, i) => {
-                      const isActive = trip.activeLegIndex === i;
+                  {/* Notebook status badge */}
+                  {(() => {
+                    const status = getCarNotebookStatus(trip.carNumber);
+                    if (status === "base") {
                       return (
-                        <div
-                          key={i}
-                          className={`flex items-center gap-2 text-[11px] font-bold font-mono p-1.5 -ml-1.5 rounded-lg ${isActive ? "bg-blue-500/10 text-blue-800" : "text-slate-500"}`}
-                        >
-                          <div
-                            className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" : "bg-slate-300"}`}
-                          />
-                          <span className="truncate">
-                            {leg.from || "?"} ➔ {leg.to || "?"}
+                        <div className="flex mb-1">
+                          <span className="bg-emerald-100 border border-emerald-200 text-emerald-800 text-[9px] font-black uppercase px-2 py-0.5 rounded-lg leading-none font-mono">
+                            на базе
                           </span>
-                          {leg.ferry > 0 ? (
-                            <span
-                              className="text-blue-400"
-                              title={`Ферри: €${leg.ferry}`}
-                            >
-                              ⛴
-                            </span>
-                          ) : null}
                         </div>
                       );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-[10px] font-bold text-slate-400 font-mono">
-                    Не задан
-                  </div>
-                )}
-              </div>
+                    }
+                    if (status === "trip") {
+                      return (
+                        <div className="flex mb-1">
+                          <span className="bg-blue-100 border border-blue-200 text-blue-800 text-[9px] font-black uppercase px-2 py-0.5 rounded-lg leading-none font-mono">
+                            в рейсе
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
 
-              <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 sm:gap-6 xl:gap-8 w-full lg:w-auto justify-between lg:justify-end border-t lg:border-t-0 border-slate-100 pt-3 lg:pt-0">
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 font-mono">
-                    Пробег
-                  </span>
-                  <span className="text-[13px] font-black text-slate-800 font-mono whitespace-nowrap">
-                    {Math.round(
-                      trip.factKm || trip.totalKm || 0,
-                    ).toLocaleString("ru-RU")}{" "}
-                    км
-                  </span>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 font-mono">
-                    Фрахт
-                  </span>
-                  <span className="text-[13px] font-black text-slate-800 font-mono whitespace-nowrap">
-                    {Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}{" "}
-                    €
-                  </span>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] uppercase tracking-widest font-black text-rose-500/70 font-mono">
-                    Расходы
-                  </span>
-                  <span className="text-[13px] font-black text-rose-600 font-mono whitespace-nowrap">
-                    {Math.round(trip.totalExpenses || 0).toLocaleString(
-                      "ru-RU",
-                    )}{" "}
-                    €
-                  </span>
+                  <div className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-widest">
+                    Диспетчер:{" "}
+                    <span className="text-slate-600">
+                      {trip.dispatcher || trip.logist || "—"}
+                    </span>
+                  </div>
+
+                  {/* Notebook note preview */}
+                  {(() => {
+                    const noteText = getCarNotebookNote(trip.carNumber);
+                    if (noteText && noteText.trim()) {
+                      return (
+                        <div className="mt-2 p-2 bg-amber-50/80 border border-amber-200/50 rounded-xl text-[10px] font-bold text-amber-900 leading-relaxed font-sans max-w-[220px] shadow-[0_1px_2px_rgba(0,0,0,0.02)] flex items-start gap-1.5">
+                          <BookOpen size={10} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                          <span className="whitespace-pre-line break-words">
+                            {noteText}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  <div className="flex items-center gap-1.5 mt-2 opacity-100 lg:opacity-0 group-hover:opacity-100 transition">
+                    {!archived && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          finishTripToArchive(trip);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 rounded-lg transition"
+                        title="В архив"
+                      >
+                        <Archive className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {user.role === "root_admin" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteTrip(trip.id);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 rounded-lg transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-4 border-l-0 lg:border-l border-slate-200 pl-0 lg:pl-4 xl:pl-6 w-full sm:w-auto justify-between sm:justify-end">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest font-mono text-left lg:text-right mb-0.5">
-                      Прибыль
-                    </span>
-                    <span
-                      className={`text-xl font-black tracking-tighter leading-none whitespace-nowrap ${trip.profitFact < 0 ? "text-rose-500" : "text-slate-900"}`}
-                    >
-                      {Math.round(trip.profitFact || 0).toLocaleString("ru-RU")}{" "}
-                      <span className="text-sm font-mono text-slate-400">
-                        €
-                      </span>
+                <div className="flex flex-col gap-1.5 min-w-[140px] text-[11px] font-bold text-slate-500 font-mono">
+                  <div className="flex justify-between gap-4">
+                    <span>ст.</span>{" "}
+                    <span className="text-slate-800">
+                      {trip.dateStart
+                        ? new Date(trip.dateStart).toLocaleDateString("ru-RU")
+                        : "-"}
                     </span>
                   </div>
-                  <div className="flex flex-col border-l border-slate-100 pl-4">
-                    <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 font-mono text-right mb-0.5">
-                      Дни
-                    </span>
-                    <span className="text-sm font-black font-mono text-slate-600 text-right">
-                      {trip.days || "-"}
+                  <div className="flex justify-between gap-4">
+                    <span>фн.</span>{" "}
+                    <span className="text-slate-800">
+                      {trip.dateEnd
+                        ? new Date(trip.dateEnd).toLocaleDateString("ru-RU")
+                        : "-"}
                     </span>
                   </div>
-                  <div className="flex flex-col border-l border-slate-100 pl-4">
-                    <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 font-mono text-right mb-0.5">
-                      В день
+                  {trip.currentMonth && archived && (
+                    <div className="flex justify-between gap-4 text-blue-500">
+                      <span>архив</span> <span>{trip.currentMonth}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-1 w-full bg-slate-50/50 rounded-2xl p-4 border border-slate-100 min-w-[220px]">
+                  <div className="text-sm font-black text-slate-900 mb-3">
+                    {routeTitle}
+                  </div>
+                  {trip.legs && trip.legs.length > 0 ? (
+                    <div className="flex flex-col gap-2">
+                      {trip.legs.map((leg, i) => {
+                        const isActive = trip.activeLegIndex === i;
+                        return (
+                          <div
+                            key={i}
+                            className={`flex items-center gap-2 text-[11px] font-bold font-mono p-1.5 -ml-1.5 rounded-lg ${isActive ? "bg-blue-500/10 text-blue-800" : "text-slate-500"}`}
+                          >
+                            <div
+                              className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" : "bg-slate-300"}`}
+                            />
+                            <span className="truncate">
+                              {leg.from || "?"} ➔ {leg.to || "?"}
+                            </span>
+                            {leg.ferry > 0 ? (
+                              <span
+                                className="text-blue-400"
+                                title={`Ферри: €${leg.ferry}`}
+                              >
+                                ⛴
+                              </span>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-[10px] font-bold text-slate-400 font-mono">
+                      Не задан
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 sm:gap-6 xl:gap-8 w-full lg:w-auto justify-between lg:justify-end border-t lg:border-t-0 border-slate-100 pt-3 lg:pt-0">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 font-mono">
+                      Пробег
                     </span>
-                    <span
-                      className={`text-sm font-black font-mono text-right whitespace-nowrap ${Math.round((trip.profitFact || 0) / (trip.days || 1)) < 0 ? "text-rose-500" : "text-green-600"}`}
-                    >
+                    <span className="text-[13px] font-black text-slate-800 font-mono whitespace-nowrap">
                       {Math.round(
-                        (trip.profitFact || 0) / (trip.days || 1),
+                        trip.factKm || trip.totalKm || 0,
                       ).toLocaleString("ru-RU")}{" "}
+                      км
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 font-mono">
+                      Фрахт
+                    </span>
+                    <span className="text-[13px] font-black text-slate-800 font-mono whitespace-nowrap">
+                      {Math.round(trip.totalFreight || 0).toLocaleString(
+                        "ru-RU",
+                      )}{" "}
                       €
                     </span>
                   </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[9px] uppercase tracking-widest font-black text-rose-500/70 font-mono">
+                      Расходы
+                    </span>
+                    <span className="text-[13px] font-black text-rose-600 font-mono whitespace-nowrap">
+                      {Math.round(trip.totalExpenses || 0).toLocaleString(
+                        "ru-RU",
+                      )}{" "}
+                      €
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-4 border-l-0 lg:border-l border-slate-200 pl-0 lg:pl-4 xl:pl-6 w-full sm:w-auto justify-between sm:justify-end">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest font-mono text-left lg:text-right mb-0.5">
+                        Прибыль
+                      </span>
+                      <span
+                        className={`text-xl font-black tracking-tighter leading-none whitespace-nowrap ${trip.profitFact < 0 ? "text-rose-500" : "text-slate-900"}`}
+                      >
+                        {Math.round(trip.profitFact || 0).toLocaleString(
+                          "ru-RU",
+                        )}{" "}
+                        <span className="text-sm font-mono text-slate-400">
+                          €
+                        </span>
+                      </span>
+                    </div>
+                    <div className="flex flex-col border-l border-slate-100 pl-4">
+                      <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 font-mono text-right mb-0.5">
+                        Дни
+                      </span>
+                      <span className="text-sm font-black font-mono text-slate-600 text-right">
+                        {trip.days || "-"}
+                      </span>
+                    </div>
+                    <div className="flex flex-col border-l border-slate-100 pl-4">
+                      <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 font-mono text-right mb-0.5">
+                        В день
+                      </span>
+                      <span
+                        className={`text-sm font-black font-mono text-right whitespace-nowrap ${Math.round((trip.profitFact || 0) / (trip.days || 1)) < 0 ? "text-rose-500" : "text-green-600"}`}
+                      >
+                        {Math.round(
+                          (trip.profitFact || 0) / (trip.days || 1),
+                        ).toLocaleString("ru-RU")}{" "}
+                        €
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        }} />
+            );
+          }}
+        />
 
         {/* Сводка (Summary Box) */}
         <div className="mt-4 grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -3843,18 +3991,18 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
   const renderHistory = () => {
     return (
-      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
+      <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
         <h2 className="text-sm font-black uppercase text-slate-800 tracking-wider mb-6 flex items-center gap-2">
           <History className="w-5 h-5 text-blue-500" /> История изменений
         </h2>
         <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-          {logs
+          {[...logs]
             .sort(
               (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
             )
             .map((log, idx) => (
               <div
-                key={`${log.id || 'log'}_${idx}`}
+                key={`${log.id || "log"}_${idx}`}
                 className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4"
               >
                 <div className="flex flex-col">
@@ -3893,16 +4041,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   };
 
   return (
-    <div className="w-full space-y-6">
-      <div className="bg-white rounded-[2rem] p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-4">
+    <div className="w-full space-y-4">
+      <div className="bg-white rounded-[2rem] p-5 sm:p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-4">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
           {/* ... Header ... */}
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="bg-blue-500 text-white font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-widest">
-                Модуль План Firebase
-              </span>
-            </div>
             <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
               <TrendingUp className="w-6 h-6 text-blue-500" /> План Дохода
             </h1>
@@ -4017,7 +4160,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-4">
         {(activeTab === "active" || activeTab === "archive") && (
           <div className="bg-white border border-slate-200 shadow-xs rounded-2xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 gap-y-4">
             <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -4040,8 +4183,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             </div>
 
             <div className="flex items-center gap-2 pl-0 md:pl-4 border-t md:border-t-0 md:border-l border-slate-200 pt-3 md:pt-0 shrink-0">
-              <span className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-wider">Масштаб таблицы:</span>
-              <button 
+              <span className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-wider">
+                Масштаб таблицы:
+              </span>
+              <button
                 onClick={() => {
                   const newScale = Math.max(50, tableScale - 10);
                   setTableScale(newScale);
@@ -4052,8 +4197,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               >
                 -
               </button>
-              <span className="text-[11px] font-black font-mono text-slate-750 min-w-[36px] text-center select-none">{tableScale}%</span>
-              <button 
+              <span className="text-[11px] font-black font-mono text-slate-750 min-w-[36px] text-center select-none">
+                {tableScale}%
+              </span>
+              <button
                 onClick={() => {
                   const newScale = Math.min(150, tableScale + 10);
                   setTableScale(newScale);
@@ -4065,7 +4212,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 +
               </button>
               {tableScale !== 100 && (
-                <button 
+                <button
                   onClick={() => {
                     setTableScale(100);
                     localStorage.setItem("pd_table_scale", "100");

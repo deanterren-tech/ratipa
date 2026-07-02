@@ -386,8 +386,8 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
       });
 
       update(ref(database), updates);
-      logDocumentHistory('Реестр сдачи использованных разрешений', `Сданы в инспекцию: ${checkedItems.length} бланков`, 'Сданы в ИТ');
-      alert(`Успешно переведено бланков в статус "Сданы в ИТ" (Архив): ${checkedItems.length} шт.`);
+      logDocumentHistory('Реестр сдачи использованных разрешений', `Сданы в инспекцию: ${checkedItems.length} бланков`, 'Сданы в ТИ');
+      alert(`Успешно переведено бланков в статус "Сданы в ТИ" (Архив): ${checkedItems.length} шт.`);
       setReturnRows([]);
     }
   };
@@ -1084,7 +1084,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
               <div className="flex gap-2">
                 {user.role === 'root_admin' && (
                   <button onClick={markCheckedOfficeReturnsAsUsed} className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight shadow-sm cursor-pointer">
-                    <CheckCircle className="h-3 w-3" /> Списать (Сданы в инспекцию ИТ)
+                    <CheckCircle className="h-3 w-3" /> Списать (Сданы в инспекцию ТИ)
                   </button>
                 )}
                 <button onClick={addReturnRow} className="flex items-center gap-1 bg-slate-950 hover:bg-slate-800 text-[#70FC8E] px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight cursor-pointer">+ Добавить строку</button>

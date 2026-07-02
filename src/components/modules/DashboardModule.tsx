@@ -287,16 +287,8 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
       {/* SECTION 00: Sleek Heading with Pill Selectors and Quick Buttons */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pt-2 select-none">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[9px] font-black tracking-widest text-slate-900 bg-[#70FC8E] px-2.5 py-0.5 rounded-full uppercase font-mono">
-              СИСТЕМА RATIPA
-            </span>
-            <span className="text-[9px] font-black tracking-widest text-slate-400 uppercase font-mono">
-              v2.4 ЗАЩИЩЕННАЯ СЕТЬ
-            </span>
-          </div>
           <h1 className="text-4xl lg:text-5xl font-black tracking-tighter text-slate-900 uppercase leading-none flex items-baseline">
-            Ratipa {settings?.customPhrases && settings.customPhrases.length > 0 && <TypingText phrases={settings.customPhrases} />}
+            Ratipa
           </h1>
         </div>
 

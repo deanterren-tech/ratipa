@@ -23,7 +23,8 @@ import {
   User,
   Calendar,
   Lock,
-  DollarSign
+  DollarSign,
+  Wand2
 } from 'lucide-react';
 
 interface Props {
@@ -321,6 +322,67 @@ export default function DocumentsModule({ user }: Props) {
       });
   };
 
+  const [isParsingCouple, setIsParsingCouple] = useState(false);
+  const [coupleRawText, setCoupleRawText] = useState("");
+  const [coupleImageBase64, setCoupleImageBase64] = useState<string | null>(null);
+
+  const handleImageUpload = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      alert("Пожалуйста, выберите файл изображения (скриншот или фото).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCoupleImageBase64(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCouplePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          handleImageUpload(file);
+        }
+      }
+    }
+  };
+
+  const handleParseCouple = async () => {
+    if (!coupleRawText.trim() && !coupleImageBase64) {
+      alert("Введите текст или добавьте скриншот/изображение для распознавания.");
+      return;
+    }
+    setIsParsingCouple(true);
+    try {
+      const res = await fetch("/api/parse-couple-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: coupleRawText, image: coupleImageBase64 })
+      });
+      if (!res.ok) throw new Error("Parse error");
+      const data = await res.json();
+      if (data.stateNumber) setCoupleStateNumber(data.stateNumber);
+      if (data.model) setCoupleModel(data.model);
+      if (data.vehicleType) setCoupleVehicleType(data.vehicleType);
+      if (data.dimensions) setCoupleDimensions(data.dimensions);
+      if (data.weight) setCoupleWeight(data.weight);
+      if (data.driver1) setCoupleDriver1(data.driver1);
+      if (data.driver2) setCoupleDriver2(data.driver2);
+      
+      setCoupleRawText("");
+      setCoupleImageBase64(null);
+    } catch (e) {
+      alert("Ошибка при распознавании.");
+      console.error(e);
+    } finally {
+      setIsParsingCouple(false);
+    }
+  };
+
   // Create or Update a Couple (1-block tractor-trailer couple) inside database
   const handleSaveCouple = () => {
     if (!coupleStateNumber.trim() || !coupleModel.trim()) {
@@ -410,13 +472,15 @@ export default function DocumentsModule({ user }: Props) {
 
   // 5. Print Ferry Order to exact physical paper layout
   const handlePrintFerryOrder = () => {
+    const act = ferryCouples.find(c => c.id === selectedCoupleId);
+    const selectedCarPlate = act ? act.stateNumber : '';
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
     printWindow.document.write(`
       <html>
         <head>
-          <title>Поручение экспедитору — Паром — \${selectedCarPlate || 'Печать'}</title>
+          <title>Поручение экспедитору — Паром — ${selectedCarPlate || 'Печать'}</title>
           <style>
             @page {
               size: A4;
@@ -569,77 +633,77 @@ export default function DocumentsModule({ user }: Props) {
                   НАИМЕНОВАНИЕ<br/>ОРГАНИЗАЦИИ:<br/>
                   NAME OF<br/>ORGANIZATION:
                 </th>
-                <td>\${ferryOrgName}</td>
+                <td>${ferryOrgName}</td>
               </tr>
               <tr>
                 <th>
                   Дата<br/>предполагаемой<br/>погрузки на судно и<br/>порт погрузки/<br/>
                   Date of intended<br/>loading on vessel and<br/>port of loading:
                 </th>
-                <td>\${ferryLoadingDatePort}</td>
+                <td>${ferryLoadingDatePort}</td>
               </tr>
               <tr>
                 <th>
                   ФИО и номер<br/>телефона<br/>контактного лица/<br/>
                   Name of contact<br/>person name and<br/>phone number:
                 </th>
-                <td>\${ferryContactPerson}</td>
+                <td>${ferryContactPerson}</td>
               </tr>
               <tr class="yellow-bg">
                 <th class="yellow-bg">
                   Наименование<br/>организации –<br/>перевозчика<br/>(согласно CMR)<br/>
                   /Name of the<br/>organization – carrier<br/>(according to CMR):
                 </th>
-                <td class="yellow-bg">\${ferryCarrierName}</td>
+                <td class="yellow-bg">${ferryCarrierName}</td>
               </tr>
               <tr>
                 <th>Тип ТС/Vehicle type:</th>
-                <td>\${ferryVehicleType}</td>
+                <td>${ferryVehicleType}</td>
               </tr>
               <tr>
                 <th>Модель/Model:</th>
-                <td>\${ferryVehicleModel}</td>
+                <td>${ferryVehicleModel}</td>
               </tr>
               <tr>
                 <th>
                   Государственный<br/>номер/State Number:
                 </th>
-                <td>\${ferryStateNumber}</td>
+                <td>${ferryStateNumber}</td>
               </tr>
               <tr>
                 <th>
                   Габариты (Длина х<br/>Ширина х<br/>Высота)/Dimensions<br/>
                   (Length х Width х<br/>Height):
                 </th>
-                <td>\${ferryDimensions}</td>
+                <td>${ferryDimensions}</td>
               </tr>
               <tr>
                 <th>
                   Вес ТС (Тягач +<br/>п/прицепом)/<br/>
                   Vehicle weight (tractor<br/>+ semi-trailer):
                 </th>
-                <td>\${ferryVehicleWeight}</td>
+                <td>${ferryVehicleWeight}</td>
               </tr>
               <tr>
                 <th>
                   Водитель № 1 (ФИО,<br/>паспортные<br/>данные)/Driver<br/>
                   № 1 (full name,<br/>passport details):
                 </th>
-                <td>\${ferryDriver1Details}</td>
+                <td>${ferryDriver1Details}</td>
               </tr>
               <tr>
                 <th>
                   Водитель № 2 (ФИО,<br/>паспортные<br/>данные)/Driver<br/>
                   № 2 (full name,<br/>passport details):
                 </th>
-                <td>\${ferryDriver2Details || ''}</td>
+                <td>${ferryDriver2Details || ''}</td>
               </tr>
               <tr>
                 <th>
                   Наименование груза,<br/>вес груза,<br/>количество<br/>упаковочных мест/<br/>
                   Name of cargo, weight<br/>of cargo, number of<br/>packing places:
                 </th>
-                <td>\${ferryCargoDetails}</td>
+                <td>${ferryCargoDetails}</td>
               </tr>
               <tr>
                 <th>
@@ -676,7 +740,7 @@ export default function DocumentsModule({ user }: Props) {
                     <tr>
                       <td style="width: 75%; border-right: 1px solid #000; padding: 5px; font-weight: bold;">
                         Количество <span class="yellow-bg" style="padding: 1px 1px;">грузовых партий (CMR)</span> на одном TC/<br/>
-                        Number of <span class="yellow-bg" style="padding: 1px 1px;">consignments (CMR)</span> per vehicle: <strong>\${ferryConsignmentsCount || '1) 5 CMR'}</strong>
+                        Number of <span class="yellow-bg" style="padding: 1px 1px;">consignments (CMR)</span> per vehicle: <strong>${ferryConsignmentsCount || '1) 5 CMR'}</strong>
                       </td>
                       <td style="width: 25%; padding: 5px;"></td>
                     </tr>
@@ -692,7 +756,7 @@ export default function DocumentsModule({ user }: Props) {
                   <table class="sub-table">
                     <tr>
                       <td style="width: 50%; border-right: 1px solid #000; padding: 5px; text-align: center; font-size: 12px; font-weight: bold;">
-                        \${ferryTotalCost ? ferryTotalCost : ''}
+                        ${ferryTotalCost ? ferryTotalCost : ''}
                       </td>
                       <td style="width: 50%; padding: 5px; font-weight: bold;">Долларов США/ US dollars</td>
                     </tr>
@@ -739,7 +803,7 @@ export default function DocumentsModule({ user }: Props) {
               <div style="margin-top: 25px;">
                 <strong>Должность, Ф.И.О., Подпись, Печать Клиента/ Title, name and surname, Signature, Client's seal</strong>
                 <div class="footer-line"></div>
-                <div class="footer-signee">\${ferryClientSignee}</div>
+                <div class="footer-signee">${ferryClientSignee}</div>
               </div>
             </div>
           </div>
@@ -984,13 +1048,13 @@ export default function DocumentsModule({ user }: Props) {
   };
 
   const handlePrintTirLossDeclaration = () => {
-    const printWindow = window.open('/loss_declaration.html', '_blank');
-    if (!printWindow) return;
-
-    // We can attempt to trigger print after it loads.
-    printWindow.onload = () => {
-      printWindow.print();
-    };
+    const iframe = document.getElementById('loss-declaration-iframe') as HTMLIFrameElement | null;
+    if (iframe && iframe.contentWindow) {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } else {
+      window.open('/loss_declaration.html', '_blank');
+    }
   };
 
   // --- OLD SYSTEM TEMPLATES LOGIC ---
@@ -1262,6 +1326,85 @@ export default function DocumentsModule({ user }: Props) {
                   <h3 className="text-[10px] font-black uppercase text-[#0f7632] tracking-wider font-mono">
                     {editCoupleId ? "📝 Редактировать сцепку" : "➕ Новая сцепка в базе"}
                   </h3>
+                  
+                  {/* AI Parser Block */}
+                  <div className="bg-blue-50/50 p-2.5 rounded-xl border border-blue-100 flex flex-col gap-2">
+                    <label className="text-[8px] font-black uppercase text-blue-800 font-mono flex items-center justify-between">
+                      <span className="flex items-center gap-1"><Wand2 size={10} /> AI Нейросетевой Парсер (текст / скриншот / фото)</span>
+                      <span className="text-[7px] text-blue-500 lowercase bg-blue-100 px-1 py-0.5 rounded">Без VPN</span>
+                    </label>
+                    
+                    <div 
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) handleImageUpload(file);
+                      }}
+                      className="flex flex-col gap-2"
+                    >
+                      <div className="flex gap-2">
+                        <textarea
+                          value={coupleRawText}
+                          onChange={e => setCoupleRawText(e.target.value)}
+                          onPaste={handleCouplePaste}
+                          placeholder="Вставьте текст или Ctrl+V скриншот..."
+                          className="w-full bg-white border border-blue-200 text-[10px] p-2 rounded-lg outline-none focus:border-blue-400 resize-none h-11"
+                        />
+                        <button
+                          onClick={handleParseCouple}
+                          disabled={isParsingCouple || (!coupleRawText.trim() && !coupleImageBase64)}
+                          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 rounded-lg text-[9px] font-black uppercase tracking-wider transition shrink-0 flex items-center justify-center gap-1"
+                        >
+                          {isParsingCouple ? (
+                            <span className="animate-pulse">Обработка...</span>
+                          ) : (
+                            "Разобрать"
+                          )}
+                        </button>
+                      </div>
+
+                      {/* File upload row */}
+                      <div className="flex items-center justify-between gap-2 text-[8px] text-slate-500">
+                        <label className="flex items-center gap-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-2 py-1 rounded-md cursor-pointer transition select-none">
+                          <span>📁 Загрузить картинку</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleImageUpload(file);
+                            }} 
+                          />
+                        </label>
+                        <span>Или перетащите файл / вставьте из буфера</span>
+                      </div>
+
+                      {/* Image Preview Thumbnail */}
+                      {coupleImageBase64 && (
+                        <div className="mt-1 flex items-center gap-2 p-1.5 bg-white border border-blue-100 rounded-lg">
+                          <img 
+                            src={coupleImageBase64} 
+                            alt="Screenshot Preview" 
+                            className="w-10 h-10 object-cover rounded border border-slate-200"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[8px] font-black text-slate-700 truncate">Скриншот прикреплен</p>
+                            <p className="text-[7px] text-slate-400 font-mono">Готов к отправке в ИИ</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setCoupleImageBase64(null)}
+                            className="text-[8px] font-black text-rose-600 hover:underline px-1.5 py-1 bg-rose-50 rounded"
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   
                   <div>
                     <label className="text-[8px] font-black uppercase text-slate-500 font-mono">Госномер сцепки (Тягач+Прицеп)</label>
@@ -1962,7 +2105,7 @@ export default function DocumentsModule({ user }: Props) {
             ) : (
               /* PAPER BLOCK - LOSS DECLARATION FORM */
               <div className="bg-white rounded-[2rem] border border-slate-250 p-2 shadow-[0_15px_40px_rgba(0,0,0,0.06)] w-full max-w-[650px] min-h-[750px] flex items-center justify-center overflow-hidden">
-                <iframe src="/loss_declaration.html" className="w-full h-[750px] border-0 rounded-[1.5rem]" title="Декларация об утере" />
+                <iframe id="loss-declaration-iframe" src="/loss_declaration.html" className="w-full h-[750px] border-0 rounded-[1.5rem]" title="Декларация об утере" />
               </div>
             )}
 

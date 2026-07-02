@@ -12,7 +12,12 @@ import {
   ZoomOut,
   Navigation,
   X,
-  Minus
+  Minus,
+  Truck,
+  Home,
+  Search,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useToast } from '../ToastProvider';
 
@@ -25,6 +30,15 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [isIframeLoading, setIsIframeLoading] = useState(true);
   const [iframeKey, setIframeKey] = useState(0); 
+
+  // Vehicle Status states inside GPS Notebook
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [vehicleStatuses, setVehicleStatuses] = useState<Record<string, 'base' | 'trip'>>({});
+  const [isVehiclesListExpanded, setIsVehiclesListExpanded] = useState(() => {
+    return localStorage.getItem('ratipa_gps_vehicles_expanded') !== 'false';
+  });
+  const [vehicleSearchQuery, setVehicleSearchQuery] = useState('');
+
   const [zoomLevel, setZoomLevel] = useState(() => {
     const saved = localStorage.getItem('ratipa_zoom_disposition');
     return saved ? parseFloat(saved) : 1;
@@ -83,9 +97,9 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
   const [gpsSize, setGpsSize] = useState<{ width: number; height: number }>(() => {
     try {
       const saved = localStorage.getItem('ratipa_gps_size');
-      return saved ? JSON.parse(saved) : { width: 380, height: 450 };
+      return saved ? JSON.parse(saved) : { width: 850, height: 580 };
     } catch {
-      return { width: 380, height: 450 };
+      return { width: 850, height: 580 };
     }
   });
 
@@ -178,6 +192,46 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
   }, [zoomLevel]);
 
   useEffect(() => {
+    localStorage.setItem('ratipa_gps_vehicles_expanded', isVehiclesListExpanded.toString());
+  }, [isVehiclesListExpanded]);
+
+  useEffect(() => {
+    let unsubVehicles = () => {};
+    let unsubStatuses = () => {};
+
+    try {
+      unsubVehicles = dbService.getVehicleDriverData((list) => {
+        setVehicles(list || []);
+      });
+    } catch (e) {
+      console.warn(e);
+    }
+
+    const loadStatuses = () => {
+      try {
+        unsubStatuses = dbService.getVehicleStatuses((data) => {
+          setVehicleStatuses(data || {});
+        });
+      } catch (e) {
+        console.warn(e);
+      }
+    };
+
+    loadStatuses();
+
+    const handleLocalChange = () => {
+      loadStatuses();
+    };
+
+    window.addEventListener('ratipa_vehicle_statuses_changed', handleLocalChange);
+    return () => {
+      unsubVehicles();
+      unsubStatuses();
+      window.removeEventListener('ratipa_vehicle_statuses_changed', handleLocalChange);
+    };
+  }, []);
+
+  useEffect(() => {
     const unsubscribe = dbService.getSettings((s) => setSettings(s));
     return () => unsubscribe();
   }, []);
@@ -211,6 +265,10 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
       );
     }
 
+    const totalCount = vehicles.length;
+    const baseCount = vehicles.filter(v => vehicleStatuses[v.id] === 'base').length;
+    const tripCount = vehicles.filter(v => vehicleStatuses[v.id] === 'trip').length;
+
     return (
       <div 
         ref={gpsWindowRef}
@@ -229,17 +287,68 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
             setIsGpsDragging(true);
             setGpsDragOffset({ x: e.clientX - gpsPos.x, y: e.clientY - gpsPos.y });
           }}
-          className="bg-slate-50 border-b border-slate-200 p-3 flex items-center justify-between cursor-move select-none"
+          className="bg-slate-50 border-b border-slate-200 p-3 flex items-center justify-between cursor-move select-none gap-4"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <span className="p-1 px-2.5 bg-indigo-500/10 text-indigo-600 font-black text-[9px] rounded-full uppercase tracking-wider font-mono">
               GPS
             </span>
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Белтрансспутник</h3>
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight hidden sm:block">
+              {gpsTab === 'beltranssputnik' ? 'Белтранс' : gpsTab === 'wialon' ? 'Wialon' : 'ГЛОНАСС'}
+            </h3>
           </div>
-          <div className="flex items-center gap-1">
+
+          {/* Counters block in the header */}
+          <div className="flex items-center gap-2 font-mono text-[9px] font-extrabold select-none shrink-0" onMouseDown={(e) => e.stopPropagation()}>
+            <span className="bg-slate-200/60 text-slate-700 px-1.5 py-0.5 rounded-md">
+              Всего: <strong className="text-slate-900">{totalCount}</strong>
+            </span>
+            <span className="bg-emerald-50 text-[#0f7632] px-1.5 py-0.5 rounded-md border border-emerald-100/40">
+              База: <strong className="text-[#0f7632]">{baseCount}</strong>
+            </span>
+            <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded-md border border-indigo-100/40">
+              Рейс: <strong className="text-indigo-900">{tripCount}</strong>
+            </span>
+          </div>
+
+          {/* Centered Segmented Tabs in the Header */}
+          <div className="flex items-center bg-slate-200/50 p-1 rounded-xl gap-1 shrink-0" onMouseDown={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setGpsTab('beltranssputnik')}
+              className={`px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all duration-150 ${gpsTab === 'beltranssputnik' ? 'bg-[#0f7632] text-white shadow-xs' : 'text-slate-600 hover:text-slate-800 hover:bg-white/40'}`}
+            >
+              Белтранс
+            </button>
+            <button
+              onClick={() => setGpsTab('wialon')}
+              className={`px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all duration-150 ${gpsTab === 'wialon' ? 'bg-[#0f7632] text-white shadow-xs' : 'text-slate-600 hover:text-slate-800 hover:bg-white/40'}`}
+            >
+              Wialon
+            </button>
+            <button
+              onClick={() => setGpsTab('era_glonass')}
+              className={`px-2.5 py-1 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all duration-150 ${gpsTab === 'era_glonass' ? 'bg-[#0f7632] text-white shadow-xs' : 'text-slate-600 hover:text-slate-800 hover:bg-white/40'}`}
+            >
+              ГЛОНАСС
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Toggle Vehicles List button */}
+            <button
+              type="button"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => setIsVehiclesListExpanded(!isVehiclesListExpanded)}
+              className={`p-1 px-2 text-[9px] font-black uppercase tracking-tight rounded-lg transition border flex items-center gap-1 cursor-pointer ${isVehiclesListExpanded ? 'bg-indigo-100 text-indigo-900 border-indigo-200/50' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border-transparent'}`}
+              title={isVehiclesListExpanded ? "Скрыть список авто" : "Показать список авто"}
+            >
+              <Truck size={12} />
+              <span className="hidden md:inline">{isVehiclesListExpanded ? 'Скрыть Авто' : 'Авто'}</span>
+            </button>
+
             <button 
               type="button"
+              onMouseDown={(e) => e.stopPropagation()}
               onClick={() => {
                 setIsGpsMinimized(true);
                 localStorage.setItem('ratipa_gps_minimized', 'true');
@@ -250,6 +359,7 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
             </button>
             <button 
               type="button"
+              onMouseDown={(e) => e.stopPropagation()}
               onClick={() => {
                 setIsGpsOpen(false);
                 localStorage.setItem('ratipa_gps_visible', 'false');
@@ -261,14 +371,93 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col p-3 overflow-hidden bg-white">
-          <div className="flex items-center gap-2 mb-3 bg-slate-50 p-1 rounded-xl">
-             <button onClick={() => setGpsTab('beltranssputnik')} className={`flex-1 text-[10px] font-black uppercase tracking-wider py-1.5 rounded-lg transition ${gpsTab === 'beltranssputnik' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:bg-slate-100'}`}>Белтрансспутник</button>
-             <button onClick={() => setGpsTab('wialon')} className={`flex-1 text-[10px] font-black uppercase tracking-wider py-1.5 rounded-lg transition ${gpsTab === 'wialon' ? 'bg-white shadow-sm text-orange-600' : 'text-slate-500 hover:bg-slate-100'}`}>Wialon</button>
-             <button onClick={() => setGpsTab('era_glonass')} className={`flex-1 text-[10px] font-black uppercase tracking-wider py-1.5 rounded-lg transition ${gpsTab === 'era_glonass' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:bg-slate-100'}`}>ЭРА ГЛОНАСС</button>
-          </div>
+        <div className="flex-1 p-2 overflow-hidden bg-slate-50 flex flex-row gap-2 min-h-0">
+          {/* Left Side: Cars List with Statuses */}
+          {isVehiclesListExpanded && (
+            <div 
+              onMouseDown={(e) => e.stopPropagation()}
+              className="w-72 bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden shrink-0 shadow-sm"
+            >
+              {/* Search input inside list header */}
+              <div className="p-2 border-b border-slate-100 bg-slate-50/50 space-y-2 shrink-0">
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none text-slate-400">
+                    <Search size={12} />
+                  </span>
+                  <input
+                    type="text"
+                    value={vehicleSearchQuery}
+                    onChange={(e) => setVehicleSearchQuery(e.target.value)}
+                    placeholder="Поиск авто, водителя..."
+                    className="w-full bg-white pl-8 pr-2.5 py-1.5 text-[11px] font-semibold text-slate-800 rounded-lg border border-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-400 transition"
+                  />
+                  {vehicleSearchQuery && (
+                    <button
+                      onClick={() => setVehicleSearchQuery('')}
+                      className="absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
 
-          <div ref={gpsContainerRef} className="flex-1 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 relative">
+              {/* Scrollable list of vehicles */}
+              <div className="flex-1 overflow-y-auto divide-y divide-slate-100 p-1 space-y-1 scrollbar-thin">
+                {vehicles
+                  .filter((v) => {
+                    if (!vehicleSearchQuery) return true;
+                    const query = vehicleSearchQuery.toLowerCase();
+                    return (
+                      (v.vehicleNumbers || '').toLowerCase().includes(query) ||
+                      (v.brands || '').toLowerCase().includes(query) ||
+                      (v.driverName || '').toLowerCase().includes(query)
+                    );
+                  })
+                  .map((v) => {
+                    const status = vehicleStatuses[v.id];
+                    return (
+                      <div key={v.id} className="p-2 rounded-lg hover:bg-slate-50/50 flex flex-col gap-1.5 transition">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-xs font-black text-slate-800 font-mono tracking-tight uppercase">
+                              {v.vehicleNumbers || 'Без номера'}
+                            </div>
+                            <div className="text-[9px] text-slate-500 truncate mt-0.5 max-w-[130px]" title={v.brands || v.driverName}>
+                              {v.brands ? `${v.brands} ` : ''}{v.driverName ? `(${v.driverName})` : ''}
+                            </div>
+                          </div>
+                          
+                          {/* Segmented status buttons */}
+                          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/40 select-none shrink-0">
+                            <button
+                              onClick={() => dbService.setVehicleStatus(v.id, 'base')}
+                              className={`px-2 py-1 text-[9px] font-black uppercase rounded-md transition duration-100 cursor-pointer ${status === 'base' ? 'bg-[#0f7632] text-white shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}
+                            >
+                              База
+                            </button>
+                            <button
+                              onClick={() => dbService.setVehicleStatus(v.id, 'trip')}
+                              className={`px-2 py-1 text-[9px] font-black uppercase rounded-md transition duration-100 cursor-pointer ${status === 'trip' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}
+                            >
+                              Рейс
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                {vehicles.length === 0 && (
+                  <div className="p-6 text-center text-slate-400 text-[11px] font-medium">
+                    Нет автомобилей в списке. Добавьте их в модуле "Авто и Водители".
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Map Container */}
+          <div ref={gpsContainerRef} className="flex-1 bg-white rounded-xl overflow-hidden border border-slate-200 relative shadow-inner">
              <iframe
                src={settings?.gpsBeltranssputnikUrl || "https://beltranssputnik.by"}
                className="w-full h-full border-0 absolute inset-0"
@@ -345,76 +534,82 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
   };
 
   return (
-    <div className={`w-full space-y-6 font-sans flex flex-col ${isFocusMode ? 'fixed inset-0 z-50 bg-slate-900/10 backdrop-blur-md p-2 lg:p-6' : 'h-full'}`}>
+    <div className={`w-full space-y-2 font-sans flex flex-col ${isFocusMode ? 'fixed inset-0 z-50 bg-slate-900/10 backdrop-blur-md p-2 lg:p-4' : 'h-full'}`}>
+      {(isGpsDragging || isGpsResizing) && (
+        <div 
+          className="fixed inset-0 z-[99999] bg-transparent select-none pointer-events-auto"
+          style={{ cursor: isGpsDragging ? 'move' : 'resize' }}
+        />
+      )}
       {renderGpsNotebook()}
       
-      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col lg:flex-row items-center justify-between gap-6 select-none">
+      <div className="bg-white rounded-2xl p-2.5 px-4 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col sm:flex-row items-center justify-between gap-3 select-none">
         
-        <div className="flex items-center gap-4 w-full lg:w-auto">
-          <div className="w-12 h-12 rounded-full bg-[#f97316]/10 border border-[#f97316]/30 flex items-center justify-center shrink-0">
-            <Map className="h-5 w-5 text-[#f97316]" />
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="w-8 h-8 rounded-full bg-[#f97316]/10 border border-[#f97316]/30 flex items-center justify-center shrink-0">
+            <Map className="h-4 w-4 text-[#f97316]" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight">
+              <h1 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight">
                 Диспозиция
               </h1>
             </div>
-            <p className="text-[11px] sm:text-xs text-slate-500 mt-1 font-medium hidden sm:block">
-              Полная таблица с информацией о текущем местонахождении авто, статусах и комментариях.
+            <p className="text-[10px] text-slate-500 mt-0.5 font-medium hidden sm:block">
+              Полная таблица с информацией о местонахождении авто, статусах и комментариях.
             </p>
           </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
+        <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto justify-start sm:justify-end">
           
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <button
                onClick={() => {
                  setIsGpsOpen(!isGpsOpen);
                  localStorage.setItem('ratipa_gps_visible', (!isGpsOpen).toString());
                  if (!isGpsOpen) setIsGpsMinimized(false);
                }}
-               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[11px] font-black uppercase tracking-tight transition cursor-pointer hidden sm:flex ${isGpsOpen ? 'bg-indigo-100 text-indigo-900 shadow-sm border border-indigo-200/50' : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200/50'}`}
+               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight transition cursor-pointer hidden sm:flex ${isGpsOpen ? 'bg-indigo-100 text-indigo-900 shadow-sm border border-indigo-200/50' : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200/50'}`}
             >
-               <Navigation className={`h-3.5 w-3.5 ${isGpsOpen ? 'text-indigo-600' : ''}`} />
+               <Navigation className={`h-3 w-3 ${isGpsOpen ? 'text-indigo-600' : ''}`} />
                GPS Блокнот
             </button>
 
-            <div className="flex bg-slate-100 p-1 rounded-xl items-center mr-2">
-               <button onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600"><ZoomOut className="w-4 h-4"/></button>
-               <span className="text-[10px] font-black w-10 text-center font-mono text-slate-700">{Math.round(zoomLevel * 100)}%</span>
-               <button onClick={() => setZoomLevel(z => Math.min(2, z + 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600"><ZoomIn className="w-4 h-4"/></button>
+            <div className="flex bg-slate-100 p-0.5 rounded-lg items-center">
+               <button onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600"><ZoomOut className="w-3.5 h-3.5"/></button>
+               <span className="text-[9px] font-black w-8 text-center font-mono text-slate-700">{Math.round(zoomLevel * 100)}%</span>
+               <button onClick={() => setZoomLevel(z => Math.min(2, z + 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600"><ZoomIn className="w-3.5 h-3.5"/></button>
             </div>
 
             <button
               onClick={handleRefresh}
-              className="flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 w-10 h-10 rounded-xl border border-slate-200/50 transition cursor-pointer"
+              className="flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 w-8 h-8 rounded-lg border border-slate-200/50 transition cursor-pointer"
               title="Перезагрузить фрейм"
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className="h-3.5 w-3.5" />
             </button>
   
             <a
               href={embedUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 bg-slate-950 hover:bg-slate-850 text-white text-[11px] font-black px-4 py-2.5 rounded-xl transition cursor-pointer shadow-xs uppercase tracking-tight hidden sm:flex"
+              className="flex items-center gap-1.5 bg-slate-950 hover:bg-slate-850 text-white text-[10px] font-black px-3 py-1.5 rounded-lg transition cursor-pointer shadow-xs uppercase tracking-tight hidden sm:flex"
             >
-              <ExternalLink className="h-3.5 w-3.5" />
+              <ExternalLink className="h-3 w-3" />
               <span>Вкладка</span>
             </a>
   
             <button
               onClick={() => setIsFocusMode(!isFocusMode)}
-              className={`flex items-center justify-center w-10 h-10 rounded-xl border transition cursor-pointer ${
+              className={`flex items-center justify-center w-8 h-8 rounded-lg border transition cursor-pointer ${
                 isFocusMode 
                   ? 'bg-[#f97316] border-[#f97316] text-white shadow-sm' 
                   : 'bg-white border-slate-250 text-slate-700 hover:bg-slate-50'
               }`}
               title="На весь экран"
             >
-              {isFocusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              {isFocusMode ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             </button>
           </div>
 
@@ -422,7 +617,7 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
       </div>
 
       <div 
-        className="relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col min-h-0"
+        className={`relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col min-h-0 ${isFocusMode ? '' : 'h-[880px]'}`}
       >
         
         {isIframeLoading && (
@@ -457,6 +652,9 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
                 src={embedUrl}
                 onLoad={() => setIsIframeLoading(false)}
                 className="w-full h-full border-0 absolute top-0 left-0"
+                style={{
+                  pointerEvents: (isGpsDragging || isGpsResizing) ? 'none' : 'auto'
+                }}
                 allow="clipboard-write"
                 title="Диспозиция"
               />

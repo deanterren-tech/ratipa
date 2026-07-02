@@ -4,6 +4,7 @@ import { dbService, database, useFirebase, onValue } from '../firebase';
 import { ref, set, push, update, remove } from 'firebase/database';
 import { motion, AnimatePresence } from 'motion/react';
 import CommandCenter from './CommandCenter';
+import TypingText from './TypingText';
 import { 
   LayoutDashboard, 
   Calculator, 
@@ -30,6 +31,7 @@ import {
   Pencil,
   Calendar,
   Bell,
+  BellRing,
   Check,
   CheckCheck,
   AlertTriangle,
@@ -83,6 +85,7 @@ const DispositionModule = lazy(() => import('./modules/DispositionModule'));
 const SettingsModule = lazy(() => import('./modules/SettingsModule'));
 const AdminModule = lazy(() => import('./modules/AdminModule'));
 const DocumentsModule = lazy(() => import('./modules/DocumentsModule'));
+const VehicleDriverDataModule = lazy(() => import('./modules/VehicleDriverDataModule'));
 
 interface AppShellProps {
   user: UserProfile;
@@ -90,9 +93,38 @@ interface AppShellProps {
 }
 
 export default function AppShell({ user, onLogout }: AppShellProps) {
-  const [activeModule, setActiveModule] = useState<string>(user && user.role === 'mechanic' ? 'baza' : 'dashboard');
-  const [loadedModules, setLoadedModules] = useState<string[]>(user && user.role === 'mechanic' ? ['baza'] : ['dashboard']);
+  const getDefaultModule = () => {
+    const hash = window.location.hash.replace('#', '');
+    if (hash) {
+      return hash;
+    }
+    const saved = localStorage.getItem('ratipa_last_module');
+    if (saved && saved !== 'undefined') {
+      return saved;
+    }
+    return user && user.role === 'mechanic' ? 'baza' : 'dashboard';
+  };
+
+  const [activeModule, setActiveModule] = useState<string>(getDefaultModule());
+  const [loadedModules, setLoadedModules] = useState<string[]>([getDefaultModule()]);
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
+
+  useEffect(() => {
+    if (activeModule) {
+      localStorage.setItem('ratipa_last_module', activeModule);
+    }
+  }, [activeModule]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash) {
+        setActiveModule(hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -112,8 +144,62 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   }, [activeModule, loadedModules]);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const lastOpenedRef = useRef<number>(0);
+  const closeTimeoutRef = useRef<any>(null);
+
+  const handleMouseEnterGroup = (groupId: string) => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+    setOpenDropdownId(groupId);
+    lastOpenedRef.current = Date.now();
+  };
+
+  const handleMouseLeaveGroup = () => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+    }
+    closeTimeoutRef.current = setTimeout(() => {
+      setOpenDropdownId(null);
+    }, 200); // 200ms grace period prevents accidental closures
+  };
+
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    };
+  }, []);
+
+  // Close navigation dropdown on click outside
+  useEffect(() => {
+    const handleOutsideClick = () => {
+      if (closeTimeoutRef.current) {
+        clearTimeout(closeTimeoutRef.current);
+      }
+      setOpenDropdownId(null);
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
   const [isDbOnline, setIsDbOnline] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
+
+  // Real-time broadcast push notifications state & sync
+  const [broadcastNotifications, setBroadcastNotifications] = useState<any[]>([]);
+
+  useEffect(() => {
+    return dbService.getBroadcastNotifications(setBroadcastNotifications);
+  }, []);
+
+  const activeUnreadBroadcasts = useMemo(() => {
+    if (!user) return [];
+    return broadcastNotifications.filter(notif => {
+      const readBy = notif.readBy || {};
+      return !readBy[user.uid];
+    });
+  }, [broadcastNotifications, user]);
 
   // Notifications states
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -428,6 +514,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'planZagruzok', label: 'План Загрузок', icon: FileSpreadsheet, permissionKey: 'planZagruzok' },
     { key: 'currentPlanning', label: 'Текущее планирование', icon: Calendar, permissionKey: 'currentPlanning' },
     { key: 'baza', label: 'Учет выезда', icon: Truck, permissionKey: 'baza' },
+    { key: 'vehicleDriverData', label: 'Авто и Водители', icon: FileText, permissionKey: 'vehicleDriverData' },
+    { key: 'analysis', label: 'Анализ', icon: TrendingUp, permissionKey: 'analysis' },
     { key: 'dozvola', label: 'Учет Дозволов', icon: FileText, permissionKey: 'dozvola' },
     { key: 'documents', label: 'Документы', icon: Files, permissionKey: 'documents' },
     { key: 'disposition', label: 'Диспозиция', icon: Map, permissionKey: 'disposition' },
@@ -441,17 +529,76 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       return allModules.filter(mod => mod.key === 'baza');
     }
     return allModules.filter(mod => {
-      if (user.role === 'root_admin') return true; // root admin sees all
+      // Allow root admin OR user named 'Сергей Root' OR specific email completely
+      if (user.role === 'root_admin' || user.name.includes('Сергей Root') || user.email === 'r98ratipaby@gmail.com') return true;
       
-      // Check specific module level perm
-      if (!user.permissions) return false;
-      const userPerm = user.permissions[mod.permissionKey];
-      return userPerm && userPerm !== 'none';
+      // If explicit permission is set in user.permissions, use it
+      if (user.permissions && user.permissions[mod.permissionKey] !== undefined) {
+        return user.permissions[mod.permissionKey] !== 'none';
+      }
+      
+      // Fallback to default permissions based on role if missing in user.permissions
+      const role = user.role;
+      if (role === 'admin' || role === 'manager') {
+        if (mod.permissionKey === 'admin') return role === 'admin';
+        return true;
+      }
+      
+      // Default fallback (dispatcher or others)
+      const defaultReads = ['planDohod', 'planZagruzok', 'baza', 'vehicleDriverData', 'dozvola', 'disposition'];
+      const defaultWrites = ['dohod', 'salary', 'documents'];
+      return defaultWrites.includes(mod.permissionKey) || defaultReads.includes(mod.permissionKey);
     });
   }, [user.role, user.permissions]);
 
-
   const [settings, setSettings] = useState<AppSettings | null>(null);
+
+  const menuGroups = useMemo(() => {
+    if (settings && settings.menuStructure && settings.menuStructure.length > 0) {
+      return settings.menuStructure;
+    }
+    return [
+      { id: 'g_home', label: 'Главная', isDropdown: false, singleModuleKey: 'dashboard' },
+      { id: 'g_planning', label: 'Планирование', isDropdown: true, subtabKeys: ['planDohod', 'planZagruzok', 'currentPlanning'] },
+      { id: 'g_calc', label: 'Калькуляция', isDropdown: false, singleModuleKey: 'dohod' },
+      { id: 'g_salary', label: 'Зарплата', isDropdown: false, singleModuleKey: 'salary' },
+      { id: 'g_veh_drv', label: 'Авто и Водители', isDropdown: false, singleModuleKey: 'vehicleDriverData' },
+      { id: 'g_analysis', label: 'Анализ', isDropdown: false, singleModuleKey: 'analysis' },
+      { id: 'g_baza', label: 'Учет выезда', isDropdown: false, singleModuleKey: 'baza' },
+      { id: 'g_dozvola', label: 'Дозволы', isDropdown: false, singleModuleKey: 'dozvola' },
+      { id: 'g_docs', label: 'Документы', isDropdown: false, singleModuleKey: 'documents' },
+      { id: 'g_disp', label: 'Диспозиция', isDropdown: false, singleModuleKey: 'disposition' },
+      { id: 'g_settings', label: 'Справочники', isDropdown: false, singleModuleKey: 'settings' },
+      { id: 'g_admin', label: 'Админ', isDropdown: false, singleModuleKey: 'admin' }
+    ];
+  }, [settings]);
+
+  const getSubtabLabel = (group: any, subtabKey: string) => {
+    if (group.customLabels && group.customLabels[subtabKey]) {
+      return group.customLabels[subtabKey];
+    }
+    const found = allModules.find(m => m.key === subtabKey);
+    return found ? found.label : subtabKey;
+  };
+
+  const getAllowedSubtabs = (group: any) => {
+    if (!group.subtabKeys) return [];
+    return group.subtabKeys.filter((subtabKey: string) => {
+      if (subtabKey === 'dashboard') return false;
+      return allowedModules.some(m => m.key === subtabKey);
+    });
+  };
+
+  const isGroupVisible = (group: any) => {
+    if (group.singleModuleKey === 'dashboard') return false;
+    if (group.isDropdown) {
+      const allowed = getAllowedSubtabs(group);
+      return allowed.length > 0;
+    } else {
+      if (!group.singleModuleKey) return false;
+      return allowedModules.some(m => m.key === group.singleModuleKey);
+    }
+  };
 
   useEffect(() => {
      return dbService.getSettings(setSettings);
@@ -493,6 +640,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
 
   const handleNavigate = (moduleKey: string) => {
+    window.location.hash = moduleKey;
     setActiveModule(moduleKey);
     setIsSidebarOpen(false);
   };
@@ -514,6 +662,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         return <PlanZagruzokModule user={user} />;
       case 'baza':
         return <BazaModule user={user} />;
+      case 'vehicleDriverData':
+        return <VehicleDriverDataModule user={user} />;
       case 'dozvola':
         return <DozvolaModule user={user} />;
       case 'documents':
@@ -537,37 +687,119 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       {/* Modern Responsive Capsule Header with high-fidelity layout */}
       <header className="bg-white/95 backdrop-blur-md text-slate-900 border-b border-slate-200/50 min-h-[3.5rem] py-1 md:py-0 md:h-14 flex items-center justify-between px-4 sm:px-8 shrink-0 sticky top-0 z-50 select-none shadow-xs gap-3">
         
-        {/* Left Brand Area */}
-        <div className="flex items-center gap-3 shrink-0">
-          <button
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-1 rounded-xl hover:bg-slate-50 transition lg:hidden focus:outline-none"
-          >
-            {isSidebarOpen ? <X className="h-6 w-6 text-slate-700" /> : <Menu className="h-6 w-6 text-slate-700" />}
-          </button>
-          
-          <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => handleNavigate(user.role === 'mechanic' ? 'baza' : 'dashboard')}>
-            <div className="flex items-baseline font-sans">
-              <span className="font-extrabold tracking-[-0.02em] text-base md:text-lg uppercase text-slate-950 leading-none">
-                Ratipa
-              </span>
+        {/* Left Aligned Section combining Brand Area & Nav Menu close to it */}
+        <div className="flex items-center gap-6 flex-1 min-w-0">
+          {/* Left Brand Area */}
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-1 rounded-xl hover:bg-slate-50 transition lg:hidden focus:outline-none"
+            >
+              {isSidebarOpen ? <X className="h-6 w-6 text-slate-700" /> : <Menu className="h-6 w-6 text-slate-700" />}
+            </button>
+            
+            <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => handleNavigate(user.role === 'mechanic' ? 'baza' : 'dashboard')}>
+              <div className="flex items-baseline font-sans">
+                <span className="font-extrabold tracking-[-0.02em] text-base md:text-lg uppercase text-slate-950 leading-none">
+                  Ratipa
+                </span>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Center: Modern capsule-based selector tags (now fully scrollable and visible everywhere without blocker-bugs) */}
-        <nav className="flex items-center gap-1 bg-[#f0f2f4] p-[3px] rounded-full border border-slate-200/50 shadow-inner overflow-x-auto whitespace-nowrap scrollbar-none max-w-[50vw] sm:max-w-[70vw] lg:max-w-none flex-nowrap shrink">
-          {navModules.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => handleNavigate(item.key)}
-              className={`text-[9.5px] md:text-[10px] font-extrabold tracking-tight uppercase transition-all duration-150 py-1.5 px-3 md:px-4 rounded-full relative cursor-pointer shrink-0 ${
-                activeModule === item.key ? 'text-white bg-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-900 hover:bg-white/40'
-              }`}
-            >
-              <span>{item.label}</span>
-            </button>
-          ))}
+          {/* Navigation Menu aligned left, closer to Logo */}
+          <nav className="flex items-center gap-1 bg-[#f0f2f4] p-[3px] rounded-full border border-slate-200/50 shadow-inner overflow-x-auto md:overflow-visible whitespace-nowrap scrollbar-none max-w-[50vw] sm:max-w-[70vw] lg:max-w-none flex-nowrap shrink relative">
+          {menuGroups.filter(isGroupVisible).map((group) => {
+            if (group.isDropdown) {
+              const allowedSubtabs = getAllowedSubtabs(group);
+              const isChildActive = allowedSubtabs.includes(activeModule);
+              const isOpen = openDropdownId === group.id;
+              
+              return (
+                <div
+                  key={group.id}
+                  className="relative inline-block"
+                  onMouseEnter={() => handleMouseEnterGroup(group.id)}
+                  onMouseLeave={handleMouseLeaveGroup}
+                >
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const now = Date.now();
+                      if (now - lastOpenedRef.current < 300) {
+                        return; // Ignore immediate click from simulated touch hover
+                      }
+                      setOpenDropdownId(isOpen ? null : group.id);
+                    }}
+                    className={`text-[9.5px] md:text-[10px] font-extrabold tracking-tight uppercase transition-all duration-150 py-1.5 px-3 md:px-4 rounded-full flex items-center gap-1.5 cursor-pointer shrink-0 select-none ${
+                      isChildActive 
+                        ? 'text-white bg-slate-950 shadow-xs' 
+                        : 'text-slate-500 hover:text-slate-900 hover:bg-white/40'
+                    }`}
+                  >
+                    <span>{group.label}</span>
+                    <ChevronDown className={`h-3 w-3 ${isChildActive ? 'text-white' : 'text-slate-400'} transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {isOpen && (
+                    <div className="absolute left-0 top-full pt-1.5 min-w-[200px] z-50">
+                      <div className="bg-white border border-slate-200/60 rounded-2xl shadow-xl py-2 animate-in fade-in slide-in-from-top-1 duration-150">
+                        {allowedSubtabs.map((subKey) => {
+                          const subLabel = getSubtabLabel(group, subKey);
+                          const isActive = activeModule === subKey;
+                          return (
+                            <a
+                              key={subKey}
+                              href={`#${subKey}`}
+                              onClick={(e) => {
+                                if (!e.metaKey && !e.ctrlKey) {
+                                  e.preventDefault();
+                                  handleNavigate(subKey);
+                                  setOpenDropdownId(null);
+                                }
+                              }}
+                              className={`flex items-center justify-between px-4 py-2.5 text-xs font-bold transition-all duration-150 ${
+                                isActive 
+                                  ? 'bg-slate-950 text-white font-extrabold' 
+                                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+                              }`}
+                            >
+                              <span>{subLabel}</span>
+                            </a>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            } else {
+              const itemKey = group.singleModuleKey!;
+              const foundModule = allModules.find(m => m.key === itemKey);
+              if (!foundModule) return null;
+              const isActive = activeModule === itemKey;
+              const displayLabel = group.customLabels && group.customLabels[itemKey] ? group.customLabels[itemKey] : group.label;
+              
+              return (
+                <a
+                  key={group.id}
+                  href={`#${itemKey}`}
+                  onClick={(e) => {
+                    if (!e.metaKey && !e.ctrlKey) {
+                      e.preventDefault();
+                      handleNavigate(itemKey);
+                    }
+                  }}
+                  className={`text-[9.5px] md:text-[10px] font-extrabold tracking-tight uppercase transition-all duration-150 py-1.5 px-3 md:px-4 rounded-full relative cursor-pointer shrink-0 ${
+                    isActive ? 'text-white bg-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-900 hover:bg-white/40'
+                  }`}
+                >
+                  <span>{displayLabel}</span>
+                </a>
+              );
+            }
+          })}
+          
           {settings?.externalTabs?.map((extTab) => (
             <a
               key={extTab.id}
@@ -581,9 +813,21 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             </a>
           ))}
         </nav>
+        </div>
 
         {/* Right Section: Avatars, Sync state + Profile badge + Logout */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 shrink-0">
+          
+          {/* Animated Text in Top Bar */}
+          {settings?.customPhrases && settings.customPhrases.length > 0 && 
+           (!settings.customPhrasesRoles || settings.customPhrasesRoles.length === 0 || settings.customPhrasesRoles.includes(user.role)) && (
+            <div className="hidden lg:flex items-center mr-2 border-r border-slate-200/60 pr-4 h-6">
+              <TypingText 
+                phrases={settings.customPhrases} 
+                className="text-[11.5px] font-mono font-bold text-slate-500 tracking-tight"
+              />
+            </div>
+          )}
           
           {/* Avatar overlap stack exactly like the image dashboard */}
           <div className="hidden md:flex items-center -space-x-2 mr-1 relative group cursor-pointer">
@@ -885,29 +1129,78 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         {/* Navigation Sidebar (Only displays for mobile/tablet screens in drawing mode) */}
         {isSidebarOpen && (
           <aside className="fixed inset-y-20 left-0 w-64 bg-white border-r border-slate-100 flex flex-col z-40 lg:hidden">
-            <div className="flex-1 p-5 py-6 space-y-1.5 overflow-y-auto select-none">
-              <span className="text-[9px] uppercase font-bold text-slate-400 tracking-widest block pl-3 pb-3">
+            <div className="flex-1 p-5 py-6 space-y-3 overflow-y-auto select-none">
+              <span className="text-[9px] uppercase font-bold text-slate-400 tracking-widest block pl-3 pb-2 border-b border-slate-100 mb-2">
                 РАЗДЕЛЫ КООРДИНАТОРА
               </span>
               
-              {allowedModules.map((item) => {
-                const IconComp = item.icon;
-                const isActive = activeModule === item.key;
-                return (
-                  <button
-                    key={item.key}
-                    onClick={() => handleNavigate(item.key)}
-                    className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-xs font-bold transition-all duration-150 cursor-pointer ${
-                      isActive 
-                        ? 'bg-slate-950 text-white shadow-lg shadow-black/10 scale-102 border-l-4 border-[#00E371]' 
-                        : 'text-slate-600 hover:bg-slate-50 hover:text-black'
-                    }`}
-                  >
-                    <IconComp className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#00E371]' : 'text-slate-400'}`} />
-                    <span>{item.label}</span>
-                  </button>
-                );
+              {menuGroups.filter(isGroupVisible).map((group) => {
+                if (group.isDropdown) {
+                  const allowedSubtabs = getAllowedSubtabs(group);
+                  return (
+                    <div key={group.id} className="space-y-1 pb-2">
+                      <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider block pl-3 pt-2">
+                        {group.label}
+                      </span>
+                      {allowedSubtabs.map((subKey) => {
+                        const found = allModules.find(m => m.key === subKey);
+                        if (!found) return null;
+                        const IconComp = found.icon;
+                        const isActive = activeModule === subKey;
+                        const subLabel = getSubtabLabel(group, subKey);
+                        return (
+                          <a
+                            key={subKey}
+                            href={`#${subKey}`}
+                            onClick={(e) => {
+                              if (!e.metaKey && !e.ctrlKey) {
+                                e.preventDefault();
+                                handleNavigate(subKey);
+                              }
+                            }}
+                            className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all duration-150 cursor-pointer ${
+                              isActive 
+                                ? 'bg-slate-950 text-white shadow-lg shadow-black/10 scale-102 border-l-4 border-[#00E371]' 
+                                : 'text-slate-600 hover:bg-slate-50 hover:text-black'
+                            }`}
+                          >
+                            <IconComp className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#00E371]' : 'text-slate-400'}`} />
+                            <span>{subLabel}</span>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  );
+                } else {
+                  const itemKey = group.singleModuleKey!;
+                  const found = allModules.find(m => m.key === itemKey);
+                  if (!found) return null;
+                  const IconComp = found.icon;
+                  const isActive = activeModule === itemKey;
+                  const displayLabel = group.customLabels && group.customLabels[itemKey] ? group.customLabels[itemKey] : group.label;
+                  return (
+                    <a
+                      key={group.id}
+                      href={`#${itemKey}`}
+                      onClick={(e) => {
+                        if (!e.metaKey && !e.ctrlKey) {
+                          e.preventDefault();
+                          handleNavigate(itemKey);
+                        }
+                      }}
+                      className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-xs font-bold transition-all duration-150 cursor-pointer ${
+                        isActive 
+                          ? 'bg-slate-950 text-white shadow-lg shadow-black/10 scale-102 border-l-4 border-[#00E371]' 
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-black'
+                      }`}
+                    >
+                      <IconComp className={`h-4 w-4 shrink-0 ${isActive ? 'text-[#00E371]' : 'text-slate-400'}`} />
+                      <span>{displayLabel}</span>
+                    </a>
+                  );
+                }
               })}
+              
               {settings?.externalTabs?.map((extTab) => {
                 return (
                   <a
@@ -943,7 +1236,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         {/* Dynamic active viewport card frame with subtle shadow and round corners */}
         <main 
           ref={mainScrollRef} 
-          className="flex-1 p-3 sm:p-6 lg:p-10 overflow-y-auto overflow-x-hidden w-full max-w-full relative bg-[#f4f5f6]"
+          className="flex-1 p-3 sm:p-4 lg:p-6 overflow-y-auto overflow-x-hidden w-full max-w-full relative bg-[#f4f5f6]"
         >
           {allModules.map((mod) => {
             const isAllowed = user.role === 'mechanic' ? (mod.key === 'baza') : (user.role === 'root_admin' || (user.permissions && user.permissions[mod.permissionKey] && user.permissions[mod.permissionKey] !== 'none'));
@@ -1190,6 +1483,52 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           )}
         </button>
 
+      </div>
+
+      {/* Real-time Broadcast Push Notifications Overlay Stack (Top-Right) */}
+      <div className="fixed top-20 right-6 z-[2000] flex flex-col gap-3.5 max-w-sm w-[calc(100%-3rem)] pointer-events-none">
+        <AnimatePresence>
+          {activeUnreadBroadcasts.map((notif) => (
+            <motion.div
+              key={notif.id}
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
+              className="pointer-events-auto bg-slate-950 text-white rounded-2xl border border-slate-800 shadow-[0_15px_50px_rgba(0,0,0,0.5)] p-5 relative overflow-hidden flex flex-col gap-3"
+            >
+              {/* Highlight bar */}
+              <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#70FC8E]" />
+
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-2.5">
+                  <div className="p-1.5 bg-slate-900 border border-slate-800 rounded-lg text-[#70FC8E] mt-0.5 animate-pulse">
+                    <BellRing className="h-4.5 w-4.5" />
+                  </div>
+                  <div>
+                    <span className="text-[9.5px] font-black uppercase tracking-widest text-[#70FC8E] block">
+                      Важное Распоряжение
+                    </span>
+                    <span className="text-[8.5px] text-slate-400 font-mono">
+                      от {notif.createdBy} • {new Date(notif.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-100 font-medium leading-relaxed whitespace-pre-wrap select-text">
+                {notif.text}
+              </p>
+
+              <button
+                onClick={() => dbService.markBroadcastNotificationAsRead(notif.id, user.uid, user.name)}
+                className="w-full mt-1.5 py-2 px-4 bg-[#70FC8E] hover:bg-[#5be277] active:scale-98 text-slate-950 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
+              >
+                <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                Прочитано / Закрыть
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
 
       <CommandCenter 
