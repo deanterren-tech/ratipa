@@ -288,9 +288,9 @@ export default function BelarusMap({
         try {
           const map = L.map('map', { zoomControl: false }).setView([53.9006, 27.5590], 5);
           
-          L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+          L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
             maxZoom: 19,
-            attribution: '&copy; Google Maps'
+            attribution: '&copy; <a href="https://carto.com/">CartoDB</a>'
           }).addTo(map);
 
           L.control.zoom({ position: 'topright' }).addTo(map);
