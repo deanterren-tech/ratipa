@@ -363,7 +363,16 @@ export default function DocumentsModule({ user }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: coupleRawText, image: coupleImageBase64 })
       });
-      if (!res.ok) throw new Error("Parse error");
+      if (!res.ok) {
+        let serverError = "Ошибка распознавания на сервере AI";
+        try {
+          const errData = await res.json();
+          if (errData && errData.error) {
+            serverError = errData.error;
+          }
+        } catch (_) {}
+        throw new Error(serverError);
+      }
       const data = await res.json();
       if (data.stateNumber) setCoupleStateNumber(data.stateNumber);
       if (data.model) setCoupleModel(data.model);
@@ -375,8 +384,8 @@ export default function DocumentsModule({ user }: Props) {
       
       setCoupleRawText("");
       setCoupleImageBase64(null);
-    } catch (e) {
-      alert("Ошибка при распознавании.");
+    } catch (e: any) {
+      alert("Ошибка при распознавании: " + (e?.message || ""));
       console.error(e);
     } finally {
       setIsParsingCouple(false);

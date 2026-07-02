@@ -146,10 +146,10 @@ export default function BelarusMap({
                 markers.push({ ...c2, active: isActive });
               }
 
-              // Fetch route polyline via OSRM (doesn't require VPN)
+              // Fetch route polyline via our backend proxy to avoid VPN/CORS issues
               let polylinePath: { lat: number; lng: number }[] = [];
               try {
-                const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${c1.lng},${c1.lat};${c2.lng},${c2.lat}?overview=full&geometries=geojson`);
+                const response = await fetch(`/api/osrm-route?coordinates=${c1.lng},${c1.lat};${c2.lng},${c2.lat}`);
                 if (response.ok) {
                   const rdata = await response.json();
                   if (rdata?.routes?.[0]?.geometry?.coordinates) {
@@ -194,7 +194,7 @@ export default function BelarusMap({
             let polylinePath: { lat: number; lng: number }[] = [];
             let distanceMeters = 0;
             try {
-              const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordQuery}?overview=full&geometries=geojson`);
+              const response = await fetch(`/api/osrm-route?coordinates=${coordQuery}`);
               if (response.ok) {
                 const rdata = await response.json();
                 if (rdata?.routes?.[0]?.geometry?.coordinates) {
@@ -262,8 +262,8 @@ export default function BelarusMap({
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
       <style>
         body, html, #map { margin: 0; padding: 0; width: 100%; height: 100%; background: #f8fafc; }
         .leaflet-container { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
@@ -288,9 +288,9 @@ export default function BelarusMap({
         try {
           const map = L.map('map', { zoomControl: false }).setView([53.9006, 27.5590], 5);
           
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
             maxZoom: 19,
-            attribution: '&copy; OpenStreetMap contributors'
+            attribution: '&copy; Google Maps'
           }).addTo(map);
 
           L.control.zoom({ position: 'topright' }).addTo(map);

@@ -1628,7 +1628,16 @@ export default function DohodModule({ user }: DohodModuleProps) {
         body: JSON.stringify({ text }),
       });
 
-      if (!res.ok) throw new Error("API parsing failed");
+      if (!res.ok) {
+        let serverError = "API parsing failed";
+        try {
+          const errData = await res.json();
+          if (errData && errData.error) {
+            serverError = errData.error;
+          }
+        } catch (_) {}
+        throw new Error(serverError);
+      }
       const data = await res.json();
 
       if (data && data.legs && data.legs.length > 0) {
@@ -1700,11 +1709,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
           "system",
         );
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("AI parse failed:", err);
       dbService.sendChatMessage(
         "ai_dispatcher",
-        `Ошибка связи с ИИ помощником.`,
+        `Ошибка связи с ИИ помощником: ${err?.message || ""}`,
         "🤖 Робот парсер",
         "system",
       );

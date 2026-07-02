@@ -268,7 +268,14 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       });
 
       if (!res.ok) {
-        throw new Error('Ошибка связи с сервером AI');
+        let serverError = 'Ошибка связи с сервером AI';
+        try {
+          const errData = await res.json();
+          if (errData && errData.error) {
+            serverError = errData.error;
+          }
+        } catch (_) {}
+        throw new Error(serverError);
       }
 
       const data = await res.json();

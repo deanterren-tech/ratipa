@@ -2035,7 +2035,16 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: raw }),
       });
-      if (!res.ok) throw new Error("API failed");
+      if (!res.ok) {
+        let serverError = "Ошибка распознавания ИИ";
+        try {
+          const errData = await res.json();
+          if (errData && errData.error) {
+            serverError = errData.error;
+          }
+        } catch (_) {}
+        throw new Error(serverError);
+      }
       const data = await res.json();
 
       const parsedRows = data.legs || [];
@@ -2067,8 +2076,8 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       setAiRouteInput("");
       setAiRouteFeedback(`Добавлено плеч: ${parsedRows.length}`);
       setTimeout(() => setAiRouteFeedback(""), 5000);
-    } catch (e) {
-      setAiRouteFeedback("Ошибка распознавания ИИ");
+    } catch (e: any) {
+      setAiRouteFeedback(e?.message || "Ошибка распознавания ИИ");
     }
   };
 
@@ -2125,7 +2134,16 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: plAiInput.trim() }),
       });
-      if (!res.ok) throw new Error("API failed");
+      if (!res.ok) {
+        let serverError = "Ошибка распознавания";
+        try {
+          const errData = await res.json();
+          if (errData && errData.error) {
+            serverError = errData.error;
+          }
+        } catch (_) {}
+        throw new Error(serverError);
+      }
       const data = await res.json();
 
       const parsedRows = data.legs || [];
@@ -2149,8 +2167,8 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       setPlAiInput("");
       setPlAiFeedback(`Успешно распознано ${parsedRows.length} плечей`);
       setTimeout(() => setPlAiFeedback(""), 3000);
-    } catch (err) {
-      setPlAiFeedback("Ошибка распознавания");
+    } catch (err: any) {
+      setPlAiFeedback(err?.message || "Ошибка распознавания");
     }
   };
 
