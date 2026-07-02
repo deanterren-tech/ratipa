@@ -145,6 +145,16 @@ export default function AnalysisRegionData({ regionId, regionName, user }: Analy
          headers: { 'Content-Type': 'application/json' },
          body: JSON.stringify({ text: aiText })
       });
+      if (!resp.ok) {
+         let serverError = "Ошибка при распознавании";
+         try {
+           const errData = await resp.json();
+           if (errData && errData.error) {
+             serverError = errData.error;
+           }
+         } catch (_) {}
+         throw new Error(serverError);
+      }
       const resData = await resp.json();
       if (resData.results && Array.isArray(resData.results)) {
          resData.results.forEach((item: any) => {
@@ -163,9 +173,9 @@ export default function AnalysisRegionData({ regionId, regionName, user }: Analy
       } else {
          alert("Не удалось распознать данные");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Ошибка при распознавании");
+      alert("Ошибка при распознавании: " + (e?.message || ""));
     } finally {
       setIsAiLoading(false);
     }

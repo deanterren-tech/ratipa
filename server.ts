@@ -132,6 +132,38 @@ async function startServer() {
 
   app.use(express.json());
 
+  // API Route for proxying OSRM route requests to avoid CORS / VPN issues
+  app.get("/api/osrm-route", async (req, res) => {
+    try {
+      const coordinates = ((req.query.coordinates as string) || "").trim();
+      if (!coordinates) {
+        return res
+          .status(400)
+          .json({ error: "Missing coordinates query parameter" });
+      }
+
+      const url = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`;
+      const routeRes = await fetch(url, {
+        headers: {
+          "User-Agent":
+            "CargoSchedulerApplet/1.0 (contact: deanterren@gmail.com)",
+          Accept: "application/json",
+        },
+        signal: AbortSignal.timeout(5000)
+      });
+
+      if (!routeRes.ok) {
+        return res.status(routeRes.status).json({ error: "OSRM fetch failed" });
+      }
+
+      const data = await routeRes.json();
+      return res.json(data);
+    } catch (error) {
+      console.error("OSRM Proxy Error:", error);
+      return res.status(500).json({ error: "Failed to fetch from OSRM" });
+    }
+  });
+
   // API Route for proxying geocoding calls safely without client-side CORS / billing issues
   app.get("/api/geocode", async (req, res) => {
     try {
@@ -159,6 +191,7 @@ async function startServer() {
               "CargoSchedulerApplet/1.0 (contact: deanterren@gmail.com)",
             Accept: "application/json",
           },
+          signal: AbortSignal.timeout(4000)
         });
 
         if (nRes.ok) {
@@ -209,6 +242,7 @@ async function startServer() {
               "CargoSchedulerApplet/1.0 (contact: deanterren@gmail.com)",
             Accept: "application/json",
           },
+          signal: AbortSignal.timeout(4000)
         });
 
         if (nRes.ok) {
@@ -398,11 +432,70 @@ ${text}
   // API Route for text parsing as well (if you want to keep the old text assistant with AI)
   app.post("/api/parse-dozvola-text", async (req, res) => {
     try {
-      // We can just keep the old one client-side if it just uses regex,
-      // no need to implement here unless we want to use Gemini for it.
-      res.json({ status: "ok" });
-    } catch (e) {
-      res.status(500).json({ error: "error" });
+      if (!ai) {
+        return res
+          .status(500)
+          .json({ error: "Gemini API key not configured on the server." });
+      }
+
+      const { text, knownFleetCars } = req.body;
+      if (!text) {
+        return res.status(400).json({ error: "No text provided" });
+      }
+
+      const promptText = `
+You are an expert logistics AI assistant.
+Your task is to parse unstructured text about transport permit (dozvol/дозвол) movements and extract structured data.
+You will be given the raw text.
+
+Extract a JSON array of objects, where each object represents an action on a specific permit.
+Each object should have the following fields:
+- "type": The permit type (e.g. "RUS", "TR A", "TR B", "UZ 2", "UZ 3", "UZ 4", "GE", "AM3", "KZ3", "CHN 2", "CHN 3"). Attempt to normalize it.
+- "number": The permit serial number (usually 3 to 8 digits).
+- "car": The truck license plate or number it is assigned to or taken from (e.g. "AB1234-7" or "9271").
+- "status": The action's resulting status. MUST be one of:
+   - "office" (received in office)
+   - "hand" (given to driver / in transit)
+   - "office_return" (returned to office)
+   - "used" (submitted to transport inspection)
+   - "expired" (cancelled, mistake, discarded)
+- "comment": Any remaining notes or comments from the text.
+- "isCopy": Boolean. True if the text mentions a copy/scan/photo (especially for CHN types).
+
+Return ONLY a valid JSON array. Do not return markdown blocks.
+
+Text:
+"${text}"
+`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: promptText,
+        config: {
+          systemInstruction:
+            "You are a helpful logistics data extractor. Return only a JSON array.",
+        },
+      });
+
+      let jsonStr = response.text || "[]";
+      const jsonMatch =
+        jsonStr.match(/```json\s*([\s\S]*?)\s*```/) ||
+        jsonStr.match(/([\{\[][\s\S]*[\}\]])/);
+      let parsed = [];
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[1]);
+      } else {
+        parsed = JSON.parse(jsonStr);
+      }
+
+      // Ensure it's an array
+      if (!Array.isArray(parsed)) {
+        parsed = [parsed];
+      }
+
+      res.json({ results: parsed });
+    } catch (e: any) {
+      handleGeminiError(e, res, "Failed to parse dozvola text");
     }
   });
 

@@ -120,35 +120,45 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
   useEffect(() => {
     const keys = Object.keys(todoTasks);
     setSelectedPermitTasks(prev => {
+      let changed = false;
       const next = { ...prev };
       keys.forEach(k => {
-        if (next[k] === undefined) next[k] = true;
+        if (next[k] === undefined) {
+          next[k] = true;
+          changed = true;
+        }
       });
-      return next;
+      return changed ? next : prev;
     });
   }, [todoTasks]);
 
   useEffect(() => {
     const items = getReturnItems();
     setSelectedReturnItems(prev => {
+      let changed = false;
       const next = { ...prev };
       items.forEach((item: any) => {
-        if (next[item.id] === undefined) next[item.id] = item.status === 'office_return';
+        if (next[item.id] === undefined) {
+          next[item.id] = item.status === 'office_return';
+          changed = true;
+        }
       });
-      return next;
+      return changed ? next : prev;
     });
   }, [dozvolsData, showArchiveReturns]);
 
   useEffect(() => {
     const items = getChinaCopyItems();
     setSelectedChinaItems(prev => {
+      let changed = false;
       const next = { ...prev };
       items.forEach((item: any) => {
         if (next[item.id] === undefined) {
           next[item.id] = item.status !== 'used' && !item.chinaCopySubmitted;
+          changed = true;
         }
       });
-      return next;
+      return changed ? next : prev;
     });
   }, [dozvolsData, showArchiveChina]);
 

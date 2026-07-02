@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../../../types';
-import { Sparkles, X } from 'lucide-react';
+import { Sparkles, X, Loader2 } from 'lucide-react';
 import { useFirebase, database } from '../../../firebase';
 import { ref, push, set, update } from 'firebase/database';
 
@@ -72,8 +72,9 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
         return { status, clearCar: false };
     };
 
-    const handleProcess = () => {
-        if (!rawText.trim()) return;
+    const [isParsing, setIsParsing] = useState(false);
+
+    const parseLocally = (rawText: string) => {
         const rawLines = rawText.split(/\n/);
         const newBatchItems: any[] = [];
 
@@ -221,13 +222,106 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
             });
         });
 
-        setTempBatchItems(newBatchItems);
+        return newBatchItems;
+    };
+
+    const handleProcess = async () => {
+        if (!rawText.trim()) return;
+        
+        setIsParsing(true);
+        let finalBatchItems: any[] = [];
+        let aiFailed = false;
+
+        try {
+            const response = await fetch("/api/parse-dozvola-text", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: rawText, knownFleetCars })
+            });
+
+            if (!response.ok) {
+                throw new Error("AI parser failed");
+            }
+
+            const data = await response.json();
+            
+            if (data.results && data.results.length > 0) {
+                // Post-process AI results (match with existing database records)
+                data.results.forEach((item: any) => {
+                    if (!item.number) return;
+
+                    const existingDozvol = Object.values(dozvolsData).find((d: any) => {
+                        const dbNum = String(d.number || d.permitNumber || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                        const candNum = String(item.number).toLowerCase().replace(/[^a-z0-9]/g, '');
+                        if (!dbNum || !candNum) return false;
+                        return dbNum.includes(candNum) || candNum.includes(dbNum);
+                    });
+
+                    let mode = existingDozvol ? "update" : "create";
+                    let finalType = item.type;
+                    
+                    // Allow AI to guess type, but if it exists, use the DB type as fallback or override
+                    if (existingDozvol && (!finalType || finalType.length < 2)) {
+                        finalType = existingDozvol.type;
+                    }
+
+                    // Map status
+                    const statusMap: Record<string, string> = {
+                        "office": "office",
+                        "hand": "hand",
+                        "office_return": "office_return",
+                        "used": "used",
+                        "expired": "expired"
+                    };
+                    let finalStatus = statusMap[item.status] || (existingDozvol ? existingDozvol.status : "office");
+                    
+                    // If returning to office, clear the car
+                    let finalCar = item.car || "";
+                    if (finalStatus === 'office_return' || finalStatus === 'used') {
+                        finalCar = "";
+                    } else if (existingDozvol && !finalCar && finalStatus === 'hand') {
+                        finalCar = existingDozvol.car || "";
+                    }
+
+                    // Attempt to match the parsed car to our known fleet if it's not exact
+                    if (finalCar) {
+                        const digits = finalCar.replace(/\\D/g, '');
+                        if (digits.length >= 3) {
+                            const fullCarFromFleet = Object.keys(knownFleetCars).find(car => car.includes(digits));
+                            if (fullCarFromFleet) finalCar = fullCarFromFleet;
+                        }
+                    }
+
+                    finalBatchItems.push({
+                        id: existingDozvol ? existingDozvol.id : null, 
+                        mode, 
+                        type: finalType || "RUS", 
+                        number: existingDozvol ? (existingDozvol.number || existingDozvol.permitNumber) : item.number, 
+                        status: finalStatus, 
+                        isCopy: !!item.isCopy, 
+                        car: finalCar, 
+                        comment: item.comment || "",
+                        existingRef: existingDozvol || null
+                    });
+                });
+            } else {
+                aiFailed = true; // Fallback if AI returned empty array
+            }
+        } catch (e) {
+            console.warn("AI parsing error, falling back to regex parser", e);
+            aiFailed = true;
+        }
+
+        if (aiFailed || finalBatchItems.length === 0) {
+            finalBatchItems = parseLocally(rawText);
+        }
+
+        setTempBatchItems(finalBatchItems);
+        setIsParsing(false);
 
         // AUTO-OPEN WINDOW FOR EXISING PERMIT:
-        // If exactly ONE permit was processed, and it's already in the database (mode is 'update'), 
-        // open the editing window directly.
-        if (newBatchItems.length === 1 && newBatchItems[0].mode === 'update' && newBatchItems[0].existingRef && onOpenEditPermit) {
-            const parsed = newBatchItems[0];
+        if (finalBatchItems.length === 1 && finalBatchItems[0].mode === 'update' && finalBatchItems[0].existingRef && onOpenEditPermit) {
+            const parsed = finalBatchItems[0];
             onOpenEditPermit(parsed.existingRef, {
                 type: parsed.type,
                 number: parsed.number,
@@ -320,9 +414,10 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
             <div className="flex justify-end z-10">
                 <button 
                     onClick={handleProcess}
-                    className="bg-slate-950 hover:bg-slate-800 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wide transition shadow-sm cursor-pointer"
+                    disabled={isParsing}
+                    className="bg-slate-950 hover:bg-slate-800 disabled:opacity-70 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wide transition shadow-sm cursor-pointer flex items-center gap-2"
                 >
-                    Распознать текст ⚡
+                    {isParsing ? <><Loader2 className="w-4 h-4 animate-spin" /> Обработка ИИ...</> : "Распознать текст ⚡"}
                 </button>
             </div>
 
