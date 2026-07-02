@@ -25,6 +25,29 @@ try {
   );
 }
 
+function handleGeminiError(e: any, res: any, defaultMsg: string) {
+  console.error(`${defaultMsg}:`, e);
+  let errMsg = e?.message || String(e || "Ошибка при обращении к ИИ");
+  
+  // Check for common connection errors or geoblocks when running locally in Russia/Belarus
+  const lowerMsg = errMsg.toLowerCase();
+  if (
+    lowerMsg.includes("fetch failed") || 
+    lowerMsg.includes("econnrefused") || 
+    lowerMsg.includes("econnreset") || 
+    lowerMsg.includes("timeout") ||
+    lowerMsg.includes("unreachable") ||
+    lowerMsg.includes("user location is not supported") ||
+    lowerMsg.includes("location not supported") ||
+    lowerMsg.includes("geoblock") ||
+    lowerMsg.includes("blocked")
+  ) {
+    errMsg += " (ИИ заблокирован в вашем регионе. Если сервер запущен локально без ВПН, настройте GOOGLE_GEMINI_BASE_URL в .env или включите ВПН на сервере)";
+  }
+  
+  res.status(500).json({ error: errMsg });
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -300,10 +323,7 @@ If you cannot find some data, leave it as an empty string. Only return valid JSO
 
         res.json({ results: parsed });
       } catch (e: any) {
-        console.error(e);
-        res
-          .status(500)
-          .json({ error: e.message || "Failed to process images" });
+        handleGeminiError(e, res, "Failed to process images");
       }
     },
   );
@@ -371,10 +391,7 @@ ${text}
 
       res.json({ results: parsed });
     } catch (e: any) {
-      console.error("Parse driver data API error:", e);
-      res
-        .status(500)
-        .json({ error: e.message || "Failed to parse driver data" });
+      handleGeminiError(e, res, "Parse driver data API error");
     }
   });
 
@@ -447,8 +464,7 @@ Do not return Markdown. Return raw JSON object only.
 
       res.json(parsed);
     } catch (e: any) {
-      console.error(e);
-      res.status(500).json({ error: e.message || "Failed to process text" });
+      handleGeminiError(e, res, "Failed to process text in dohod");
     }
   });
 
@@ -507,8 +523,7 @@ Do not return Markdown. Return raw JSON object only.
 
       res.json(parsed);
     } catch (e: any) {
-      console.error(e);
-      res.status(500).json({ error: e.message || "Failed to process text" });
+      handleGeminiError(e, res, "Failed to process text in plandohod");
     }
   });
 
@@ -566,8 +581,7 @@ Do not return Markdown. Return raw JSON array only.
       }
       res.json({ results: parsed });
     } catch (e: any) {
-      console.error(e);
-      res.status(500).json({ error: e.message || "Failed to process text" });
+      handleGeminiError(e, res, "Failed to process text in analysis");
     }
   });
 
@@ -637,8 +651,7 @@ Do not include any Markdown wrappers (like \`\`\`json), explanations, or notes. 
       }
       res.json(parsed);
     } catch (error: any) {
-      console.error("Parse couple data API error:", error);
-      res.status(500).json({ error: error.message || "Ошибка связи с сервером AI" });
+      handleGeminiError(error, res, "Parse couple data API error");
     }
   });
 
