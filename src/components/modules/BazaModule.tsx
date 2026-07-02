@@ -139,13 +139,6 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
         const data = snap.val() || {};
         const list = Object.keys(data).map(id => ({ id, ...data[id] }));
         setSystemUsers(list);
-        
-        // Ensure root admin exists (re-create Сергей if missing)
-        const hasRoot = list.some(u => u.isRootAdmin || u.name === 'Сергей');
-        if (!hasRoot && Object.keys(data).length > 0) {
-           let fullPerms: any = {}; allFields.forEach(f => fullPerms[f] = true);
-           push(ref(db, 'users_list'), { name: "Сергей", role: "Диспетчер", password: "ratipa2026", permissions: fullPerms, isRootAdmin: true });
-        }
       }));
 
       return () => {
@@ -450,14 +443,24 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   }, [cars]);
 
   return (
-    <div className="w-full space-y-6 flex flex-col font-sans">
+    <div className="w-full space-y-4 flex flex-col font-sans">
       
       {/* Top Internal Tab Navigation for Baza module */}
-      <div className="bg-white/80 backdrop-blur-md p-3 rounded-2xl border border-slate-200/50 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col md:flex-row justify-between items-center gap-4">
-        <div className="flex items-center gap-2 self-start md:self-auto">
-          <span className="bg-[#70FC8E] text-slate-950 font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono border border-black/5">
-            Учет выезда
-          </span>
+      <div className="bg-white rounded-2xl p-2.5 px-4 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col sm:flex-row items-center justify-between gap-3 select-none">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="w-8 h-8 rounded-full bg-[#70FC8E]/20 border border-[#70FC8E]/40 flex items-center justify-center shrink-0">
+            <Truck className="h-4 w-4 text-[#22c55e]" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight">
+                Учет выезда
+              </h1>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-0.5 font-medium hidden sm:block">
+              Контроль нахождения автомобилей на базе
+            </p>
+          </div>
         </div>
         
         <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
@@ -542,7 +545,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
       <div className="space-y-6">
           
           <div className={currentTab === 'base' ? '' : 'hidden'}>
-             <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
+             <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
                  <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono border-b border-slate-100 pb-3 mb-6 flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200"></span> 
                     Добавить новый автомобиль
@@ -690,7 +693,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
           </div>
 
           <div className={currentTab === 'history' ? '' : 'hidden'}>
-             <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col">
+             <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col">
                  <h2 className="text-base font-black uppercase tracking-tight text-slate-800 border-b border-slate-100 pb-4 mb-4">История всех действий в системе</h2>
                  <div className="space-y-3 max-h-[700px] overflow-y-auto pr-2">
                     {[...globalHistory].reverse().map(h => (

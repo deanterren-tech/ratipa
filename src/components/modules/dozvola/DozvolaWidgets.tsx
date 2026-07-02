@@ -206,7 +206,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
                 ) : (
                     <>
                         <div className="flex justify-between items-center text-sm font-bold text-emerald-600"><span>В офисе (чистые):</span><span>{stats.office} шт</span></div>
-                        <div className="flex justify-between items-center text-sm font-bold text-blue-600"><span>Выданы нам (не сданы в ИТ):</span><span>{stats.hand} шт</span></div>
+                        <div className="flex justify-between items-center text-sm font-bold text-blue-600"><span>Выданы нам (не сданы в ТИ):</span><span>{stats.hand} шт</span></div>
                         {(currentSelectedTab === 'all' || currentSelectedTab === 'CHN 2' || currentSelectedTab === 'CHN 3') && (
                             <div className="flex justify-between items-center text-sm font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-lg mt-1"><span>Сдана копия (Китай):</span><span>{stats.copies} шт</span></div>
                         )}

@@ -441,7 +441,300 @@ try{
 pdf2htmlEX.defaultViewer = new pdf2htmlEX.Viewer({});
 }catch(e){}
 </script>
-<title></title>
+<style>
+  .interactive-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .interactive-input {
+    position: absolute;
+    background: rgba(16, 185, 129, 0.04);
+    border: 1px dashed rgba(16, 185, 129, 0.25);
+    border-radius: 4px;
+    font-family: "Courier New", Courier, monospace, "Times New Roman", serif;
+    font-size: 14px;
+    font-weight: bold;
+    color: #1a202c;
+    padding: 1px 4px;
+    box-sizing: border-box;
+    pointer-events: auto;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .interactive-input:hover {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.4);
+  }
+  .interactive-input:focus {
+    background: #ffffff;
+    border: 1.5px solid #0f7632;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+    outline: none;
+  }
+  .interactive-textarea {
+    position: absolute;
+    background: rgba(16, 185, 129, 0.04);
+    border: 1px dashed rgba(16, 185, 129, 0.25);
+    border-radius: 4px;
+    font-family: "Courier New", Courier, monospace, "Times New Roman", serif;
+    font-size: 13px;
+    font-weight: bold;
+    color: #1a202c;
+    padding: 3px 6px;
+    box-sizing: border-box;
+    pointer-events: auto;
+    resize: none;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .interactive-textarea:hover {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.4);
+  }
+  .interactive-textarea:focus {
+    background: #ffffff;
+    border: 1.5px solid #0f7632;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+    outline: none;
+  }
+  .interactive-checkbox {
+    position: absolute;
+    width: 17px;
+    height: 17px;
+    cursor: pointer;
+    pointer-events: auto;
+    accent-color: #0f7632;
+  }
+  .interactive-checkbox:hover {
+    transform: scale(1.1);
+  }
+  .btn-panel {
+    position: fixed;
+    top: 15px;
+    right: 15px;
+    display: flex;
+    gap: 10px;
+    z-index: 99999;
+    pointer-events: auto;
+  }
+  .print-btn {
+    background: #0f7632;
+    color: white;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(15, 118, 50, 0.25);
+    transition: all 0.2s;
+    pointer-events: auto;
+  }
+  .print-btn:hover {
+    background: #0d6229;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(13, 98, 41, 0.35);
+  }
+  .print-btn:active {
+    transform: translateY(1px);
+  }
+  .clear-btn {
+    background: #ef4444;
+    color: white;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 8px 14px;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);
+    transition: all 0.2s;
+    pointer-events: auto;
+  }
+  .clear-btn:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(220, 38, 38, 0.35);
+  }
+  .clear-btn:active {
+    transform: translateY(1px);
+  }
+
+  /* Print optimizations: clean inputs without boundaries or backgrounds */
+  @media print {
+    .interactive-input, .interactive-textarea {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+      font-size: 14px !important;
+      color: #000000 !important;
+      font-family: "Times New Roman", serif !important;
+    }
+    .interactive-checkbox {
+      accent-color: #000000 !important;
+    }
+    .no-print {
+      display: none !important;
+    }
+  }
+</style>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var pc = document.querySelector(".pc1");
+  if (!pc) return;
+
+  // Append overlay
+  var overlay = document.createElement("div");
+  overlay.className = "interactive-overlay";
+  overlay.innerHTML = `
+    <!-- Top Right Date -->
+    <input type="text" id="date_top" class="interactive-input" style="left: 63.5%; top: 6.8%; width: 23%; height: 2.1%;" placeholder="ДД.ММ.ГГГГ" />
+
+    <!-- 1. Addressed to Association -->
+    <textarea id="addressed_to" class="interactive-textarea" style="left: 6.5%; top: 17%; width: 31%; height: 6.5%;" placeholder="Ассоциация..."></textarea>
+
+    <!-- 2. Holder Info -->
+    <textarea id="holder_info" class="interactive-textarea" style="left: 40.5%; top: 17%; width: 53.5%; height: 8.8%;" placeholder="Наименование, ID и адрес..."></textarea>
+
+    <!-- 3. Number of TIR Carnet -->
+    <input type="text" id="tir_number" class="interactive-input" style="left: 6.5%; top: 27.5%; width: 31%; height: 2.1%;" placeholder="Номер МДП..." />
+
+    <!-- 4. Date of issuance -->
+    <input type="text" id="issuance_date" class="interactive-input" style="left: 40.5%; top: 31.5%; width: 24.5%; height: 2.1%;" placeholder="ДД.ММ.ГГГГ" />
+
+    <!-- 5. Date of validity -->
+    <input type="text" id="validity_date" class="interactive-input" style="left: 68.5%; top: 31.5%; width: 25.5%; height: 2.1%;" placeholder="ДД.ММ.ГГГГ" />
+
+    <!-- 6. Number of volets -->
+    <input type="text" id="volets_num" class="interactive-input" style="left: 6.5%; top: 32.5%; width: 31%; height: 2.1%;" placeholder="Листов..." />
+
+    <!-- 7. Date and place of disappearance -->
+    <textarea id="disappear_place_date" class="interactive-textarea" style="left: 6.5%; top: 38.8%; width: 87.5%; height: 3.5%;" placeholder="Дата и место утери..."></textarea>
+
+    <!-- 7.1 Cause of disappearance -->
+    <input type="checkbox" id="cause_lost" class="interactive-checkbox" style="left: 21%; top: 43.8%;" />
+    <input type="checkbox" id="cause_stolen" class="interactive-checkbox" style="left: 40.5%; top: 43.8%;" />
+    <input type="checkbox" id="cause_destroyed" class="interactive-checkbox" style="left: 61%; top: 43.8%;" />
+    <input type="checkbox" id="cause_retained" class="interactive-checkbox" style="left: 80.5%; top: 43.8%;" />
+
+    <!-- 8. State of TIR Carnet -->
+    <input type="checkbox" id="state_used" class="interactive-checkbox" style="left: 31.5%; top: 50.1%;" />
+    <input type="checkbox" id="state_unused" class="interactive-checkbox" style="left: 61%; top: 50.1%;" />
+
+    <!-- 9. Lost status -->
+    <input type="checkbox" id="lost_with_goods" class="interactive-checkbox" style="left: 31.5%; top: 54.3%;" />
+    <input type="checkbox" id="lost_without_goods" class="interactive-checkbox" style="left: 61%; top: 54.3%;" />
+
+    <!-- 10. Description of goods -->
+    <textarea id="goods_description" class="interactive-textarea" style="left: 6.5%; top: 61.2%; width: 87.5%; height: 3.5%;" placeholder="Товары, количество, вес, прочее..."></textarea>
+
+    <!-- 11.1 Location of loss -->
+    <textarea id="loss_location" class="interactive-textarea" style="left: 6.5%; top: 68.8%; width: 87.5%; height: 3.5%;" placeholder="Место утери..."></textarea>
+
+    <!-- 11.2 Date of loss -->
+    <input type="text" id="loss_date" class="interactive-input" style="left: 6.5%; top: 74.5%; width: 87.5%; height: 2.1%;" placeholder="Дата утери..." />
+
+    <!-- 11.3 Official report details -->
+    <input type="text" id="official_report" class="interactive-input" style="left: 48.5%; top: 77.8%; width: 45.5%; height: 2.1%;" placeholder="Официальные документы от..." />
+    <input type="checkbox" id="report_yes" class="interactive-checkbox" style="left: 73.2%; top: 80%;" />
+    <input type="checkbox" id="report_no" class="interactive-checkbox" style="left: 80.8%; top: 80%;" />
+
+    <!-- 12. Observations -->
+    <textarea id="observations" class="interactive-textarea" style="left: 6.5%; top: 86.2%; width: 87.5%; height: 3.5%;" placeholder="Замечания..."></textarea>
+    <input type="checkbox" id="obs_yes" class="interactive-checkbox" style="left: 73.2%; top: 88.5%;" />
+    <input type="checkbox" id="obs_no" class="interactive-checkbox" style="left: 80.8%; top: 88.5%;" />
+  `;
+  pc.appendChild(overlay);
+
+  // Add floating button panel with Print and Clear buttons
+  var btnPanel = document.createElement("div");
+  btnPanel.className = "btn-panel no-print";
+
+  var printBtn = document.createElement("button");
+  printBtn.className = "print-btn";
+  printBtn.innerText = "Печать декларации";
+  printBtn.addEventListener("click", function() {
+    window.print();
+  });
+
+  var clearBtn = document.createElement("button");
+  clearBtn.className = "clear-btn";
+  clearBtn.innerText = "Очистить форму";
+  clearBtn.addEventListener("click", function() {
+    if (confirm("Вы действительно хотите очистить все заполненные поля?")) {
+      localStorage.removeItem("ratipa_loss_declaration_data");
+      inputs.forEach(function(el) {
+        if (el.type === "checkbox") {
+          el.checked = false;
+        } else {
+          el.value = "";
+        }
+      });
+    }
+  });
+
+  btnPanel.appendChild(printBtn);
+  btnPanel.appendChild(clearBtn);
+  document.body.appendChild(btnPanel);
+
+  // Dynamic Save and Load
+  var inputs = overlay.querySelectorAll(".interactive-input, .interactive-textarea, .interactive-checkbox");
+
+  function saveData() {
+    var data = {};
+    inputs.forEach(function(el) {
+      if (el.type === "checkbox") {
+        data[el.id] = el.checked;
+      } else {
+        data[el.id] = el.value;
+      }
+    });
+    localStorage.setItem("ratipa_loss_declaration_data", JSON.stringify(data));
+  }
+
+  function loadData() {
+    var saved = localStorage.getItem("ratipa_loss_declaration_data");
+    if (!saved) return;
+    try {
+      var data = JSON.parse(saved);
+      inputs.forEach(function(el) {
+        if (el.id in data) {
+          if (el.type === "checkbox") {
+            el.checked = !!data[el.id];
+          } else {
+            el.value = data[el.id] || "";
+          }
+        }
+      });
+    } catch(e) {}
+  }
+
+  inputs.forEach(function(el) {
+    el.addEventListener("input", saveData);
+    el.addEventListener("change", saveData);
+  });
+
+  loadData();
+
+  // Storage event listener to sync state between iframe and popups
+  window.addEventListener("storage", function(e) {
+    if (e.key === "ratipa_loss_declaration_data") {
+      loadData();
+    }
+  });
+});
+</script>
+<title>Декларация об утере книжки МДП</title>
 </head>
 <body>
 <div id="sidebar">

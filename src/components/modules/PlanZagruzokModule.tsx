@@ -67,8 +67,8 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
   }, []);
 
   const dynamicTabs = settings?.planZagruzokTabs || [];
-  const allowedDynamicTabs = dynamicTabs.filter(t => user.role === 'root_admin' || user.permissions[`planZagruzok_${t.id}`] !== 'none');
-  const hasBasePermission = user.role === 'root_admin' || user.permissions.planZagruzok !== 'none';
+  const allowedDynamicTabs = dynamicTabs.filter(t => user.role === 'root_admin' || user.role === 'admin' || (user.permissions && user.permissions[`planZagruzok_${t.id}`] !== 'none'));
+  const hasBasePermission = user.role === 'root_admin' || user.role === 'admin' || (user.permissions && user.permissions.planZagruzok !== 'none');
 
   const allowedTabs = [
     ...(hasBasePermission ? [
@@ -115,29 +115,26 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
   };
 
   return (
-    <div className={`w-full space-y-6 font-sans flex flex-col ${isFocusMode ? 'fixed inset-0 z-50 bg-slate-900/10 backdrop-blur-md p-2 lg:p-6' : 'h-full'}`}>
+    <div className={`w-full space-y-2 font-sans flex flex-col ${isFocusMode ? 'fixed inset-0 z-50 bg-slate-900/10 backdrop-blur-md p-2 lg:p-4' : 'h-full'}`}>
       
-      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col lg:flex-row items-center justify-between gap-6 select-none">
+      <div className="bg-white rounded-2xl p-2.5 px-4 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col sm:flex-row items-center justify-between gap-3 select-none">
         
-        <div className="flex items-center gap-4 w-full lg:w-auto">
-          <div className="w-12 h-12 rounded-full bg-[#70FC8E]/15 border border-[#70FC8E]/45 flex items-center justify-center shrink-0">
-            <FileSpreadsheet className="h-5 w-5 text-slate-900" />
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="w-8 h-8 rounded-full bg-[#70FC8E]/15 border border-[#70FC8E]/45 flex items-center justify-center shrink-0">
+            <FileSpreadsheet className="h-4 w-4 text-slate-900" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight">
+              <h1 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight">
                 План Загрузок {activeTabObj && activeTabObj.id !== 'plan' && activeTabObj.id !== 'blacklist' && `| ${activeTabObj.name}`}
               </h1>
-              <span className="bg-[#70FC8E] text-slate-950 text-[9px] font-mono font-black px-2.5 py-0.5 rounded-full border border-black/5 uppercase tracking-wider">
-                Синхр Google Таблиц
-              </span>
             </div>
-            <div className="flex gap-2 mt-2.5 flex-wrap">
+            <div className="flex gap-1.5 mt-1 flex-wrap">
               {allowedTabs.map(tab => (
                 <button 
                   key={tab.id}
                   onClick={() => setActiveTabId(tab.id)}
-                  className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition shrink-0 cursor-pointer ${
+                  className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md transition shrink-0 cursor-pointer ${
                     activeTabId === tab.id 
                       ? tab.variant === 'rose'
                         ? 'bg-rose-500 text-white shadow-sm'
@@ -154,20 +151,20 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto justify-start lg:justify-end">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-start sm:justify-end">
           
-          <div className="flex bg-slate-100 p-1 rounded-xl items-center">
-             <button onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600 cursor-pointer"><ZoomOut className="w-4 h-4"/></button>
-             <span className="text-[10px] font-black w-10 text-center font-mono text-slate-700">{Math.round(zoomLevel * 100)}%</span>
-             <button onClick={() => setZoomLevel(z => Math.min(2, z + 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600 cursor-pointer"><ZoomIn className="w-4 h-4"/></button>
+          <div className="flex bg-slate-100 p-0.5 rounded-lg items-center">
+             <button onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600 cursor-pointer"><ZoomOut className="w-3.5 h-3.5"/></button>
+             <span className="text-[9px] font-black w-8 text-center font-mono text-slate-700">{Math.round(zoomLevel * 100)}%</span>
+             <button onClick={() => setZoomLevel(z => Math.min(2, z + 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600 cursor-pointer"><ZoomIn className="w-3.5 h-3.5"/></button>
           </div>
 
           <button
             onClick={handleRefresh}
-            className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-black px-4 py-2.5 rounded-xl border border-slate-200/50 transition cursor-pointer"
+            className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[10px] font-black px-2.5 py-1.5 rounded-lg border border-slate-200/50 transition cursor-pointer"
             title="Перезагрузить фрейм"
           >
-            <RefreshCw className="h-4 w-4 text-slate-500" />
+            <RefreshCw className="h-3.5 w-3.5 text-slate-500" />
             <span className="hidden sm:inline">Обновить</span>
           </button>
 
@@ -175,15 +172,15 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
             href={sheetsExternalUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 bg-slate-950 hover:bg-slate-850 text-[#70FC8E] text-xs font-black px-4 py-2.5 rounded-xl transition cursor-pointer shadow-xs uppercase tracking-tight hidden sm:flex"
+            className="flex items-center gap-1.5 bg-slate-950 hover:bg-slate-850 text-[#70FC8E] text-[10px] font-black px-2.5 py-1.5 rounded-lg transition cursor-pointer shadow-xs uppercase tracking-tight hidden sm:flex"
           >
-            <ExternalLink className="h-4 w-4" />
+            <ExternalLink className="h-3.5 w-3.5" />
             <span>Новая вкладка</span>
           </a>
 
           <button
             onClick={() => setIsFocusMode(!isFocusMode)}
-            className={`flex items-center gap-2 text-xs font-black px-4 py-2.5 rounded-xl border transition cursor-pointer uppercase tracking-tight ${
+            className={`flex items-center gap-1.5 text-[10px] font-black px-2.5 py-1.5 rounded-lg border transition cursor-pointer uppercase tracking-tight ${
               isFocusMode 
                 ? 'bg-[#70FC8E] border-[#70FC8E] text-slate-950 hover:opacity-90 shadow-sm' 
                 : 'bg-white border-slate-250 text-slate-705 lg:hover:bg-slate-50'
@@ -191,12 +188,12 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
           >
             {isFocusMode ? (
               <>
-                <Minimize2 className="h-4 w-4" />
+                <Minimize2 className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Свернуть</span>
               </>
             ) : (
               <>
-                <Maximize2 className="h-4 w-4" />
+                <Maximize2 className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Экран</span>
               </>
             )}
@@ -206,7 +203,7 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
       </div>
 
       <div 
-        className="relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col min-h-0"
+        className={`relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col min-h-0 ${isFocusMode ? '' : 'h-[880px]'}`}
       >
         
         {activeIsLoading && (

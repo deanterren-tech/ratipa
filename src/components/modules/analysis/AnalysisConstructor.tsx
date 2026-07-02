@@ -3,6 +3,7 @@ import { APIProvider, Map, useMap, useMapsLibrary } from '@vis.gl/react-google-m
 import { useFirebase, database, dbService } from '../../../firebase';
 import { pdService } from '../../../firebase/planDohodService';
 import { ref, get } from 'firebase/database';
+import BelarusMap from '../../BelarusMap';
 import { 
   MapPin, Plus, Trash2, X, Check, Copy, ArrowDownUp, 
   ArrowUpDown, MoveUp, MoveDown, Search, HelpCircle, 
@@ -495,6 +496,7 @@ function ModalMapRenderer({
 }
 
 export default function AnalysisConstructor() {
+  const [useOsmMap, setUseOsmMap] = useState(() => localStorage.getItem('ratipa_use_osm_map') === 'true');
   const [pdSettings, setPdSettings] = useState<any>({ googleMapsApiKey: '' });
   
   // Visual blocks/legs of the constructed route sequence
@@ -1373,19 +1375,38 @@ export default function AnalysisConstructor() {
                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse"></span>
                      <span className="text-xs font-black capitalize text-slate-700 tracking-tight">Маршрут на интерактивной карте</span>
                   </div>
-                  {activeLegIndex !== null && (
-                     <button 
-                        onClick={() => setActiveLegIndex(null)}
-                        className="text-[10px] font-black uppercase tracking-wider text-rose-500 hover:text-rose-600 border border-rose-100 bg-rose-50 rounded px-2 py-1 transition-colors cursor-pointer"
+                  <div className="flex items-center gap-2">
+                     <button
+                        onClick={() => {
+                          const newVal = !useOsmMap;
+                          setUseOsmMap(newVal);
+                          localStorage.setItem('ratipa_use_osm_map', String(newVal));
+                        }}
+                        className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded transition-colors cursor-pointer border ${
+                          useOsmMap 
+                            ? 'bg-[#70FC8E] text-slate-950 border-[#5beb78]' 
+                            : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                        }`}
+                        title="Включить карту OpenStreetMap (работает в Беларуси без VPN)"
                      >
-                        Сбросить фокус
+                        {useOsmMap ? '🗺️ Карта: Без VPN (РБ)' : '🌐 Карта: Google Maps'}
                      </button>
-                  )}
+                     {activeLegIndex !== null && (
+                        <button 
+                           onClick={() => setActiveLegIndex(null)}
+                           className="text-[10px] font-black uppercase tracking-wider text-rose-500 hover:text-rose-600 border border-rose-100 bg-rose-50 rounded px-2 py-1 transition-colors cursor-pointer"
+                        >
+                           Сбросить фокус
+                        </button>
+                     )}
+                  </div>
                </div>
 
                {/* MAP DISPLAYER */}
                <div className="h-[480px] bg-slate-100 relative">
-                  {!resolvedApiKey ? (
+                  {useOsmMap ? (
+                     <BelarusMap legs={legs} activeLegIndex={activeLegIndex} />
+                  ) : !resolvedApiKey ? (
                      <div className="absolute inset-x-4 inset-y-12 flex flex-col items-center justify-center text-center p-6 bg-white border border-slate-100 rounded-2xl shadow-sm">
                         <AlertCircle className="text-rose-500 mb-3" size={32} />
                         <h4 className="font-black text-sm text-slate-800 uppercase tracking-widest">Активируйте карту в справочнике</h4>
