@@ -54,6 +54,53 @@ export default function BelarusMap({
     return null;
   };
 
+  // Helper for route fetching with robust fallbacks
+  const fetchRouteWithFallback = async (coordinates: string, steps: boolean = false, alternatives: boolean = false): Promise<any> => {
+    const stepsParam = steps ? "&steps=true" : "";
+    const altParam = alternatives ? "&alternatives=true" : "";
+    
+    // 1. Try our proxy first
+    try {
+      const response = await fetch(`/api/osrm-route?coordinates=${coordinates}${stepsParam}${altParam}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.code === "Ok" && data.routes && data.routes.length > 0) {
+          return data;
+        }
+      }
+    } catch (e) {
+      console.warn("Proxy routing failed, trying direct OSRM fallback:", e);
+    }
+
+    // 2. Try direct OSRM router on client
+    try {
+      const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson${stepsParam}${altParam}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.code === "Ok" && data.routes && data.routes.length > 0) {
+          return data;
+        }
+      }
+    } catch (e) {
+      console.warn("Direct OSRM fallback failed, trying OpenStreetMap FOSSGIS fallback:", e);
+    }
+
+    // 3. Try OpenStreetMap FOSSGIS fallback
+    try {
+      const response = await fetch(`https://routing.openstreetmap.de/routed-car/route/v1/driving/${coordinates}?overview=full&geometries=geojson${stepsParam}${altParam}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.code === "Ok" && data.routes && data.routes.length > 0) {
+          return data;
+        }
+      }
+    } catch (e) {
+      console.error("All OSRM routing attempts failed:", e);
+    }
+
+    return null;
+  };
+
   // Listen to drag messages from inside Leaflet iframe
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
@@ -146,18 +193,15 @@ export default function BelarusMap({
                 markers.push({ ...c2, active: isActive });
               }
 
-              // Fetch route polyline via our backend proxy to avoid VPN/CORS issues
+              // Fetch route polyline via helper (incorporates proxy & direct fallbacks)
               let polylinePath: { lat: number; lng: number }[] = [];
               try {
-                const response = await fetch(`/api/osrm-route?coordinates=${c1.lng},${c1.lat};${c2.lng},${c2.lat}`);
-                if (response.ok) {
-                  const rdata = await response.json();
-                  if (rdata?.routes?.[0]?.geometry?.coordinates) {
-                    polylinePath = rdata.routes[0].geometry.coordinates.map((coord: [number, number]) => ({
-                      lat: coord[1],
-                      lng: coord[0]
-                    }));
-                  }
+                const rdata = await fetchRouteWithFallback(`${c1.lng},${c1.lat};${c2.lng},${c2.lat}`);
+                if (rdata?.routes?.[0]?.geometry?.coordinates) {
+                  polylinePath = rdata.routes[0].geometry.coordinates.map((coord: [number, number]) => ({
+                    lat: coord[1],
+                    lng: coord[0]
+                  }));
                 }
               } catch (e) {
                 console.warn("OSRM fetch failed for leg " + i, e);
@@ -194,16 +238,13 @@ export default function BelarusMap({
             let polylinePath: { lat: number; lng: number }[] = [];
             let distanceMeters = 0;
             try {
-              const response = await fetch(`/api/osrm-route?coordinates=${coordQuery}`);
-              if (response.ok) {
-                const rdata = await response.json();
-                if (rdata?.routes?.[0]?.geometry?.coordinates) {
-                  polylinePath = rdata.routes[0].geometry.coordinates.map((coord: [number, number]) => ({
-                    lat: coord[1],
-                    lng: coord[0]
-                  }));
-                  distanceMeters = rdata.routes[0].distance || 0;
-                }
+              const rdata = await fetchRouteWithFallback(coordQuery);
+              if (rdata?.routes?.[0]?.geometry?.coordinates) {
+                polylinePath = rdata.routes[0].geometry.coordinates.map((coord: [number, number]) => ({
+                  lat: coord[1],
+                  lng: coord[0]
+                }));
+                distanceMeters = rdata.routes[0].distance || 0;
               }
             } catch (e) {
               console.warn("OSRM fetch failed for single route", e);

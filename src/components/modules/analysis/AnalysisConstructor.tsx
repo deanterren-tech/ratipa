@@ -173,9 +173,31 @@ function RouteMapLayer({ legs, activeLegIndex }: { legs: any[]; activeLegIndex: 
       } else {
         // Default: OSRM
         try {
-          const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${c1.lng()},${c1.lat()};${c2.lng()},${c2.lat()}?overview=full&geometries=geojson`);
+          let response = null;
+          const coordsParam = `${c1.lng()},${c1.lat()};${c2.lng()},${c2.lat()}`;
+          try {
+            response = await fetch(`/api/osrm-route?coordinates=${coordsParam}`);
+            if (!response.ok) {
+              throw new Error("Proxy OSRM fetch returned error status");
+            }
+          } catch (proxyError) {
+            console.warn("Proxy routing failed, trying direct OSRM fallback:", proxyError);
+            try {
+              response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordsParam}?overview=full&geometries=geojson`);
+              if (!response.ok) {
+                throw new Error("Direct OSRM fetch returned error status");
+              }
+            } catch (directError) {
+              console.warn("Direct OSRM fallback failed, trying OpenStreetMap FOSSGIS fallback:", directError);
+              try {
+                response = await fetch(`https://routing.openstreetmap.de/routed-car/route/v1/driving/${coordsParam}?overview=full&geometries=geojson`);
+              } catch (fossgisError) {
+                console.error("All front-end OSRM routing attempts failed:", fossgisError);
+              }
+            }
+          }
 
-          if (response.ok) {
+          if (response && response.ok) {
             const data = await response.json();
             if (data.code === 'Ok' && data.routes && data.routes[0]) {
               const route = data.routes[0];
@@ -420,9 +442,30 @@ function ModalMapRenderer({
 
       const coordinates = validCoords.map(vc => `${vc.lng()},${vc.lat()}`).join(';');
       try {
-        const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`);
+        let response = null;
+        try {
+          response = await fetch(`/api/osrm-route?coordinates=${coordinates}`);
+          if (!response.ok) {
+            throw new Error("Proxy OSRM fetch returned error status");
+          }
+        } catch (proxyError) {
+          console.warn("Proxy routing failed, trying direct OSRM fallback:", proxyError);
+          try {
+            response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`);
+            if (!response.ok) {
+              throw new Error("Direct OSRM fetch returned error status");
+            }
+          } catch (directError) {
+            console.warn("Direct OSRM fallback failed, trying OpenStreetMap FOSSGIS fallback:", directError);
+            try {
+              response = await fetch(`https://routing.openstreetmap.de/routed-car/route/v1/driving/${coordinates}?overview=full&geometries=geojson`);
+            } catch (fossgisError) {
+              console.error("All front-end OSRM routing attempts failed:", fossgisError);
+            }
+          }
+        }
 
-        if (response.ok) {
+        if (response && response.ok) {
           const data = await response.json();
           if (data.code === 'Ok' && data.routes && data.routes[0]) {
             const route = data.routes[0];
