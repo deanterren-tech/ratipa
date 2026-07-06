@@ -1,3 +1,4 @@
+import { useDialog } from '../../DialogProvider';
 import React, { useState, useEffect } from "react";
 import { UserProfile } from "../../../types";
 import { FileText, Download, Printer, Plus, Trash2, CheckCircle, Search, Sparkles, RefreshCw, Sliders, Settings, Layers, Eye } from "lucide-react";
@@ -19,6 +20,7 @@ interface DozvolaDocumentsProps {
 }
 
 export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
+  const { showConfirm, showAlert } = useDialog();
   const [docType, setDocType] = useState("Заявление на получение разрешений");
   const [dozvolsData, setDozvolsData] = useState<any>({});
   const [todoTasks, setTodoTasks] = useState<any>({});
@@ -28,14 +30,17 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
   // Document row state for interactive editing
   const [permitRows, setPermitRows] = useState<any[]>([]);
   const [selectedPermitTasks, setSelectedPermitTasks] = useState<Record<string, boolean>>({});
+  const [taskSearchQuery, setTaskSearchQuery] = useState("");
 
   const [returnRows, setReturnRows] = useState<any[]>([]);
   const [selectedReturnItems, setSelectedReturnItems] = useState<Record<string, boolean>>({});
   const [showArchiveReturns, setShowArchiveReturns] = useState(false);
+  const [returnSearchQuery, setReturnSearchQuery] = useState("");
 
   const [chinaRows, setChinaRows] = useState<any[]>([]);
   const [selectedChinaItems, setSelectedChinaItems] = useState<Record<string, boolean>>({});
   const [showArchiveChina, setShowArchiveChina] = useState(false);
+  const [chinaSearchQuery, setChinaSearchQuery] = useState("");
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [lastAssembledStatement, setLastAssembledStatement] = useState<any>(null);
@@ -367,13 +372,13 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
   };
 
   // Submit collected return items to Transport Inspection
-  const markCheckedOfficeReturnsAsUsed = () => {
+  const markCheckedOfficeReturnsAsUsed = async () => {
     const checkedItems = getReturnItems().filter((item: any) => selectedReturnItems[item.id]);
     if (!checkedItems.length) {
-      alert("Пожалуйста, сначала выберите хотя бы один бланк из списка возвращаемых.");
+      await showAlert("Пожалуйста, сначала выберите хотя бы один бланк из списка возвращаемых.");
       return;
     }
-    if (!confirm(`Вы действительно хотите перевести выбранные бланки в статус “Сдан в транспортную инспекцию”? Всего к списанию: ${checkedItems.length} шт.`)) {
+    if (!(await showConfirm(`Вы действительно хотите перевести выбранные бланки в статус “Сдан в транспортную инспекцию”? Всего к списанию: ${checkedItems.length} шт.`))) {
       return;
     }
 
@@ -454,7 +459,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
             </td>
         </tr>
     </table>
-    <div class="contacts">
+    <div class="contacts" style="text-align: center;">
         Республика Беларусь, г.Минск, ул.Таежная 39-2.<br>
         Тел. (017) 338-11-03, 338-13-80; факс (017) 338-10-79.<br>
         ОАО “Приорбанк”, г. Минск<br>
@@ -704,17 +709,6 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
         }
 
         const timestamp = formatApplicationDate(applicationDate).replace(/\./g, '-');
-        
-        if (docType === "Заявление об утере") {
-            const a = document.createElement("a");
-            a.href = "/loss_declaration.html";
-            a.download = `Заявление_об_утере_${timestamp}.html`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            logDocumentHistory(docType, 'Скачан как HTML (' + a.download + ')', 'HTML');
-            return;
-        }
 
         let blob: Blob;
         let filename = "Document";
@@ -799,20 +793,6 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
             return alert("Нет строк реестра возврата.");
         }
         
-        if (docType === "Заявление об утере") {
-            const printWindow = window.open("/loss_declaration.html", "_blank");
-            if (printWindow) {
-                printWindow.focus();
-                printWindow.onload = () => {
-                    setTimeout(() => printWindow.print(), 500);
-                };
-                logDocumentHistory(docType, 'Отправлен на печать', 'Печать');
-            }
-            return;
-        }
-
-        // Loss declaration has no rows to validate
-
         const printWindow = window.open("", "_blank");
         if (printWindow) {
             printWindow.document.open();
@@ -850,7 +830,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
       }
   };
 
-  const markSelectedChinaCopiesAsSubmitted = (submitted: boolean) => {
+  const markSelectedChinaCopiesAsSubmitted = async (submitted: boolean) => {
     const checkedItems = getChinaCopyItems().filter((item: any) => selectedChinaItems[item.id]);
     if (!checkedItems.length) {
       alert("Сначала выберите хотя бы один бланк из списка китайских копий.");
@@ -859,7 +839,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
     const msg = submitted 
       ? `Пометить выбранные копии (${checkedItems.length} шт.) как поданные/сданные в инспекцию?\nОни больше не будут отмечаться галочками по умолчанию.`
       : `Сбросить отметку о сдаче копий для выбранных файлов (${checkedItems.length} шт.)?`;
-    if (!confirm(msg)) return;
+    if (!(await showConfirm(msg))) return;
 
     if (useFirebase) {
       const updates: Record<string, any> = {};
@@ -882,8 +862,35 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
   };
 
   const activeTasks = Object.values(todoTasks).filter((task: any) => !task.done && Array.isArray(task.items));
+  const filteredActiveTasks = activeTasks.filter((task: any) => {
+    const q = taskSearchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const carMatch = String(task.car || "").toLowerCase().includes(q);
+    const noteMatch = String(task.note || "").toLowerCase().includes(q);
+    const itemsMatch = task.items.some((i: any) => 
+      String(i.type || "").toLowerCase().includes(q) || String(i.qty || "").includes(q)
+    );
+    return carMatch || noteMatch || itemsMatch;
+  });
   const activeReturns = getReturnItems();
+  const filteredActiveReturns = activeReturns.filter((item: any) => {
+    const q = returnSearchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const typeMatch = String(item.type || "").toLowerCase().includes(q);
+    const numMatch = String(item.number || "").toLowerCase().includes(q);
+    const carMatch = String(item.car || "").toLowerCase().includes(q);
+    return typeMatch || numMatch || carMatch;
+  });
+
   const activeChinaCopies = getChinaCopyItems();
+  const filteredActiveChinaCopies = activeChinaCopies.filter((item: any) => {
+    const q = chinaSearchQuery.trim().toLowerCase();
+    if (!q) return true;
+    const typeMatch = String(item.type || "").toLowerCase().includes(q);
+    const numMatch = String(item.number || "").toLowerCase().includes(q);
+    const carMatch = String(item.car || "").toLowerCase().includes(q);
+    return typeMatch || numMatch || carMatch;
+  });
 
   return (
     <div className="space-y-6">
@@ -914,9 +921,6 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                 <option value="Заявление по китайским копиям">
                   Заявление на китайские разрешения
                 </option>
-                <option value="Заявление об утере">
-                  Заявление об утере (Loss declaration)
-                </option>
 
               </select>
             </div>
@@ -938,7 +942,6 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                     {docType === "Заявление на получение разрешений" && "Документ формируется на основе активных заявок блока Планерки."}
                     {docType === "Реестр возврата разрешений" && "В реестр возвращаемых бланков попадают бланки со статусом 'Сдан в офис'."}
                     {docType === "Заявление по китайским копиям" && "Собирается из китайских дозволов (СHN 2, CHN 3) со сданной копией."}
-                    {docType === "Заявление об утере" && "Стандартный бланк заявления об утере разрешений. Выводится статичный шаблон для печати или скачивания."}
 
                 </p>
             </div>
@@ -982,16 +985,25 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
       {/* Dynamic item selectors and editable lists */}
       {docType === "Заявление на получение разрешений" && (
         <div className="bg-white rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] p-6 space-y-6">
-          <div className="space-y-2">
+          <div className="space-y-3">
             <h3 className="text-sm font-black text-slate-900 uppercase">1. Выбор активных заявок планерки</h3>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button onClick={() => setAllPermitsChecked(true)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase rounded-lg">Выбрать все</button>
               <button onClick={() => setAllPermitsChecked(false)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase rounded-lg">Снять все</button>
               <button onClick={rebuildPermitRows} className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase rounded-lg">Собрать по выбранным</button>
+              <div className="flex-1 min-w-[200px]">
+                <input
+                  type="text"
+                  placeholder="🔍 Поиск заявок по машине или виду разрешения..."
+                  value={taskSearchQuery}
+                  onChange={(e) => setTaskSearchQuery(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                />
+              </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-3 bg-slate-50 border border-slate-200/50 rounded-2xl">
-              {activeTasks.map((task: any) => (
+              {filteredActiveTasks.map((task: any) => (
                 <label key={task.id} className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50/50 transition">
                   <input 
                     type="checkbox" 
@@ -1001,13 +1013,18 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                   />
                   <div>
                     <span className="font-black text-slate-900 text-xs">{task.car}</span>
+                    {task.note && <span className="block text-[10px] text-amber-600 font-bold mb-0.5">{task.note}</span>}
                     <span className="block text-[10px] text-slate-500 font-bold">
                       {task.items.map((i: any) => `${i.type} × ${i.qty}`).join(', ')} · {task.createdAt}
                     </span>
                   </div>
                 </label>
               ))}
-              {!activeTasks.length && <div className="col-span-2 text-center text-slate-400 font-bold text-xs py-6">В планерке нет активных заявок</div>}
+              {!activeTasks.length ? (
+                <div className="col-span-2 text-center text-slate-400 font-bold text-xs py-6">В планерке нет активных заявок</div>
+              ) : !filteredActiveTasks.length ? (
+                <div className="col-span-2 text-center text-slate-400 font-bold text-xs py-6">Нет заявок, соответствующих поиску</div>
+              ) : null}
             </div>
           </div>
 
@@ -1065,16 +1082,25 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                 <input type="checkbox" checked={showArchiveReturns} onChange={(e) => setShowArchiveReturns(e.target.checked)} className="accent-amber-500" />
                 Включить уже сданные в ТИ (Архив)
               </label>
+              <div className="flex-1 min-w-[200px]">
+                <input
+                  type="text"
+                  placeholder="🔍 Поиск бланков по номеру, типу или машине..."
+                  value={returnSearchQuery}
+                  onChange={(e) => setReturnSearchQuery(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                />
+              </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-3 bg-slate-50 border border-slate-200/50 rounded-2xl">
-              {activeReturns.map((item: any) => (
+              {filteredActiveReturns.map((item: any) => (
                 <label key={item.id} className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50/50 transition">
                   <input 
-                    type="checkbox" 
-                    className="mt-1 accent-amber-500" 
-                    checked={!!selectedReturnItems[item.id]}
-                    onChange={(e) => setSelectedReturnItems(prev => ({ ...prev, [item.id]: e.target.checked }))}
+                     type="checkbox" 
+                     className="mt-1 accent-amber-500" 
+                     checked={!!selectedReturnItems[item.id]}
+                     onChange={(e) => setSelectedReturnItems(prev => ({ ...prev, [item.id]: e.target.checked }))}
                   />
                   <div>
                     <span className="font-black text-slate-900 text-xs">{item.type} №{item.number}</span>
@@ -1084,7 +1110,11 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                   </div>
                 </label>
               ))}
-              {!activeReturns.length && <div className="col-span-2 text-center text-slate-400 font-bold text-xs py-6">В реестре офиса нет сданных бланков</div>}
+              {!activeReturns.length ? (
+                <div className="col-span-2 text-center text-slate-400 font-bold text-xs py-6">В реестре офиса нет сданных бланков</div>
+              ) : !filteredActiveReturns.length ? (
+                <div className="col-span-2 text-center text-slate-400 font-bold text-xs py-6">Нет бланков, соответствующих поиску</div>
+              ) : null}
             </div>
           </div>
 
@@ -1152,10 +1182,19 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
               </label>
               <button onClick={() => markSelectedChinaCopiesAsSubmitted(true)} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase rounded-lg">Пометить как отправленные в ТИ</button>
               <button onClick={() => markSelectedChinaCopiesAsSubmitted(false)} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase rounded-lg">Сбросить отметку сдачи</button>
+              <div className="flex-1 min-w-[200px]">
+                <input
+                  type="text"
+                  placeholder="🔍 Поиск копий по номеру или машине..."
+                  value={chinaSearchQuery}
+                  onChange={(e) => setChinaSearchQuery(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                />
+              </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-3 bg-slate-50 border border-slate-200/50 rounded-2xl">
-              {activeChinaCopies.map((item: any) => (
+              {filteredActiveChinaCopies.map((item: any) => (
                 <label key={item.id} className={`flex items-start gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50/50 transition ${item.chinaCopySubmitted ? 'bg-purple-50/40 border-purple-100' : 'bg-white border-slate-100'}`}>
                   <input 
                     type="checkbox" 
@@ -1176,7 +1215,11 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                   </div>
                 </label>
               ))}
-              {!activeChinaCopies.length && <div className="col-span-2 text-center text-slate-400 font-bold text-xs py-6 font-mono">Нет китайских дозволов с отметкой 'копия сдана'</div>}
+              {!activeChinaCopies.length ? (
+                <div className="col-span-2 text-center text-slate-400 font-bold text-xs py-6 font-mono">Нет китайских дозволов с отметкой 'копия сдана'</div>
+              ) : !filteredActiveChinaCopies.length ? (
+                <div className="col-span-2 text-center text-slate-400 font-bold text-xs py-6 font-mono">Нет копий, соответствующих поиску</div>
+              ) : null}
             </div>
           </div>
 

@@ -9,9 +9,11 @@ import {
   DISPATCHER_COLORS_PRESETS,
   PotentialLoad,
   CurrencyPreset,
+  AppSettings,
 } from "../../types";
 import { dbService } from "../../firebase";
 import { pdService } from "../../firebase/planDohodService";
+import { useDialog } from "../DialogProvider";
 import {
   Plus,
   Trash2,
@@ -99,6 +101,21 @@ function RouteDisplay({
     routingProvider: "osrm",
     openRouteServiceApiKey: "",
   });
+  const [globalSettings, setGlobalSettings] = useState<AppSettings | null>(null);
+  const [offlineMode, setOfflineMode] = useState(() => localStorage.getItem('offline_mode') === 'true');
+
+  useEffect(() => {
+    const unsub = dbService.getSettings(setGlobalSettings);
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const handleOfflineChange = () => {
+      setOfflineMode(localStorage.getItem('offline_mode') === 'true');
+    };
+    window.addEventListener('ratipa-offline-mode-change', handleOfflineChange);
+    return () => window.removeEventListener('ratipa-offline-mode-change', handleOfflineChange);
+  }, []);
 
   useEffect(() => {
     const unsub = pdService.subscribePlanDohodSettings(setPdSettings);
@@ -318,7 +335,7 @@ function RouteDisplay({
         attempted = true;
       }
 
-      if (apiKey && apiKey.trim() !== "") {
+      if (apiKey && apiKey.trim() !== "" && !offlineMode) {
         const coordinates = validCoords.map((vc) => [vc.lng(), vc.lat()]);
         try {
           const response = await fetch(
@@ -492,35 +509,56 @@ function RouteDisplay({
         attempted = true;
       }
 
+      const mapboxUsage = globalSettings?.mapboxUsage;
+      const bypassMapbox = mapboxUsage
+        ? (mapboxUsage.count >= (mapboxUsage.limit || 100000) && !mapboxUsage.allowExceed)
+        : false;
+
       const coordinates = validCoords
         .map((vc) => `${vc.lng()},${vc.lat()}`)
         .join(";");
       try {
         let response = null;
-        try {
-          response = await fetch(
-            `/api/osrm-route?coordinates=${coordinates}&steps=true&alternatives=true`,
-          );
-          if (!response.ok) {
-            throw new Error("Proxy OSRM fetch returned error status");
-          }
-        } catch (proxyError) {
-          console.warn("Proxy routing failed, trying direct OSRM fallback:", proxyError);
+        let usedDirectMapbox = false;
+        if (!offlineMode) {
           try {
+            const bypassParam = bypassMapbox ? "&bypassMapbox=true" : "";
             response = await fetch(
-              `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true&alternatives=true`,
+              `/api/osrm-route?coordinates=${coordinates}&steps=true&alternatives=true${bypassParam}`,
             );
             if (!response.ok) {
-              throw new Error("Direct OSRM fetch returned error status");
+              throw new Error("Proxy routing fetch returned error status");
             }
-          } catch (directError) {
-            console.warn("Direct OSRM fallback failed, trying OpenStreetMap FOSSGIS fallback:", directError);
-            try {
-              response = await fetch(
-                `https://routing.openstreetmap.de/routed-car/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true&alternatives=true`,
-              );
-            } catch (fossgisError) {
-              console.error("All front-end OSRM routing attempts failed:", fossgisError);
+          } catch (proxyError) {
+            console.warn("Proxy routing failed, trying direct Mapbox fallback:", proxyError);
+            if (!bypassMapbox) {
+              try {
+                const mapboxToken = "pk.eyJ1Ijoic2VyZ2VpdGVyZXoiLCJhIjoiY21yN3FqeTNzMTV2ZTJ3czlobGM0ZTF2NiJ9.GeagZG4Ev2U2a7NfnLicyg";
+                response = await fetch(
+                  `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinates}?geometries=geojson&overview=full&steps=true&alternatives=true&access_token=${mapboxToken}`,
+                );
+                if (!response.ok) {
+                  throw new Error("Direct Mapbox fetch returned error status");
+                }
+                usedDirectMapbox = true;
+              } catch (directError) {
+                console.warn("Direct Mapbox fallback failed, trying public OSRM fallback:", directError);
+                try {
+                  response = await fetch(
+                    `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true&alternatives=true`,
+                  );
+                } catch (ossError) {
+                  console.error("All front-end Mapbox & OSRM routing attempts failed:", ossError);
+                }
+              }
+            } else {
+              try {
+                response = await fetch(
+                  `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true&alternatives=true`,
+                );
+              } catch (ossError) {
+                console.error("All front-end OSRM routing attempts failed:", ossError);
+              }
             }
           }
         }
@@ -529,6 +567,9 @@ function RouteDisplay({
 
         if (response && response.ok) {
           const data = await response.json();
+          if (data.source === "mapbox" || usedDirectMapbox) {
+            dbService.incrementMapboxUsage();
+          }
           if (data.code === "Ok" && data.routes && data.routes.length > 0) {
             let selectedRoute = data.routes[0];
 
@@ -732,6 +773,7 @@ const matchUserAndDispatcher = (user: string, dispatcher: string): boolean => {
 };
 
 export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
+  const { showConfirm } = useDialog();
   const [searchQuery, setSearchQuery] = useState("");
   const [tableScale, setTableScale] = useState<number>(() => {
     const saved = localStorage.getItem("pd_table_scale");
@@ -1162,8 +1204,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     const car = notebookCarInput.trim().toUpperCase();
     if (!car) return;
     pdService.saveNotebookNote(selectedNotebookUser, car, "");
-    if (!notebookOrder.includes(car)) {
-      const newOrder = [...notebookOrder, car];
+    const normalizedOrder = notebookOrder.map(c => c.trim().toUpperCase());
+    if (!normalizedOrder.includes(car)) {
+      const newOrder = [...normalizedOrder, car];
       pdService.saveNotebookOrder(selectedNotebookUser, newOrder);
     }
     setNotebookCarInput("");
@@ -1172,33 +1215,31 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const handleRemoveCarFromNotebook = (car: string) => {
     pdService.removeNotebookCar(selectedNotebookUser, car);
     pdService.saveNotebookStatus(selectedNotebookUser, car, null);
-    const newOrder = notebookOrder.filter((c) => c !== car);
+    const newOrder = notebookOrder.filter((c) => c.trim().toUpperCase() !== car.trim().toUpperCase());
     pdService.saveNotebookOrder(selectedNotebookUser, newOrder);
   };
 
   const handleAddMyCarsToNotebook = () => {
     const myCars: string[] = [];
-    trips.forEach((trip) => {
-      if (
-        (matchUserAndDispatcher(user.name, trip.logist || "") ||
-          matchUserAndDispatcher(user.name, trip.dispatcher || "")) &&
-        trip.carNumber
-      ) {
-        myCars.push(trip.carNumber.trim().toUpperCase());
+    Object.entries(carDispatcherMapping).forEach(([carPlate, dispatcherName]) => {
+      if (dispatcherName && matchUserAndDispatcher(user.name, dispatcherName as string)) {
+        myCars.push(carPlate.trim().toUpperCase());
       }
     });
     const uniqueCars = Array.from(new Set(myCars));
     if (uniqueCars.length === 0) {
-      alert("У вас пока нет оформленных машин в текущем журнале.");
+      alert("У вас пока нет привязанных машин в справочнике.");
       return;
     }
 
-    const newOrder = [...notebookOrder];
+    const normalizedExistingOrder = notebookOrder.map(c => c.trim().toUpperCase());
+    const newOrder = [...normalizedExistingOrder];
     let addedCount = 0;
     uniqueCars.forEach((car) => {
       if (!newOrder.includes(car)) {
         newOrder.push(car);
-        if (notebookNotes[car] === undefined) {
+        const existingNoteKey = Object.keys(notebookNotes).find(k => k.trim().toUpperCase() === car);
+        if (!existingNoteKey) {
           pdService.saveNotebookNote(selectedNotebookUser, car, "");
         }
         addedCount++;
@@ -1236,15 +1277,30 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       return null;
     }
 
-    // All cars that are in order or have notes
+    // All cars that are in order or have notes, normalized to prevent duplicates
+    const normalizedOrder = notebookOrder.map(c => c.trim().toUpperCase());
+    const normalizedNotesKeys = Object.keys(notebookNotes).map(c => c.trim().toUpperCase());
     const cars = Array.from(
-      new Set([...notebookOrder, ...Object.keys(notebookNotes)]),
-    ).filter((car) => notebookOrder.includes(car) || (notebookNotes[car] !== undefined && notebookNotes[car] !== null));
+      new Set([...normalizedOrder, ...normalizedNotesKeys])
+    ).filter((car) => {
+      const isOrdered = normalizedOrder.includes(car);
+      const noteVal = notebookNotes[car] !== undefined && notebookNotes[car] !== null
+        ? notebookNotes[car]
+        : Object.entries(notebookNotes).find(([k]) => k.trim().toUpperCase() === car)?.[1];
+      const hasNote = noteVal !== undefined && noteVal !== null;
+      return isOrdered || hasNote;
+    });
 
     const realCars = cars.filter((car) => car !== 'ПЛАН');
     const totalCarsCount = realCars.length;
-    const baseCount = realCars.filter((car) => notebookStatuses[car] === 'base').length;
-    const tripCount = realCars.filter((car) => notebookStatuses[car] === 'trip').length;
+    const baseCount = realCars.filter((car) => {
+      const status = notebookStatuses[car] || Object.entries(notebookStatuses).find(([k]) => k.trim().toUpperCase() === car)?.[1];
+      return status === 'base';
+    }).length;
+    const tripCount = realCars.filter((car) => {
+      const status = notebookStatuses[car] || Object.entries(notebookStatuses).find(([k]) => k.trim().toUpperCase() === car)?.[1];
+      return status === 'trip';
+    }).length;
 
     if (isNbMinimized) {
       return (
@@ -1263,6 +1319,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         </div>
       );
     }
+
+    const myMappedCars = Object.entries(carDispatcherMapping)
+      .filter(([_, dispatcherName]) => dispatcherName && matchUserAndDispatcher(user.name, dispatcherName as string))
+      .map(([carPlate]) => carPlate.trim().toUpperCase());
 
     const permittedToSwitch =
       isAdminUser || isNotebookViewer || user.role === "root_admin";
@@ -1410,7 +1470,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               className="flex-1 p-2 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-[10px] uppercase font-bold text-slate-800"
             />
             <datalist id="notebook-vehicles-list">
-              {savedCars.map((car) => (
+              {myMappedCars.map((car) => (
                 <option key={car} value={car} />
               ))}
             </datalist>
@@ -1426,8 +1486,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
           {/* Cars list */}
           <div className="space-y-2.5 overflow-y-auto pr-1 custom-scrollbar max-h-[calc(100%-180px)]">
             {cars.map((car) => {
-              const valText = notebookNotes[car] || "";
+              const valText = notebookNotes[car] !== undefined && notebookNotes[car] !== null
+                ? notebookNotes[car]
+                : (Object.entries(notebookNotes).find(([k]) => k.trim().toUpperCase() === car)?.[1] || "");
               const isHighlighted = highlightedCar === car;
+              const carStatus = notebookStatuses[car] || Object.entries(notebookStatuses).find(([k]) => k.trim().toUpperCase() === car)?.[1];
 
               return (
                 <div
@@ -1486,12 +1549,12 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         <button
                           type="button"
                           onClick={() => {
-                            const current = notebookStatuses[car];
+                            const current = notebookStatuses[car] || Object.entries(notebookStatuses).find(([k]) => k.trim().toUpperCase() === car)?.[1];
                             const nextStatus = current === "base" ? null : "base";
                             pdService.saveNotebookStatus(selectedNotebookUser, car, nextStatus);
                           }}
                           className={`px-2 py-1 text-[8px] font-black uppercase tracking-wider rounded-lg border transition duration-150 cursor-pointer ${
-                            notebookStatuses[car] === "base"
+                            carStatus === "base"
                               ? "bg-emerald-500 border-emerald-600 text-white shadow-sm font-extrabold"
                               : "bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50"
                           }`}
@@ -1501,12 +1564,12 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         <button
                           type="button"
                           onClick={() => {
-                            const current = notebookStatuses[car];
+                            const current = notebookStatuses[car] || Object.entries(notebookStatuses).find(([k]) => k.trim().toUpperCase() === car)?.[1];
                             const nextStatus = current === "trip" ? null : "trip";
                             pdService.saveNotebookStatus(selectedNotebookUser, car, nextStatus);
                           }}
                           className={`px-2 py-1 text-[8px] font-black uppercase tracking-wider rounded-lg border transition duration-150 cursor-pointer ${
-                            notebookStatuses[car] === "trip"
+                            carStatus === "trip"
                               ? "bg-blue-500 border-blue-600 text-white shadow-sm font-extrabold"
                               : "bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50"
                           }`}
@@ -1814,19 +1877,87 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setLegs(legs.map((l) => ({ ...l, coeff: c })));
   };
 
+
+  const checkManualDistanceUpdate = (from: string, to: string, newDist: number) => {
+    if (!from || !to || newDist <= 0) return;
+    const matched = distances.find((d) => {
+      const a = (d.from || "").trim().toLowerCase();
+      const b = (d.to || "").trim().toLowerCase();
+      return (
+        (a === from.trim().toLowerCase() && b === to.trim().toLowerCase()) ||
+        (a === to.trim().toLowerCase() && b === from.trim().toLowerCase())
+      );
+    });
+
+    if (!matched || matched.distance !== newDist) {
+      const q = matched
+        ? `Изменить расстояние ${from} - ${to} в базе шаблонов с ${matched.distance} км на ${newDist} км?`
+        : `Сохранить новое плечо ${from} - ${to} (${newDist} км) в общую базу шаблонов расстояний?`;
+
+      setTimeout(async () => {
+        if (await showConfirm(q)) {
+          if (matched) {
+            dbService.saveDistance(
+              { ...matched, distance: newDist },
+              user.name,
+              user.role,
+            );
+          } else {
+            dbService.saveDistance(
+              { id: "dist_" + Date.now(), from, to, distance: newDist },
+              user.name,
+              user.role,
+            );
+          }
+        }
+      }, 500);
+    }
+  };
+
   const checkLegDistance = (idx: number, isPotentialList: boolean = false) => {
     const list = isPotentialList ? plLegs : legs;
     const leg = list[idx];
-    if (leg.from && leg.to) {
-      if (settings.useDistanceLookup) {
+    
+    let newKm = leg.km;
+    let newEmptyRun = leg.emptyRunKm;
+    
+    if (settings.useDistanceLookup) {
+      if (leg.from && leg.to && leg.km === 0) {
         const d = findDistance(leg.from, leg.to);
-        if (d !== null && leg.km === 0) {
-          if (isPotentialList) {
-            const nl = [...plLegs];
-            nl[idx].km = d;
-            setPlLegs(nl);
-          } else {
-            updateLeg(idx, { km: d });
+        if (d !== null) newKm = d;
+      }
+      
+      if (leg.from && (!leg.emptyRunKm || leg.emptyRunKm === 0)) {
+        const prevTo = idx === 0 ? "Минск" : list[idx - 1]?.to;
+        if (prevTo) {
+          const emptyRunD = findDistance(prevTo, leg.from);
+          if (emptyRunD !== null) {
+            newEmptyRun = emptyRunD;
+          }
+        }
+      }
+      
+      if (newKm !== leg.km || newEmptyRun !== leg.emptyRunKm) {
+        if (isPotentialList) {
+          const nl = [...plLegs];
+          if (newKm !== leg.km) nl[idx].km = newKm;
+          if (newEmptyRun !== leg.emptyRunKm) nl[idx].emptyRunKm = newEmptyRun;
+          setPlLegs(nl);
+        } else {
+          updateLeg(idx, { 
+            ...(newKm !== leg.km ? { km: newKm } : {}), 
+            ...(newEmptyRun !== leg.emptyRunKm ? { emptyRunKm: newEmptyRun } : {})
+          });
+        }
+      } else {
+        // If they didn't change (meaning they were manually typed), prompt to save if they don't match db
+        if (leg.km > 0 && leg.from && leg.to) {
+          checkManualDistanceUpdate(leg.from, leg.to, leg.km);
+        }
+        if (leg.emptyRunKm > 0 && leg.from) {
+          const prevTo = idx === 0 ? "Минск" : list[idx - 1]?.to;
+          if (prevTo) {
+            checkManualDistanceUpdate(prevTo, leg.from, leg.emptyRunKm);
           }
         }
       }
@@ -1918,6 +2049,19 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               typeof updatedFields.km === "undefined"
             ) {
               merged.km = matchedDist;
+            }
+            
+            // Auto populate emptyRunKm (доезд)
+            const prevTo = i === 0 ? "Минск" : legs[i - 1]?.to;
+            if (prevTo && merged.from) {
+              const emptyRunDist = findDistance(prevTo, merged.from);
+              if (
+                emptyRunDist !== null &&
+                emptyRunDist > 0 &&
+                typeof updatedFields.emptyRunKm === "undefined"
+              ) {
+                merged.emptyRunKm = emptyRunDist;
+              }
             }
           }
 
@@ -2276,8 +2420,8 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setPlReferenceCurrency(pl.referenceCurrency || "EUR");
   };
 
-  const deletePotentialLoad = (id: string) => {
-    if (confirm("Удалить просчет?")) {
+  const deletePotentialLoad = async (id: string) => {
+    if (await showConfirm("Удалить просчет?")) {
       setPotentialLoads(potentialLoads.filter((p) => p.id !== id));
       if (plEditingId === id) {
         // Stop editing if deleted
@@ -2298,9 +2442,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     }
   };
 
-  const applyPlToMain = (pl: PotentialLoad) => {
+  const applyPlToMain = async (pl: PotentialLoad) => {
     if (
-      confirm(
+      await showConfirm(
         "Осторожно: Это заменит текущие плечи в основной форме. Продолжить?",
       )
     ) {
@@ -2494,8 +2638,13 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       onChange={(e) => handleCarNumberChange(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-bold uppercase outline-none focus:border-blue-500 transition"
                     />
-                    <datalist id="saved-cars-list">
-                      {savedCars.map((c) => (
+                     <datalist id="saved-cars-list">
+                      {Array.from(
+                        new Set([
+                          ...savedCars,
+                          ...Object.keys(carDispatcherMapping),
+                        ])
+                      ).map((c) => (
                         <option key={c} value={c} />
                       ))}
                     </datalist>
@@ -2722,6 +2871,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                                     emptyRunKm: Number(e.target.value),
                                   })
                                 }
+                                onBlur={() => checkLegDistance(idx)}
                                 className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none"
                               />
                             </td>
@@ -3355,6 +3505,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                                   nl[i].emptyRunKm = Number(e.target.value);
                                   setPlLegs(nl);
                                 }}
+                                onBlur={() => checkLegDistance(i, true)}
                                 className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none"
                               />
                             </td>

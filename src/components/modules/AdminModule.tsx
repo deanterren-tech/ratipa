@@ -1,7 +1,42 @@
+import { useDialog } from '../DialogProvider';
 import React, { useState, useEffect } from 'react';
 import { UserProfile, AppSettings } from '../../types';
 import { dbService } from '../../firebase';
-import { ShieldAlert, ArrowUp, ArrowDown, Search, Activity, Lock, Plus, Trash2, Settings2, FolderPlus, GripVertical, Folder, Link2, RotateCcw, Sparkles, ChevronLeft, ChevronRight, Check, X } from 'lucide-react';
+import { 
+  ShieldAlert, 
+  ArrowUp, 
+  ArrowDown, 
+  Search, 
+  Activity, 
+  Lock, 
+  Plus, 
+  Trash2, 
+  Settings2, 
+  FolderPlus, 
+  GripVertical, 
+  Folder, 
+  Link2, 
+  RotateCcw, 
+  Sparkles, 
+  ChevronLeft, 
+  ChevronRight, 
+  Check, 
+  X,
+  Users,
+  Bell,
+  Compass,
+  ShieldCheck,
+  LayoutDashboard, 
+  Calculator, 
+  Wallet, 
+  TrendingUp, 
+  FileSpreadsheet, 
+  Map, 
+  Truck, 
+  FileText, 
+  Clock, 
+  Settings 
+} from 'lucide-react';
 import { Virtuoso } from 'react-virtuoso';
 import UserManagementBlock from './UserManagementBlock';
 import AdminOnlinePresenceBlock from './AdminOnlinePresenceBlock';
@@ -10,7 +45,8 @@ import PlanZagruzokSettingsBlock from './PlanZagruzokSettingsBlock';
 import PlanDohodDispatchersSettingsBlock from './PlanDohodDispatchersSettingsBlock';
 import AdminPushNotificationsBlock from './AdminPushNotificationsBlock';
 import AdminFirebaseConfigBlock from './AdminFirebaseConfigBlock';
-import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Map, Truck, FileText, Clock, Settings } from 'lucide-react';
+import AdminMapboxLimitsBlock from './AdminMapboxLimitsBlock';
+import { pdService } from '../../firebase/planDohodService';
 
 interface AdminModuleProps {
   user: UserProfile;
@@ -18,18 +54,29 @@ interface AdminModuleProps {
 
 
 export default function AdminModule({ user }: AdminModuleProps) {
+  const { showConfirm } = useDialog();
+  
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [searchLogs, setSearchLogs] = useState('');
+  const [userListCount, setUserListCount] = useState(0);
+  const [dispatchersCount, setDispatchersCount] = useState(0);
+  const [notificationsCount, setNotificationsCount] = useState(0);
 
   // Fetch data
   useEffect(() => {
     const unsubSettings = dbService.getSettings(setSettings);
     const unsubLogs = dbService.getAuditLogs(setLogs);
+    const unsubUsers = dbService.getUsers((list) => setUserListCount(list?.length || 0));
+    const unsubDisp = pdService.subscribeDispatchers((disp) => setDispatchersCount(disp?.length || 0));
+    const unsubNotif = dbService.getBroadcastNotifications((list) => setNotificationsCount(list?.length || 0));
     return () => {
       unsubSettings();
       unsubLogs();
+      unsubUsers();
+      unsubDisp();
+      unsubNotif();
     };
   }, []);
 
@@ -96,35 +143,67 @@ export default function AdminModule({ user }: AdminModuleProps) {
 
   const [activeTab, setActiveTab] = useState<'users' | 'planning' | 'income' | 'system' | 'push'>('users');
 
+  const tabsList = [
+    { id: 'users', label: 'Пользователи и Сессии', icon: Users, count: userListCount },
+    { id: 'planning', label: 'Планирование', icon: Compass, count: (settings?.currentPlanningTabs?.length || 0) + (settings?.planZagruzokTabs?.length || 0) },
+    { id: 'income', label: 'План Дохода', icon: TrendingUp, count: dispatchersCount },
+    { id: 'system', label: 'Система и Конструктор', icon: Settings, count: settings?.menuStructure?.length || 10 },
+    { id: 'push', label: 'Push Уведомления', icon: Bell, count: notificationsCount },
+  ] as const;
+
   return (
     <div className="w-full space-y-6 font-sans">
       
-      {/* Banner */}
+      {/* HEADER BAR */}
       <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] select-none">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-black text-slate-900 mt-1.5 flex items-center gap-2 uppercase tracking-tight">
-            <ShieldAlert className="h-6 w-6 text-slate-900" style={{ fill: '#c3fb12' }} />
-            Администрирование
-          </h1>
-          <p className="text-xs text-slate-500 mt-1 font-semibold">
-            Управление системой, доступом и конфигурациями.
-          </p>
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-2.5">
+              <ShieldAlert className="w-5.5 h-5.5 text-slate-900" style={{ fill: '#c3fb12' }} />
+              <span>Панель Администратора</span>
+            </h1>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider font-mono mt-1">
+              Управление правами доступа, структурой интерфейса, ротацией логов и пуш-рассылками RATIPA
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] bg-slate-100 text-slate-500 font-bold px-3 py-1.5 rounded-full font-mono uppercase border border-slate-200">
+            <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+            <span>{user.role === 'root_admin' ? 'Root Доступ' : 'Администратор'}</span>
+          </div>
+        </div>
+
+        {/* MODERN SCROLLABLE TAB NAVIGATOR */}
+        <div className="mt-6 flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/60 max-w-max">
+          {tabsList.map((t) => {
+            const IconComp = t.icon;
+            const isActive = activeTab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-tight transition duration-155 select-none cursor-pointer ${
+                  isActive 
+                    ? 'bg-slate-950 text-white shadow-sm font-extrabold' 
+                    : 'text-slate-505 hover:text-slate-900 hover:bg-white/50'
+                }`}
+              >
+                <IconComp className={`w-3.5 h-3.5 ${isActive ? 'text-[#c3fb12]' : 'text-slate-400'}`} />
+                <span>{t.label}</span>
+                {t.count > 0 && (
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-mono font-black ${
+                    isActive ? 'bg-[#c3fb12]/20 text-[#c3fb12]' : 'bg-slate-200 text-slate-600'
+                  }`}>
+                    {t.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="flex flex-col xl:flex-row gap-6 mt-6">
-        
-        {/* Sidebar Nav */}
-        <div className="w-full xl:w-64 shrink-0 space-y-2 flex flex-row xl:flex-col overflow-x-auto xl:overflow-x-visible custom-scrollbar pb-2 xl:pb-0">
-           <button onClick={() => setActiveTab('users')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest whitespace-nowrap rounded-xl transition text-left ${activeTab === 'users' ? 'bg-slate-900 text-white shadow-sm' : 'bg-white text-slate-500 hover:text-slate-800 border border-slate-200/50 hover:bg-slate-50'}`}>Пользователи</button>
-           <button onClick={() => setActiveTab('planning')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest whitespace-nowrap rounded-xl transition text-left ${activeTab === 'planning' ? 'bg-slate-900 text-white shadow-sm' : 'bg-white text-slate-500 hover:text-slate-800 border border-slate-200/50 hover:bg-slate-50'}`}>Планирование</button>
-           <button onClick={() => setActiveTab('income')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest whitespace-nowrap rounded-xl transition text-left ${activeTab === 'income' ? 'bg-slate-900 text-white shadow-sm' : 'bg-white text-slate-500 hover:text-slate-800 border border-slate-200/50 hover:bg-slate-50'}`}>План Дохода</button>
-           <button onClick={() => setActiveTab('system')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest whitespace-nowrap rounded-xl transition text-left ${activeTab === 'system' ? 'bg-slate-900 text-white shadow-sm' : 'bg-white text-slate-500 hover:text-slate-800 border border-slate-200/50 hover:bg-slate-50'}`}>Система</button>
-           <button onClick={() => setActiveTab('push')} className={`px-4 py-3 text-xs font-black uppercase tracking-widest whitespace-nowrap rounded-xl transition text-left ${activeTab === 'push' ? 'bg-slate-900 text-white shadow-sm' : 'bg-white text-slate-500 hover:text-slate-800 border border-slate-200/50 hover:bg-slate-50'}`}>Push Уведомления</button>
-        </div>
-
-        {/* Main Content Area */}
-        <div className="flex-1 min-w-0 space-y-6">
+      <div className="w-full mt-6">
+        <div className="space-y-6">
           <div className={activeTab === 'users' ? 'space-y-6' : 'hidden'}>
             <UserManagementBlock user={user} />
             <AdminOnlinePresenceBlock user={user} />
@@ -141,6 +220,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
 
           <div className={activeTab === 'system' ? 'space-y-6' : 'hidden'}>
             <AdminFirebaseConfigBlock />
+            <AdminMapboxLimitsBlock settings={settings} user={user} />
 
             <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6 w-full">
               <div className="border-b border-slate-100 pb-3">
@@ -383,8 +463,8 @@ export default function AdminModule({ user }: AdminModuleProps) {
                     saveSettings({ ...settings!, menuStructure: updatedList });
                   };
 
-                  const restoreDefaultMenu = () => {
-                    if (window.confirm("Вы уверены, что хотите сбросить структуру меню к стандартному виду? Все текущие группы и переименования будут сброшены.")) {
+                  const restoreDefaultMenu = async () => {
+                    if (await showConfirm("Вы уверены, что хотите сбросить структуру меню к стандартному виду? Все текущие группы и переименования будут сброшены.")) {
                       const defaults = [
                         { id: 'g_home', label: 'Главная', isDropdown: false, singleModuleKey: 'dashboard' },
                         { id: 'g_planning', label: 'Планирование', isDropdown: true, subtabKeys: ['planDohod', 'planZagruzok', 'currentPlanning'] },

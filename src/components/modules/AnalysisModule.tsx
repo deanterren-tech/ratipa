@@ -1,3 +1,4 @@
+import { useDialog } from '../DialogProvider';
 import React, { useState, useEffect } from 'react';
 import { UserProfile } from '../../types';
 import { useFirebase, database, onValue } from '../../firebase';
@@ -12,6 +13,8 @@ interface AnalysisModuleProps {
 }
 
 export default function AnalysisModule({ user }: AnalysisModuleProps) {
+  const { showConfirm } = useDialog();
+  
   const [activeTab, setActiveTab] = useState<string>('report');
   const [regions, setRegions] = useState<{id: string, name: string}[]>([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -43,8 +46,8 @@ export default function AnalysisModule({ user }: AnalysisModuleProps) {
     setNewRegionName('');
   };
 
-  const handleDeleteRegion = (id: string, name: string) => {
-    if (confirm(`Удалить направление ${name}? Все данные по нему тоже будут удалены.`)) {
+  const handleDeleteRegion = async (id: string, name: string) => {
+    if (await showConfirm(`Удалить направление ${name}? Все данные по нему тоже будут удалены.`)) {
       if (useFirebase) {
         remove(ref(database, `analysisRegions/${id}`));
         remove(ref(database, `analysisGroups/${id}`));

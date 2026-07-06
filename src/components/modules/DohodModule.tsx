@@ -1,3 +1,4 @@
+import { useDialog } from '../DialogProvider';
 import React, { useState, useEffect, useMemo } from "react";
 import {
   UserProfile,
@@ -8,6 +9,7 @@ import {
   ChatMessage,
   RouteTemplate,
   DirectionPreset,
+  AppSettings,
 } from "../../types";
 import { dbService } from "../../firebase";
 import { pdService } from "../../firebase/planDohodService";
@@ -101,6 +103,21 @@ function RouteDisplay({
     routingProvider: "osrm",
     openRouteServiceApiKey: "",
   });
+  const [globalSettings, setGlobalSettings] = useState<AppSettings | null>(null);
+  const [offlineMode, setOfflineMode] = useState(() => localStorage.getItem('offline_mode') === 'true');
+
+  useEffect(() => {
+    const unsub = dbService.getSettings(setGlobalSettings);
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const handleOfflineChange = () => {
+      setOfflineMode(localStorage.getItem('offline_mode') === 'true');
+    };
+    window.addEventListener('ratipa-offline-mode-change', handleOfflineChange);
+    return () => window.removeEventListener('ratipa-offline-mode-change', handleOfflineChange);
+  }, []);
 
   useEffect(() => {
     const unsub = pdService.subscribePlanDohodSettings(setPdSettings);
@@ -397,35 +414,56 @@ function RouteDisplay({
         attempted = true;
       }
 
+      const mapboxUsage = globalSettings?.mapboxUsage;
+      const bypassMapbox = mapboxUsage
+        ? (mapboxUsage.count >= (mapboxUsage.limit || 100000) && !mapboxUsage.allowExceed)
+        : false;
+
       const coordinates = validCoords
         .map((vc) => `${vc.lng()},${vc.lat()}`)
         .join(";");
       try {
         let response = null;
-        try {
-          response = await fetch(
-            `/api/osrm-route?coordinates=${coordinates}&steps=true&alternatives=true`,
-          );
-          if (!response.ok) {
-            throw new Error("Proxy OSRM fetch returned error status");
-          }
-        } catch (proxyError) {
-          console.warn("Proxy routing failed, trying direct OSRM fallback:", proxyError);
+        let usedDirectMapbox = false;
+        if (!offlineMode) {
           try {
+            const bypassParam = bypassMapbox ? "&bypassMapbox=true" : "";
             response = await fetch(
-              `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true&alternatives=true`,
+              `/api/osrm-route?coordinates=${coordinates}&steps=true&alternatives=true${bypassParam}`,
             );
             if (!response.ok) {
-              throw new Error("Direct OSRM fetch returned error status");
+              throw new Error("Proxy routing fetch returned error status");
             }
-          } catch (directError) {
-            console.warn("Direct OSRM fallback failed, trying OpenStreetMap FOSSGIS fallback:", directError);
-            try {
-              response = await fetch(
-                `https://routing.openstreetmap.de/routed-car/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true&alternatives=true`,
-              );
-            } catch (fossgisError) {
-              console.error("All front-end OSRM routing attempts failed:", fossgisError);
+          } catch (proxyError) {
+            console.warn("Proxy routing failed, trying direct Mapbox fallback:", proxyError);
+            if (!bypassMapbox) {
+              try {
+                const mapboxToken = "pk.eyJ1Ijoic2VyZ2VpdGVyZXoiLCJhIjoiY21yN3FqeTNzMTV2ZTJ3czlobGM0ZTF2NiJ9.GeagZG4Ev2U2a7NfnLicyg";
+                response = await fetch(
+                  `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinates}?geometries=geojson&overview=full&steps=true&alternatives=true&access_token=${mapboxToken}`,
+                );
+                if (!response.ok) {
+                  throw new Error("Direct Mapbox fetch returned error status");
+                }
+                usedDirectMapbox = true;
+              } catch (directError) {
+                console.warn("Direct Mapbox fallback failed, trying public OSRM fallback:", directError);
+                try {
+                  response = await fetch(
+                    `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true&alternatives=true`,
+                  );
+                } catch (ossError) {
+                  console.error("All front-end Mapbox & OSRM routing attempts failed:", ossError);
+                }
+              }
+            } else {
+              try {
+                response = await fetch(
+                  `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true&alternatives=true`,
+                );
+              } catch (ossError) {
+                console.error("All front-end OSRM routing attempts failed:", ossError);
+              }
             }
           }
         }
@@ -434,6 +472,9 @@ function RouteDisplay({
 
         if (response && response.ok) {
           const data = await response.json();
+          if (data.source === "mapbox" || usedDirectMapbox) {
+            dbService.incrementMapboxUsage();
+          }
           if (data.code === "Ok" && data.routes && data.routes.length > 0) {
             let selectedRoute = data.routes[0];
 
@@ -648,6 +689,8 @@ interface DohodModuleProps {
 }
 
 export default function DohodModule({ user }: DohodModuleProps) {
+  const { showConfirm } = useDialog();
+  
   const [calculationHistory, setCalculationHistory] = useState<
     RouteCalculation[]
   >([]);
@@ -666,6 +709,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
   const [tripStartDate, setTripStartDate] = useState<string>("");
   const [tripEndDate, setTripEndDate] = useState<string>("");
   const [tripDays, setTripDays] = useState<number>(1);
+  const [additionalExpenses, setAdditionalExpenses] = useState<number>(0);
 
   const [editingCalcId, setEditingCalcId] = useState<string | null>(null);
   const [editingCalcData, setEditingCalcData] = useState<
@@ -737,6 +781,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
       infoCurrency: "USD",
       ferrySelectValue: "none",
       ferryCost: 0,
+      additionalExpenses: 0,
     },
   ]);
 
@@ -903,6 +948,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
       infoCurrency: "USD",
       ferrySelectValue: "none",
       ferryCost: 0,
+      additionalExpenses: 0,
     };
     const newLegs = [...legs];
     newLegs.splice(index + 1, 0, newLeg);
@@ -987,8 +1033,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
     index: number,
     updatedFields: Partial<Omit<Leg, "id">>,
   ) => {
-    setLegs(
-      legs.map((l, i) => {
+    setLegs((prevLegs) => {
+      const newLegs = prevLegs.map((l, i) => {
         if (i === index) {
           const merged = { ...l, ...updatedFields };
 
@@ -1004,6 +1050,19 @@ export default function DohodModule({ user }: DohodModuleProps) {
             ) {
               merged.dist = matchedDist;
             }
+            
+            // Auto-populate emptyRun (доезд)
+            const prevTo = i === 0 ? "Минск" : prevLegs[i - 1]?.to;
+            if (prevTo && merged.from) {
+              const emptyRunDist = findDistanceInPool(prevTo, merged.from);
+              if (
+                emptyRunDist !== null &&
+                emptyRunDist > 0 &&
+                typeof updatedFields.emptyRun === "undefined"
+              ) {
+                merged.emptyRun = emptyRunDist;
+              }
+            }
           }
 
           if (updatedFields.ferrySelectValue !== undefined) {
@@ -1018,8 +1077,22 @@ export default function DohodModule({ user }: DohodModuleProps) {
           return merged;
         }
         return l;
-      }),
-    );
+      });
+
+      // If current leg's 'to' destination was changed, the next leg's 'prevTo' changes!
+      if (updatedFields.to !== undefined && newLegs[index + 1]) {
+        const nextLeg = { ...newLegs[index + 1] };
+        if (nextLeg.from) {
+          const emptyRunDist = findDistanceInPool(updatedFields.to, nextLeg.from);
+          if (emptyRunDist !== null && emptyRunDist > 0) {
+            nextLeg.emptyRun = emptyRunDist;
+            newLegs[index + 1] = nextLeg;
+          }
+        }
+      }
+
+      return newLegs;
+    });
   };
 
   const handleInfoRateBlur = (index: number) => {
@@ -1102,8 +1175,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
         ? `Изменить расстояние ${from} - ${to} в базе шаблонов с ${matched.distance} км на ${newDist} км?`
         : `Сохранить новое плечо ${from} - ${to} (${newDist} км) в общую базу шаблонов расстояний?`;
 
-      setTimeout(() => {
-        if (window.confirm(q)) {
+      setTimeout(async () => {
+        if (await showConfirm(q)) {
           if (matched) {
             dbService.saveDistance(
               { ...matched, distance: newDist },
@@ -1151,12 +1224,13 @@ export default function DohodModule({ user }: DohodModuleProps) {
     0,
   );
 
-  // Legacy logic: expenses = sum(dist * coeff + ferryCost)
-  const totalExpenses = legs.reduce((acc, l) => {
+  // Legacy logic: expenses = sum(dist * coeff + ferryCost) + leg additionalExpenses
+  const totalExpenses = Number(additionalExpenses || 0) + legs.reduce((acc, l) => {
     return (
       acc +
       ((Number(l.dist || l.distance || 0) + Number(l.emptyRun || 0)) * Number(l.coeff || 0) +
-        Number(l.ferryCost || 0))
+        Number(l.ferryCost || 0) +
+        Number(l.additionalExpenses || 0))
     );
   }, 0);
 
@@ -1177,6 +1251,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
       km: totalKm,
       freight: totalFreight,
       expenses: totalExpenses,
+      additionalExpenses: Number(additionalExpenses || 0),
       netProfit: totalProfit,
       dailyProfit: currentDailyProfit,
       datetime: new Date().toLocaleString("ru-RU"),
@@ -1212,12 +1287,14 @@ export default function DohodModule({ user }: DohodModuleProps) {
       from: l.from || "",
       to: l.to || "",
       dist: l.dist || l.distance || 0,
+      emptyRun: l.emptyRun || 0,
       freight: l.freight || 0,
       infoRate: l.infoRate || 0,
       infoCurrency: l.infoCurrency || "USD",
       ferrySelectValue: l.ferrySelectValue || "none",
       ferryCost: l.ferryCost || l.ferry || 0,
       coeff: l.coeff || 0,
+      additionalExpenses: l.additionalExpenses || l.otherExpenses || 0,
     }));
     setLegs(newArray);
   };
@@ -1226,6 +1303,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
     if (calc.direction || calc.globalDirection)
       setGlobalDirection(calc.direction || calc.globalDirection || "Турция");
     if (calc.days) setTripDays(calc.days);
+    setAdditionalExpenses(calc.additionalExpenses || 0);
 
     // Attempt reverse-engineer dates from days
     if (calc.days) {
@@ -1242,12 +1320,14 @@ export default function DohodModule({ user }: DohodModuleProps) {
           from: l.from || "",
           to: l.to || "",
           dist: l.dist || l.distance || 0,
+          emptyRun: l.emptyRun || 0,
           freight: l.freight || 0,
           infoRate: l.infoRate || 0,
           infoCurrency: l.infoCurrency || "USD",
           ferrySelectValue: l.ferrySelectValue || "none",
           ferryCost: l.ferryCost || 0,
           coeff: l.coeff || 0,
+          additionalExpenses: l.additionalExpenses || l.otherExpenses || 0,
         })),
       );
     }
@@ -1887,6 +1967,9 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-48">
                     Паром
                   </th>
+                  <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-24">
+                    Доп. расх. €
+                  </th>
                   <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-16">
                     Коэф.
                   </th>
@@ -1929,6 +2012,12 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         type="number"
                         value={leg.emptyRun || ""}
                         onChange={(e) => updateLeg(idx, { emptyRun: Number(e.target.value) })}
+                        onBlur={() => {
+                          const prevTo = idx === 0 ? "Минск" : legs[idx - 1]?.to;
+                          if (prevTo && leg.from && leg.emptyRun && leg.emptyRun > 0) {
+                            checkManualDistanceUpdate(prevTo, leg.from, leg.emptyRun);
+                          }
+                        }}
                         className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-[#0f7632] outline-none"
                       />
                     </td>
@@ -2052,6 +2141,19 @@ export default function DohodModule({ user }: DohodModuleProps) {
                     <td className="p-2">
                       <input
                         type="number"
+                        value={leg.additionalExpenses || ""}
+                        placeholder="0"
+                        onChange={(e) =>
+                          updateLeg(idx, {
+                            additionalExpenses: e.target.value === "" ? undefined : Number(e.target.value),
+                          })
+                        }
+                        className="w-full px-2 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-[#0f7632] outline-none"
+                      />
+                    </td>
+                    <td className="p-2">
+                      <input
+                        type="number"
                         step="0.01"
                         value={
                           leg.coeff === undefined ? getDirCoeff() : leg.coeff
@@ -2099,6 +2201,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                     infoCurrency: "USD",
                     ferrySelectValue: "none",
                     ferryCost: 0,
+                    additionalExpenses: 0,
                   },
                 ])
               }
@@ -2378,6 +2481,18 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 className="bg-transparent text-right w-16 text-lg font-black outline-none border-b border-transparent focus:border-slate-300"
               />
             </div>
+            <div className="flex items-center justify-between border-t border-slate-200 pt-3 mt-1">
+              <span className="text-sm font-black text-slate-800">
+                Доп. расходы (€):
+              </span>
+              <input
+                type="number"
+                min="0"
+                value={additionalExpenses}
+                onChange={(e) => setAdditionalExpenses(Number(e.target.value))}
+                className="bg-transparent text-right w-20 text-lg font-black outline-none border-b border-transparent focus:border-slate-300"
+              />
+            </div>
           </div>
 
           <div
@@ -2607,6 +2722,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         {calc.datetime} · Направление:{" "}
                         {calc.globalDirection || "Не указано"} · Логист:{" "}
                         {calc.username || calc.logist || "Система"}
+                        {calc.additionalExpenses ? ` · Доп. расходы: ${calc.additionalExpenses} €` : ""}
                       </div>
                     </div>
                     <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition">
@@ -2761,11 +2877,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
                                 </strong>
                               </span>
                             )}
-                            {Number(l.otherExpenses || 0) > 0 && (
+                            {Number(l.additionalExpenses || l.otherExpenses || 0) > 0 && (
                               <span>
                                 Доп:{" "}
                                 <strong className="text-rose-600">
-                                  {Math.round(l.otherExpenses).toLocaleString(
+                                  {Math.round(l.additionalExpenses || l.otherExpenses || 0).toLocaleString(
                                     "ru-RU",
                                   )}{" "}
                                   €
@@ -3145,6 +3261,23 @@ export default function DohodModule({ user }: DohodModuleProps) {
                     setEditingCalcData({
                       ...editingCalcData,
                       netProfit: Number(e.target.value),
+                    })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                  Доп. расходы (€)
+                </label>
+                <input
+                  type="number"
+                  step="1"
+                  value={editingCalcData.additionalExpenses || 0}
+                  onChange={(e) =>
+                    setEditingCalcData({
+                      ...editingCalcData,
+                      additionalExpenses: Number(e.target.value),
                     })
                   }
                   className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition"

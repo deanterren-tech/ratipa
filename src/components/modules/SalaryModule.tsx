@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, SalaryLog, CarRateGroup, AppSettings, Driver } from '../../types';
-import { dbService } from '../../firebase';
+import { dbService, database } from '../../firebase';
+import { ref, onValue } from 'firebase/database';
 import { Wallet, Calculator, Sparkles, Send, Trash2, Edit, Copy, Calendar } from 'lucide-react';
 import CalendarDaysCalculator from './CalendarDaysCalculator';
 import { useDialog } from '../DialogProvider';
@@ -27,6 +28,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const [logs, setLogs] = useState<SalaryLog[]>([]);
   const [carsPool, setCarsPool] = useState<CarRateGroup[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [knownFleet, setKnownFleet] = useState<string[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -55,12 +57,17 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     const unsubCars = dbService.getCarRateGroups((data) => setCarsPool(data));
     const unsubDrivers = dbService.getDrivers((data) => setDrivers(data));
     const unsubSettings = dbService.getSettings((data) => setSettings(data));
+    const unsubKnownFleet = onValue(ref(database, 'known_fleet'), (snap) => {
+      const data = snap.val() || {};
+      setKnownFleet(Object.values(data).map((v: any) => String(v).trim().toUpperCase()).filter(Boolean));
+    });
 
     return () => {
         unsubLogs();
         unsubCars();
         unsubDrivers();
         unsubSettings();
+        unsubKnownFleet();
     };
   }, []);
 
@@ -406,6 +413,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                 <input type="text" list="salary-cars-list" value={carNumber} onChange={e => handleCarNumberChange(e.target.value)} placeholder="Начните вводить..." className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition uppercase" />
                                 <datalist id="salary-cars-list">
                                     {carsPool.flatMap((g, i) => (g.vehicles || []).map((v, j) => <option key={`pool-${i}-${j}-${v}`} value={v}>Ставка: {g.rate} € ({g.name})</option>))}
+                                    {knownFleet.filter(k => !carsPool.some(g => (g.vehicles || []).map(x => x.toUpperCase()).includes(k.toUpperCase()))).map(k => <option key={`known-${k}`} value={k}>Автомобиль без тарифа</option>)}
                                 </datalist>
                             </div>
                             <div className="flex flex-col gap-1.5">
@@ -540,7 +548,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                          <button onClick={() => openEditModal(rec)} title="Редактировать" className="text-slate-400 hover:text-emerald-500 transition opacity-0 group-hover:opacity-100">
                                              <Edit className="w-4 h-4" />
                                          </button>
-                                         <button onClick={() => {if(confirm('Удалить эту выплату?')) dbService.deleteSalary(rec.id, user.name, user.role); }} title="Удалить" className="text-slate-400 hover:text-rose-500 transition opacity-0 group-hover:opacity-100">
+                                         <button onClick={async () => {if(await showConfirm('Удалить эту выплату?')) dbService.deleteSalary(rec.id, user.name, user.role); }} title="Удалить" className="text-slate-400 hover:text-rose-500 transition opacity-0 group-hover:opacity-100">
                                              <Trash2 className="w-4 h-4" />
                                          </button>
                                      </div>

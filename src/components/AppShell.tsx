@@ -37,7 +37,11 @@ import {
   AlertTriangle,
   Info,
   LineChart,
-  ExternalLink
+  ExternalLink,
+  Wifi,
+  WifiOff,
+  DollarSign,
+  RefreshCw
 } from 'lucide-react';
 
 interface NotificationItem {
@@ -87,6 +91,21 @@ const AdminModule = lazy(() => import('./modules/AdminModule'));
 const DocumentsModule = lazy(() => import('./modules/DocumentsModule'));
 const VehicleDriverDataModule = lazy(() => import('./modules/VehicleDriverDataModule'));
 
+const groupIconMap: Record<string, React.ComponentType<any>> = {
+  g_home: LayoutDashboard,
+  g_planning: Calendar,
+  g_calc: Calculator,
+  g_salary: Wallet,
+  g_veh_drv: Truck,
+  g_analysis: TrendingUp,
+  g_baza: Truck,
+  g_dozvola: FileText,
+  g_docs: Files,
+  g_disp: Map,
+  g_settings: Settings,
+  g_admin: ShieldAlert,
+};
+
 interface AppShellProps {
   user: UserProfile;
   onLogout: () => void;
@@ -108,6 +127,14 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const [activeModule, setActiveModule] = useState<string>(getDefaultModule());
   const [loadedModules, setLoadedModules] = useState<string[]>([getDefaultModule()]);
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
+  const [offlineMode, setOfflineMode] = useState(() => localStorage.getItem('offline_mode') === 'true');
+
+  const toggleOfflineMode = () => {
+    const newVal = !offlineMode;
+    setOfflineMode(newVal);
+    localStorage.setItem('offline_mode', newVal ? 'true' : 'false');
+    window.dispatchEvent(new Event('ratipa-offline-mode-change'));
+  };
 
   useEffect(() => {
     if (activeModule) {
@@ -208,15 +235,101 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const [notifTab, setNotifTab] = useState<'all' | 'unread'>('all');
   const notifRef = useRef<HTMLDivElement>(null);
 
+  // Converter states
+  const [isConverterOpen, setIsConverterOpen] = useState(false);
+  const [showEditRates, setShowEditRates] = useState(false);
+  const [isRatesLoading, setIsRatesLoading] = useState(false);
+  const [activeCurrency, setActiveCurrency] = useState<string>('USD');
+  const [activeValue, setActiveValue] = useState<string>('100');
+  const [rates, setRates] = useState(() => {
+    const saved = localStorage.getItem('ratipa_converter_rates');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {
+      USD: 3.25,
+      EUR: 3.55,
+      RUB: 0.036,
+      BYN: 1.0
+    };
+  });
+  const converterRef = useRef<HTMLDivElement>(null);
+
+  const fetchNbrbRates = async () => {
+    setIsRatesLoading(true);
+    try {
+      // Try the server-side API proxy first to bypass client CORS / VPN / network issues
+      let response = await fetch('/api/nbrb-rates');
+      if (!response.ok) {
+        console.warn('Backend NBRB rates proxy failed, falling back to direct browser fetch...');
+        response = await fetch('https://www.nbrb.by/api/exrates/rates?periodicity=0');
+      }
+      if (!response.ok) throw new Error('NBRB status not ok');
+      const data = await response.json();
+      
+      const foundRates: Record<string, number> = { BYN: 1.0 };
+      data.forEach((item: any) => {
+        if (item.Cur_Abbreviation === 'USD') {
+          foundRates.USD = item.Cur_OfficialRate / item.Cur_Scale;
+        } else if (item.Cur_Abbreviation === 'EUR') {
+          foundRates.EUR = item.Cur_OfficialRate / item.Cur_Scale;
+        } else if (item.Cur_Abbreviation === 'RUB') {
+          foundRates.RUB = item.Cur_OfficialRate / item.Cur_Scale;
+        }
+      });
+
+      if (foundRates.USD && foundRates.EUR && foundRates.RUB) {
+        setRates(prev => {
+          const merged = { ...prev, ...foundRates };
+          localStorage.setItem('ratipa_converter_rates', JSON.stringify(merged));
+          return merged;
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch NBRB rates:', error);
+    } finally {
+      setIsRatesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchNbrbRates();
+  }, []);
+
+  const updateRate = (currency: string, newRate: number) => {
+    const updated = { ...rates, [currency]: newRate };
+    setRates(updated);
+    localStorage.setItem('ratipa_converter_rates', JSON.stringify(updated));
+  };
+
+  const getDisplayValue = (currency: string) => {
+    if (activeCurrency === currency) {
+      return activeValue;
+    }
+    const numericVal = parseFloat(activeValue);
+    if (isNaN(numericVal) || numericVal === 0) {
+      return '';
+    }
+    const valInByn = numericVal * rates[activeCurrency as keyof typeof rates];
+    const targetVal = valInByn / rates[currency as keyof typeof rates];
+    if (currency === 'RUB') {
+      return targetVal.toFixed(1);
+    }
+    return targetVal.toFixed(2);
+  };
+
   // Real-time Database references for notification auto-generation
   const [bazaCars, setBazaCars] = useState<any[]>([]);
   const [tripsDashboard, setTripsDashboard] = useState<any[]>([]);
 
-  // Close notifications dropdown on click outside
+  // Close notifications and converter dropdowns on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
         setIsNotifOpen(false);
+      }
+      if (converterRef.current && !converterRef.current.contains(event.target as Node)) {
+        setIsConverterOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -701,7 +814,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => handleNavigate(user.role === 'mechanic' ? 'baza' : 'dashboard')}>
               <div className="flex items-baseline font-sans">
                 <span className="font-extrabold tracking-[-0.02em] text-base md:text-lg uppercase text-slate-950 leading-none">
-                  Ratipa
+                  RATIPA PORTAL
                 </span>
               </div>
             </div>
@@ -710,6 +823,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           {/* Navigation Menu aligned left, closer to Logo */}
           <nav className="flex items-center gap-1 bg-[#f0f2f4] p-[3px] rounded-full border border-slate-200/50 shadow-inner overflow-x-auto md:overflow-visible whitespace-nowrap scrollbar-none max-w-[50vw] sm:max-w-[70vw] lg:max-w-none flex-nowrap shrink relative">
           {menuGroups.filter(isGroupVisible).map((group) => {
+            const GroupIcon = groupIconMap[group.id] || Calendar;
             if (group.isDropdown) {
               const allowedSubtabs = getAllowedSubtabs(group);
               const isChildActive = allowedSubtabs.includes(activeModule);
@@ -737,6 +851,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                         : 'text-slate-500 hover:text-slate-900 hover:bg-white/40'
                     }`}
                   >
+                    <GroupIcon className={`h-3 w-3 ${isChildActive ? 'text-white' : 'text-slate-400'}`} />
                     <span>{group.label}</span>
                     <ChevronDown className={`h-3 w-3 ${isChildActive ? 'text-white' : 'text-slate-400'} transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                   </button>
@@ -747,6 +862,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                         {allowedSubtabs.map((subKey) => {
                           const subLabel = getSubtabLabel(group, subKey);
                           const isActive = activeModule === subKey;
+                          const foundSub = allModules.find(m => m.key === subKey);
+                          const SubIcon = foundSub?.icon || Calendar;
                           return (
                             <a
                               key={subKey}
@@ -758,13 +875,14 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                                   setOpenDropdownId(null);
                                 }
                               }}
-                              className={`flex items-center justify-between px-4 py-2.5 text-xs font-bold transition-all duration-150 ${
+                              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold transition-all duration-150 ${
                                 isActive 
                                   ? 'bg-slate-950 text-white font-extrabold' 
                                   : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
                               }`}
                             >
-                              <span>{subLabel}</span>
+                              <SubIcon className={`h-3.5 w-3.5 ${isActive ? 'text-[#70FC8E]' : 'text-slate-400'}`} />
+                              <span className="flex-1">{subLabel}</span>
                             </a>
                           );
                         })}
@@ -779,6 +897,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
               if (!foundModule) return null;
               const isActive = activeModule === itemKey;
               const displayLabel = group.customLabels && group.customLabels[itemKey] ? group.customLabels[itemKey] : group.label;
+              const ItemIcon = foundModule.icon || Calendar;
               
               return (
                 <a
@@ -790,10 +909,11 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                       handleNavigate(itemKey);
                     }
                   }}
-                  className={`text-[9.5px] md:text-[10px] font-extrabold tracking-tight uppercase transition-all duration-150 py-1.5 px-3 md:px-4 rounded-full relative cursor-pointer shrink-0 ${
+                  className={`text-[9.5px] md:text-[10px] font-extrabold tracking-tight uppercase transition-all duration-150 py-1.5 px-3 md:px-4 rounded-full flex items-center gap-1.5 relative cursor-pointer shrink-0 ${
                     isActive ? 'text-white bg-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-900 hover:bg-white/40'
                   }`}
                 >
+                  <ItemIcon className={`h-3 w-3 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                   <span>{displayLabel}</span>
                 </a>
               );
@@ -808,8 +928,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
               rel="noopener noreferrer"
               className="text-[9.5px] md:text-[10px] font-extrabold tracking-tight uppercase transition-all duration-150 py-1.5 px-3 md:px-3.5 rounded-full text-slate-500 hover:text-slate-900 hover:bg-white/40 flex items-center gap-1 cursor-pointer shrink-0"
             >
-              <span>{extTab.title}</span>
               <ExternalLink className="h-3 w-3 text-slate-400" />
+              <span>{extTab.title}</span>
             </a>
           ))}
         </nav>
@@ -861,6 +981,188 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Currency Converter Widget */}
+          <div className="relative font-sans" ref={converterRef}>
+            <button
+              type="button"
+              onClick={() => setIsConverterOpen(!isConverterOpen)}
+              className={`relative p-2 rounded-full border transition-all duration-205 active:scale-95 cursor-pointer flex items-center justify-center ${
+                isConverterOpen 
+                  ? 'bg-slate-950 text-[#70FC8E] border-slate-950 shadow-md scale-105' 
+                  : 'bg-slate-50 text-slate-700 hover:text-slate-950 hover:bg-slate-100 border-slate-200/60'
+              }`}
+              title="Конвертер валют"
+            >
+              <DollarSign size={16} />
+            </button>
+
+            <AnimatePresence>
+              {isConverterOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  className="absolute right-0 mt-3 w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden p-5"
+                >
+                  <div className="border-b border-slate-100 pb-2.5 mb-3.5 flex justify-between items-center select-none">
+                    <div>
+                      <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-950 font-sans">Конвертер валют</h3>
+                      <p className="text-[9px] text-slate-400 font-mono tracking-widest mt-0.5 uppercase">Курсы из API НБРБ</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fetchNbrbRates();
+                      }}
+                      disabled={isRatesLoading}
+                      title="Обновить курсы из НБРБ"
+                      className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-500 hover:text-slate-800 transition-all flex items-center justify-center cursor-pointer active:scale-95 disabled:opacity-50"
+                    >
+                      <RefreshCw size={10} className={`${isRatesLoading ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {/* USD Field */}
+                    <div>
+                      <div className="flex justify-between items-center mb-1 select-none">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider font-mono">USD ($) Доллар</label>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={getDisplayValue('USD')}
+                          onChange={(e) => {
+                            setActiveCurrency('USD');
+                            setActiveValue(e.target.value.replace(',', '.'));
+                          }}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+
+                    {/* EUR Field */}
+                    <div>
+                      <div className="flex justify-between items-center mb-1 select-none">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider font-mono">EUR (€) Евро</label>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={getDisplayValue('EUR')}
+                          onChange={(e) => {
+                            setActiveCurrency('EUR');
+                            setActiveValue(e.target.value.replace(',', '.'));
+                          }}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+
+                    {/* BYN Field */}
+                    <div>
+                      <div className="flex justify-between items-center mb-1 select-none">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider font-mono">BYN (Br) Бел. рубль</label>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={getDisplayValue('BYN')}
+                          onChange={(e) => {
+                            setActiveCurrency('BYN');
+                            setActiveValue(e.target.value.replace(',', '.'));
+                          }}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+
+                    {/* RUB Field */}
+                    <div>
+                      <div className="flex justify-between items-center mb-1 select-none">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider font-mono">RUB (₽) Рус. рубль</label>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={getDisplayValue('RUB')}
+                          onChange={(e) => {
+                            setActiveCurrency('RUB');
+                            setActiveValue(e.target.value.replace(',', '.'));
+                          }}
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expandable Rates Section */}
+                  <div className="mt-4 pt-3 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setShowEditRates(!showEditRates)}
+                      className="text-[10px] font-black uppercase text-slate-500 hover:text-slate-800 tracking-wider flex items-center gap-1 cursor-pointer select-none"
+                    >
+                      <span>{showEditRates ? 'Скрыть курсы' : 'Настройка курсов'}</span>
+                      <ChevronDown size={12} className={`transition-transform duration-200 ${showEditRates ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {showEditRates && (
+                      <div className="mt-2.5 space-y-2.5 bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                        <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-widest block font-mono select-none">Курс к 1 BYN:</span>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-[8.5px] font-black text-slate-400 uppercase block font-mono mb-1 select-none">1 USD =</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={rates.USD}
+                              onChange={(e) => updateRate('USD', parseFloat(e.target.value) || 0)}
+                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 focus:outline-none"
+                            />
+                            <span className="text-[8px] text-slate-400 font-mono block mt-0.5 select-none">BYN</span>
+                          </div>
+                          <div>
+                            <label className="text-[8.5px] font-black text-slate-400 uppercase block font-mono mb-1 select-none">1 EUR =</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={rates.EUR}
+                              onChange={(e) => updateRate('EUR', parseFloat(e.target.value) || 0)}
+                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 focus:outline-none"
+                            />
+                            <span className="text-[8px] text-slate-400 font-mono block mt-0.5 select-none">BYN</span>
+                          </div>
+                          <div>
+                            <label className="text-[8.5px] font-black text-slate-400 uppercase block font-mono mb-1 select-none">1 RUB =</label>
+                            <input
+                              type="number"
+                              step="0.0001"
+                              value={rates.RUB}
+                              onChange={(e) => updateRate('RUB', parseFloat(e.target.value) || 0)}
+                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 focus:outline-none"
+                            />
+                            <span className="text-[8px] text-slate-400 font-mono block mt-0.5 select-none">BYN</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Fully featured Notifications Center dropdown */}

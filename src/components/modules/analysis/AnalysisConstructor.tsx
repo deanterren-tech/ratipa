@@ -3,6 +3,7 @@ import { APIProvider, Map, useMap, useMapsLibrary } from '@vis.gl/react-google-m
 import { useFirebase, database, dbService } from '../../../firebase';
 import { pdService } from '../../../firebase/planDohodService';
 import { ref, get } from 'firebase/database';
+import { AppSettings } from '../../../types';
 import BelarusMap from '../../BelarusMap';
 import { 
   MapPin, Plus, Trash2, X, Check, Copy, ArrowDownUp, 
@@ -88,6 +89,21 @@ function RouteMapLayer({ legs, activeLegIndex }: { legs: any[]; activeLegIndex: 
   const map = useMap();
   const polylinesRef = useRef<google.maps.Polyline[]>([]);
   const [pdSettings, setPdSettings] = useState<any>({ routingProvider: 'osrm', openRouteServiceApiKey: '' });
+  const [globalSettings, setGlobalSettings] = useState<AppSettings | null>(null);
+  const [offlineMode, setOfflineMode] = useState(() => localStorage.getItem('offline_mode') === 'true');
+
+  useEffect(() => {
+    const unsub = dbService.getSettings(setGlobalSettings);
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const handleOfflineChange = () => {
+      setOfflineMode(localStorage.getItem('offline_mode') === 'true');
+    };
+    window.addEventListener('ratipa-offline-mode-change', handleOfflineChange);
+    return () => window.removeEventListener('ratipa-offline-mode-change', handleOfflineChange);
+  }, []);
 
   useEffect(() => {
     const unsub = pdService.subscribePlanDohodSettings((settings) => {
@@ -142,7 +158,7 @@ function RouteMapLayer({ legs, activeLegIndex }: { legs: any[]; activeLegIndex: 
 
       let polylinePath: google.maps.LatLngLiteral[] = [];
 
-      if (isOrs && apiKey && apiKey.trim() !== '') {
+      if (isOrs && apiKey && apiKey.trim() !== '' && !offlineMode) {
         try {
           const response = await fetch('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
             method: 'POST',
@@ -171,34 +187,57 @@ function RouteMapLayer({ legs, activeLegIndex }: { legs: any[]; activeLegIndex: 
           console.error("RouteMapLayer OpenRouteService driving-car failed:", e);
         }
       } else {
-        // Default: OSRM
+        // Default: Mapbox / OSRM Proxy
         try {
           let response = null;
+          let usedDirectMapbox = false;
           const coordsParam = `${c1.lng()},${c1.lat()};${c2.lng()},${c2.lat()}`;
-          try {
-            response = await fetch(`/api/osrm-route?coordinates=${coordsParam}`);
-            if (!response.ok) {
-              throw new Error("Proxy OSRM fetch returned error status");
-            }
-          } catch (proxyError) {
-            console.warn("Proxy routing failed, trying direct OSRM fallback:", proxyError);
+
+          const mapboxUsage = globalSettings?.mapboxUsage;
+          const bypassMapbox = mapboxUsage
+            ? (mapboxUsage.count >= (mapboxUsage.limit || 100000) && !mapboxUsage.allowExceed)
+            : false;
+
+          if (!offlineMode) {
             try {
-              response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordsParam}?overview=full&geometries=geojson`);
+              const bypassParam = bypassMapbox ? "&bypassMapbox=true" : "";
+              response = await fetch(`/api/osrm-route?coordinates=${coordsParam}${bypassParam}`);
               if (!response.ok) {
-                throw new Error("Direct OSRM fetch returned error status");
+                throw new Error("Proxy routing fetch returned error status");
               }
-            } catch (directError) {
-              console.warn("Direct OSRM fallback failed, trying OpenStreetMap FOSSGIS fallback:", directError);
-              try {
-                response = await fetch(`https://routing.openstreetmap.de/routed-car/route/v1/driving/${coordsParam}?overview=full&geometries=geojson`);
-              } catch (fossgisError) {
-                console.error("All front-end OSRM routing attempts failed:", fossgisError);
+            } catch (proxyError) {
+              console.warn("Proxy routing failed, trying direct Mapbox fallback:", proxyError);
+              if (!bypassMapbox) {
+                try {
+                  const mapboxToken = "pk.eyJ1Ijoic2VyZ2VpdGVyZXoiLCJhIjoiY21yN3FqeTNzMTV2ZTJ3czlobGM0ZTF2NiJ9.GeagZG4Ev2U2a7NfnLicyg";
+                  response = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${coordsParam}?geometries=geojson&overview=full&access_token=${mapboxToken}`);
+                  if (!response.ok) {
+                    throw new Error("Direct Mapbox fetch returned error status");
+                  }
+                  usedDirectMapbox = true;
+                } catch (directError) {
+                  console.warn("Direct Mapbox fallback failed, trying public OSRM fallback:", directError);
+                  try {
+                    response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordsParam}?overview=full&geometries=geojson`);
+                  } catch (ossError) {
+                    console.error("All front-end Mapbox & OSRM routing attempts failed:", ossError);
+                  }
+                }
+              } else {
+                try {
+                  response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordsParam}?overview=full&geometries=geojson`);
+                } catch (ossError) {
+                  console.error("All front-end OSRM routing attempts failed:", ossError);
+                }
               }
             }
           }
 
           if (response && response.ok) {
             const data = await response.json();
+            if (data.source === "mapbox" || usedDirectMapbox) {
+              dbService.incrementMapboxUsage();
+            }
             if (data.code === 'Ok' && data.routes && data.routes[0]) {
               const route = data.routes[0];
               const rawCoordinates = route.geometry?.coordinates || [];
@@ -278,6 +317,12 @@ function ModalMapRenderer({
   const map = useMap();
   const polylinesRef = useRef<google.maps.Polyline[]>([]);
   const [pdSettings, setPdSettings] = useState<any>({ routingProvider: 'osrm', openRouteServiceApiKey: '' });
+  const [globalSettings, setGlobalSettings] = useState<AppSettings | null>(null);
+
+  useEffect(() => {
+    const unsub = dbService.getSettings(setGlobalSettings);
+    return unsub;
+  }, []);
 
   useEffect(() => {
     const unsub = pdService.subscribePlanDohodSettings((settings) => {
@@ -440,11 +485,17 @@ function ModalMapRenderer({
       let distanceKm = 0;
       let polylinePath: google.maps.LatLngLiteral[] = [];
 
+      const mapboxUsage = globalSettings?.mapboxUsage;
+      const bypassMapbox = mapboxUsage
+        ? (mapboxUsage.count >= (mapboxUsage.limit || 100000) && !mapboxUsage.allowExceed)
+        : false;
+
       const coordinates = validCoords.map(vc => `${vc.lng()},${vc.lat()}`).join(';');
       try {
         let response = null;
         try {
-          response = await fetch(`/api/osrm-route?coordinates=${coordinates}`);
+          const bypassParam = bypassMapbox ? "&bypassMapbox=true" : "";
+          response = await fetch(`/api/osrm-route?coordinates=${coordinates}${bypassParam}`);
           if (!response.ok) {
             throw new Error("Proxy OSRM fetch returned error status");
           }
@@ -467,6 +518,9 @@ function ModalMapRenderer({
 
         if (response && response.ok) {
           const data = await response.json();
+          if (data.source === "mapbox") {
+            dbService.incrementMapboxUsage();
+          }
           if (data.code === 'Ok' && data.routes && data.routes[0]) {
             const route = data.routes[0];
             const distanceMeters = route.distance || 0;

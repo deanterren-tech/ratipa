@@ -288,7 +288,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pt-2 select-none">
         <div>
           <h1 className="text-4xl lg:text-5xl font-black tracking-tighter text-slate-900 uppercase leading-none flex items-baseline">
-            Ratipa
+            RATIPA PORTAL
           </h1>
         </div>
 
@@ -302,22 +302,6 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
             </span>
             <span>ПОДКЛЮЧЕНО</span>
           </div>
-
-          {/* "Add widget" styled action trigger */}
-          <button 
-            onClick={() => onNavigate('settings')}
-            className="px-4 py-2.5 rounded-full bg-white border border-slate-200/60 hover:bg-slate-50 text-[10px] font-extrabold tracking-tight text-slate-800 transition cursor-pointer shadow-xs"
-          >
-            + СПРАВОЧНИКИ
-          </button>
-
-          {/* "Create report" pill button trigger */}
-          <button 
-            onClick={() => onNavigate('dohod')}
-            className="px-4 py-2.5 rounded-full bg-slate-900 text-[#70FC8E] font-black hover:bg-slate-800 text-[10px] tracking-tight uppercase transition cursor-pointer shadow-xs"
-          >
-            КАЛЬКУЛЯЦИЯ
-          </button>
         </div>
       </div>
 
