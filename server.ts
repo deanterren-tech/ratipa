@@ -601,6 +601,27 @@ async function startServer() {
 
   app.use(express.json());
 
+  // API Route for proxying NBRB exchange rates to avoid CORS issues
+  app.get("/api/nbrb-rates", async (req, res) => {
+    try {
+      const response = await fetch("https://www.nbrb.by/api/exrates/rates?periodicity=0", {
+        headers: {
+          "User-Agent": "CargoSchedulerApplet/1.0",
+          Accept: "application/json",
+        },
+        signal: AbortSignal.timeout(6000)
+      });
+      if (!response.ok) {
+        throw new Error(`NBRB server returned status: ${response.status}`);
+      }
+      const data = await response.json();
+      return res.json(data);
+    } catch (error: any) {
+      console.error("Failed to fetch NBRB rates in proxy:", error.message || error);
+      return res.status(502).json({ error: "Failed to fetch rates from NBRB API", details: error.message || String(error) });
+    }
+  });
+
   // API Route for proxying OSRM route requests to avoid CORS / VPN issues
   app.get("/api/osrm-route", async (req, res) => {
     try {
@@ -613,41 +634,72 @@ async function startServer() {
 
       const steps = req.query.steps === "true" ? "&steps=true" : "";
       const alternatives = req.query.alternatives === "true" ? "&alternatives=true" : "";
+      const bypassMapbox = req.query.bypassMapbox === "true";
 
-      // List of public OSRM servers to attempt sequentially
-      const servers = [
-        "https://router.project-osrm.org",
-        "https://routing.openstreetmap.de/routed-car"
-      ];
+      const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN || "pk.eyJ1Ijoic2VyZ2VpdGVyZXoiLCJhIjoiY21yN3FqeTNzMTV2ZTJ3czlobGM0ZTF2NiJ9.GeagZG4Ev2U2a7NfnLicyg";
 
       let data = null;
       let success = false;
+      let usedSource = "mapbox";
 
-      for (const server of servers) {
+      // Try official Mapbox Directions API first if not bypassed
+      if (!bypassMapbox) {
         try {
-          const url = `${server}/route/v1/driving/${coordinates}?overview=full&geometries=geojson${steps}${alternatives}`;
+          const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinates}?geometries=geojson&overview=full${steps}${alternatives}&access_token=${mapboxToken}`;
           const routeRes = await fetch(url, {
-            headers: {
-              "User-Agent": "CargoSchedulerApplet/1.0 (contact: deanterren@gmail.com)",
-              Accept: "application/json",
-            },
-            signal: AbortSignal.timeout(4000) // 4 seconds timeout for each request
+            signal: AbortSignal.timeout(6000) // 6 seconds timeout for Mapbox
           });
 
           if (routeRes.ok) {
             data = await routeRes.json();
             if (data && data.code === "Ok" && data.routes && data.routes.length > 0) {
               success = true;
-              break;
             }
+          } else {
+            console.warn("Mapbox API returned error status:", routeRes.status);
           }
         } catch (err) {
-          console.warn(`OSRM proxy request failed for server ${server}:`, err);
+          console.warn("Mapbox API request failed, trying OSRM backups:", err);
+        }
+      } else {
+        console.log("Bypassing Mapbox as requested by client (over limit/bypassed)");
+      }
+
+      // If Mapbox fails or is bypassed, try OSRM servers as secondary fallbacks
+      if (!success) {
+        usedSource = "osrm";
+        const servers = [
+          "https://router.project-osrm.org",
+          "https://routing.openstreetmap.de/routed-car"
+        ];
+
+        for (const server of servers) {
+          try {
+            const url = `${server}/route/v1/driving/${coordinates}?overview=full&geometries=geojson${steps}${alternatives}`;
+            const routeRes = await fetch(url, {
+              headers: {
+                "User-Agent": "CargoSchedulerApplet/1.0 (contact: deanterren@gmail.com)",
+                Accept: "application/json",
+              },
+              signal: AbortSignal.timeout(4000) // 4 seconds timeout for each request
+            });
+
+            if (routeRes.ok) {
+              data = await routeRes.json();
+              if (data && data.code === "Ok" && data.routes && data.routes.length > 0) {
+                success = true;
+                break;
+              }
+            }
+          } catch (err) {
+            console.warn(`OSRM proxy request failed for server ${server}:`, err);
+          }
         }
       }
 
       // If both public OSRM servers fail, execute our ultimate math fallback!
       if (!success) {
+        usedSource = "geodesic";
         console.log("Both OSRM servers failed. Triggering ultimate mathematical geodesic route fallback...");
         
         // Parse input coordinates "lng1,lat1;lng2,lat2;..."
@@ -716,6 +768,10 @@ async function startServer() {
             name: idx === 0 ? "Origin" : idx === coordPairs.length - 1 ? "Destination" : `Waypoint ${idx}`
           }))
         };
+      }
+
+      if (data) {
+        data.source = usedSource;
       }
 
       return res.json(data);

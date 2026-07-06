@@ -1,3 +1,4 @@
+import { useDialog } from '../../DialogProvider';
 import React, { useState, useEffect, useMemo } from 'react';
 import { UserProfile } from '../../../types';
 import { useFirebase, database } from '../../../firebase';
@@ -9,6 +10,7 @@ interface DozvolaHistoryProps {
 }
 
 export default function DozvolaHistory({ user }: DozvolaHistoryProps) {
+  const { showConfirm } = useDialog();
   const [subTab, setSubTab] = useState<'actions' | 'documents'>('actions');
   const [history, setHistory] = useState<any[]>([]);
   const [docHistory, setDocHistory] = useState<any[]>([]);
@@ -76,16 +78,16 @@ export default function DozvolaHistory({ user }: DozvolaHistoryProps) {
   }, [docHistory, searchTerm]);
 
   // Delete handlers
-  const handleDeleteActionLog = (id: string) => {
-    if (confirm("Вы действительно хотите удалить эту запись из журнала операций?")) {
+  const handleDeleteActionLog = async (id: string) => {
+    if (await showConfirm("Вы действительно хотите удалить эту запись из журнала операций?")) {
       remove(ref(database, `dozvolsHistoryV4/${id}`))
         .then(() => alert("Запись успешно удалена"))
         .catch(err => alert("Ошибка при удалении: " + err.message));
     }
   };
 
-  const handleDeleteDocLog = (id: string) => {
-    if (confirm("Вы действительно хотите удалить эту запись о формировании документа?")) {
+  const handleDeleteDocLog = async (id: string) => {
+    if (await showConfirm("Вы действительно хотите удалить эту запись о формировании документа?")) {
       remove(ref(database, `dozvolsDocumentsHistoryV1/${id}`))
         .then(() => alert("Запись успешно удалена"))
         .catch(err => alert("Ошибка при удалении: " + err.message));

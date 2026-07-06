@@ -85,3 +85,14 @@ html, body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Force Times New Roman for the high-fidelity print previews */
+.print-preview-paper, .print-preview-paper * {
+  font-family: "Times New Roman", Times, serif !important;
+}
+
+/* Force larger padding for high-fidelity 1-to-1 print preview cells to fill the A4 height nicely */
+.print-preview-paper .main-table-preview th,
+.print-preview-paper .main-table-preview > tbody > tr > td {
+  padding: 10.5px 8px !important;
+}

@@ -1,3 +1,4 @@
+import { useDialog } from '../../DialogProvider';
 import React, { useState, useEffect } from "react";
 import { UserProfile } from "../../../types";
 import { Plus, GripVertical, Trash2 } from "lucide-react";
@@ -9,6 +10,7 @@ interface DozvolaTypesDirectoryProps {
 }
 
 export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryProps) {
+  const { showConfirm } = useDialog();
   const [types, setTypes] = useState<any>({});
   const [typesOrder, setTypesOrder] = useState<string[]>([]);
   const [printMappings, setPrintMappings] = useState<any>({});
@@ -84,8 +86,8 @@ export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryPro
       setIsEditingType(false);
   };
 
-  const handleDeleteType = (id: string, name: string) => {
-      if (!confirm(`Точно удалить вида дозвола: ${name}? В реестре он останется как текст, но пропадет из вкладок.`)) return;
+  const handleDeleteType = async (id: string, name: string) => {
+      if (!(await showConfirm(`Точно удалить вида дозвола: ${name}? В реестре он останется как текст, но пропадет из вкладок.`))) return;
       if (useFirebase) {
           remove(ref(database, `dozvolsTypesV4/${id}`));
           remove(ref(database, `dozvolsPermitPrintMappingsV1/${name}`));

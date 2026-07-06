@@ -233,79 +233,85 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
         let aiFailed = false;
 
         try {
-            const response = await fetch("/api/parse-dozvola-text", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text: rawText, knownFleetCars })
-            });
-
-            if (!response.ok) {
-                throw new Error("AI parser failed");
-            }
-
-            const data = await response.json();
-            
-            if (data.results && data.results.length > 0) {
-                // Post-process AI results (match with existing database records)
-                data.results.forEach((item: any) => {
-                    if (!item.number) return;
-
-                    const existingDozvol = Object.values(dozvolsData).find((d: any) => {
-                        const dbNum = String(d.number || d.permitNumber || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                        const candNum = String(item.number).toLowerCase().replace(/[^a-z0-9]/g, '');
-                        if (!dbNum || !candNum) return false;
-                        return dbNum.includes(candNum) || candNum.includes(dbNum);
-                    });
-
-                    let mode = existingDozvol ? "update" : "create";
-                    let finalType = item.type;
-                    
-                    // Allow AI to guess type, but if it exists, use the DB type as fallback or override
-                    if (existingDozvol && (!finalType || finalType.length < 2)) {
-                        finalType = existingDozvol.type;
-                    }
-
-                    // Map status
-                    const statusMap: Record<string, string> = {
-                        "office": "office",
-                        "hand": "hand",
-                        "office_return": "office_return",
-                        "used": "used",
-                        "expired": "expired"
-                    };
-                    let finalStatus = statusMap[item.status] || (existingDozvol ? existingDozvol.status : "office");
-                    
-                    // If returning to office, clear the car
-                    let finalCar = item.car || "";
-                    if (finalStatus === 'office_return' || finalStatus === 'used') {
-                        finalCar = "";
-                    } else if (existingDozvol && !finalCar && finalStatus === 'hand') {
-                        finalCar = existingDozvol.car || "";
-                    }
-
-                    // Attempt to match the parsed car to our known fleet if it's not exact
-                    if (finalCar) {
-                        const digits = finalCar.replace(/\\D/g, '');
-                        if (digits.length >= 3) {
-                            const fullCarFromFleet = Object.keys(knownFleetCars).find(car => car.includes(digits));
-                            if (fullCarFromFleet) finalCar = fullCarFromFleet;
-                        }
-                    }
-
-                    finalBatchItems.push({
-                        id: existingDozvol ? existingDozvol.id : null, 
-                        mode, 
-                        type: finalType || "RUS", 
-                        number: existingDozvol ? (existingDozvol.number || existingDozvol.permitNumber) : item.number, 
-                        status: finalStatus, 
-                        isCopy: !!item.isCopy, 
-                        car: finalCar, 
-                        comment: item.comment || "",
-                        existingRef: existingDozvol || null
-                    });
-                });
+            const offlineModeActive = localStorage.getItem('offline_mode') === 'true';
+            if (offlineModeActive) {
+                console.log("[Offline Mode] Instantly falling back to local regex parser.");
+                aiFailed = true;
             } else {
-                aiFailed = true; // Fallback if AI returned empty array
+                const response = await fetch("/api/parse-dozvola-text", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text: rawText, knownFleetCars })
+                });
+
+                if (!response.ok) {
+                    throw new Error("AI parser failed");
+                }
+
+                const data = await response.json();
+                
+                if (data.results && data.results.length > 0) {
+                    // Post-process AI results (match with existing database records)
+                    data.results.forEach((item: any) => {
+                        if (!item.number) return;
+
+                        const existingDozvol = Object.values(dozvolsData).find((d: any) => {
+                            const dbNum = String(d.number || d.permitNumber || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                            const candNum = String(item.number).toLowerCase().replace(/[^a-z0-9]/g, '');
+                            if (!dbNum || !candNum) return false;
+                            return dbNum.includes(candNum) || candNum.includes(dbNum);
+                        });
+
+                        let mode = existingDozvol ? "update" : "create";
+                        let finalType = item.type;
+                        
+                        // Allow AI to guess type, but if it exists, use the DB type as fallback or override
+                        if (existingDozvol && (!finalType || finalType.length < 2)) {
+                            finalType = existingDozvol.type;
+                        }
+
+                        // Map status
+                        const statusMap: Record<string, string> = {
+                            "office": "office",
+                            "hand": "hand",
+                            "office_return": "office_return",
+                            "used": "used",
+                            "expired": "expired"
+                        };
+                        let finalStatus = statusMap[item.status] || (existingDozvol ? existingDozvol.status : "office");
+                        
+                        // If returning to office, clear the car
+                        let finalCar = item.car || "";
+                        if (finalStatus === 'office_return' || finalStatus === 'used') {
+                            finalCar = "";
+                        } else if (existingDozvol && !finalCar && finalStatus === 'hand') {
+                            finalCar = existingDozvol.car || "";
+                        }
+
+                        // Attempt to match the parsed car to our known fleet if it's not exact
+                        if (finalCar) {
+                            const digits = finalCar.replace(/\D/g, '');
+                            if (digits.length >= 3) {
+                                const fullCarFromFleet = Object.keys(knownFleetCars).find(car => car.includes(digits));
+                                if (fullCarFromFleet) finalCar = fullCarFromFleet;
+                            }
+                        }
+
+                        finalBatchItems.push({
+                            id: existingDozvol ? existingDozvol.id : null, 
+                            mode, 
+                            type: finalType || "RUS", 
+                            number: existingDozvol ? (existingDozvol.number || existingDozvol.permitNumber) : item.number, 
+                            status: finalStatus, 
+                            isCopy: !!item.isCopy, 
+                            car: finalCar, 
+                            comment: item.comment || "",
+                            existingRef: existingDozvol || null
+                        });
+                    });
+                } else {
+                    aiFailed = true; // Fallback if AI returned empty array
+                }
             }
         } catch (e) {
             console.warn("AI parsing error, falling back to regex parser", e);
@@ -569,4 +575,3 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
         </div>
     );
 }
-

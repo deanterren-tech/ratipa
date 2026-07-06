@@ -436,6 +436,16 @@ const INITIAL_SETTINGS: AppSettings = {
     "admin",
   ],
   customPhrases: ["Сдал отчетность", "На погрузке", "В пути", "Завершил рейс"],
+  mapboxUsage: {
+    count: 0,
+    limit: 100000,
+    allowExceed: false,
+    loadsCount: 0,
+    loadsLimit: 50000,
+    allowExceedLoads: false,
+    currentMonth: "2026-07",
+    lastReset: "2026-07-05T00:00:00.000Z"
+  },
 };
 
 const userKey = (name: string) =>
@@ -1684,6 +1694,45 @@ export const dbService = {
               updated = true;
             }
 
+            const actualMonth = new Date().toISOString().substring(0, 7);
+            if (!data.mapboxUsage) {
+              data.mapboxUsage = {
+                count: 0,
+                limit: 100000,
+                allowExceed: false,
+                loadsCount: 0,
+                loadsLimit: 50000,
+                allowExceedLoads: false,
+                currentMonth: actualMonth,
+                lastReset: new Date().toISOString()
+              };
+              updated = true;
+            } else {
+              let innerUpdated = false;
+              if (data.mapboxUsage.loadsCount === undefined) {
+                data.mapboxUsage.loadsCount = 0;
+                innerUpdated = true;
+              }
+              if (data.mapboxUsage.loadsLimit === undefined) {
+                data.mapboxUsage.loadsLimit = 50000;
+                innerUpdated = true;
+              }
+              if (data.mapboxUsage.allowExceedLoads === undefined) {
+                data.mapboxUsage.allowExceedLoads = false;
+                innerUpdated = true;
+              }
+              if (data.mapboxUsage.currentMonth !== actualMonth) {
+                data.mapboxUsage.count = 0;
+                data.mapboxUsage.loadsCount = 0;
+                data.mapboxUsage.currentMonth = actualMonth;
+                data.mapboxUsage.lastReset = new Date().toISOString();
+                innerUpdated = true;
+              }
+              if (innerUpdated) {
+                updated = true;
+              }
+            }
+
             if (updated) {
               set(dbRef, data).catch((err) =>
                 console.warn("Failed to update database schema:", err),
@@ -2467,6 +2516,66 @@ export const dbService = {
       local[id] = status;
       setLocalStorageData("ratipa_vehicle_statuses", local);
       window.dispatchEvent(new Event("ratipa_vehicle_statuses_changed"));
+    }
+  },
+
+  incrementMapboxUsage: async () => {
+    if (useFirebase) {
+      try {
+        const dbRef = ref(database, "appSettings/mapboxUsage/count");
+        const snapshot = await new Promise<any>((resolve) => {
+          const unsub = onValue(dbRef, (snap) => {
+            resolve(snap);
+            unsub();
+          }, () => {
+            resolve(null);
+          });
+          setTimeout(() => {
+            resolve(null);
+            unsub();
+          }, 2000);
+        });
+        const currentCount = snapshot && snapshot.exists() ? Number(snapshot.val() || 0) : 0;
+        await set(dbRef, currentCount + 1);
+      } catch (err) {
+        console.warn("Failed to increment Mapbox usage in Firebase:", err);
+      }
+    } else {
+      const local = getLocalStorageData<AppSettings>("ratipa_settings", INITIAL_SETTINGS);
+      if (local.mapboxUsage) {
+        local.mapboxUsage.count = (local.mapboxUsage.count || 0) + 1;
+        setLocalStorageData("ratipa_settings", local);
+      }
+    }
+  },
+
+  incrementMapboxLoads: async () => {
+    if (useFirebase) {
+      try {
+        const dbRef = ref(database, "appSettings/mapboxUsage/loadsCount");
+        const snapshot = await new Promise<any>((resolve) => {
+          const unsub = onValue(dbRef, (snap) => {
+            resolve(snap);
+            unsub();
+          }, () => {
+            resolve(null);
+          });
+          setTimeout(() => {
+            resolve(null);
+            unsub();
+          }, 2000);
+        });
+        const currentCount = snapshot && snapshot.exists() ? Number(snapshot.val() || 0) : 0;
+        await set(dbRef, currentCount + 1);
+      } catch (err) {
+        console.warn("Failed to increment Mapbox loads in Firebase:", err);
+      }
+    } else {
+      const local = getLocalStorageData<AppSettings>("ratipa_settings", INITIAL_SETTINGS);
+      if (local.mapboxUsage) {
+        local.mapboxUsage.loadsCount = (local.mapboxUsage.loadsCount || 0) + 1;
+        setLocalStorageData("ratipa_settings", local);
+      }
     }
   },
 };

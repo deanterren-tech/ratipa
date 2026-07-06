@@ -1,3 +1,4 @@
+import { useDialog } from '../../DialogProvider';
 import React, { useState, useEffect, useMemo } from 'react';
 import { UserProfile } from '../../../types';
 import { useFirebase, database } from '../../../firebase';
@@ -26,6 +27,7 @@ interface GroupRecord {
 }
 
 export default function AnalysisRegionData({ regionId, regionName, user }: AnalysisRegionDataProps) {
+  const { showConfirm } = useDialog();
   const [groups, setGroups] = useState<GroupRecord[]>([]);
   const [records, setRecords] = useState<ItemRecord[]>([]);
   
@@ -97,8 +99,8 @@ export default function AnalysisRegionData({ regionId, regionName, user }: Analy
     setEditingGroupId(null);
   };
 
-  const handleDeleteGroup = (id: string) => {
-    if (confirm("Вы уверены? Эта группа и все ее записи будут удалены.")) {
+  const handleDeleteGroup = async (id: string) => {
+    if (await showConfirm("Вы уверены? Эта группа и все ее записи будут удалены.")) {
       if (useFirebase) {
         remove(ref(database, `analysisGroups/${regionId}/${id}`));
         const toDelete = records.filter(r => r.groupId === id);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile, AppSettings, FerryTemplate, DistancePreset, CurrencyPreset, Announcement, QuickLink, CarRateGroup, Driver } from '../../types';
+import { UserProfile, AppSettings, FerryTemplate, DistancePreset, CurrencyPreset, QuickLink, CarRateGroup, Driver } from '../../types';
 import { dbService, database, onValue } from '../../firebase';
 import { pdService } from '../../firebase/planDohodService';
 import { ref, set, push, remove } from 'firebase/database';
@@ -9,7 +9,6 @@ import {
   Trash2, 
   Anchor, 
   Compass, 
-  Megaphone, 
   ExternalLink, 
   Lock,
   Truck,
@@ -20,7 +19,13 @@ import {
   Users,
   Search,
   Check,
-  X
+  X,
+  Info,
+  Globe,
+  Navigation,
+  FileText,
+  Layers,
+  Link
 } from 'lucide-react';
 import { useDialog } from '../DialogProvider';
 import { useToast } from '../ToastProvider';
@@ -30,11 +35,22 @@ interface SettingsModuleProps {
 }
 
 export default function SettingsModule({ user }: SettingsModuleProps) {
+  const isWritePermitted = user.permissions.settings === 'write';
   const { showConfirm } = useDialog();
   const { toast } = useToast();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [pdSettings, setPdSettings] = useState<any>({ useDistanceLookup: false, googleMapsApiKey: '' });
   
+  // Navigation Tab State
+  const [activeTab, setActiveTab] = useState<'fleet' | 'routes' | 'system' | 'links'>('fleet');
+
+  // Search states for directories
+  const [carSearch, setCarSearch] = useState('');
+  const [driverSearch, setDriverSearch] = useState('');
+  const [distanceSearch, setDistanceSearch] = useState('');
+  const [ferrySearch, setFerrySearch] = useState('');
+  const [directionSearch, setDirectionSearch] = useState('');
+
   // Dynamic directory builders
   const [ferries, setFerries] = useState<FerryTemplate[]>([]);
   const [distances, setDistances] = useState<DistancePreset[]>([]);
@@ -58,10 +74,6 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const [dFrom, setDFrom] = useState('');
   const [dTo, setDTo] = useState('');
   const [dKm, setDKm] = useState<number>(0);
-
-  // Local Form states (Announcement)
-  const [annText, setAnnText] = useState('');
-  const [annImportant, setAnnImportant] = useState(false);
 
   // Local Form states (Quick link)
   const [linkTitle, setLinkTitle] = useState('');
@@ -108,6 +120,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const [dispatchers, setDispatchers] = useState<string[]>([]);
   const [knownFleet, setKnownFleet] = useState<string[]>([]);
   const [knownFleetObjects, setKnownFleetObjects] = useState<{ key: string; plate: string }[]>([]);
+  const [isKnownFleetLoaded, setIsKnownFleetLoaded] = useState(false);
   const [savedCars, setSavedCars] = useState<string[]>([]);
   
   // Car Editing State
@@ -139,6 +152,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       }));
       setKnownFleetObjects(list);
       setKnownFleet(list.map(x => x.plate));
+      setIsKnownFleetLoaded(true);
     });
     const unsubSavedCarsList = pdService.subscribeCars(setSavedCars);
 
@@ -157,6 +171,50 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       unsubSavedCarsList();
     };
   }, []);
+
+  // Self-healing synchronization to align vehicle directory and tariff groups
+  useEffect(() => {
+    if (!isKnownFleetLoaded || carRateGroups.length === 0 || !isWritePermitted) return;
+
+    const knownSet = new Set(knownFleet.map(v => v.trim().toUpperCase()).filter(Boolean));
+    const tariffSet = new Set(
+      carRateGroups.flatMap(g => (g.vehicles || []).map(v => v.trim().toUpperCase())).filter(Boolean)
+    );
+
+    // 1. Add missing vehicles to known_fleet in Firebase (so they are visible in the directory)
+    const missingInKnown = Array.from(tariffSet).filter(v => !knownSet.has(v));
+    if (missingInKnown.length > 0) {
+      const dbRef = ref(database, 'known_fleet');
+      missingInKnown.forEach(v => {
+        push(dbRef, v);
+      });
+    }
+
+    // 2. Remove obsolete vehicles from known_fleet in Firebase (vehicles that are in known_fleet but not in any tariff group)
+    const obsoleteInKnown = knownFleetObjects.filter(item => {
+      const plate = item.plate.trim().toUpperCase();
+      return plate && !tariffSet.has(plate);
+    });
+    if (obsoleteInKnown.length > 0) {
+      obsoleteInKnown.forEach(item => {
+        remove(ref(database, `known_fleet/${item.key}`));
+      });
+    }
+
+    // 3. Remove obsolete dispatcher mappings
+    let mapChanged = false;
+    const updatedMap = { ...dispatchersMap };
+    Object.keys(updatedMap).forEach(plate => {
+      const normPlate = plate.trim().toUpperCase();
+      if (!tariffSet.has(normPlate)) {
+        delete updatedMap[plate];
+        mapChanged = true;
+      }
+    });
+    if (mapChanged) {
+      pdService.updateDispatchersCarMapping(updatedMap);
+    }
+  }, [carRateGroups, knownFleet, knownFleetObjects, dispatchersMap, isKnownFleetLoaded, isWritePermitted]);
 
   const handleMapCarToDispatcher = (car: string, disp: string | null) => {
     const updatedMap = { ...dispatchersMap };
@@ -331,20 +389,39 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     e.preventDefault();
     if (!newCarPlate.trim()) return;
     const cPlate = newCarPlate.trim().toUpperCase();
-    if (knownFleet.includes(cPlate)) {
+    if (allCars.includes(cPlate)) {
       toast("Этот автомобиль уже есть в справочнике!", 'error');
       return;
     }
-    const dbRef = ref(database, 'known_fleet');
-    push(dbRef, cPlate);
+
+    // Automatically add to first tariff group
+    if (carRateGroups.length > 0) {
+      const firstGroup = carRateGroups[0];
+      const updatedVehicles = Array.from(new Set([...(firstGroup.vehicles || []).map(v => v.trim().toUpperCase()), cPlate]));
+      dbService.saveCarRateGroup({ ...firstGroup, vehicles: updatedVehicles }, user.name, user.role);
+      toast("Автомобиль добавлен в справочник и тарифную группу.", 'success');
+    } else {
+      const dbRef = ref(database, 'known_fleet');
+      push(dbRef, cPlate);
+      toast("Автомобиль добавлен в справочник.", 'success');
+    }
+
     setNewCarPlate('');
-    toast("Автомобиль добавлен в справочник.", 'success');
   };
 
   const handleDeleteKnownCar = async (key: string, plate: string) => {
-    if (await showConfirm(`Вы действительно хотите удалить автомобиль "${plate}" из справочника?`)) {
-      remove(ref(database, `known_fleet/${key}`));
-      toast("Автомобиль удален из справочника.", 'success');
+    if (await showConfirm(`Вы действительно хотите удалить автомобиль "${plate}"? Это удалит его из тарифных групп и привязки к диспетчерам.`)) {
+      // Remove from all tariff groups - the sync effect will clean up known_fleet and dispatcher mappings automatically
+      carRateGroups.forEach(g => {
+        if (g.vehicles && g.vehicles.includes(plate)) {
+          dbService.saveCarRateGroup({
+            ...g,
+            vehicles: g.vehicles.filter(v => v !== plate)
+          }, user.name, user.role);
+        }
+      });
+
+      toast("Автомобиль удален.", 'success');
     }
   };
 
@@ -359,9 +436,79 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       return;
     }
     const updatedPlate = editCarPlate.trim().toUpperCase();
+    const originalCar = knownFleetObjects.find(x => x.key === key);
+    const originalPlate = originalCar ? originalCar.plate : '';
+
     set(ref(database, `known_fleet/${key}`), updatedPlate);
+
+    if (originalPlate && originalPlate !== updatedPlate) {
+      // Rename in all tariff groups
+      carRateGroups.forEach(g => {
+        if (g.vehicles && g.vehicles.includes(originalPlate)) {
+          dbService.saveCarRateGroup({
+            ...g,
+            vehicles: g.vehicles.map(v => v === originalPlate ? updatedPlate : v)
+          }, user.name, user.role);
+        }
+      });
+
+      // Rename in dispatcher mapping
+      if (dispatchersMap[originalPlate] !== undefined) {
+        const updatedMap = { ...dispatchersMap };
+        updatedMap[updatedPlate] = updatedMap[originalPlate];
+        delete updatedMap[originalPlate];
+        pdService.updateDispatchersCarMapping(updatedMap);
+      }
+    }
+
     setEditingCarKey(null);
-    toast("Номер автомобиля сохранен.", 'success');
+    toast("Номер автомобиля сохранен во всех связанных разделах.", 'success');
+  };
+
+  const handleConfirmAddVehicleToGroup = (group: CarRateGroup, vehicleNum: string) => {
+    if (!vehicleNum.trim()) {
+      setAddingVehicleGroup(null);
+      return;
+    }
+    const plate = vehicleNum.trim().toUpperCase();
+
+    // 1. If it's already in this tariff group, do nothing
+    if (group.vehicles && group.vehicles.includes(plate)) {
+      setAddingVehicleGroup(null);
+      return;
+    }
+
+    // 2. Remove this vehicle from any OTHER tariff groups (to ensure a vehicle is in exactly one group)
+    carRateGroups.forEach(g => {
+      if (g.id !== group.id && g.vehicles && g.vehicles.includes(plate)) {
+        dbService.saveCarRateGroup({
+          ...g,
+          vehicles: g.vehicles.filter(v => v !== plate)
+        }, user.name, user.role);
+      }
+    });
+
+    // 3. Add to the target tariff group
+    const updatedVehicles = Array.from(new Set([...(group.vehicles || []), plate]));
+    dbService.saveCarRateGroup({
+      ...group,
+      vehicles: updatedVehicles
+    }, user.name, user.role);
+
+    toast(`Автомобиль ${plate} добавлен в тарифную группу.`, 'success');
+    setAddingVehicleGroup(null);
+  };
+
+  const handleRemoveVehicleFromGroup = async (group: CarRateGroup, plate: string) => {
+    if (await showConfirm(`Вы действительно хотите удалить автомобиль "${plate}"? Это также удалит его из автопарка и привязки к диспетчерам.`)) {
+      // Remove from tariff group
+      dbService.saveCarRateGroup({
+        ...group,
+        vehicles: (group.vehicles || []).filter(v => v !== plate)
+      }, user.name, user.role);
+
+      toast(`Автомобиль ${plate} удален.`, 'success');
+    }
   };
 
   // Save/Delete Ferries
@@ -382,7 +529,6 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   };
 
   const handleDeleteFerry = (id: string) => {
-    console.log(`SettingsModule: Deleting ferry ${id}`);
     dbService.deleteFerryTemplate(id, user.name, user.role);
   };
 
@@ -435,39 +581,6 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     }
   };
 
-  // Save settings (Announcements block / Bookmarks block)
-  const handleAddAnnouncement = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!annText.trim() || !settings) return;
-
-    const newAnn: Announcement = {
-      id: "ann_" + Date.now(),
-      text: annText.trim(),
-      date: new Date().toLocaleDateString(),
-      author: user.name,
-      important: annImportant
-    };
-
-    const updated: AppSettings = {
-      ...settings,
-      announcements: [newAnn, ...(settings.announcements || [])]
-    };
-
-    dbService.saveSettings(updated, user.name, user.role);
-    setAnnText('');
-    setAnnImportant(false);
-    toast("Объявление транслировано на Dashboard.", 'success');
-  };
-
-  const handleDeleteAnnouncement = (id: string) => {
-    if (!settings) return;
-    const updated: AppSettings = {
-      ...settings,
-      announcements: settings.announcements.filter(a => a.id !== id)
-    };
-    dbService.saveSettings(updated, user.name, user.role);
-  };
-
   const handleAddQuickLink = (e: React.FormEvent) => {
     e.preventDefault();
     if (!linkTitle || !linkUrl || !settings) return;
@@ -510,11 +623,11 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
 
     const updatedLinks = (settings.quickLinks || []).map((l) => {
       if (l.id === editingLinkId) {
-        return {
-          ...l,
-          title: editingLinkTitle.trim(),
-          url: editingLinkUrl.trim()
-        };
+         return {
+           ...l,
+           title: editingLinkTitle.trim(),
+           url: editingLinkUrl.trim()
+         };
       }
       return l;
     });
@@ -607,1351 +720,1500 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     );
   }
 
-  const isWritePermitted = user.permissions.settings === 'write';
+  const allCars: string[] = Array.from(new Set([
+    ...knownFleet.map(v => v.trim().toUpperCase()),
+    ...carRateGroups.flatMap(g => (g.vehicles || []).map(v => v.trim().toUpperCase()))
+  ].filter(Boolean))) as string[];
 
-  const allCars = Array.from(new Set([
-    ...drivers.map(d => (typeof d === 'object' ? d?.plate || d?.carNumber || d?.number : d)),
-    ...carRateGroups.flatMap(g => (g.vehicles || []).map(v => (typeof v === 'object' ? v?.plate || v?.carNumber || v?.number : v))),
-    ...knownFleet.map(v => (typeof v === 'object' ? v?.plate || v?.carNumber || v?.number || v?.name : v)),
-    ...savedCars.map(v => (typeof v === 'object' ? v?.plate || v?.carNumber || v?.number || v?.name : v))
-  ]
-    .map(p => {
-      if (typeof p === 'object' && p !== null) {
-        return (p.plate || p.carNumber || p.number || p.name || '').toString();
-      }
-      return p ? String(p) : '';
-    })
-    .map(p => p.trim().toUpperCase())
-    .filter(Boolean)
-  ));
+  // Directory Search Filter Logic
+  const filteredKnownFleet = knownFleetObjects.filter(item =>
+    item.plate.toLowerCase().includes(carSearch.toLowerCase())
+  );
+
+  const filteredDrivers = drivers.filter(drv =>
+    drv.name.toLowerCase().includes(driverSearch.toLowerCase()) ||
+    (drv.phone && drv.phone.toLowerCase().includes(driverSearch.toLowerCase())) ||
+    (drv.license && drv.license.toLowerCase().includes(driverSearch.toLowerCase()))
+  );
+
+  const filteredDistances = distances.filter(di =>
+    di.from.toLowerCase().includes(distanceSearch.toLowerCase()) ||
+    di.to.toLowerCase().includes(distanceSearch.toLowerCase())
+  );
+
+  const filteredFerries = ferries.filter(fe =>
+    fe.name.toLowerCase().includes(ferrySearch.toLowerCase())
+  );
+
+  const filteredDirections = Object.entries(directions).filter(([name]) =>
+    name.toLowerCase().includes(directionSearch.toLowerCase())
+  );
+
+  // Tabs structure with design details and icons
+  const tabList = [
+    { id: 'fleet', label: 'Автопарк и Водители', icon: Truck, count: filteredKnownFleet.length + filteredDrivers.length },
+    { id: 'routes', label: 'Маршруты и Направления', icon: Compass, count: filteredDistances.length + filteredFerries.length + filteredDirections.length },
+    { id: 'system', label: 'Системные Настройки', icon: Settings, count: currencies.length },
+    { id: 'links', label: 'Ссылки и Порталы', icon: ExternalLink, count: (settings?.quickLinks?.length || 0) + (settings?.externalTabs?.length || 0) }
+  ] as const;
 
   return (
     <div className="w-full space-y-6 font-sans">
       
-      {/* GRAPHICAL VEHICLE DISPATCHER MAPPING BLOCK */}
-      <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-           <div>
-              <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight mt-1.5 flex items-center gap-2">
-                 <Users className="h-5 w-5 text-blue-500" /> Интерактивная привязка авто к диспетчерам
-              </h2>
-              <p className="text-xs text-slate-400 mt-1 font-mono">
-                 Перетаскивайте карточки автомобилей из правой колонки во вкладки диспетчеров слева для мгновенной привязки.
-              </p>
-           </div>
+      {/* HEADER BAR */}
+      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-2.5">
+              <Settings className="w-5.5 h-5.5 text-slate-900" style={{ fill: '#70FC8E' }} />
+              <span>Корпоративные Справочники</span>
+            </h1>
+            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider font-mono mt-1">
+              Системные реестры, тарифные сетки, коэффициенты и интеграционные ключи RATIPA
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] bg-slate-100 text-slate-500 font-bold px-3 py-1.5 rounded-full font-mono uppercase border border-slate-200">
+            <Layers className="w-3.5 h-3.5 text-slate-400" />
+            <span>{isWritePermitted ? 'Редактирование' : 'Только чтение'}</span>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-           {/* LEFT COLUMN: Dispatchers Tabs */}
-           <div className="lg:col-span-2 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-1 mb-2">
-                 <span className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-wider">
+        {/* MODERN SCROLLABLE TAB NAVIGATOR */}
+        <div className="mt-6 flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/60 max-w-max">
+          {tabList.map((t) => {
+            const IconComp = t.icon;
+            const isActive = activeTab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-tight transition duration-150 select-none cursor-pointer ${
+                  isActive 
+                    ? 'bg-slate-950 text-white shadow-sm font-extrabold' 
+                    : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
+                }`}
+              >
+                <IconComp className={`w-3.5 h-3.5 ${isActive ? 'text-[#70FC8E]' : 'text-slate-400'}`} />
+                <span>{t.label}</span>
+                {t.count > 0 && (
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-mono font-black ${
+                    isActive ? 'bg-[#70FC8E]/20 text-[#70FC8E]' : 'bg-slate-200 text-slate-600'
+                  }`}>
+                    {t.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* TAB CONTENT 1: FLEET & DISPATCHERS */}
+      {activeTab === 'fleet' && (
+        <div className="space-y-6">
+          
+          {/* INTERACTIVE CAR-DISPATCHER MAPPING BLOCK */}
+          <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-5">
+            <div>
+              <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                <Users className="h-4.5 w-4.5 text-blue-500" /> 
+                <span>Интерактивная привязка авто к диспетчерам</span>
+              </h2>
+              <p className="text-[11px] text-slate-400 font-mono mt-0.5 uppercase tracking-wide">
+                Перетаскивайте автомобили из правой колонки во вкладки диспетчеров слева для быстрой привязки
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              {/* LEFT COLUMN: Dispatchers Tabs */}
+              <div className="lg:col-span-2 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1 mb-1">
+                  <span className="text-[9px] font-black uppercase text-slate-400 font-mono tracking-wider">
                     Диспетчеры
-                 </span>
-                 <span className="text-[10px] text-slate-400 font-mono">
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-mono font-black uppercase">
                     {dispatchers.length} активных
-                 </span>
-              </div>
-              
-              <div className="space-y-2 max-h-[450px] overflow-y-auto pr-1 custom-scrollbar">
-                 {/* "Без диспетчера" Card */}
-                 <div 
+                  </span>
+                </div>
+                
+                <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
+                  {/* "Без диспетчера" Card */}
+                  <div 
                     onDragOver={(e) => handleDragOverDispCard(e, 'Без диспетчера')}
                     onDragLeave={handleDragLeaveDispCard}
                     onDrop={(e) => handleDropOnDispCard(e, 'Без диспетчера')}
                     onClick={() => setActiveDispSelect('Без диспетчера')}
-                    className={`p-4 rounded-2xl border transition cursor-pointer select-none relative ${
-                       activeDispSelect === 'Без диспетчера'
-                       ? 'border-red-500 bg-red-50/50 text-red-950 shadow-sm'
-                       : 'border-slate-200 hover:border-slate-350 bg-slate-50 text-slate-700'
-                    } ${dragOverDisp === 'Без диспетчера' ? 'ring-2 ring-red-500 ring-dashed border-red-500 scale-[1.02]' : ''}`}
-                 >
+                    className={`p-3.5 rounded-xl border transition cursor-pointer select-none relative ${
+                      activeDispSelect === 'Без диспетчера'
+                        ? 'border-red-500 bg-red-50/50 text-red-950 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300 bg-slate-50 text-slate-700'
+                    } ${dragOverDisp === 'Без диспетчера' ? 'ring-2 ring-red-500 ring-dashed border-red-500 scale-[1.01]' : ''}`}
+                  >
                     <div className="flex justify-between items-center">
-                       <div className="flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                          <strong className="text-xs font-black uppercase tracking-wider">Без диспетчера</strong>
-                       </div>
-                       <span className="bg-white/85 border border-slate-150 px-2.5 py-0.5 rounded-md font-mono text-[10px] font-black text-slate-600">
-                          {allCars.filter(c => !dispatchersMap[c]).length} авто
-                       </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                        <strong className="text-xs font-black uppercase tracking-wider">Без диспетчера</strong>
+                      </div>
+                      <span className="bg-white border border-slate-150 px-2 py-0.5 rounded font-mono text-[9px] font-black text-slate-600">
+                        {allCars.filter(c => !dispatchersMap[c]).length} авто
+                      </span>
                     </div>
-                    <p className="text-[9px] text-slate-400 font-mono mt-1 uppercase tracking-wide">
-                       Область сброса для отмены привязки
-                    </p>
-                 </div>
+                  </div>
 
-                 {/* Dispatchers List */}
-                 {dispatchers.map((dispName) => {
+                  {/* Dispatchers List */}
+                  {dispatchers.map((dispName) => {
                     const countAssigned = allCars.filter(c => dispatchersMap[c] === dispName).length;
                     return (
-                       <div 
-                          key={dispName}
-                          onDragOver={(e) => handleDragOverDispCard(e, dispName)}
-                          onDragLeave={handleDragLeaveDispCard}
-                          onDrop={(e) => handleDropOnDispCard(e, dispName)}
-                          onClick={() => setActiveDispSelect(dispName)}
-                          className={`p-4 rounded-2xl border transition cursor-pointer select-none relative ${
-                             activeDispSelect === dispName
-                             ? 'border-blue-500 bg-blue-50/50 text-blue-950 shadow-sm'
-                             : 'border-slate-200 hover:border-slate-350 bg-white text-slate-700'
-                          } ${dragOverDisp === dispName ? 'ring-2 ring-blue-500 ring-dashed border-blue-500 scale-[1.02]' : ''}`}
-                       >
-                          <div className="flex justify-between items-center">
-                             <div className="flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                                <strong className="text-xs font-black uppercase tracking-wider">{dispName}</strong>
-                             </div>
-                             <span className="bg-slate-50 border border-slate-200/50 px-2.5 py-0.5 rounded-md font-mono text-[10px] font-black text-slate-600">
-                                {countAssigned} авто
-                             </span>
+                      <div 
+                        key={dispName}
+                        onDragOver={(e) => handleDragOverDispCard(e, dispName)}
+                        onDragLeave={handleDragLeaveDispCard}
+                        onDrop={(e) => handleDropOnDispCard(e, dispName)}
+                        onClick={() => setActiveDispSelect(dispName)}
+                        className={`p-3.5 rounded-xl border transition cursor-pointer select-none relative ${
+                          activeDispSelect === dispName
+                            ? 'border-blue-500 bg-blue-50/50 text-blue-950 shadow-sm'
+                            : 'border-slate-200 hover:border-slate-300 bg-white text-slate-700'
+                        } ${dragOverDisp === dispName ? 'ring-2 ring-blue-500 ring-dashed border-blue-500 scale-[1.01]' : ''}`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                            <strong className="text-xs font-black uppercase tracking-wider">{dispName}</strong>
                           </div>
-                          <p className="text-[9px] text-slate-400 font-mono mt-1 uppercase tracking-wide">
-                             Нажмите для просмотра закрепленных авто
-                          </p>
-                       </div>
+                          <span className="bg-slate-50 border border-slate-200 px-2 py-0.5 rounded font-mono text-[9px] font-black text-slate-600">
+                            {countAssigned} авто
+                          </span>
+                        </div>
+                      </div>
                     );
-                 })}
-              </div>
+                  })}
+                </div>
 
-              {/* Selected Dispatcher's Cars view below */}
-              <div className="bg-slate-50 border border-slate-205 rounded-2xl p-4 mt-4">
-                 <h3 className="text-[10px] font-black uppercase text-slate-500 font-mono tracking-wider mb-3">
-                    Закреплено за: <span className="text-blue-600 underline font-sans font-extrabold uppercase">{activeDispSelect}</span>
-                 </h3>
-                 <div className="space-y-1.5 max-h-[220px] overflow-y-auto custom-scrollbar">
+                {/* Selected Dispatcher's Cars view below */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5">
+                  <h3 className="text-[9px] font-black uppercase text-slate-500 font-mono tracking-wider mb-2.5">
+                    Закреплено за: <span className="text-blue-600 underline font-sans font-black uppercase">{activeDispSelect}</span>
+                  </h3>
+                  <div className="space-y-1.5 max-h-[160px] overflow-y-auto custom-scrollbar">
                     {allCars.filter(c => activeDispSelect === 'Без диспетчера' ? !dispatchersMap[c] : dispatchersMap[c] === activeDispSelect).map(c => (
-                       <div 
-                          key={c}
-                          draggable={isWritePermitted}
-                          onDragStart={(e) => handleDragStartCarMapping(e, c)}
-                          className="bg-white border border-slate-200 p-2.5 rounded-xl flex items-center justify-between text-xs font-bold hover:shadow-xs hover:border-slate-300 transition cursor-move group select-none"
-                       >
-                          <span className="font-mono text-slate-800 uppercase tracking-widest">{c}</span>
-                          {isWritePermitted && activeDispSelect !== 'Без диспетчера' && (
-                             <button 
-                                onClick={() => handleMapCarToDispatcher(c, null)}
-                                className="text-[9px] font-black text-rose-500 hover:bg-rose-50 px-2 py-1 rounded transition uppercase"
-                             >
-                                Отвязать
-                             </button>
-                          )}
-                       </div>
+                      <div 
+                        key={c}
+                        draggable={isWritePermitted}
+                        onDragStart={(e) => handleDragStartCarMapping(e, c)}
+                        className="bg-white border border-slate-200 p-2 px-3 rounded-lg flex items-center justify-between text-xs font-bold hover:shadow-2xs hover:border-slate-300 transition cursor-move group select-none"
+                      >
+                        <span className="font-mono text-slate-800 uppercase tracking-widest">{c}</span>
+                        {isWritePermitted && activeDispSelect !== 'Без диспетчера' && (
+                          <button 
+                            onClick={() => handleMapCarToDispatcher(c, null)}
+                            className="text-[9px] font-black text-rose-500 hover:bg-rose-50 px-2 py-0.5 rounded transition uppercase"
+                          >
+                            Отвязать
+                          </button>
+                        )}
+                      </div>
                     ))}
                     {allCars.filter(c => activeDispSelect === 'Без диспетчера' ? !dispatchersMap[c] : dispatchersMap[c] === activeDispSelect).length === 0 && (
-                       <div className="text-center py-6 text-[10px] font-black uppercase text-slate-450 tracking-widest font-mono select-none">
-                          Нет закрепленных автомобилей
-                       </div>
+                      <div className="text-center py-4 text-[9px] font-black uppercase text-slate-400 tracking-widest font-mono select-none">
+                        Нет закрепленных автомобилей
+                      </div>
                     )}
-                 </div>
+                  </div>
+                </div>
               </div>
-           </div>
 
-           {/* RIGHT COLUMN: All Cars in DB base */}
-           <div className="lg:col-span-3 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-1 mb-2">
-                 <span className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-wider block">
+              {/* RIGHT COLUMN: All Cars in DB base */}
+              <div className="lg:col-span-3 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-1 mb-1">
+                  <span className="text-[9px] font-black uppercase text-slate-400 font-mono tracking-wider">
                     База Автомобилей ({allCars.length} шт)
-                 </span>
-                 <div className="relative w-full sm:w-48">
+                  </span>
+                  <div className="relative w-full sm:w-56">
+                    <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+                      <Search className="w-3.5 h-3.5" />
+                    </span>
                     <input 
-                       type="text" 
-                       placeholder="Быстрый поиск авто..." 
-                       value={carSearchInMapping}
-                       onChange={(e) => setCarSearchInMapping(e.target.value)}
-                       className="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wide outline-none focus:border-blue-400"
+                      type="text" 
+                      placeholder="Поиск по госномеру..." 
+                      value={carSearchInMapping}
+                      onChange={(e) => setCarSearchInMapping(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 pl-8 pr-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wide outline-none focus:border-blue-400 transition font-mono"
                     />
-                 </div>
-              </div>
+                  </div>
+                </div>
 
-              <div className="flex flex-col gap-2 max-h-[450px] overflow-y-auto pr-1 custom-scrollbar">
-                 {allCars
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[460px] overflow-y-auto pr-1 custom-scrollbar">
+                  {allCars
                     .filter(plate => !carSearchInMapping.trim() || plate.toLowerCase().includes(carSearchInMapping.toLowerCase()))
                     .map((carPlate) => {
-                       const currentDisp = dispatchersMap[carPlate];
-                       return (
-                          <div 
-                             key={carPlate}
-                             draggable={isWritePermitted}
-                             onDragStart={(e) => handleDragStartCarMapping(e, carPlate)}
-                             className={`p-3 px-4 rounded-xl border transition relative select-none flex items-center justify-between cursor-move shadow-xs hover:shadow-sm ${
-                                 currentDisp 
-                                 ? "border-indigo-150 bg-indigo-50/30" 
-                                 : "border-slate-200 bg-white hover:border-slate-350"
-                              }`}
-                           >
-                              <div className="flex items-center gap-3">
-                                 <div className="flex flex-col gap-0.5 text-slate-300">
-                                    <div className="flex gap-0.5">
-                                       <span className="w-1 h-1 rounded-full bg-slate-400/60" />
-                                       <span className="w-1 h-1 rounded-full bg-slate-400/60" />
-                                    </div>
-                                    <div className="flex gap-0.5">
-                                       <span className="w-1 h-1 rounded-full bg-slate-400/60" />
-                                       <span className="w-1 h-1 rounded-full bg-slate-400/60" />
-                                    </div>
-                                 </div>
-                                 <span className="text-xs font-black font-mono tracking-wider text-slate-900 uppercase">
-                                    {carPlate}
-                                 </span>
-                              </div>
-                              
-                              <div className="flex items-center gap-3">
-                                 <span className="text-[10px] font-mono">
-                                    {currentDisp ? (
-                                       <span className="text-blue-600 font-bold">Диспетчер: {currentDisp}</span>
-                                    ) : (
-                                       <span className="text-slate-400 font-medium">Свободен</span>
-                                    )}
-                                 </span>
-                                 <span className={`${currentDisp ? "bg-indigo-100 text-indigo-800" : "bg-slate-100 text-slate-500"} text-[8px] font-black uppercase px-2 py-0.5 rounded font-mono tracking-wider`}>
-                                    {currentDisp ? "OK" : "FREE"}
-                                 </span>
-                              </div>
-                           </div>
-                        );
-                     })}
-              </div>
-           </div>
-        </div>
-      </div>
-      
-      {/* Global Rates Settings */}
-      <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
-        <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3">
-          <Settings className="h-4 w-4 text-slate-900" style={{ fill: '#70FC8E' }} />
-          Глобальные настройки и Таблицы
-        </h2>
-        {settings && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div>
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-2">Ставка простоя (€/день)</label>
-                <input
-                  type="number"
-                  defaultValue={settings.idleRate}
-                  onBlur={(e) => dbService.saveSettings({...settings, idleRate: Number(e.target.value)}, user.name, user.role)}
-                  className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black focus:outline-none focus:border-slate-400"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-2">Ставка суточных (€/день)</label>
-                <input
-                  type="number"
-                  defaultValue={settings.perDiemRate}
-                  onBlur={(e) => dbService.saveSettings({...settings, perDiemRate: Number(e.target.value)}, user.name, user.role)}
-                  className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black focus:outline-none focus:border-slate-400"
-                />
-              </div>
-            </div>
-
-            <div className="border border-slate-200 rounded-2xl p-4 sm:p-6 bg-slate-50/50 space-y-4">
-              <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                <ExternalLink className="w-4 h-4 text-emerald-500" />
-                Ссылки на Google Таблицы (Фреймы)
-              </h3>
-              <p className="text-xs text-slate-500 font-medium pb-2 border-b border-slate-200">
-                Вставьте прямые ссылки на Google Таблицы. Рекомендуется использовать формат <code>/edit</code> для сохранения панели инструментов.
-              </p>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5">План Загрузок (План)</label>
-                  <input
-                    type="url"
-                    defaultValue={settings.planZagruzokSheetUrl || ''}
-                    onBlur={(e) => dbService.saveSettings({...settings, planZagruzokSheetUrl: e.target.value}, user.name, user.role)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition"
-                    placeholder="https://docs.google.com/spreadsheets/d/..."
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5">План Загрузок (Черный Список)</label>
-                  <input
-                    type="url"
-                    defaultValue={settings.planZagruzokBlacklistUrl || ''}
-                    onBlur={(e) => dbService.saveSettings({...settings, planZagruzokBlacklistUrl: e.target.value}, user.name, user.role)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-red-400 transition"
-                    placeholder="https://docs.google.com/spreadsheets/d/..."
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5">Диспозиция</label>
-                  <input
-                    type="url"
-                    defaultValue={settings.dispositionSheetUrl || ''}
-                    onBlur={(e) => dbService.saveSettings({...settings, dispositionSheetUrl: e.target.value}, user.name, user.role)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition"
-                    placeholder="https://docs.google.com/spreadsheets/d/..."
-                  />
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 flex flex-col gap-4 mt-6">
-                 <h3 className="text-xs font-bold text-slate-800 tracking-tight uppercase">Ссылки на GPS провайдеров</h3>
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-500 inline-block"/> Белтрансспутник</label>
-                      <input
-                        type="url"
-                        defaultValue={settings.gpsBeltranssputnikUrl || ''}
-                        onBlur={(e) => dbService.saveSettings({...settings, gpsBeltranssputnikUrl: e.target.value}, user.name, user.role)}
-                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-400 transition"
-                        placeholder="https://..."
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-500 inline-block"/> Wialon</label>
-                      <input
-                        type="url"
-                        defaultValue={settings.gpsWialonUrl || ''}
-                        onBlur={(e) => dbService.saveSettings({...settings, gpsWialonUrl: e.target.value}, user.name, user.role)}
-                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-orange-400 transition"
-                        placeholder="https://..."
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block"/> ЭРА ГЛОНАСС</label>
-                      <input
-                        type="url"
-                        defaultValue={settings.gpsEraGlonassUrl || ''}
-                        onBlur={(e) => dbService.saveSettings({...settings, gpsEraGlonassUrl: e.target.value}, user.name, user.role)}
-                        className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition"
-                        placeholder="https://..."
-                      />
-                    </div>
-                 </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Google Maps API Settings */}
-      <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
-        <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
-          <MapPin className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
-          Настройки интеграции карт и расчета расстояний
-        </h2>
-        <div className="space-y-4 text-xs font-medium text-slate-650">
-          <p className="text-slate-500">
-            Здесь вы можете выбрать провайдера для автоматического расчёта маршрутов и расстояний в плечах "Калькуляции" и "Планировании Доходов". Мы рекомендуем использовать бесплатный OSRM или OpenRouteService в качестве замены Google Maps Directions API.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono">Провайдер маршрутов</label>
-                <select
-                  disabled={!isWritePermitted}
-                  value={pdSettings?.routingProvider || 'osrm'}
-                  onChange={(e) => {
-                    pdService.updatePlanDohodSettings({
-                      ...pdSettings,
-                      routingProvider: e.target.value
-                    });
-                    toast(`Провайдер изменен на ${e.target.value === 'osrm' ? 'OSRM' : 'OpenRouteService'}`, "success");
-                  }}
-                  className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-450"
-                >
-                  <option value="osrm">OSRM (Без ключа, бесплатно)</option>
-                  <option value="openrouteservice">OpenRouteService API (Требуется ключ)</option>
-                </select>
-              </div>
-
-              <label className="flex items-center gap-3 cursor-pointer select-none bg-slate-50 border border-slate-200 p-4 rounded-xl hover:bg-slate-100 transition">
-                <input
-                  type="checkbox"
-                  disabled={!isWritePermitted}
-                  checked={pdSettings?.useDistanceLookup !== false}
-                  onChange={(e) => {
-                    pdService.updatePlanDohodSettings({
-                      ...pdSettings,
-                      useDistanceLookup: e.target.checked
-                    });
-                    toast(e.target.checked ? "Автоматический расчет расстояний включен" : "Автоматический расчет расстояний выключен", "success");
-                  }}
-                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                />
-                <div className="flex flex-col">
-                  <span className="font-black text-slate-800 text-xs">Использовать автоматический расчет расстояний</span>
-                  <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider">При отсутствии расстояния в справочнике предустановок</span>
-                </div>
-              </label>
-
-              <div>
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-2">OpenRouteService API Key</label>
-                <input
-                  type="password"
-                  disabled={!isWritePermitted}
-                  value={pdSettings?.openRouteServiceApiKey || ''}
-                  onChange={(e) => {
-                    pdService.updatePlanDohodSettings({
-                      ...pdSettings,
-                      openRouteServiceApiKey: e.target.value
-                    });
-                  }}
-                  placeholder="5b3ce3597851110001cf6248..."
-                  className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-450 font-mono"
-                />
-                <p className="text-[10px] text-slate-400 mt-1.5 font-medium leading-normal">
-                  Получите бесплатный ключ API на сайте <a href="https://openrouteservice.org" target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">openrouteservice.org</a>. Ключ используется для построения маршрутов и точного расчёта км.
-                </p>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-2">Google Maps Geocoding API Key (Резервный / Для карт)</label>
-                <input
-                  type="password"
-                  disabled={!isWritePermitted}
-                  value={pdSettings?.googleMapsApiKey || ''}
-                  onChange={(e) => {
-                    pdService.updatePlanDohodSettings({
-                      ...pdSettings,
-                      googleMapsApiKey: e.target.value
-                    });
-                  }}
-                  placeholder="AIzaSy..."
-                  className="w-full px-3.5 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-450 font-mono"
-                />
-                <p className="text-[10px] text-slate-400 mt-1.5 font-medium leading-normal">
-                  Ключ используется для геокодирования адресов в координаты. Если оставить пустым, используется системный ключ Google Maps.
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-[#70FC8E]/5 border border-[#70FC8E]/20 p-5 rounded-2xl space-y-3 text-slate-700">
-              <div className="flex items-center gap-2 font-black text-xs text-slate-900 uppercase tracking-tight">
-                <span className={`w-2.5 h-2.5 rounded-full ${ (pdSettings?.openRouteServiceApiKey || pdSettings?.googleMapsApiKey || process.env.GOOGLE_MAPS_PLATFORM_KEY) ? 'bg-emerald-500' : 'bg-amber-500' } animate-pulse`} />
-                Статус интеграции: { (pdSettings?.openRouteServiceApiKey || pdSettings?.googleMapsApiKey || process.env.GOOGLE_MAPS_PLATFORM_KEY) ? 'АКТИВНА' : 'ТРЕБУЕТСЯ НАСТРОЙКА' }
-              </div>
-              <p className="leading-relaxed text-[11px] text-slate-600 font-medium">
-                Система использует карты Google Maps для отображения, но вычисления маршрутов и километража выполняются через выбранный вами сервис. При отсутствии ключа OpenRouteService система рассчитает расстояние в обход по прямой (функция Haversine).
-              </p>
-              <div className="text-[10px] text-slate-400 space-y-1 pt-2.5 border-t border-slate-200/50">
-                <div>• Провайдер: { pdSettings?.routingProvider === 'openrouteservice' ? 'OpenRouteService API' : 'OSRM API (Без ключа)' }</div>
-                <div>• Ключ OpenRouteService: { pdSettings?.openRouteServiceApiKey ? 'Установлен' : 'Не найден (используется резервный режим)' }</div>
-                <div>• Ключ Google Maps (Геокодирование): { pdSettings?.googleMapsApiKey ? 'Установлен вручную (Firebase)' : (process.env.GOOGLE_MAPS_PLATFORM_KEY ? 'Установлен (AI Studio)' : 'Не найден') }</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ROW 0: TARIFF GROUPS */}
-      <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
-        <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
-          <Truck className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
-          Тарифные группы (Зарплата и Авто)
-        </h2>
-
-        {isWritePermitted && (
-            <form onSubmit={handleAddTariff} className="grid grid-cols-1 sm:grid-cols-5 gap-2.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/50">
-              <input
-                type="text"
-                placeholder="Название (Группа 0.14)"
-                required
-                value={stName}
-                onChange={(e) => setStName(e.target.value)}
-                className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400 sm:col-span-1"
-              />
-              <input
-                type="number"
-                step="0.001"
-                placeholder="Тариф за км (€)"
-                required
-                value={stRate || ''}
-                onChange={(e) => setStRate(Number(e.target.value))}
-                className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400 sm:col-span-1"
-              />
-              <input
-                type="number"
-                placeholder="Суточные (€/день)"
-                value={stPerDiem || ''}
-                onChange={(e) => setStPerDiem(e.target.value ? Number(e.target.value) : undefined)}
-                className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400 sm:col-span-1"
-              />
-              <input
-                type="text"
-                placeholder="Комментарий (опционально)"
-                value={stComment}
-                onChange={(e) => setStComment(e.target.value)}
-                className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400 sm:col-span-1"
-              />
-              <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-xs font-black uppercase tracking-tight transition cursor-pointer">
-                Создать группу
-              </button>
-            </form>
-          )}
-
-        <div className="space-y-4">
-          {carRateGroups.map((group) => (
-            <div key={group.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
-               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-3">
-                 <div>
-                   <span className="font-black text-sm text-slate-900">{group.name || 'Без названия'}</span>
-                   <span className="font-bold text-xs text-slate-500 ml-2">Тариф: {group.rate} €/км</span>
-                   {group.perDiemRate !== undefined && group.perDiemRate > 0 && (
-                     <span className="font-bold text-xs text-indigo-500 ml-2">Суточные: {group.perDiemRate} €/д</span>
-                   )}
-                   {group.comment && <div className="text-[10px] text-slate-400 mt-0.5">{group.comment}</div>}
-                 </div>
-                 {isWritePermitted && (
-                   <button onClick={() => handleDeleteTariff(group.id)} className="text-rose-500 p-2 hover:bg-rose-50 rounded-lg transition self-start sm:self-auto"><Trash2 className="h-4 w-4"/></button>
-                 )}
-               </div>
-               <div className="flex flex-wrap gap-2 text-[10px] font-bold text-slate-700">
-                 {(group.vehicles || []).map((v, i) => (
-                   <span key={`${group.id}-${i}-${v}`} className="bg-white px-2 py-1 rounded border border-slate-200 flex items-center gap-1">
-                     {v}
-                     {isWritePermitted && <button onClick={() => dbService.saveCarRateGroup({...group, vehicles: group.vehicles.filter(x => x !== v)}, user.name, user.role)} className="ml-1 text-slate-400">×</button>}
-                   </span>
-                 ))}
-                 {isWritePermitted && (
-                   <button 
-                     onClick={() => {
-                        setAddingVehicleGroup(group);
-
-                     }}
-                     className="bg-slate-200 px-2 py-1 rounded text-slate-600 shadow-sm border border-slate-300 hover:bg-slate-300 transition"
-                    >+ Добавить авто</button>
-                 )}
-               </div>
-            </div>
-          ))}
-          {!carRateGroups.length && (
-              <div className="text-center py-6 text-slate-400 text-xs font-mono font-black uppercase tracking-widest bg-slate-50 rounded-2xl border border-slate-250/20">Группы не созданы.</div>
-          )}
-        </div>
-        
-        {/* Modal for adding vehicle */}
-        {addingVehicleGroup && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white p-6 rounded-2xl w-full max-w-sm space-y-4">
-              <h3 className="font-black text-sm">Добавить авто в {addingVehicleGroup.name}</h3>
-              <input
-                type="text"
-                className="w-full p-2 border rounded-xl text-xs"
-                placeholder="ГОС. НОМЕР"
-                value={newVehiclePlate}
-                onChange={(e) => setNewVehiclePlate(e.target.value)}
-              />
-              <div className="flex gap-2">
-                <button onClick={() => setAddingVehicleGroup(null)} className="flex-1 bg-slate-100 p-2 rounded-xl text-xs font-bold">Отмена</button>
-                <button 
-                  onClick={() => {
-                     const normalized = newVehiclePlate.toUpperCase().trim().replace(/\s+/g, ' ');
-                     if (normalized && !addingVehicleGroup.vehicles?.includes(normalized)) {
-                        dbService.saveCarRateGroup({...addingVehicleGroup, vehicles: [...(addingVehicleGroup.vehicles || []), normalized]}, user.name, user.role);
-                        setAddingVehicleGroup(null);
-                        setNewVehiclePlate('');
-                     }
-                  }} 
-                  className="flex-1 bg-slate-900 text-white p-2 rounded-xl text-xs font-bold"
-                >Добавить</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-      </div>
-
-      {/* ROW 1: DRIVERS DIRECTORY */}
-      <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
-        <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
-          <Users className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
-          Справочник водителей (Активная база)
-        </h2>
-
-        {isWritePermitted && (
-          <form onSubmit={handleAddDriver} className="grid grid-cols-1 md:grid-cols-5 gap-2.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/50">
-            <input
-              type="text"
-              placeholder="ФИО Водителя"
-              required
-              value={drName}
-              onChange={(e) => setDrName(e.target.value)}
-              className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400 text-slate-800"
-            />
-            <input
-              type="text"
-              placeholder="Телефон"
-              value={drPhone}
-              onChange={(e) => setDrPhone(e.target.value)}
-              className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400 text-slate-800"
-            />
-            <input
-              type="text"
-              placeholder="Удостоверение"
-              value={drLicense}
-              onChange={(e) => setDrLicense(e.target.value)}
-              className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400 text-slate-800"
-            />
-            <select
-              value={drRateGroupId}
-              onChange={(e) => setDrRateGroupId(e.target.value)}
-              className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold text-slate-700"
-            >
-              <option value="">Тарифная группа</option>
-              {carRateGroups.map(g => (
-                <option key={g.id} value={g.id}>{g.name}</option>
-              ))}
-            </select>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Комментарий"
-                value={drComment}
-                onChange={(e) => setDrComment(e.target.value)}
-                className="flex-1 p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400 text-slate-800"
-              />
-              <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-[10px] font-black uppercase tracking-wider px-4 transition cursor-pointer shrink-0">
-                Добавить
-              </button>
-            </div>
-          </form>
-        )}
-
-        <div className="overflow-x-auto border border-slate-200/60 rounded-2xl">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 font-mono border-b border-slate-250/30">
-                <th className="px-4 py-3">ФИО водителя</th>
-                <th className="px-4 py-3">Телефон</th>
-                <th className="px-4 py-3">Удостоверение</th>
-                <th className="px-4 py-3">Тарифная группа</th>
-                <th className="px-4 py-3">Комментарий</th>
-                {isWritePermitted && <th className="px-4 py-3 text-right">Действия</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-              {drivers.map((drv) => {
-                const isEditing = editingDriverId === drv.id;
-                return (
-                  <tr key={drv.id} className="hover:bg-slate-50/40 transition">
-                    <td className="px-4 py-3 font-black text-slate-900">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editDrName}
-                          onChange={(e) => setEditDrName(e.target.value)}
-                          className="p-1.5 bg-white text-xs rounded-lg border border-slate-300 font-bold w-full outline-none"
-                        />
-                      ) : (
-                        drv.name
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editDrPhone}
-                          onChange={(e) => setEditDrPhone(e.target.value)}
-                          className="p-1.5 bg-white text-xs rounded-lg border border-slate-300 font-bold w-full outline-none"
-                        />
-                      ) : (
-                        drv.phone || <span className="text-slate-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editDrLicense}
-                          onChange={(e) => setEditDrLicense(e.target.value)}
-                          className="p-1.5 bg-white text-xs rounded-lg border border-slate-300 font-bold w-full outline-none"
-                        />
-                      ) : (
-                        drv.license || <span className="text-slate-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {isEditing ? (
-                        <select
-                          value={editDrRateGroupId}
-                          onChange={(e) => setEditDrRateGroupId(e.target.value)}
-                          className="p-1.5 bg-white text-xs rounded-lg border border-slate-300 font-bold w-full outline-none text-slate-700"
+                      const currentDisp = dispatchersMap[carPlate];
+                      return (
+                        <div 
+                          key={carPlate}
+                          draggable={isWritePermitted}
+                          onDragStart={(e) => handleDragStartCarMapping(e, carPlate)}
+                          className={`p-3 rounded-xl border transition relative select-none flex items-center justify-between cursor-move shadow-2xs hover:shadow-xs ${
+                            currentDisp 
+                              ? "border-blue-100 bg-blue-50/20" 
+                              : "border-slate-200 bg-white hover:border-slate-300"
+                          }`}
                         >
-                          <option value="">Не назначена</option>
-                          {carRateGroups.map(g => (
-                            <option key={g.id} value={g.id}>{g.name}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        carRateGroups.find(g => g.id === drv.rateGroupId)?.name || <span className="text-slate-300">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editDrComment}
-                          onChange={(e) => setEditDrComment(e.target.value)}
-                          className="p-1.5 bg-white text-xs rounded-lg border border-slate-300 font-bold w-full outline-none"
-                        />
-                      ) : (
-                        drv.comment || <span className="text-slate-300">—</span>
-                      )}
-                    </td>
-                    {isWritePermitted && (
-                      <td className="px-4 py-3 text-right">
-                        {isEditing ? (
-                          <div className="flex gap-1 justify-end">
-                            <button
-                              onClick={() => handleSaveEditDriver(drv.id)}
-                              className="text-emerald-600 p-1.5 hover:bg-emerald-50 rounded-lg transition"
-                              title="Сохранить изменения"
-                            >
-                              <Check className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => setEditingDriverId(null)}
-                              className="text-slate-400 p-1.5 hover:bg-slate-100 rounded-lg transition"
-                              title="Отмена"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs font-black tracking-widest text-slate-800 uppercase">
+                              {carPlate}
+                            </span>
                           </div>
-                        ) : (
-                          <div className="flex gap-1 justify-end">
-                            <button
-                              onClick={() => handleStartEditDriver(drv)}
-                              className="text-indigo-600 p-1.5 hover:bg-indigo-50 rounded-lg transition"
-                              title="Редактировать водителя"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteDriver(drv.id, drv.name)}
-                              className="text-rose-500 p-1.5 hover:bg-rose-50 rounded-lg transition"
-                              title="Удалить из базы"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                          
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-mono font-bold uppercase">
+                              {currentDisp ? (
+                                <span className="text-blue-600">{currentDisp}</span>
+                              ) : (
+                                <span className="text-slate-400">Свободен</span>
+                              )}
+                            </span>
                           </div>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-              {drivers.length === 0 && (
-                <tr>
-                  <td colSpan={isWritePermitted ? 6 : 5} className="text-center py-6 text-slate-400 text-xs font-mono font-black uppercase tracking-widest bg-slate-50">
-                    Водители не зарегистрированы.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+          </div>
 
-      </div>
+          {/* TWO PANEL ROW: VEHICLES DIRECTORY & TARIFF GROUPS */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            {/* 1. VEHICLES DIRECTORY (5 cols) */}
+            <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 lg:col-span-5 flex flex-col">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-2.5">
+                <div>
+                  <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5">
+                    <Truck className="h-4 w-4 text-emerald-500" />
+                    <span>База Автопарка</span>
+                  </h3>
+                  <span className="text-[10px] text-slate-400 font-mono font-bold">Активные госномера тягачей</span>
+                </div>
 
-      {/* ROW 1.5: VEHICLES DIRECTORY */}
-      <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
-        <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
-          <Truck className="h-4.5 w-4.5 text-slate-900 font-bold" />
-          Справочник автомобилей (База автопарка)
-        </h2>
+                {/* Local search */}
+                <div className="relative w-full sm:w-40">
+                  <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+                    <Search className="w-3 h-3" />
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Поиск..."
+                    value={carSearch}
+                    onChange={(e) => setCarSearch(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 pl-7 pr-2 py-1.5 rounded-lg text-[9px] font-mono font-bold uppercase tracking-wide outline-none focus:border-emerald-400 transition"
+                  />
+                </div>
+              </div>
 
-        {isWritePermitted && (
-          <form onSubmit={handleAddKnownCar} className="flex gap-2.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/50">
-            <input
-              type="text"
-              placeholder="Гос. Номер автомобиля (например, 1234 AB-7)"
-              required
-              value={newCarPlate}
-              onChange={(e) => setNewCarPlate(e.target.value)}
-              className="flex-1 p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400 text-slate-800 uppercase"
-            />
-            <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-xs font-black uppercase tracking-tight py-2.5 px-6 transition cursor-pointer shrink-0">
-              Добавить автомобиль
-            </button>
-          </form>
-        )}
-
-        <div className="overflow-x-auto border border-slate-200/60 rounded-2xl">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 font-mono border-b border-slate-250/30">
-                <th className="px-4 py-3">Государственный Номер</th>
-                {isWritePermitted && <th className="px-4 py-3 text-right w-[150px]">Действия</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-              {knownFleetObjects.map((item) => {
-                const isEditing = editingCarKey === item.key;
-                return (
-                  <tr key={item.key} className="hover:bg-slate-50/40 transition">
-                    <td className="px-4 py-3 font-black text-slate-900 font-mono tracking-wider uppercase">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editCarPlate}
-                          onChange={(e) => setEditCarPlate(e.target.value)}
-                          className="p-1.5 bg-white text-xs rounded-lg border border-slate-300 font-bold w-full max-w-[250px] outline-none uppercase font-mono tracking-wider text-slate-800"
-                        />
-                      ) : (
-                        item.plate
-                      )}
-                    </td>
-                    {isWritePermitted && (
-                      <td className="px-4 py-3 text-right w-[150px]">
-                        {isEditing ? (
-                          <div className="flex gap-1 justify-end">
-                            <button
-                              onClick={() => handleSaveEditCar(item.key)}
-                              className="text-emerald-600 p-1.5 hover:bg-emerald-50 rounded-lg transition"
-                              title="Сохранить изменения"
-                            >
-                              <Check className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => setEditingCarKey(null)}
-                              className="text-slate-400 p-1.5 hover:bg-slate-100 rounded-lg transition"
-                              title="Отмена"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-1 justify-end">
-                            <button
-                              onClick={() => handleStartEditCar(item.key, item.plate)}
-                              className="text-indigo-600 p-1.5 hover:bg-indigo-50 rounded-lg transition"
-                              title="Редактировать номер"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteKnownCar(item.key, item.plate)}
-                              className="text-rose-500 p-1.5 hover:bg-rose-50 rounded-lg transition"
-                              title="Удалить из базы"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-              {knownFleetObjects.length === 0 && (
-                <tr>
-                  <td colSpan={isWritePermitted ? 2 : 1} className="text-center py-6 text-slate-400 text-xs font-mono font-black uppercase tracking-widest bg-slate-50">
-                    Автомобили не зарегистрированы.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-12">
-
-        {/* ROW 0: DIRECTION EXPENSE COEFFICIENTS */}
-        <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
-          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
-            <TrendingUp className="h-4.5 w-4.5 text-slate-900 font-bold" />
-            Районы/направления и коэффициенты расходов
-          </h2>
-          <p className="text-[10px] text-slate-500 font-bold">Используется при расчете плана дохода. Задает наценку расходов на КМ по умолчанию.</p>
-
-          {isWritePermitted && (
-            <form onSubmit={handleAddDirection} className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200/50">
-              <input
-                type="text"
-                placeholder="Германия / Азия"
-                required
-                value={dirName}
-                onChange={(e) => setDirName(e.target.value)}
-                className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-[10px] font-bold text-slate-800 focus:border-slate-450"
-              />
-              <input
-                type="number"
-                step="0.01"
-                placeholder="Коэф (напр. 1.2)"
-                required
-                value={dirCoeff}
-                onChange={(e) => setDirCoeff(Number(e.target.value))}
-                className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-[10px] font-bold text-slate-800 focus:border-slate-450"
-              />
-              <div className="flex gap-1 pt-0">
-                <button type="submit" className="flex-1 bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-[10px] font-black uppercase tracking-wider transition cursor-pointer">
-                  {editingDirKey ? 'Сберечь' : 'Внести'}
-                </button>
-                {editingDirKey && (
-                  <button 
-                    type="button" 
-                    onClick={handleCancelEditDirection} 
-                    className="px-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-[10px] font-bold transition"
-                  >
-                    Отм
+              {isWritePermitted && (
+                <form onSubmit={handleAddKnownCar} className="flex gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/50">
+                  <input
+                    type="text"
+                    placeholder="1234 AB-7"
+                    required
+                    value={newCarPlate}
+                    onChange={(e) => setNewCarPlate(e.target.value)}
+                    className="flex-1 p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none focus:border-slate-400 font-bold placeholder:text-slate-400 text-slate-850 uppercase font-mono tracking-wider"
+                  />
+                  <button type="submit" className="bg-slate-950 hover:bg-slate-850 text-[#70FC8E] rounded-lg text-[10px] font-black uppercase tracking-tight px-3 transition cursor-pointer font-mono">
+                    Добавить
                   </button>
+                </form>
+              )}
+
+              <div className="overflow-x-auto border border-slate-200 rounded-xl flex-1 max-h-[350px] custom-scrollbar">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-[9px] font-black uppercase text-slate-400 font-mono border-b border-slate-200">
+                      <th className="px-3 py-2">Госномер ТС</th>
+                      {isWritePermitted && <th className="px-3 py-2 text-right w-[100px]">Действие</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs text-slate-700 font-mono">
+                    {filteredKnownFleet.map((item) => {
+                      const isEditing = editingCarKey === item.key;
+                      return (
+                        <tr key={item.key} className="hover:bg-slate-50/40 transition">
+                          <td className="px-3 py-2 font-black text-slate-800 uppercase tracking-widest">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editCarPlate}
+                                onChange={(e) => setEditCarPlate(e.target.value)}
+                                className="p-1 bg-white text-xs rounded border border-slate-300 font-black w-full outline-none uppercase font-mono tracking-widest text-slate-800"
+                              />
+                            ) : (
+                              item.plate
+                            )}
+                          </td>
+                          {isWritePermitted && (
+                            <td className="px-3 py-2 text-right w-[100px]">
+                              {isEditing ? (
+                                <div className="flex gap-1 justify-end">
+                                  <button
+                                    onClick={() => handleSaveEditCar(item.key)}
+                                    className="text-emerald-600 p-1 hover:bg-emerald-50 rounded transition"
+                                    title="Сохранить"
+                                  >
+                                    <Check className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingCarKey(null)}
+                                    className="text-slate-400 p-1 hover:bg-slate-105 rounded transition"
+                                    title="Отмена"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 focus-within:opacity-100 hover:opacity-100">
+                                  <button
+                                    onClick={() => handleStartEditCar(item.key, item.plate)}
+                                    className="text-indigo-600 p-1 hover:bg-indigo-50 rounded transition"
+                                    title="Изменить"
+                                  >
+                                    <Edit2 className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteKnownCar(item.key, item.plate)}
+                                    className="text-rose-500 p-1 hover:bg-rose-50 rounded transition"
+                                    title="Удалить"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                    {filteredKnownFleet.length === 0 && (
+                      <tr>
+                        <td colSpan={2} className="text-center py-6 text-slate-400 text-[10px] uppercase font-mono font-black tracking-wider bg-slate-50">
+                          Машины не найдены
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 2. TARIFF GROUPS (7 cols) */}
+            <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 lg:col-span-7 flex flex-col">
+              <div>
+                <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
+                  <Wallet className="h-4.5 w-4.5 text-blue-500" />
+                  <span>Тарифные группы (Зарплата водителей)</span>
+                </h3>
+                <p className="text-[10px] text-slate-400 font-bold font-mono uppercase mt-1">Определяют ставку за 1 км и размер суточных</p>
+              </div>
+
+              {isWritePermitted && (
+                <form onSubmit={handleAddTariff} className="grid grid-cols-1 sm:grid-cols-12 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200/50">
+                  <input
+                    type="text"
+                    placeholder="Название (0.135)"
+                    required
+                    value={stName}
+                    onChange={(e) => setStName(e.target.value)}
+                    className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none focus:border-slate-400 font-bold text-slate-800 placeholder:text-slate-400 sm:col-span-3"
+                  />
+                  <input
+                    type="number"
+                    step="0.001"
+                    placeholder="Тариф за км (€)"
+                    required
+                    value={stRate || ''}
+                    onChange={(e) => setStRate(Number(e.target.value))}
+                    className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none focus:border-slate-400 font-bold text-slate-800 placeholder:text-slate-400 sm:col-span-3 font-mono"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Суточные (€/д)"
+                    value={stPerDiem || ''}
+                    onChange={(e) => setStPerDiem(e.target.value ? Number(e.target.value) : undefined)}
+                    className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none focus:border-slate-400 font-bold text-slate-800 placeholder:text-slate-400 sm:col-span-3 font-mono"
+                  />
+                  <button type="submit" className="bg-slate-950 hover:bg-slate-850 text-[#70FC8E] rounded-lg text-[10px] font-black uppercase tracking-tight sm:col-span-3 transition cursor-pointer">
+                    Создать
+                  </button>
+                </form>
+              )}
+
+              <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
+                {carRateGroups.map((group) => (
+                  <div key={group.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                    <div className="flex justify-between items-center mb-2 font-bold text-slate-800">
+                      <div>
+                        <span className="font-black text-slate-900">{group.name}</span>
+                        <span className="ml-2 font-mono text-[10px] py-0.5 px-1.5 bg-slate-200 rounded text-slate-600">{group.rate} €/км</span>
+                        {group.perDiemRate !== undefined && (
+                          <span className="ml-1.5 font-mono text-[10px] py-0.5 px-1.5 bg-indigo-100 rounded text-indigo-700">{group.perDiemRate} €/день</span>
+                        )}
+                      </div>
+                      {isWritePermitted && (
+                        <button onClick={() => handleDeleteTariff(group.id)} className="text-rose-500 hover:text-rose-700 p-1 hover:bg-rose-50 rounded transition">
+                          <Trash2 className="h-3.5 w-3.5"/>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {(group.vehicles || []).map((v, i) => (
+                        <span key={`${group.id}-${i}-${v}`} className="bg-white px-2 py-0.5 rounded border border-slate-200 text-[9px] font-mono font-black text-slate-700 flex items-center gap-1 uppercase">
+                          {v}
+                          {isWritePermitted && (
+                            <button 
+                              onClick={() => handleRemoveVehicleFromGroup(group, v)} 
+                              className="ml-1 text-slate-400 hover:text-rose-500 font-black font-sans text-xs transition-colors"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                      {addingVehicleGroup?.id === group.id ? (
+                        <div className="flex items-center gap-1.5 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                          <input
+                            type="text"
+                            placeholder="1234 AB-7"
+                            className="text-[9px] font-mono uppercase font-black outline-none w-20 border-0 p-0"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleConfirmAddVehicleToGroup(group, e.currentTarget.value);
+                              }
+                            }}
+                            onBlur={(e) => {
+                              if (!e.currentTarget.value.trim()) {
+                                setAddingVehicleGroup(null);
+                              }
+                            }}
+                          />
+                          <button
+                            onClick={(e) => {
+                              const val = e.currentTarget.previousSibling ? (e.currentTarget.previousSibling as HTMLInputElement).value : '';
+                              handleConfirmAddVehicleToGroup(group, val);
+                            }}
+                            className="text-emerald-600 hover:text-emerald-800 font-black font-sans text-xs"
+                          >
+                            ✓
+                          </button>
+                          <button
+                            onClick={() => setAddingVehicleGroup(null)}
+                            className="text-slate-400 hover:text-slate-600 font-black font-sans text-xs"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ) : (
+                        isWritePermitted && (
+                          <button 
+                            onClick={() => setAddingVehicleGroup(group)}
+                            className="bg-slate-200/60 px-2 py-0.5 rounded text-[9px] font-mono font-bold text-slate-600 hover:bg-slate-250 transition cursor-pointer"
+                          >
+                            + добавить ТС
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {!carRateGroups.length && (
+                  <div className="text-center py-8 text-slate-400 text-[10px] font-mono font-black uppercase tracking-wider bg-slate-50 border border-slate-100 rounded-xl">
+                    Группы не созданы
+                  </div>
                 )}
               </div>
-            </form>
-          )}
+            </div>
+          </div>
 
-          <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
-            {Object.entries(directions).map(([name, coeff]) => (
-              <div key={name} className="flex justify-between items-center p-3.5 bg-slate-50/70 rounded-2xl text-xs font-bold border border-slate-200/20 group hover:border-slate-300/60 transition duration-100">
-                <span className="text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
-                  <MapPin size={12} className="text-slate-400" />
-                  {name}
+          {/* DRIVERS DIRECTORY - FULL WIDTH CARDS */}
+          <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-sm font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-2">
+                  <Users className="h-4.5 w-4.5 text-slate-900" style={{ fill: '#70FC8E' }} />
+                  <span>Справочник водителей RATIPA (Активная база)</span>
+                </h3>
+                <p className="text-[10px] text-slate-400 font-bold font-mono uppercase mt-0.5">Картотека водителей, контактные телефоны и тарифные коэффициенты</p>
+              </div>
+
+              {/* Driver search */}
+              <div className="relative w-full sm:w-60">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Search className="w-3.5 h-3.5" />
                 </span>
-                <div className="flex items-center gap-2">
-                  <strong className="text-slate-950 font-mono font-black py-1 px-2.5 bg-slate-100 rounded-lg">x{coeff as number}</strong>
-                  {isWritePermitted && (
-                    <div className="flex items-center gap-1">
+                <input
+                  type="text"
+                  placeholder="Быстрый поиск водителя..."
+                  value={driverSearch}
+                  onChange={(e) => setDriverSearch(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 pl-9 pr-3 py-1.5 rounded-xl text-xs font-bold outline-none focus:border-emerald-500 transition"
+                />
+              </div>
+            </div>
+
+            {isWritePermitted && (
+              <form onSubmit={handleAddDriver} className="grid grid-cols-1 md:grid-cols-5 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200/50">
+                <input
+                  type="text"
+                  placeholder="ФИО Водителя"
+                  required
+                  value={drName}
+                  onChange={(e) => setDrName(e.target.value)}
+                  className="p-2.5 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none focus:border-slate-400 font-bold text-slate-800"
+                />
+                <input
+                  type="text"
+                  placeholder="Телефон водителя"
+                  value={drPhone}
+                  onChange={(e) => setDrPhone(e.target.value)}
+                  className="p-2.5 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none focus:border-slate-400 font-bold text-slate-800"
+                />
+                <input
+                  type="text"
+                  placeholder="Водительское удостоверение"
+                  value={drLicense}
+                  onChange={(e) => setDrLicense(e.target.value)}
+                  className="p-2.5 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none focus:border-slate-400 font-bold text-slate-800"
+                />
+                <select
+                  value={drRateGroupId}
+                  onChange={(e) => setDrRateGroupId(e.target.value)}
+                  className="p-2.5 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none focus:border-slate-400 font-bold text-slate-600"
+                >
+                  <option value="">Тарифная группа</option>
+                  {carRateGroups.map(g => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Примечание"
+                    value={drComment}
+                    onChange={(e) => setDrComment(e.target.value)}
+                    className="flex-1 p-2.5 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none focus:border-slate-400 font-bold text-slate-800"
+                  />
+                  <button type="submit" className="bg-slate-950 hover:bg-slate-850 text-[#70FC8E] rounded-lg text-[10px] font-black uppercase tracking-wider px-3.5 transition cursor-pointer">
+                    Добавить
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="overflow-x-auto border border-slate-200/60 rounded-xl max-h-[400px] custom-scrollbar">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 font-mono border-b border-slate-200">
+                    <th className="px-4 py-3">ФИО водителя</th>
+                    <th className="px-4 py-3">Телефон</th>
+                    <th className="px-4 py-3">Удостоверение</th>
+                    <th className="px-4 py-3">Тарифная группа</th>
+                    <th className="px-4 py-3">Комментарий</th>
+                    {isWritePermitted && <th className="px-4 py-3 text-right">Действия</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+                  {filteredDrivers.map((drv) => {
+                    const isEditing = editingDriverId === drv.id;
+                    return (
+                      <tr key={drv.id} className="hover:bg-slate-50/40 transition">
+                        <td className="px-4 py-3 font-black text-slate-900">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editDrName}
+                              onChange={(e) => setEditDrName(e.target.value)}
+                              className="p-1.5 bg-white text-xs rounded border border-slate-300 font-bold w-full outline-none"
+                            />
+                          ) : (
+                            drv.name
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-medium">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editDrPhone}
+                              onChange={(e) => setEditDrPhone(e.target.value)}
+                              className="p-1.5 bg-white text-xs rounded border border-slate-300 font-bold w-full outline-none"
+                            />
+                          ) : (
+                            drv.phone || <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-mono">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editDrLicense}
+                              onChange={(e) => setEditDrLicense(e.target.value)}
+                              className="p-1.5 bg-white text-xs rounded border border-slate-300 font-bold w-full outline-none"
+                            />
+                          ) : (
+                            drv.license || <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-bold">
+                          {isEditing ? (
+                            <select
+                              value={editDrRateGroupId}
+                              onChange={(e) => setEditDrRateGroupId(e.target.value)}
+                              className="p-1.5 bg-white text-xs rounded border border-slate-300 font-bold w-full outline-none text-slate-650"
+                            >
+                              <option value="">Не назначена</option>
+                              {carRateGroups.map(g => (
+                                <option key={g.id} value={g.id}>{g.name}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            carRateGroups.find(g => g.id === drv.rateGroupId)?.name || <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 italic">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editDrComment}
+                              onChange={(e) => setEditDrComment(e.target.value)}
+                              className="p-1.5 bg-white text-xs rounded border border-slate-300 font-bold w-full outline-none"
+                            />
+                          ) : (
+                            drv.comment || <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                        {isWritePermitted && (
+                          <td className="px-4 py-3 text-right">
+                            {isEditing ? (
+                              <div className="flex gap-1 justify-end">
+                                <button
+                                  onClick={() => handleSaveEditDriver(drv.id)}
+                                  className="text-emerald-600 p-1 hover:bg-emerald-50 rounded transition"
+                                >
+                                  <Check className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => setEditingDriverId(null)}
+                                  className="text-slate-400 p-1 hover:bg-slate-100 rounded transition"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-1 justify-end">
+                                <button
+                                  onClick={() => handleStartEditDriver(drv)}
+                                  className="text-indigo-600 p-1 hover:bg-indigo-50 rounded transition"
+                                  title="Редактировать"
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteDriver(drv.id, drv.name)}
+                                  className="text-rose-500 p-1 hover:bg-rose-50 rounded transition"
+                                  title="Удалить"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                  {filteredDrivers.length === 0 && (
+                    <tr>
+                      <td colSpan={isWritePermitted ? 6 : 5} className="text-center py-8 text-slate-400 text-xs font-mono font-black uppercase bg-slate-50">
+                        Водители не найдены
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* TAB CONTENT 2: ROUTES & LOGISTICS */}
+      {activeTab === 'routes' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          
+          {/* A. DIRECTIONS & COEFFICIENTS (Left panel) */}
+          <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 flex flex-col">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5">
+                  <TrendingUp className="h-4.5 w-4.5 text-blue-500" />
+                  <span>Направления и Коэффициенты расходов</span>
+                </h3>
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase">Наценка на путевой километр расхода</span>
+              </div>
+
+              {/* Local search */}
+              <div className="relative w-full sm:w-40">
+                <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+                  <Search className="w-3 h-3" />
+                </span>
+                <input
+                  type="text"
+                  placeholder="Поиск..."
+                  value={directionSearch}
+                  onChange={(e) => setDirectionSearch(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 pl-7 pr-2 py-1 rounded-lg text-[9px] font-mono font-bold uppercase tracking-wide outline-none focus:border-blue-400 transition"
+                />
+              </div>
+            </div>
+
+            {isWritePermitted && (
+              <form onSubmit={handleAddDirection} className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200/50">
+                <input
+                  type="text"
+                  placeholder="Германия / Азия"
+                  required
+                  value={dirName}
+                  onChange={(e) => setDirName(e.target.value)}
+                  className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none placeholder:text-[9px] font-bold text-slate-800"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="Коэф (напр. 1.25)"
+                  required
+                  value={dirCoeff}
+                  onChange={(e) => setDirCoeff(Number(e.target.value))}
+                  className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none placeholder:text-[9px] font-bold text-slate-800 font-mono"
+                />
+                <div className="flex gap-1">
+                  <button type="submit" className="flex-1 bg-slate-950 hover:bg-slate-850 text-[#70FC8E] rounded-lg text-[10px] font-black uppercase transition cursor-pointer font-mono">
+                    {editingDirKey ? 'Сохранить' : 'Добавить'}
+                  </button>
+                  {editingDirKey && (
+                    <button 
+                      type="button" 
+                      onClick={handleCancelEditDirection} 
+                      className="px-2 bg-slate-250 hover:bg-slate-300 text-slate-700 rounded-lg text-[10px] font-bold transition"
+                    >
+                      X
+                    </button>
+                  )}
+                </div>
+              </form>
+            )}
+
+            <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar flex-1">
+              {filteredDirections.map(([name, coeff]) => (
+                <div key={name} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl text-xs font-bold border border-slate-100 group transition">
+                  <span className="text-slate-800 uppercase font-mono tracking-tight flex items-center gap-2">
+                    <MapPin size={13} className="text-slate-400" />
+                    {name}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <strong className="text-slate-950 font-mono font-black py-0.5 px-2 bg-slate-200 rounded">x{coeff as number}</strong>
+                    {isWritePermitted && (
+                      <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition duration-150">
+                        <button 
+                          onClick={() => handleEditClickDirection(name, coeff as number)} 
+                          className="text-indigo-600 hover:text-indigo-800 p-1 bg-white border border-slate-200 rounded transition"
+                          title="Изменить"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteDirection(name)} 
+                          className="text-rose-500 hover:text-rose-700 p-1 bg-white border border-slate-200 rounded transition"
+                          title="Удалить"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {filteredDirections.length === 0 && (
+                <div className="text-center py-10 text-slate-400 text-[10px] font-mono font-black uppercase tracking-widest bg-slate-50 rounded-xl">
+                  Направления не найдены
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* B. FERRY DFS TARIFFS (Right panel) */}
+          <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 flex flex-col">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5">
+                  <Anchor className="h-4.5 w-4.5 text-blue-500" />
+                  <span>Тарифы Паромных линий DFS</span>
+                </h3>
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase">Базовые стоимости переправ в EUR</span>
+              </div>
+
+              {/* Local search */}
+              <div className="relative w-full sm:w-40">
+                <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+                  <Search className="w-3 h-3" />
+                </span>
+                <input
+                  type="text"
+                  placeholder="Поиск..."
+                  value={ferrySearch}
+                  onChange={(e) => setFerrySearch(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 pl-7 pr-2 py-1 rounded-lg text-[9px] font-mono font-bold uppercase tracking-wide outline-none focus:border-blue-400 transition"
+                />
+              </div>
+            </div>
+
+            {isWritePermitted && (
+              <form onSubmit={handleAddFerry} className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200/50">
+                <input
+                  type="text"
+                  placeholder="Liepaja - Travemunde"
+                  required
+                  value={fName}
+                  onChange={(e) => setFName(e.target.value)}
+                  className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none placeholder:text-[9px] font-bold text-slate-800"
+                />
+                <input
+                  type="number"
+                  placeholder="Цена (EUR)"
+                  required
+                  value={fPrice || ''}
+                  onChange={(e) => setFPrice(Number(e.target.value))}
+                  className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none placeholder:text-[9px] font-bold text-slate-800 font-mono"
+                />
+                <button type="submit" className="bg-slate-950 hover:bg-slate-850 text-[#70FC8E] rounded-lg text-[10px] font-black uppercase transition cursor-pointer font-mono">
+                  Добавить
+                </button>
+              </form>
+            )}
+
+            <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar flex-1">
+              {filteredFerries.map((fe) => (
+                <div key={fe.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl text-xs font-bold border border-slate-100 group transition">
+                  <span className="text-slate-800 uppercase tracking-tight font-black">{fe.name}</span>
+                  <div className="flex items-center gap-3">
+                    <strong className="text-slate-950 font-mono font-black py-0.5 px-2 bg-slate-200 rounded">{fe.price} EUR</strong>
+                    {isWritePermitted && (
                       <button 
-                        onClick={() => handleEditClickDirection(name, coeff as number)} 
-                        className="text-blue-500 hover:text-blue-700 p-1.5 bg-white border border-slate-150 rounded-lg hover:border-blue-200 transition cursor-pointer"
-                        title="Редактировать"
+                        onClick={() => handleDeleteFerry(fe.id)} 
+                        className="text-rose-500 hover:text-rose-700 p-1 bg-white border border-slate-200 rounded opacity-100 sm:opacity-0 group-hover:opacity-100 transition duration-150"
                       >
-                        <Edit2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {filteredFerries.length === 0 && (
+                <div className="text-center py-10 text-slate-400 text-[10px] font-mono font-black uppercase tracking-widest bg-slate-50 rounded-xl">
+                  Тарифы не найдены
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* C. STANDARD DISTANCES DATABASE (Full width bottom panel) */}
+          <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 lg:col-span-2 flex flex-col">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5">
+                  <Compass className="h-4.5 w-4.5 text-blue-500 animate-spin-slow" />
+                  <span>База стандартных расстояний RATIPA (КМ)</span>
+                </h3>
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase">Предустановленный километраж ключевых логистических плеч</span>
+              </div>
+
+              {/* Local search */}
+              <div className="relative w-full sm:w-60">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Search className="w-3.5 h-3.5" />
+                </span>
+                <input
+                  type="text"
+                  placeholder="Поиск по городам отправления/прибытия..."
+                  value={distanceSearch}
+                  onChange={(e) => setDistanceSearch(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 pl-9 pr-3 py-1.5 rounded-xl text-xs font-bold outline-none focus:border-blue-400 transition"
+                />
+              </div>
+            </div>
+
+            {isWritePermitted && (
+              <form onSubmit={handleAddDistance} className="grid grid-cols-1 sm:grid-cols-4 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/50">
+                <input
+                  type="text"
+                  placeholder="От (напр., Минск)"
+                  required
+                  value={dFrom}
+                  onChange={(e) => setDFrom(e.target.value)}
+                  className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none font-bold text-slate-800"
+                />
+                <input
+                  type="text"
+                  placeholder="До (напр., Берлин)"
+                  required
+                  value={dTo}
+                  onChange={(e) => setDTo(e.target.value)}
+                  className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none font-bold text-slate-800"
+                />
+                <input
+                  type="number"
+                  placeholder="Расстояние (КМ)"
+                  required
+                  value={dKm || ''}
+                  onChange={(e) => setDKm(Number(e.target.value))}
+                  className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none font-bold font-mono text-slate-800"
+                />
+                <button type="submit" className="bg-slate-950 hover:bg-slate-850 text-[#70FC8E] rounded-lg text-[10px] font-black uppercase transition cursor-pointer font-mono">
+                  Записать в базу
+                </button>
+              </form>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+              {filteredDistances.map((di) => (
+                <div key={di.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs font-bold hover:border-slate-300 transition group select-none">
+                  <div className="flex items-center gap-2">
+                    <Navigation className="w-3.5 h-3.5 text-emerald-500" />
+                    <span className="text-slate-700 uppercase">{di.from} &rarr; {di.to}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-black text-slate-900 bg-white border border-slate-200 px-2 py-0.5 rounded text-[10px]">
+                      {di.distance} км
+                    </span>
+                    {isWritePermitted && (
                       <button 
-                        onClick={() => handleDeleteDirection(name)} 
-                        className="text-rose-500 hover:text-rose-700 p-1.5 bg-white border border-slate-150 rounded-lg hover:border-rose-200 transition cursor-pointer"
+                        onClick={() => handleDeleteDistance(di.id)} 
+                        className="text-rose-500 hover:text-rose-700 p-1 bg-white border border-slate-200 rounded opacity-100 sm:opacity-0 group-hover:opacity-100 transition duration-150"
                         title="Удалить"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-            {Object.keys(directions).length === 0 && (
-              <div className="text-center py-10 text-slate-400 text-xs font-mono font-black uppercase tracking-widest bg-slate-50 rounded-2xl border border-slate-250/20">Направления не заполнены.</div>
-            )}
-          </div>
-        </div>
-        
-        {/* ROW 1: FERRY PRICING PRESSETS */}
-        <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
-          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
-            <Anchor className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
-            Тарифы Паромных Линий (DFS)
-          </h2>
-          <p className="text-[10px] text-slate-500 font-bold">Цены указаны в EUR. Справка в другой валюте по внутреннему курсу.</p>
-
-          {isWritePermitted && (
-            <form onSubmit={handleAddFerry} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/50">
-              <input
-                type="text"
-                placeholder="Откуда — Куда"
-                required
-                value={fName}
-                onChange={(e) => setFName(e.target.value)}
-                className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400"
-              />
-              <input
-                type="number"
-                placeholder="Цена (EUR)"
-                required
-                value={fPrice || ''}
-                onChange={(e) => setFPrice(Number(e.target.value))}
-                className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-450 font-bold placeholder:text-slate-400"
-              />
-              <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-xs font-black uppercase tracking-tight transition cursor-pointer">
-                Добавить
-              </button>
-            </form>
-          )}
-
-          <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
-            {ferries.map((fe) => (
-              <div key={fe.id} className="flex justify-between items-center p-3.5 bg-slate-50/70 rounded-2xl text-xs font-bold border border-slate-200/20 group hover:border-slate-300/60 transition duration-100">
-                <span className="text-slate-800 uppercase tracking-tight">{fe.name}</span>
-                <div className="flex items-center gap-3">
-                  <strong className="text-slate-950 font-mono font-black">{fe.price} EUR</strong>
-                  {isWritePermitted && (
-                    <button 
-                      onClick={() => handleDeleteFerry(fe.id)} 
-                      className="text-rose-500 hover:text-rose-700 p-2 bg-white border border-slate-150 rounded-lg hover:border-rose-200 transition cursor-pointer"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-            {!ferries.length && (
-              <div className="text-center py-10 text-slate-400 text-xs font-mono font-black uppercase tracking-widest bg-slate-50 rounded-2xl border border-slate-250/20">Тарифы не внесены.</div>
-            )}
-          </div>
-        </div>
-
-        {/* ROW 2: DISTANCES PRESETS */}
-        <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
-          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
-            <Compass className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
-            База стандартных расстояний (КМ)
-          </h2>
-
-          {isWritePermitted && (
-            <form onSubmit={handleAddDistance} className="grid grid-cols-1 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200/50">
-              <input
-                type="text"
-                placeholder="От (Минск)"
-                required
-                value={dFrom}
-                onChange={(e) => setDFrom(e.target.value)}
-                className="p-2 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-[10px] font-bold text-slate-800"
-              />
-              <input
-                type="text"
-                placeholder="До (Берлин)"
-                required
-                value={dTo}
-                onChange={(e) => setDTo(e.target.value)}
-                className="p-2 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-[10px] font-bold text-slate-800"
-              />
-              <input
-                type="number"
-                placeholder="Расстояние"
-                required
-                value={dKm || ''}
-                onChange={(e) => setDKm(Number(e.target.value))}
-                className="p-2 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-[10px] font-bold text-slate-800"
-              />
-              <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-[10px] font-black uppercase tracking-wider transition cursor-pointer">
-                Внести
-              </button>
-            </form>
-          )}
-
-          <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
-            {distances.map((di) => (
-              <div key={di.id} className="flex justify-between items-center p-3.5 bg-slate-50/70 rounded-2xl text-xs font-bold border border-slate-200/20 group hover:border-slate-300/60 transition duration-100">
-                <span className="text-slate-800 uppercase tracking-tight">{di.from} &rarr; {di.to}</span>
-                <div className="flex items-center gap-3">
-                  <strong className="text-slate-950 font-mono font-black">{di.distance} км</strong>
-                  {isWritePermitted && (
-                    <button 
-                      onClick={() => handleDeleteDistance(di.id)} 
-                      className="text-rose-500 hover:text-rose-700 p-1 bg-white border border-slate-150 rounded-lg hover:border-rose-200 transition cursor-pointer"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-            {!distances.length && (
-              <div className="text-center py-10 text-slate-400 text-xs font-mono font-black uppercase tracking-widest bg-slate-50 rounded-2xl border border-slate-250/20">Маршруты не заполнены.</div>
-            )}
-          </div>
-        </div>
-
-        {/* CURRENCIES PRESETS */}
-        <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
-          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
-            <Wallet className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
-            Справочник Валют
-          </h2>
-
-          {isWritePermitted && (
-            <form onSubmit={handleAddCurrency} className="grid grid-cols-1 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200/50">
-              <input
-                type="text"
-                placeholder="Код (USD, EUR...)"
-                required
-                value={cCode}
-                onChange={(e) => setCCode(e.target.value)}
-                className="col-span-3 p-2 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-[10px] font-bold text-slate-800"
-              />
-              <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-[10px] font-black uppercase tracking-wider transition cursor-pointer">
-                Внести
-              </button>
-            </form>
-          )}
-
-          <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
-            {currencies.map((c) => (
-              <div key={c.id} className="flex justify-between items-center p-3.5 bg-slate-50/70 rounded-2xl text-xs font-bold border border-slate-200/20 group hover:border-slate-300/60 transition duration-100">
-                <span className="text-slate-800 tracking-tight font-black">{c.code}</span>
-                <div className="flex items-center gap-3">
-                  {isWritePermitted && (
-                    <button 
-                      onClick={() => handleDeleteCurrency(c.id)} 
-                      className="text-rose-500 hover:text-rose-700 p-1 bg-white border border-slate-150 rounded-lg hover:border-rose-200 transition cursor-pointer"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-            {!currencies.length && (
-              <div className="text-center py-10 text-slate-400 text-xs font-mono font-black uppercase tracking-widest bg-slate-50 rounded-2xl border border-slate-250/20">Валюты не заданы.</div>
-            )}
-          </div>
-        </div>
-
-        {/* ROW 3: BOOKMARKS / EXTERNAL QUICK LINKS & IFRAMES */}
-        <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
-          <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3">
-            <ExternalLink className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
-            Ссылки на Информационные Фреймы и Полезные Ссылки
-          </h2>
-
-          {/* BAMAP & ASMAP Iframe URL Customization */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200/50">
-            <div>
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block"/> Адрес фрейма БАМАП
-              </label>
-              <input
-                type="url"
-                disabled={!isWritePermitted}
-                placeholder="https://bamap.org/information/news/"
-                defaultValue={settings?.bamapUrl || ''}
-                onBlur={(e) => {
-                  if (!settings) return;
-                  dbService.saveSettings({...settings, bamapUrl: e.target.value}, user.name, user.role);
-                  toast("Ссылка фрейма БАМАП сохранена", "success");
-                }}
-                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-400 transition"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-mono mb-1.5 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"/> Адрес фрейма АСМАП
-              </label>
-              <input
-                type="url"
-                disabled={!isWritePermitted}
-                placeholder="https://www.asmap.ru/news/"
-                defaultValue={settings?.asmapUrl || ''}
-                onBlur={(e) => {
-                  if (!settings) return;
-                  dbService.saveSettings({...settings, asmapUrl: e.target.value}, user.name, user.role);
-                  toast("Ссылка фрейма АСМАП сохранена", "success");
-                }}
-                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition"
-              />
-            </div>
-          </div>
-
-          <div className="pt-2 border-t border-slate-100 space-y-4">
-            <h3 className="text-[11px] font-black uppercase text-slate-500 font-mono">Добавление пользовательских ссылок</h3>
-            {isWritePermitted && (
-              <form onSubmit={handleAddQuickLink} className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200/50 select-none">
-                <input
-                  type="text"
-                  placeholder="Служба/Название"
-                  required
-                  value={linkTitle}
-                  onChange={(e) => setLinkTitle(e.target.value)}
-                  className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-slate-450 font-bold"
-                />
-                <input
-                  type="url"
-                  placeholder="https://..."
-                  required
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-slate-450 font-bold"
-                />
-                <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-[10px] font-black uppercase transition cursor-pointer">
-                  Внедрить Ссылку
-                </button>
-              </form>
-            )}
-
-            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-              {settings?.quickLinks?.map((li) => {
-                const isEditing = editingLinkId === li.id;
-                if (isEditing) {
-                  return (
-                    <form 
-                      key={li.id} 
-                      onSubmit={handleSaveEditQuickLink} 
-                      className="flex flex-col sm:flex-row gap-2 bg-slate-100 p-3 rounded-2xl border border-slate-300"
-                    >
-                      <input
-                        type="text"
-                        value={editingLinkTitle}
-                        onChange={(e) => setEditingLinkTitle(e.target.value)}
-                        required
-                        className="p-2 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none font-bold flex-1"
-                        placeholder="Название"
-                      />
-                      <input
-                        type="url"
-                        value={editingLinkUrl}
-                        onChange={(e) => setEditingLinkUrl(e.target.value)}
-                        required
-                        className="p-2 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none font-bold flex-1"
-                        placeholder="https://..."
-                      />
-                      <div className="flex gap-1.5 justify-end">
-                        <button 
-                          type="submit" 
-                          className="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition cursor-pointer flex items-center justify-center min-w-[36px]" 
-                          title="Сохранить"
-                        >
-                          <Check className="h-4 w-4" />
-                        </button>
-                        <button 
-                          type="button" 
-                          onClick={() => setEditingLinkId(null)} 
-                          className="p-2.5 bg-slate-400 hover:bg-slate-500 text-white rounded-xl transition cursor-pointer flex items-center justify-center min-w-[36px]" 
-                          title="Отмена"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </form>
-                  );
-                }
-
-                return (
-                  <div key={li.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-slate-50/70 rounded-2xl text-xs font-bold border border-slate-250/15 group hover:border-slate-300/60 transition duration-100 gap-2">
-                    <span className="text-slate-800 uppercase tracking-tight">{li.title}</span>
-                    <div className="flex items-center justify-between sm:justify-end gap-3 flex-wrap">
-                      <span className="text-[10px] text-slate-400 font-mono max-w-[180px] sm:max-w-[240px] truncate">{li.url}</span>
-                      {isWritePermitted && (
-                        <div className="flex items-center gap-1.5">
-                          <button 
-                            onClick={() => handleStartEditQuickLink(li)} 
-                            className="text-slate-500 hover:text-slate-800 p-1.5 bg-white border border-slate-150 rounded-lg hover:border-slate-300 transition cursor-pointer flex items-center justify-center"
-                            title="Редактировать"
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteQuickLink(li.id)} 
-                            className="text-rose-500 hover:text-rose-700 p-1.5 bg-white border border-slate-150 rounded-lg hover:border-rose-200 transition cursor-pointer flex items-center justify-center"
-                            title="Удалить"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Core dynamic external tabs section */}
-          <div className="pt-4 border-t border-slate-100 space-y-4">
-            <h3 className="text-[11px] font-black uppercase text-slate-500 font-mono">Добавление вкладок на сторонние сайты (Внешние Вкладки)</h3>
-            <p className="text-[10px] text-slate-400 font-bold leading-normal">
-              Эти вкладки будут размещены в главном меню навигации (сверху в ПК-версии и в выдвижной шторке на мобильных) рядом с системными разделами. Клик по ним откроет указанный сайт в новой вкладке браузера.
-            </p>
-            {isWritePermitted && (
-              <form onSubmit={handleAddExternalTab} className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200/50 select-none">
-                <input
-                  type="text"
-                  placeholder="Название вкладки"
-                  required
-                  value={extTitle}
-                  onChange={(e) => setExtTitle(e.target.value)}
-                  className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-slate-450 font-bold"
-                />
-                <input
-                  type="url"
-                  placeholder="https://..."
-                  required
-                  value={extUrl}
-                  onChange={(e) => setExtUrl(e.target.value)}
-                  className="p-2.5 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-slate-450 font-bold"
-                />
-                <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-[10px] font-black uppercase transition cursor-pointer">
-                  Добавить Вкладку
-                </button>
-              </form>
-            )}
-
-            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-              {(settings?.externalTabs || []).map((t) => {
-                const isEditing = editingExtId === t.id;
-                if (isEditing) {
-                  return (
-                    <form 
-                      key={t.id} 
-                      onSubmit={handleSaveEditExternalTab} 
-                      className="flex flex-col sm:flex-row gap-2 bg-slate-100 p-3 rounded-2xl border border-slate-300"
-                    >
-                      <input
-                        type="text"
-                        value={editingExtTitle}
-                        onChange={(e) => setEditingExtTitle(e.target.value)}
-                        required
-                        className="p-2 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none font-bold flex-1"
-                        placeholder="Название вкладки"
-                      />
-                      <input
-                        type="url"
-                        value={editingExtUrl}
-                        onChange={(e) => setEditingExtUrl(e.target.value)}
-                        required
-                        className="p-2 bg-white text-xs rounded-xl border border-slate-200 focus:outline-none font-bold flex-1"
-                        placeholder="https://..."
-                      />
-                      <div className="flex gap-1.5 justify-end">
-                        <button 
-                          type="submit" 
-                          className="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition cursor-pointer flex items-center justify-center min-w-[36px]" 
-                          title="Сохранить"
-                        >
-                          <Check className="h-4 w-4" />
-                        </button>
-                        <button 
-                          type="button" 
-                          onClick={() => setEditingExtId(null)} 
-                          className="p-2.5 bg-slate-400 hover:bg-slate-500 text-white rounded-xl transition cursor-pointer flex items-center justify-center min-w-[36px]" 
-                          title="Отмена"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </form>
-                  );
-                }
-
-                return (
-                  <div key={t.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-slate-50/70 rounded-2xl text-xs font-bold border border-slate-250/15 group hover:border-slate-300/60 transition duration-100 gap-2">
-                    <span className="text-slate-800 uppercase tracking-tight">{t.title}</span>
-                    <div className="flex items-center justify-between sm:justify-end gap-3 flex-wrap">
-                      <span className="text-[10px] text-slate-400 font-mono max-w-[180px] sm:max-w-[240px] truncate">{t.url}</span>
-                      {isWritePermitted && (
-                        <div className="flex items-center gap-1.5">
-                          <button 
-                            onClick={() => handleStartEditExternalTab(t)} 
-                            className="text-slate-500 hover:text-slate-800 p-1.5 bg-white border border-slate-150 rounded-lg hover:border-slate-300 transition cursor-pointer flex items-center justify-center flex-shrink-0"
-                            title="Редактировать"
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteExternalTab(t.id)} 
-                            className="text-rose-500 hover:text-rose-700 p-1.5 bg-white border border-slate-150 rounded-lg hover:border-rose-200 transition cursor-pointer flex items-center justify-center flex-shrink-0"
-                            title="Удалить"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              {!(settings?.externalTabs?.length) && (
-                <div className="text-center py-6 text-slate-400 text-[10px] font-mono font-black uppercase tracking-widest bg-slate-50 rounded-2xl border border-slate-200/10">Внешние вкладки отсутствуют.</div>
+                </div>
+              ))}
+              {filteredDistances.length === 0 && (
+                <div className="col-span-full text-center py-10 text-slate-400 text-[10px] font-mono font-black uppercase tracking-wider bg-slate-50 rounded-xl">
+                  Расстояния не найдены
+                </div>
               )}
             </div>
           </div>
-        </div>
 
-      </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT 3: SYSTEM SETTINGS */}
+      {activeTab === 'system' && (
+        <div className="space-y-6">
+          
+          {/* CORE RATES & INTEGRATION ROW */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            {/* Rates setting (5 cols) */}
+            <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 lg:col-span-5 flex flex-col">
+              <div>
+                <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
+                  <Wallet className="h-4.5 w-4.5 text-blue-500" />
+                  <span>Глобальные нормативные ставки</span>
+                </h3>
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase mt-1">Базовые величины расчетов по умолчанию</span>
+              </div>
+
+              {settings && (
+                <div className="space-y-4 flex-1">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">Ставка простоя (€/день)</label>
+                    <input
+                      type="number"
+                      disabled={!isWritePermitted}
+                      defaultValue={settings.idleRate}
+                      onBlur={(e) => dbService.saveSettings({...settings, idleRate: Number(e.target.value)}, user.name, user.role)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black focus:outline-none focus:border-slate-400 font-mono text-slate-800"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">Ставка суточных командировочных (€/день)</label>
+                    <input
+                      type="number"
+                      disabled={!isWritePermitted}
+                      defaultValue={settings.perDiemRate}
+                      onBlur={(e) => dbService.saveSettings({...settings, perDiemRate: Number(e.target.value)}, user.name, user.role)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black focus:outline-none focus:border-slate-400 font-mono text-slate-800"
+                    />
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-[10px] text-slate-400 font-medium leading-relaxed mt-2 uppercase font-mono tracking-wide">
+                    ⚠ Смена данных величин немедленно затронет новые расчеты в калькуляциях и диспетчерских планировщиках. Исторические записи останутся без изменений.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Google / OSRM Maps Integration (7 cols) */}
+            <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 lg:col-span-7 flex flex-col">
+              <div>
+                <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
+                  <MapPin className="h-4.5 w-4.5 text-blue-500" />
+                  <span>Интеграция карт и расчет расстояний</span>
+                </h3>
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase mt-1">Параметры OSRM / OpenRouteService маршрутизации</span>
+              </div>
+
+              <div className="space-y-4 text-xs font-medium text-slate-650 flex-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">Провайдер маршрутов</label>
+                    <select
+                      disabled={!isWritePermitted}
+                      value={pdSettings?.routingProvider || 'osrm'}
+                      onChange={(e) => {
+                        pdService.updatePlanDohodSettings({
+                          ...pdSettings,
+                          routingProvider: e.target.value
+                        });
+                        toast(`Провайдер изменен на ${e.target.value === 'osrm' ? 'OSRM' : 'OpenRouteService'}`, "success");
+                      }}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-450 cursor-pointer"
+                    >
+                      <option value="osrm">OSRM (Без ключа, бесплатно)</option>
+                      <option value="openrouteservice">OpenRouteService API (Требуется ключ)</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center">
+                    <label className="flex items-center gap-3 cursor-pointer select-none bg-slate-50 border border-slate-200 p-3 rounded-xl hover:bg-slate-100 transition w-full">
+                      <input
+                        type="checkbox"
+                        disabled={!isWritePermitted}
+                        checked={pdSettings?.useDistanceLookup !== false}
+                        onChange={(e) => {
+                          pdService.updatePlanDohodSettings({
+                            ...pdSettings,
+                            useDistanceLookup: e.target.checked
+                          });
+                          toast(e.target.checked ? "Автоматический расчет расстояний включен" : "Автоматический расчет расстояний выключен", "success");
+                        }}
+                        className="w-4 h-4 text-emerald-500 border-slate-300 rounded focus:ring-emerald-400"
+                      />
+                      <div className="flex flex-col">
+                        <span className="font-bold text-slate-800 text-xs">Авторасчет</span>
+                        <span className="text-[8px] text-slate-400 font-mono uppercase">Если нет в КМ-базе</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">OpenRouteService API Key</label>
+                    <input
+                      type="password"
+                      disabled={!isWritePermitted}
+                      value={pdSettings?.openRouteServiceApiKey || ''}
+                      onChange={(e) => {
+                        pdService.updatePlanDohodSettings({
+                          ...pdSettings,
+                          openRouteServiceApiKey: e.target.value
+                        });
+                      }}
+                      placeholder="Скрыто..."
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-450 font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">Google Maps API Key (Резервный / Геокод)</label>
+                    <input
+                      type="password"
+                      disabled={!isWritePermitted}
+                      value={pdSettings?.googleMapsApiKey || ''}
+                      onChange={(e) => {
+                        pdService.updatePlanDohodSettings({
+                          ...pdSettings,
+                          googleMapsApiKey: e.target.value
+                        });
+                      }}
+                      placeholder="Скрыто..."
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-450 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-[#70FC8E]/5 border border-[#70FC8E]/20 p-3.5 rounded-xl space-y-1.5 text-slate-600 leading-relaxed text-[10px] font-mono uppercase tracking-wide">
+                  <div>• Маршруты: { pdSettings?.routingProvider === 'openrouteservice' ? 'OpenRouteService API' : 'OSRM API (Автономно)' }</div>
+                  <div>• Ключ OpenRouteService: { pdSettings?.openRouteServiceApiKey ? 'АКТИВЕН' : 'ОТСУТСТВУЕТ (OSRM Режим)' }</div>
+                  <div>• Ключ Google Maps: { pdSettings?.googleMapsApiKey ? 'УСТАНОВЛЕН ВРУЧНУЮ' : 'СИСТЕМНЫЙ' }</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* CURRENCY REGISTRY (Full width bottom panel) */}
+          <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4">
+            <div className="border-b border-slate-100 pb-2.5">
+              <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5">
+                <Wallet className="h-4.5 w-4.5 text-[#70FC8E]" style={{ fill: '#000' }} />
+                <span>Справочник Валют RATIPA</span>
+              </h3>
+              <span className="text-[10px] text-slate-400 font-mono font-bold uppercase mt-1">Список валют для финансовых модулей и конвертаций</span>
+            </div>
+
+            {isWritePermitted && (
+              <form onSubmit={handleAddCurrency} className="flex gap-2.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200/50 max-w-md">
+                <input
+                  type="text"
+                  placeholder="Код валюты (напр. USD, PLN, BYN)"
+                  required
+                  value={cCode}
+                  onChange={(e) => setCCode(e.target.value)}
+                  className="flex-1 p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none font-black text-slate-800 uppercase font-mono tracking-widest placeholder:normal-case placeholder:font-bold"
+                />
+                <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-lg text-[10px] font-black uppercase tracking-tight px-4 transition cursor-pointer font-mono">
+                  Добавить валюту
+                </button>
+              </form>
+            )}
+
+            <div className="flex flex-wrap gap-2.5 pt-2">
+              {currencies.map((c) => (
+                <div key={c.id} className="bg-slate-50 hover:bg-slate-100 border border-slate-200 p-2.5 px-4 rounded-xl flex items-center gap-3 transition">
+                  <span className="text-sm font-black font-mono tracking-widest text-slate-800 uppercase">{c.code}</span>
+                  {isWritePermitted && (
+                    <button 
+                      onClick={() => handleDeleteCurrency(c.id)} 
+                      className="text-rose-400 hover:text-rose-600 transition"
+                      title="Удалить"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {!currencies.length && (
+                <div className="text-slate-400 font-mono font-black uppercase tracking-wider text-xs py-4">Валюты не заданы.</div>
+              )}
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* TAB CONTENT 4: EXTERNAL PORTALS & PORTAL LINKS */}
+      {activeTab === 'links' && (
+        <div className="space-y-6">
+          
+          {/* Iframe Tables Links & GPS Providers */}
+          <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
+            <div>
+              <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                <Layers className="h-4.5 w-4.5 text-blue-500 animate-pulse" />
+                <span>Генеральные ссылки интеграций Google Sheets & GPS</span>
+              </h2>
+              <p className="text-[11px] text-slate-400 font-mono mt-0.5 uppercase tracking-wide">
+                Настройки встроенных системных вкладок фреймов и спутникового позиционирования автопарка
+              </p>
+            </div>
+
+            {settings && (
+              <div className="space-y-6">
+                
+                {/* Google sheets frames links */}
+                <div className="border border-slate-200 rounded-2xl p-4 sm:p-5 bg-slate-50/50 space-y-3.5">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                    <ExternalLink className="w-3.5 h-3.5 text-[#107c41]" />
+                    <span>Google Таблицы RATIPA (Встроенные Фреймы)</span>
+                  </h4>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">План Загрузок (Фрейм Таблицы)</label>
+                      <input
+                        type="url"
+                        disabled={!isWritePermitted}
+                        defaultValue={settings.planZagruzokSheetUrl || ''}
+                        onBlur={(e) => dbService.saveSettings({...settings, planZagruzokSheetUrl: e.target.value}, user.name, user.role)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition font-mono text-[10px]"
+                        placeholder="https://docs.google.com/spreadsheets/d/..."
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">План Загрузок (Черный Список)</label>
+                      <input
+                        type="url"
+                        disabled={!isWritePermitted}
+                        defaultValue={settings.planZagruzokBlacklistUrl || ''}
+                        onBlur={(e) => dbService.saveSettings({...settings, planZagruzokBlacklistUrl: e.target.value}, user.name, user.role)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-red-400 transition font-mono text-[10px]"
+                        placeholder="https://docs.google.com/spreadsheets/d/..."
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">Диспозиция (Фрейм Таблицы)</label>
+                      <input
+                        type="url"
+                        disabled={!isWritePermitted}
+                        defaultValue={settings.dispositionSheetUrl || ''}
+                        onBlur={(e) => dbService.saveSettings({...settings, dispositionSheetUrl: e.target.value}, user.name, user.role)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition font-mono text-[10px]"
+                        placeholder="https://docs.google.com/spreadsheets/d/..."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* GPS Integrations links */}
+                <div className="border border-slate-200 rounded-2xl p-4 sm:p-5 bg-slate-50/50 space-y-3.5">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                    <Globe className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Спутниковый GPS МониторингRATIPA</span>
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">Белтрансспутник (Ссылка)</label>
+                      <input
+                        type="url"
+                        disabled={!isWritePermitted}
+                        defaultValue={settings.gpsBeltranssputnikUrl || ''}
+                        onBlur={(e) => dbService.saveSettings({...settings, gpsBeltranssputnikUrl: e.target.value}, user.name, user.role)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-400 transition font-mono text-[10px]"
+                        placeholder="https://..."
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">Wialon (Ссылка)</label>
+                      <input
+                        type="url"
+                        disabled={!isWritePermitted}
+                        defaultValue={settings.gpsWialonUrl || ''}
+                        onBlur={(e) => dbService.saveSettings({...settings, gpsWialonUrl: e.target.value}, user.name, user.role)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-orange-400 transition font-mono text-[10px]"
+                        placeholder="https://..."
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">ЭРА ГЛОНАСС (Ссылка)</label>
+                      <input
+                        type="url"
+                        disabled={!isWritePermitted}
+                        defaultValue={settings.gpsEraGlonassUrl || ''}
+                        onBlur={(e) => dbService.saveSettings({...settings, gpsEraGlonassUrl: e.target.value}, user.name, user.role)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-400 transition font-mono text-[10px]"
+                        placeholder="https://..."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            )}
+          </div>
+
+          {/* DYNAMIC QUICK LINKS & MENU TABS SECTION */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
+            
+            {/* Custom Dashboard useful bookmarks */}
+            <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 flex flex-col">
+              <div>
+                <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
+                  <Link className="h-4 w-4 text-blue-500" />
+                  <span>Полезные Экспресс-ссылки на Dashboard</span>
+                </h3>
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase mt-1">Виджет быстрого клика на главной панели</span>
+              </div>
+
+              {isWritePermitted && (
+                <form onSubmit={handleAddQuickLink} className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200/50 select-none">
+                  <input
+                    type="text"
+                    placeholder="Название службы"
+                    required
+                    value={linkTitle}
+                    onChange={(e) => setLinkTitle(e.target.value)}
+                    className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none font-bold text-slate-800"
+                  />
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    required
+                    value={linkUrl}
+                    onChange={(e) => setLinkUrl(e.target.value)}
+                    className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none font-bold text-slate-800 font-mono text-[10px]"
+                  />
+                  <button type="submit" className="bg-slate-950 hover:bg-slate-850 text-[#70FC8E] rounded-lg text-[10px] font-black uppercase transition cursor-pointer font-mono">
+                    Вывести
+                  </button>
+                </form>
+              )}
+
+              <div className="space-y-1.5 max-h-[250px] overflow-y-auto pr-1 custom-scrollbar flex-1">
+                {settings?.quickLinks?.map((li) => {
+                  const isEditing = editingLinkId === li.id;
+                  if (isEditing) {
+                    return (
+                      <form 
+                        key={li.id} 
+                        onSubmit={handleSaveEditQuickLink} 
+                        className="flex flex-col sm:flex-row gap-1.5 bg-slate-100 p-2 rounded-xl border border-slate-300"
+                      >
+                        <input
+                          type="text"
+                          value={editingLinkTitle}
+                          onChange={(e) => setEditingLinkTitle(e.target.value)}
+                          required
+                          className="p-1.5 bg-white text-xs rounded border border-slate-200 font-bold flex-1"
+                        />
+                        <input
+                          type="url"
+                          value={editingLinkUrl}
+                          onChange={(e) => setEditingLinkUrl(e.target.value)}
+                          required
+                          className="p-1.5 bg-white text-xs rounded border border-slate-200 font-mono text-[10px] flex-1"
+                        />
+                        <div className="flex gap-1 justify-end">
+                          <button type="submit" className="text-emerald-600 p-1 hover:bg-emerald-50 rounded">
+                            <Check className="h-4 w-4" />
+                          </button>
+                          <button type="button" onClick={() => setEditingLinkId(null)} className="text-slate-400 p-1 hover:bg-slate-50 rounded">
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </form>
+                    );
+                  }
+
+                  return (
+                    <div key={li.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl text-xs font-bold border border-slate-100 group transition">
+                      <span className="text-slate-800 uppercase font-mono">{li.title}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] text-slate-400 font-mono truncate max-w-[150px]">{li.url}</span>
+                        {isWritePermitted && (
+                          <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition">
+                            <button onClick={() => handleStartEditQuickLink(li)} className="text-indigo-600 hover:text-indigo-800 p-1 bg-white border border-slate-200 rounded">
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </button>
+                            <button onClick={() => handleDeleteQuickLink(li.id)} className="text-rose-500 hover:text-rose-700 p-1 bg-white border border-slate-200 rounded">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Custom Top Navigation Bar Menu Links */}
+            <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 flex flex-col">
+              <div>
+                <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
+                  <ExternalLink className="h-4 w-4 text-blue-500" />
+                  <span>Кастомные меню-вкладки на внешние сайты</span>
+                </h3>
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase mt-1">Отображаются в верхнем навигационном меню RATIPA</span>
+              </div>
+
+              {isWritePermitted && (
+                <form onSubmit={handleAddExternalTab} className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200/50 select-none">
+                  <input
+                    type="text"
+                    placeholder="Название"
+                    required
+                    value={extTitle}
+                    onChange={(e) => setExtTitle(e.target.value)}
+                    className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none font-bold text-slate-800"
+                  />
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    required
+                    value={extUrl}
+                    onChange={(e) => setExtUrl(e.target.value)}
+                    className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none font-bold text-slate-800 font-mono text-[10px]"
+                  />
+                  <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-lg text-[10px] font-black uppercase transition cursor-pointer font-mono">
+                    Добавить
+                  </button>
+                </form>
+              )}
+
+              <div className="space-y-1.5 max-h-[250px] overflow-y-auto pr-1 custom-scrollbar flex-1">
+                {(settings?.externalTabs || []).map((t) => {
+                  const isEditing = editingExtId === t.id;
+                  if (isEditing) {
+                    return (
+                      <form 
+                        key={t.id} 
+                        onSubmit={handleSaveEditExternalTab} 
+                        className="flex flex-col sm:flex-row gap-1.5 bg-slate-100 p-2 rounded-xl border border-slate-300"
+                      >
+                        <input
+                          type="text"
+                          value={editingExtTitle}
+                          onChange={(e) => setEditingExtTitle(e.target.value)}
+                          required
+                          className="p-1.5 bg-white text-xs rounded border border-slate-200 font-bold flex-1"
+                        />
+                        <input
+                          type="url"
+                          value={editingExtUrl}
+                          onChange={(e) => setEditingExtUrl(e.target.value)}
+                          required
+                          className="p-1.5 bg-white text-xs rounded border border-slate-200 font-mono text-[10px] flex-1"
+                        />
+                        <div className="flex gap-1 justify-end">
+                          <button type="submit" className="text-emerald-600 p-1 hover:bg-emerald-50 rounded">
+                            <Check className="h-4 w-4" />
+                          </button>
+                          <button type="button" onClick={() => setEditingExtId(null)} className="text-slate-400 p-1 hover:bg-slate-50 rounded">
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </form>
+                    );
+                  }
+
+                  return (
+                    <div key={t.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl text-xs font-bold border border-slate-100 group transition">
+                      <span className="text-slate-800 uppercase font-mono">{t.title}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] text-slate-400 font-mono truncate max-w-[150px]">{t.url}</span>
+                        {isWritePermitted && (
+                          <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition">
+                            <button onClick={() => handleStartEditExternalTab(t)} className="text-indigo-600 hover:text-indigo-800 p-1 bg-white border border-slate-200 rounded">
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </button>
+                            <button onClick={() => handleDeleteExternalTab(t.id)} className="text-rose-500 hover:text-rose-700 p-1 bg-white border border-slate-200 rounded">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      )}
 
     </div>
   );

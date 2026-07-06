@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 794 1123" width="794" height="1123">
+  <!-- Background -->
+  <rect width="794" height="1123" fill="#ffffff" />
+  
+  <!-- Outer border -->
+  <rect x="20" y="20" width="754" height="1083" fill="none" stroke="#475569" stroke-width="2" />
+  
+  <!-- Header -->
+  <text x="397" y="50" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#475569">INTERNATIONAL ROAD TRANSPORT UNION (IRU)</text>
+  <text x="397" y="65" font-family="Arial, sans-serif" font-size="10" text-anchor="middle" fill="#64748b">МЕЖДУНАРОДНЫЙ СОЮЗ АВТОМОБИЛЬНОГО ТРАНСПОРТА</text>
+  
+  <text x="397" y="90" font-family="Arial, sans-serif" font-size="15" font-weight="bold" text-anchor="middle" fill="#0f172a">DECLARATION OF LOSS OF A TIR CARNET</text>
+  <text x="397" y="105" font-family="Arial, sans-serif" font-size="13" font-weight="bold" text-anchor="middle" fill="#334155">ДЕКЛАРАЦИЯ ОБ УТЕРЕ КНИЖКИ МДП</text>
+  
+  <!-- Box 1: Guaranteeing Association -->
+  <rect x="30" y="120" width="360" height="65" fill="none" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="38" y="135" font-family="Arial, sans-serif" font-size="9.5" font-weight="bold" fill="#475569">1. Guaranteeing Association / Гарантийное объединение</text>
+  
+  <!-- Box 2: Holder -->
+  <rect x="404" y="120" width="360" height="65" fill="none" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="412" y="135" font-family="Arial, sans-serif" font-size="9.5" font-weight="bold" fill="#475569">2. TIR Carnet Holder / Держатель книжки МДП</text>
+  
+  <!-- Box 3: TIR Carnet No -->
+  <rect x="30" y="195" width="360" height="55" fill="none" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="38" y="210" font-family="Arial, sans-serif" font-size="9.5" font-weight="bold" fill="#475569">3. TIR Carnet No. / Номер книжки МДП</text>
+  
+  <!-- Box 4: Date of issue -->
+  <rect x="404" y="195" width="175" height="55" fill="none" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="412" y="210" font-family="Arial, sans-serif" font-size="9.5" font-weight="bold" fill="#475569">4. Date of issue / Дата выдачи</text>
+  
+  <!-- Expiry Date -->
+  <rect x="589" y="195" width="175" height="55" fill="none" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="597" y="210" font-family="Arial, sans-serif" font-size="9.5" font-weight="bold" fill="#475569">Validity / Срок действия</text>
+  
+  <!-- Box 5: Number of volets -->
+  <rect x="30" y="260" width="360" height="55" fill="none" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="38" y="275" font-family="Arial, sans-serif" font-size="9.5" font-weight="bold" fill="#475569">5. Number of volets / Число листов</text>
+  
+  <!-- Box 6: Place and date of incident -->
+  <rect x="404" y="260" width="360" height="55" fill="none" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="412" y="275" font-family="Arial, sans-serif" font-size="9.5" font-weight="bold" fill="#475569">6. Place and date of incident / Место и дата происшествия</text>
+  
+  <!-- Box 7: Circumstances -->
+  <rect x="30" y="325" width="734" height="150" fill="none" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="38" y="340" font-family="Arial, sans-serif" font-size="9.5" font-weight="bold" fill="#475569">7. Detailed description of the circumstances / Подробное описание обстоятельств утери</text>
+  <text x="38" y="365" font-family="Arial, sans-serif" font-size="11" fill="#64748b">Книжка МДП была изъята или утеряна при обстоятельствах, указанных ниже.</text>
+  <line x1="30" y1="385" x2="764" y2="385" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4" />
+  <line x1="30" y1="415" x2="764" y2="415" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4" />
+  <line x1="30" y1="445" x2="764" y2="445" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4" />
+  
+  <!-- Box 8: Measures taken -->
+  <rect x="30" y="485" width="734" height="130" fill="none" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="38" y="500" font-family="Arial, sans-serif" font-size="9.5" font-weight="bold" fill="#475569">8. Measures taken by the holder / Меры, принятые держателем книжки</text>
+  <text x="38" y="525" font-family="Arial, sans-serif" font-size="11" fill="#64748b">Заявление в полицию, информирование ассоциации, проведение расследования.</text>
+  <line x1="30" y1="545" x2="764" y2="545" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4" />
+  <line x1="30" y1="575" x2="764" y2="575" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4" />
+  
+  <!-- Box 9: Signature and stamp -->
+  <rect x="30" y="625" width="360" height="110" fill="none" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="38" y="640" font-family="Arial, sans-serif" font-size="9.5" font-weight="bold" fill="#475569">9. Signature and stamp of the holder / Подпись и печать держателя</text>
+  
+  <!-- Box 10: Decision of association -->
+  <rect x="404" y="625" width="360" height="110" fill="none" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="412" y="640" font-family="Arial, sans-serif" font-size="9.5" font-weight="bold" fill="#475569">10. Decision of the association / Решение объединения</text>
+  
+  <!-- Box 11: Police report / Seizure info -->
+  <rect x="30" y="745" width="734" height="230" fill="none" stroke="#cbd5e1" stroke-width="1.5" />
+  <text x="38" y="760" font-family="Arial, sans-serif" font-size="9.5" font-weight="bold" fill="#475569">11. Police / customs seizure details (Step 1) / Сведения об изъятии полицией или таможней</text>
+  
+  <!-- Box 11.1: Place -->
+  <rect x="40" y="780" width="714" height="65" fill="none" stroke="#e2e8f0" stroke-width="1.5" />
+  <text x="48" y="795" font-family="Arial, sans-serif" font-size="8.5" font-weight="bold" fill="#64748b">11.1 Place of seizure / Место изъятия полицией или таможней</text>
+  
+  <!-- Box 11.2: Date -->
+  <rect x="40" y="865" width="714" height="65" fill="none" stroke="#e2e8f0" stroke-width="1.5" />
+  <text x="48" y="880" font-family="Arial, sans-serif" font-size="8.5" font-weight="bold" fill="#64748b">11.2 Date of seizure / Дата изъятия</text>
+  
+  <!-- Footer Disclaimer -->
+  <text x="30" y="1000" font-family="Arial, sans-serif" font-size="8.5" fill="#64748b" width="734">
+    This form must be completed and sent immediately to the Guaranteeing Association in case of loss or theft of a TIR Carnet.
+  </text>
+  <text x="30" y="1015" font-family="Arial, sans-serif" font-size="8.5" fill="#64748b">
+    Настоящая декларация должна быть заполнена и немедленно направлена в Гарантийное объединение в случае утери или кражи книжки МДП.
+  </text>
+</svg>

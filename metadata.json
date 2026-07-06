@@ -1,6 +1,6 @@
 {
-  "name": "Ratipa",
-  "description": "Unified logistics and operational management platform including live vehicle tracking, cargo loading plans, route calculators, salary logs, and administrative controls.",
+  "name": "Ratipa CRM & ERP",
+  "description": "Comprehensive logistics, permit (dozvola), and cargo management command center dashboard with advanced planning, analytical charts, and automated tools.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

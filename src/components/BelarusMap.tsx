@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { MapPin, Sparkles, Navigation } from 'lucide-react';
+import { AppSettings } from '../types';
+import { dbService } from '../firebase';
 
 interface BelarusMapProps {
   // For multi-leg maps (Analysis)
@@ -30,10 +32,16 @@ export default function BelarusMap({
   onWaypointsChange
 }: BelarusMapProps) {
   const [loading, setLoading] = useState(false);
+  const [globalSettings, setGlobalSettings] = useState<AppSettings | null>(null);
   const [routeData, setRouteData] = useState<{
     paths: { lat: number; lng: number }[][];
     markers: { lat: number; lng: number; label: string; active?: boolean; id?: string }[];
   }>({ paths: [], markers: [] });
+
+  useEffect(() => {
+    const unsub = dbService.getSettings(setGlobalSettings);
+    return unsub;
+  }, []);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -58,13 +66,23 @@ export default function BelarusMap({
   const fetchRouteWithFallback = async (coordinates: string, steps: boolean = false, alternatives: boolean = false): Promise<any> => {
     const stepsParam = steps ? "&steps=true" : "";
     const altParam = alternatives ? "&alternatives=true" : "";
+
+    const mapboxUsage = globalSettings?.mapboxUsage;
+    const bypassMapbox = mapboxUsage
+      ? (mapboxUsage.count >= (mapboxUsage.limit || 100000) && !mapboxUsage.allowExceed)
+      : false;
+
+    const bypassParam = bypassMapbox ? "&bypassMapbox=true" : "";
     
     // 1. Try our proxy first
     try {
-      const response = await fetch(`/api/osrm-route?coordinates=${coordinates}${stepsParam}${altParam}`);
+      const response = await fetch(`/api/osrm-route?coordinates=${coordinates}${stepsParam}${altParam}${bypassParam}`);
       if (response.ok) {
         const data = await response.json();
         if (data && data.code === "Ok" && data.routes && data.routes.length > 0) {
+          if (data.source === "mapbox") {
+            dbService.incrementMapboxUsage();
+          }
           return data;
         }
       }
@@ -105,6 +123,11 @@ export default function BelarusMap({
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
       if (!event.data) return;
+
+      if (event.data.type === 'MAP_LOADED') {
+        dbService.incrementMapboxLoads();
+        return;
+      }
 
       if (event.data.type === 'MARKER_DRAG_END') {
         const { id, lat, lng } = event.data;
@@ -296,30 +319,40 @@ export default function BelarusMap({
     };
   }, [legs, activeLegIndex, origin, destination, JSON.stringify(waypoints)]);
 
-  // Inject content into the Leaflet iframe
+  // Inject content into the Mapbox GL JS iframe
+  const mapboxToken = "pk.eyJ1Ijoic2VyZ2VpdGVyZXoiLCJhIjoiY21yN3FqeTNzMTV2ZTJ3czlobGM0ZTF2NiJ9.GeagZG4Ev2U2a7NfnLicyg";
+
   const srcDoc = `
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+      <link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet" />
+      <script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
       <style>
         body, html, #map { margin: 0; padding: 0; width: 100%; height: 100%; background: #f8fafc; }
-        .leaflet-container { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-        .custom-popup .leaflet-popup-content-wrapper {
+        .mapboxgl-popup-content {
           border-radius: 12px;
           border: 1px solid #e2e8f0;
           box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-          padding: 4px;
-        }
-        .custom-popup .leaflet-popup-content {
-          margin: 8px 12px;
+          padding: 8px 12px;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
           font-weight: 700;
           color: #1e293b;
           font-size: 11px;
           line-height: 1.4;
+        }
+        .custom-marker {
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          border: 2px solid white;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+          cursor: grab;
+        }
+        .custom-marker:active {
+          cursor: grabbing;
         }
       </style>
     </head>
@@ -327,156 +360,158 @@ export default function BelarusMap({
       <div id="map"></div>
       <script>
         try {
-          const map = L.map('map', { zoomControl: false }).setView([53.9006, 27.5590], 5);
-          
-          L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            maxZoom: 19,
-            attribution: '&copy; <a href="https://carto.com/">CartoDB</a>'
-          }).addTo(map);
+          mapboxgl.accessToken = "${mapboxToken}";
+          const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: [27.5590, 53.9006],
+            zoom: 5
+          });
 
-          L.control.zoom({ position: 'topright' }).addTo(map);
+          map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
 
           const paths = ${JSON.stringify(routeData.paths)};
           const markers = ${JSON.stringify(routeData.markers)};
 
-          const bounds = [];
+          map.on('load', () => {
+            window.parent.postMessage({ type: 'MAP_LOADED' }, '*');
+            const bounds = new mapboxgl.LngLatBounds();
 
-          // Draw markers
-          markers.forEach(m => {
-            const color = m.active ? '#f43f5e' : '#94a3b8';
-            const isDraggable = !!m.id; // draggable if it has an ID (single-route map)
+            // Draw markers
+            markers.forEach(m => {
+              const color = m.active ? '#f43f5e' : '#94a3b8';
+              const isDraggable = !!m.id;
 
-            // Custom draggable HTML DivIcon
-            const divIcon = L.divIcon({
-              className: 'custom-div-icon',
-              html: '<div style="background-color: ' + color + '; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3); cursor: grab;"></div>',
-              iconSize: [14, 14],
-              iconAnchor: [7, 7]
+              const el = document.createElement('div');
+              el.className = 'custom-marker';
+              el.style.backgroundColor = color;
+
+              const popup = new mapboxgl.Popup({ offset: 10, closeButton: false })
+                .setHTML('<div>' + m.label + '</div>');
+
+              const markerObj = new mapboxgl.Marker({
+                element: el,
+                draggable: isDraggable
+              })
+                .setLngLat([m.lng, m.lat])
+                .setPopup(popup)
+                .addTo(map);
+
+              bounds.extend([m.lng, m.lat]);
+
+              if (isDraggable) {
+                markerObj.on('dragend', () => {
+                  const lngLat = markerObj.getLngLat();
+                  window.parent.postMessage({
+                    type: 'MARKER_DRAG_END',
+                    id: m.id,
+                    lat: lngLat.lat,
+                    lng: lngLat.lng
+                  }, '*');
+                });
+              }
             });
 
-            const marker = L.marker([m.lat, m.lng], {
-              icon: divIcon,
-              draggable: isDraggable
-            }).addTo(map);
+            // Draw route lines
+            paths.forEach((pathPoints, idx) => {
+              if (pathPoints.length < 2) return;
 
-            marker.bindPopup(m.label, { className: 'custom-popup' });
-            bounds.push([m.lat, m.lng]);
+              const isActive = ${activeLegIndex === undefined || activeLegIndex === null} || idx === ${activeLegIndex};
+              const color = isActive ? '#4f46e5' : '#cbd5e1';
+              const width = isActive ? 6 : 3;
 
-            if (isDraggable) {
-              marker.on('dragend', function(event) {
-                const newLatLng = event.target.getLatLng();
-                window.parent.postMessage({
-                  type: 'MARKER_DRAG_END',
-                  id: m.id,
-                  lat: newLatLng.lat,
-                  lng: newLatLng.lng
-                }, '*');
-              });
-            }
-          });
+              const coordinates = pathPoints.map(p => [p.lng, p.lat]);
+              coordinates.forEach(pt => bounds.extend(pt));
 
-          // Draw route lines
-          let tempMarker = null;
-          let isDraggingTemp = false;
+              const sourceId = 'route-source-' + idx;
+              const layerId = 'route-layer-' + idx;
 
-          paths.forEach((pathPoints, idx) => {
-            const isActive = ${activeLegIndex === undefined || activeLegIndex === null} || idx === ${activeLegIndex};
-            const color = isActive ? '#4f46e5' : '#cbd5e1';
-            const weight = isActive ? 8 : 4;
-            
-            const latlngs = pathPoints.map(p => [p.lat, p.lng]);
-            const polyline = L.polyline(latlngs, {
-              color: color,
-              weight: weight,
-              opacity: isActive ? 0.75 : 0.35
-            }).addTo(map);
-
-            latlngs.forEach(pt => bounds.push(pt));
-
-            const canAddWaypoints = ${!!onWaypointsChange};
-            if (canAddWaypoints && isActive) {
-              // Hover handling: create a responsive temporary marker when hovering the polyline
-              polyline.on('mouseover', function(e) {
-                if (isDraggingTemp) return;
-                
-                if (!tempMarker) {
-                  const tempIcon = L.divIcon({
-                    className: 'temp-div-icon',
-                    html: '<div style="background-color: #4f46e5; width: 14px; height: 14px; border-radius: 50%; border: 2.5px solid white; box-shadow: 0 1px 5px rgba(0,0,0,0.4); cursor: pointer;"></div>',
-                    iconSize: [14, 14],
-                    iconAnchor: [7, 7]
-                  });
-                  tempMarker = L.marker(e.latlng, {
-                    icon: tempIcon,
-                    draggable: true
-                  }).addTo(map);
-
-                  tempMarker.on('dragstart', function() {
-                    isDraggingTemp = true;
-                  });
-
-                  tempMarker.on('dragend', function(event) {
-                    const newLatLng = event.target.getLatLng();
-                    window.parent.postMessage({
-                      type: 'ROUTE_LINE_DRAG_END',
-                      legIndex: idx,
-                      lat: newLatLng.lat,
-                      lng: newLatLng.lng
-                    }, '*');
-                    
-                    if (tempMarker) {
-                      map.removeLayer(tempMarker);
-                      tempMarker = null;
-                    }
-                    isDraggingTemp = false;
-                  });
-                } else {
-                  tempMarker.setLatLng(e.latlng);
+              map.addSource(sourceId, {
+                type: 'geojson',
+                data: {
+                  type: 'Feature',
+                  properties: {},
+                  geometry: {
+                    type: 'LineString',
+                    coordinates: coordinates
+                  }
                 }
               });
 
-              polyline.on('mousemove', function(e) {
-                if (tempMarker && !isDraggingTemp) {
-                  tempMarker.setLatLng(e.latlng);
+              map.addLayer({
+                id: layerId,
+                type: 'line',
+                source: sourceId,
+                layout: {
+                  'line-join': 'round',
+                  'line-cap': 'round'
+                },
+                paint: {
+                  'line-color': color,
+                  'line-width': width,
+                  'line-opacity': isActive ? 0.8 : 0.4
                 }
               });
 
-              // Click support: clicks on the route also add a waypoint immediately
-              polyline.on('click', function(e) {
-                if (!isDraggingTemp) {
+              // Click handling for adding waypoint
+              const canAddWaypoints = ${!!onWaypointsChange};
+              if (canAddWaypoints && isActive) {
+                // Change cursor on hover
+                map.on('mouseenter', layerId, () => {
+                  map.getCanvas().style.cursor = 'pointer';
+                });
+                map.on('mouseleave', layerId, () => {
+                  map.getCanvas().style.cursor = '';
+                });
+
+                map.on('click', layerId, (e) => {
                   window.parent.postMessage({
                     type: 'ROUTE_LINE_DRAG_END',
                     legIndex: idx,
-                    lat: e.latlng.lat,
-                    lng: e.latlng.lng
+                    lat: e.lngLat.lat,
+                    lng: e.lngLat.lng
                   }, '*');
-                }
-              });
-            }
-          });
-
-          // Clean up temp marker when mouse moves away from it
-          map.on('mousemove', function(e) {
-            if (tempMarker && !isDraggingTemp) {
-              const markerLatLng = tempMarker.getLatLng();
-              const dist = map.latLngToLayerPoint(e.latlng).distanceTo(map.latLngToLayerPoint(markerLatLng));
-              if (dist > 40) { // pixels
-                map.removeLayer(tempMarker);
-                tempMarker = null;
+                });
               }
+            });
+
+            if (!bounds.isEmpty()) {
+              map.fitBounds(bounds, { padding: 40, animate: true });
             }
           });
-
-          if (bounds.length > 0) {
-            map.fitBounds(bounds, { padding: [40, 40] });
-          }
         } catch(e) {
-          console.error("Leaflet iframe render failed:", e);
+          console.error("Mapbox iframe render failed:", e);
         }
       </script>
     </body>
     </html>
   `;
+
+  const mapboxUsage = globalSettings?.mapboxUsage;
+  const isLoadsLimitExceeded = mapboxUsage
+    ? ((mapboxUsage.loadsCount || 0) >= (mapboxUsage.loadsLimit || 50000) && !mapboxUsage.allowExceedLoads)
+    : false;
+
+  if (isLoadsLimitExceeded) {
+    return (
+      <div className="w-full h-full min-h-[400px] bg-slate-900 flex flex-col items-center justify-center p-6 text-center text-white space-y-4 rounded-b-2xl">
+        <div className="bg-rose-500/10 p-4 rounded-full border border-rose-500/20">
+          <Navigation className="h-8 w-8 text-rose-500 animate-pulse" />
+        </div>
+        <div className="space-y-2 max-w-sm">
+          <h3 className="text-sm font-black uppercase tracking-tight text-white">
+            Лимит показов карты исчерпан
+          </h3>
+          <p className="text-slate-400 text-xs font-medium leading-relaxed">
+            Достигнут установленный месячный лимит в <strong className="text-white font-mono">{(mapboxUsage?.loadsLimit || 50000).toLocaleString('ru-RU')}</strong> показов Mapbox-карты.
+          </p>
+          <p className="text-[10px] text-slate-500 leading-normal">
+            Администратор может разрешить превышение или сбросить счетчик в разделе «Администрирование».
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full relative font-sans">
@@ -484,14 +519,14 @@ export default function BelarusMap({
         <div className="absolute inset-0 bg-white/80 backdrop-blur-xs flex flex-col items-center justify-center z-10">
           <Navigation className="w-8 h-8 text-indigo-500 animate-spin mb-2" />
           <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider font-mono">
-            Обновление карты (Без VPN)...
+            Обновление карты (Mapbox)...
           </span>
         </div>
       )}
       <iframe
         ref={iframeRef}
         srcDoc={srcDoc}
-        title="Belarus Route Map Fallback"
+        title="Belarus Route Map Mapbox"
         className="w-full h-full border-0 rounded-b-2xl"
       />
     </div>

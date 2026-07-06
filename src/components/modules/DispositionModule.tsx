@@ -31,14 +31,6 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
   const [isIframeLoading, setIsIframeLoading] = useState(true);
   const [iframeKey, setIframeKey] = useState(0); 
 
-  // Vehicle Status states inside GPS Notebook
-  const [vehicles, setVehicles] = useState<any[]>([]);
-  const [vehicleStatuses, setVehicleStatuses] = useState<Record<string, 'base' | 'trip'>>({});
-  const [isVehiclesListExpanded, setIsVehiclesListExpanded] = useState(() => {
-    return localStorage.getItem('ratipa_gps_vehicles_expanded') !== 'false';
-  });
-  const [vehicleSearchQuery, setVehicleSearchQuery] = useState('');
-
   const [zoomLevel, setZoomLevel] = useState(() => {
     const saved = localStorage.getItem('ratipa_zoom_disposition');
     return saved ? parseFloat(saved) : 1;
@@ -192,46 +184,6 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
   }, [zoomLevel]);
 
   useEffect(() => {
-    localStorage.setItem('ratipa_gps_vehicles_expanded', isVehiclesListExpanded.toString());
-  }, [isVehiclesListExpanded]);
-
-  useEffect(() => {
-    let unsubVehicles = () => {};
-    let unsubStatuses = () => {};
-
-    try {
-      unsubVehicles = dbService.getVehicleDriverData((list) => {
-        setVehicles(list || []);
-      });
-    } catch (e) {
-      console.warn(e);
-    }
-
-    const loadStatuses = () => {
-      try {
-        unsubStatuses = dbService.getVehicleStatuses((data) => {
-          setVehicleStatuses(data || {});
-        });
-      } catch (e) {
-        console.warn(e);
-      }
-    };
-
-    loadStatuses();
-
-    const handleLocalChange = () => {
-      loadStatuses();
-    };
-
-    window.addEventListener('ratipa_vehicle_statuses_changed', handleLocalChange);
-    return () => {
-      unsubVehicles();
-      unsubStatuses();
-      window.removeEventListener('ratipa_vehicle_statuses_changed', handleLocalChange);
-    };
-  }, []);
-
-  useEffect(() => {
     const unsubscribe = dbService.getSettings((s) => setSettings(s));
     return () => unsubscribe();
   }, []);
@@ -265,10 +217,6 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
       );
     }
 
-    const totalCount = vehicles.length;
-    const baseCount = vehicles.filter(v => vehicleStatuses[v.id] === 'base').length;
-    const tripCount = vehicles.filter(v => vehicleStatuses[v.id] === 'trip').length;
-
     return (
       <div 
         ref={gpsWindowRef}
@@ -298,19 +246,6 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
             </h3>
           </div>
 
-          {/* Counters block in the header */}
-          <div className="flex items-center gap-2 font-mono text-[9px] font-extrabold select-none shrink-0" onMouseDown={(e) => e.stopPropagation()}>
-            <span className="bg-slate-200/60 text-slate-700 px-1.5 py-0.5 rounded-md">
-              Всего: <strong className="text-slate-900">{totalCount}</strong>
-            </span>
-            <span className="bg-emerald-50 text-[#0f7632] px-1.5 py-0.5 rounded-md border border-emerald-100/40">
-              База: <strong className="text-[#0f7632]">{baseCount}</strong>
-            </span>
-            <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded-md border border-indigo-100/40">
-              Рейс: <strong className="text-indigo-900">{tripCount}</strong>
-            </span>
-          </div>
-
           {/* Centered Segmented Tabs in the Header */}
           <div className="flex items-center bg-slate-200/50 p-1 rounded-xl gap-1 shrink-0" onMouseDown={(e) => e.stopPropagation()}>
             <button
@@ -334,18 +269,6 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* Toggle Vehicles List button */}
-            <button
-              type="button"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={() => setIsVehiclesListExpanded(!isVehiclesListExpanded)}
-              className={`p-1 px-2 text-[9px] font-black uppercase tracking-tight rounded-lg transition border flex items-center gap-1 cursor-pointer ${isVehiclesListExpanded ? 'bg-indigo-100 text-indigo-900 border-indigo-200/50' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border-transparent'}`}
-              title={isVehiclesListExpanded ? "Скрыть список авто" : "Показать список авто"}
-            >
-              <Truck size={12} />
-              <span className="hidden md:inline">{isVehiclesListExpanded ? 'Скрыть Авто' : 'Авто'}</span>
-            </button>
-
             <button 
               type="button"
               onMouseDown={(e) => e.stopPropagation()}
@@ -372,90 +295,6 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
         </div>
 
         <div className="flex-1 p-2 overflow-hidden bg-slate-50 flex flex-row gap-2 min-h-0">
-          {/* Left Side: Cars List with Statuses */}
-          {isVehiclesListExpanded && (
-            <div 
-              onMouseDown={(e) => e.stopPropagation()}
-              className="w-72 bg-white rounded-xl border border-slate-200 flex flex-col overflow-hidden shrink-0 shadow-sm"
-            >
-              {/* Search input inside list header */}
-              <div className="p-2 border-b border-slate-100 bg-slate-50/50 space-y-2 shrink-0">
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none text-slate-400">
-                    <Search size={12} />
-                  </span>
-                  <input
-                    type="text"
-                    value={vehicleSearchQuery}
-                    onChange={(e) => setVehicleSearchQuery(e.target.value)}
-                    placeholder="Поиск авто, водителя..."
-                    className="w-full bg-white pl-8 pr-2.5 py-1.5 text-[11px] font-semibold text-slate-800 rounded-lg border border-slate-200 focus:outline-none focus:border-indigo-500 placeholder-slate-400 transition"
-                  />
-                  {vehicleSearchQuery && (
-                    <button
-                      onClick={() => setVehicleSearchQuery('')}
-                      className="absolute inset-y-0 right-0 flex items-center pr-2 text-slate-400 hover:text-slate-600"
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Scrollable list of vehicles */}
-              <div className="flex-1 overflow-y-auto divide-y divide-slate-100 p-1 space-y-1 scrollbar-thin">
-                {vehicles
-                  .filter((v) => {
-                    if (!vehicleSearchQuery) return true;
-                    const query = vehicleSearchQuery.toLowerCase();
-                    return (
-                      (v.vehicleNumbers || '').toLowerCase().includes(query) ||
-                      (v.brands || '').toLowerCase().includes(query) ||
-                      (v.driverName || '').toLowerCase().includes(query)
-                    );
-                  })
-                  .map((v) => {
-                    const status = vehicleStatuses[v.id];
-                    return (
-                      <div key={v.id} className="p-2 rounded-lg hover:bg-slate-50/50 flex flex-col gap-1.5 transition">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="text-xs font-black text-slate-800 font-mono tracking-tight uppercase">
-                              {v.vehicleNumbers || 'Без номера'}
-                            </div>
-                            <div className="text-[9px] text-slate-500 truncate mt-0.5 max-w-[130px]" title={v.brands || v.driverName}>
-                              {v.brands ? `${v.brands} ` : ''}{v.driverName ? `(${v.driverName})` : ''}
-                            </div>
-                          </div>
-                          
-                          {/* Segmented status buttons */}
-                          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200/40 select-none shrink-0">
-                            <button
-                              onClick={() => dbService.setVehicleStatus(v.id, 'base')}
-                              className={`px-2 py-1 text-[9px] font-black uppercase rounded-md transition duration-100 cursor-pointer ${status === 'base' ? 'bg-[#0f7632] text-white shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}
-                            >
-                              База
-                            </button>
-                            <button
-                              onClick={() => dbService.setVehicleStatus(v.id, 'trip')}
-                              className={`px-2 py-1 text-[9px] font-black uppercase rounded-md transition duration-100 cursor-pointer ${status === 'trip' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-800'}`}
-                            >
-                              Рейс
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                {vehicles.length === 0 && (
-                  <div className="p-6 text-center text-slate-400 text-[11px] font-medium">
-                    Нет автомобилей в списке. Добавьте их в модуле "Авто и Водители".
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* Map Container */}
           <div ref={gpsContainerRef} className="flex-1 bg-white rounded-xl overflow-hidden border border-slate-200 relative shadow-inner">
              <iframe

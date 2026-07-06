@@ -77,6 +77,7 @@ export interface Leg {
   ferrySelectValue?: string;
   coeff: number;
   direction?: string;
+  additionalExpenses?: number;
 }
 
 export interface RouteCalculation {
@@ -96,6 +97,7 @@ export interface RouteCalculation {
   totalKm?: number;
   totalFreight?: number;
   totalExpenses?: number;
+  additionalExpenses?: number;
   totalProfit?: number;
   datetime?: string; // legacy field
   date?: string;
@@ -303,6 +305,16 @@ export interface AppSettings {
   customPhrasesRoles?: string[];
   drivers?: any[];
   menuStructure?: MenuStructureGroup[];
+  mapboxUsage?: {
+    count: number;
+    limit: number;
+    allowExceed: boolean;
+    loadsCount?: number;
+    loadsLimit?: number;
+    allowExceedLoads?: boolean;
+    currentMonth: string;
+    lastReset?: string;
+  };
 }
 
 export interface FerryTemplate {
