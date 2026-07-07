@@ -169,7 +169,8 @@ function RouteDisplay({
           const res = await fetch(
             `/api/geocode?address=${encodeURIComponent(address)}`,
           );
-          if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (res.ok && contentType.includes('application/json')) {
             const data = await res.json();
             if (
               data &&
@@ -180,7 +181,24 @@ function RouteDisplay({
             }
           }
         } catch (err) {
-          console.error("Geocode api failed:", err);
+          console.warn("Geocode proxy failed, trying Nominatim...", err);
+        }
+
+        try {
+          const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
+          const res = await fetch(url);
+          if (res.ok) {
+            const arr = await res.json();
+            if (Array.isArray(arr) && arr.length > 0) {
+              const lat = parseFloat(arr[0].lat);
+              const lng = parseFloat(arr[0].lon);
+              if (!isNaN(lat) && !isNaN(lng)) {
+                return new google.maps.LatLng(lat, lng);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Nominatim fallback failed:", err);
         }
         return null;
       };
@@ -367,7 +385,8 @@ function RouteDisplay({
           const res = await fetch(
             `/api/geocode?address=${encodeURIComponent(address)}`,
           );
-          if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (res.ok && contentType.includes('application/json')) {
             const data = await res.json();
             if (
               data &&
@@ -378,7 +397,24 @@ function RouteDisplay({
             }
           }
         } catch (err) {
-          console.error("Geocode api failed:", err);
+          console.warn("Geocode proxy failed, trying Nominatim...", err);
+        }
+
+        try {
+          const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
+          const res = await fetch(url);
+          if (res.ok) {
+            const arr = await res.json();
+            if (Array.isArray(arr) && arr.length > 0) {
+              const lat = parseFloat(arr[0].lat);
+              const lng = parseFloat(arr[0].lon);
+              if (!isNaN(lat) && !isNaN(lng)) {
+                return new google.maps.LatLng(lat, lng);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Nominatim fallback failed:", err);
         }
         return null;
       };

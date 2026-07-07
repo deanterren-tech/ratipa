@@ -1121,7 +1121,7 @@ export default function DozvolaRegistryList({
                   </tr>
                 ))}
                 {!items.length && (
-                  <tr>
+                  <tr key="empty-row">
                     <td
                       colSpan={showTypeColumn ? 9 : 8}
                       className="text-center p-16 text-slate-400 font-black text-xs uppercase tracking-wider font-mono bg-slate-50/30"

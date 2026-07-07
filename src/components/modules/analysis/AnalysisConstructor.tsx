@@ -30,6 +30,40 @@ function haversineDistance(p1: google.maps.LatLng, p2: google.maps.LatLng): numb
   return R * c;
 }
 
+async function robustGeocode(address: string): Promise<google.maps.LatLng | null> {
+  if (!address || address.trim().length === 0) return null;
+  try {
+    const res = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      const data = await res.json();
+      if (data && typeof data.lat === 'number' && typeof data.lng === 'number') {
+        return new google.maps.LatLng(data.lat, data.lng);
+      }
+    }
+  } catch (err) {
+    console.warn("Geocode proxy failed, trying Nominatim...", err);
+  }
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const arr = await res.json();
+      if (Array.isArray(arr) && arr.length > 0) {
+        const lat = parseFloat(arr[0].lat);
+        const lng = parseFloat(arr[0].lon);
+        if (!isNaN(lat) && !isNaN(lng)) {
+          return new google.maps.LatLng(lat, lng);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Nominatim client geocode fallback failed:", err);
+  }
+  return null;
+}
+
 function geocodeFallback(
   fromAddress: string,
   toAddress: string,
@@ -39,20 +73,7 @@ function geocodeFallback(
   opacity: number,
   polylinesRef: React.MutableRefObject<google.maps.Polyline[]>
 ) {
-  const resolve = async (address: string): Promise<google.maps.LatLng | null> => {
-    try {
-      const res = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data && typeof data.lat === 'number' && typeof data.lng === 'number') {
-          return new google.maps.LatLng(data.lat, data.lng);
-        }
-      }
-    } catch (err) {
-      console.error("Geocode api failed:", err);
-    }
-    return null;
-  };
+  const resolve = robustGeocode;
 
   Promise.all([resolve(fromAddress), resolve(toAddress)]).then(([p1, p2]) => {
     if (p1 && p2) {
@@ -128,20 +149,7 @@ function RouteMapLayer({ legs, activeLegIndex }: { legs: any[]; activeLegIndex: 
 
     const apiKey = pdSettings?.openRouteServiceApiKey || '';
     const isOrs = pdSettings?.routingProvider === 'openrouteservice';
-    const resolve = async (address: string): Promise<google.maps.LatLng | null> => {
-      try {
-        const res = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && typeof data.lat === 'number' && typeof data.lng === 'number') {
-            return new google.maps.LatLng(data.lat, data.lng);
-          }
-        }
-      } catch (err) {
-        console.error("Geocode api failed:", err);
-      }
-      return null;
-    };
+    const resolve = robustGeocode;
 
     legs.forEach(async (leg, idx) => {
       if (!leg.from || !leg.to) return;
@@ -354,20 +362,7 @@ function ModalMapRenderer({
 
     async function runORS() {
       const apiKey = pdSettings?.openRouteServiceApiKey || '';
-      const resolve = async (address: string): Promise<google.maps.LatLng | null> => {
-        try {
-          const res = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && typeof data.lat === 'number' && typeof data.lng === 'number') {
-              return new google.maps.LatLng(data.lat, data.lng);
-            }
-          }
-        } catch (err) {
-          console.error("Geocode api failed:", err);
-        }
-        return null;
-      };
+      const resolve = robustGeocode;
 
       const activeWaypoints = waypoints.filter(w => w.trim().length > 0);
       const coords = await Promise.all([
@@ -457,20 +452,7 @@ function ModalMapRenderer({
     }
 
     async function runOSRM() {
-      const resolve = async (address: string): Promise<google.maps.LatLng | null> => {
-        try {
-          const res = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && typeof data.lat === 'number' && typeof data.lng === 'number') {
-              return new google.maps.LatLng(data.lat, data.lng);
-            }
-          }
-        } catch (err) {
-          console.error("Geocode api failed:", err);
-        }
-        return null;
-      };
+      const resolve = robustGeocode;
 
       const activeWaypoints = waypoints.filter(w => w.trim().length > 0);
       const coords = await Promise.all([

@@ -29,6 +29,9 @@ interface DeliveryItem {
   sentAt: string;
   receivedAt?: string;
   status: 'sent' | 'received';
+  routeLocIds?: string[];
+  currentStepIndex?: number;
+  receivedAtSteps?: Record<string, string>;
 }
 
 const DozvolCommentRow: React.FC<{ d: any; isHighlighted?: boolean }> = ({ d, isHighlighted }) => {
@@ -120,6 +123,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
   const [editingDelivId, setEditingDelivId] = useState<string | null>(null);
   const [delivFrom, setDelivFrom] = useState('');
   const [delivTo, setDelivTo] = useState('');
+  const [delivRoute, setDelivRoute] = useState<string[]>(['']);
   const [delivDozvols, setDelivDozvols] = useState<string[]>([]);
   const [delivSentAt, setDelivSentAt] = useState('');
   const [delivSearchQuery, setDelivSearchQuery] = useState('');
@@ -180,26 +184,42 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
   };
 
   const handleSaveDelivery = () => {
-    if (!delivFrom || !delivTo || delivDozvols.length === 0 || !delivSentAt || !useFirebase) return;
+    const activeRoute = delivRoute.filter(r => r.trim().length > 0);
+    const finalRoute = activeRoute.length > 0 ? activeRoute : (delivTo ? [delivTo] : []);
     
+    if (!delivFrom || finalRoute.length === 0 || delivDozvols.length === 0 || !delivSentAt || !useFirebase) return;
+    
+    const immediateTo = finalRoute[0];
+    
+    const deliveryPayload: any = {
+      fromLocId: delivFrom,
+      toLocId: immediateTo,
+      dozvolIds: delivDozvols,
+      sentAt: delivSentAt,
+      routeLocIds: finalRoute,
+      currentStepIndex: 0,
+    };
+
     if (editingDelivId) {
-      update(ref(database, `locationsDeliveries/${editingDelivId}`), {
-        fromLocId: delivFrom,
-        toLocId: delivTo,
-        dozvolIds: delivDozvols,
-        sentAt: delivSentAt
-      });
+      const existing = deliveries[editingDelivId];
+      if (existing) {
+        deliveryPayload.currentStepIndex = existing.currentStepIndex ?? 0;
+        deliveryPayload.receivedAtSteps = existing.receivedAtSteps ?? {};
+        const idx = deliveryPayload.currentStepIndex;
+        if (idx < finalRoute.length) {
+          deliveryPayload.toLocId = finalRoute[idx];
+        } else {
+          deliveryPayload.currentStepIndex = finalRoute.length - 1;
+          deliveryPayload.toLocId = finalRoute[finalRoute.length - 1];
+        }
+      }
+      update(ref(database, `locationsDeliveries/${editingDelivId}`), deliveryPayload);
     } else {
       const newKey = push(ref(database, 'locationsDeliveries')).key;
       if (newKey) {
-        set(ref(database, `locationsDeliveries/${newKey}`), {
-          id: newKey,
-          fromLocId: delivFrom,
-          toLocId: delivTo,
-          dozvolIds: delivDozvols,
-          sentAt: delivSentAt,
-          status: 'sent'
-        });
+        deliveryPayload.id = newKey;
+        deliveryPayload.status = 'sent';
+        set(ref(database, `locationsDeliveries/${newKey}`), deliveryPayload);
       }
     }
 
@@ -207,6 +227,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
     setEditingDelivId(null);
     setDelivFrom('');
     setDelivTo('');
+    setDelivRoute(['']);
     setDelivDozvols([]);
     setDelivSentAt('');
     setDelivSearchQuery('');
@@ -216,6 +237,11 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
     setEditingDelivId(d.id);
     setDelivFrom(d.fromLocId);
     setDelivTo(d.toLocId);
+    if (d.routeLocIds && d.routeLocIds.length > 0) {
+      setDelivRoute(d.routeLocIds);
+    } else {
+      setDelivRoute([d.toLocId]);
+    }
     setDelivDozvols(d.dozvolIds || []);
     setDelivSentAt(d.sentAt);
     setShowDeliveryForm(true);
@@ -227,13 +253,36 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
     if (!toLocName) return;
 
     const updates: Record<string, any> = {};
-    updates[`locationsDeliveries/${d.id}/status`] = 'received';
-    updates[`locationsDeliveries/${d.id}/receivedAt`] = new Date().toISOString();
+    const now = new Date().toISOString();
 
-    if (d.dozvolIds) {
-      d.dozvolIds.forEach(dId => {
-        updates[`dozvolsRegistryV4/${dId}/car`] = toLocName;
-      });
+    const hasRoute = d.routeLocIds && d.routeLocIds.length > 1;
+    const currentIdx = d.currentStepIndex ?? 0;
+
+    if (hasRoute && currentIdx < d.routeLocIds.length - 1) {
+      const nextIdx = currentIdx + 1;
+      const nextLocId = d.routeLocIds[nextIdx];
+      
+      updates[`locationsDeliveries/${d.id}/currentStepIndex`] = nextIdx;
+      updates[`locationsDeliveries/${d.id}/toLocId`] = nextLocId;
+      updates[`locationsDeliveries/${d.id}/receivedAtSteps/${d.toLocId}`] = now;
+      
+      if (d.dozvolIds) {
+        d.dozvolIds.forEach(dId => {
+          updates[`dozvolsRegistryV4/${dId}/car`] = toLocName;
+        });
+      }
+    } else {
+      updates[`locationsDeliveries/${d.id}/status`] = 'received';
+      updates[`locationsDeliveries/${d.id}/receivedAt`] = now;
+      if (hasRoute) {
+        updates[`locationsDeliveries/${d.id}/receivedAtSteps/${d.toLocId}`] = now;
+      }
+
+      if (d.dozvolIds) {
+        d.dozvolIds.forEach(dId => {
+          updates[`dozvolsRegistryV4/${dId}/car`] = toLocName;
+        });
+      }
     }
 
     update(ref(database), updates);
@@ -599,44 +648,139 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-            {Object.values(deliveries).sort((a: DeliveryItem, b: DeliveryItem) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime()).map((d: DeliveryItem) => (
-              <div key={d.id} className="bg-slate-50 border border-slate-200 p-3 rounded-2xl flex flex-col gap-2">
-                <div className="flex justify-between items-center text-xs">
-                   <span className="font-bold text-slate-800 truncate pr-2" title={`${locations[d.fromLocId]?.name} ➔ ${locations[d.toLocId]?.name}`}>
-                     {locations[d.fromLocId]?.name} ➔ {locations[d.toLocId]?.name}
-                   </span>
-                   <div className="flex items-center gap-2">
-                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${d.status === 'sent' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'}`}>
-                       {d.status === 'sent' ? 'В пути' : 'Доставлено'}
-                     </span>
+            {Object.values(deliveries).sort((a: DeliveryItem, b: DeliveryItem) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime()).map((d: DeliveryItem) => {
+              const hasRoute = d.routeLocIds && d.routeLocIds.length > 0;
+              const routeLocs = hasRoute ? d.routeLocIds! : [d.toLocId];
+              const currentIdx = d.currentStepIndex ?? 0;
+              
+              const activeFromLocId = currentIdx === 0 ? d.fromLocId : routeLocs[currentIdx - 1];
+              const activeToLocId = d.toLocId;
+
+              const activeFromLocName = locations[activeFromLocId]?.name || 'Unknown';
+              const activeToLocName = locations[activeToLocId]?.name || 'Unknown';
+
+              return (
+                <div key={d.id} className="bg-slate-50 border border-slate-200 p-3 rounded-2xl flex flex-col gap-2">
+                  <div className="flex justify-between items-start text-xs">
+                     <div className="flex flex-col min-w-0 flex-1">
+                       <span className="font-bold text-slate-800 truncate pr-2" title={`${locations[d.fromLocId]?.name} ➔ ${locations[routeLocs[routeLocs.length - 1]]?.name || locations[d.toLocId]?.name}`}>
+                         {locations[d.fromLocId]?.name} ➔ {locations[routeLocs[routeLocs.length - 1]]?.name || locations[d.toLocId]?.name}
+                       </span>
+                       {hasRoute && d.status === 'sent' && (
+                         <span className="text-[10px] text-slate-500 font-medium mt-0.5">
+                           Этап: <span className="font-bold text-blue-600">{activeFromLocName}</span> ➔ <span className="font-bold text-blue-600">{activeToLocName}</span>
+                         </span>
+                       )}
+                     </div>
+                     <div className="flex items-center gap-1.5 shrink-0">
+                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shrink-0 ${d.status === 'sent' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-600'}`}>
+                         {d.status === 'sent' ? (hasRoute && routeLocs.length > 1 ? `В пути (${currentIdx + 1}/${routeLocs.length})` : 'В пути') : 'Доставлено'}
+                       </span>
+                       <button 
+                         onClick={() => handleEditDelivery(d)}
+                         className="p-1 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded transition"
+                       >
+                         <Edit className="w-3.5 h-3.5" />
+                       </button>
+                       <button 
+                         onClick={() => handleDeleteDelivery(d.id)}
+                         className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition"
+                       >
+                         <Trash2 className="w-3.5 h-3.5" />
+                       </button>
+                     </div>
+                  </div>
+
+                  {/* Route Steps Visualizer if multi-step */}
+                  {hasRoute && routeLocs.length > 1 && (
+                    <div className="bg-white border border-slate-150 rounded-xl p-2 flex flex-col gap-1 text-[10px]">
+                      <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Маршрут доставки:</div>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                          <span className="font-medium text-slate-600 truncate">{locations[d.fromLocId]?.name}</span>
+                          <span className="text-[8px] text-slate-400 font-bold ml-auto shrink-0 bg-slate-100 px-1 py-0.2 rounded">Отправка</span>
+                        </div>
+                        {routeLocs.map((locId, sIdx) => {
+                          const isReached = sIdx < currentIdx || d.status === 'received';
+                          const isActive = sIdx === currentIdx && d.status === 'sent';
+                          const stepTime = d.receivedAtSteps?.[locId] ? new Date(d.receivedAtSteps[locId]).toLocaleDateString() : null;
+
+                          return (
+                            <div key={locId} className="flex items-center gap-1.5 pl-3 border-l-2 border-dashed border-slate-200 ml-1 py-0.5">
+                              <div className={`w-2 h-2 rounded-full shrink-0 ${isReached ? 'bg-emerald-500' : isActive ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'}`} />
+                              <span className={`truncate ${isActive ? 'font-bold text-blue-600' : isReached ? 'text-slate-500 line-through' : 'text-slate-400'}`}>
+                                {locations[locId]?.name || 'Unknown'}
+                              </span>
+                              {stepTime && (
+                                <span className="text-[8px] text-slate-400 font-mono ml-auto shrink-0">{stepTime}</span>
+                              )}
+                              {!stepTime && isActive && (
+                                <span className="text-[8px] text-blue-500 font-bold ml-auto shrink-0 bg-blue-50 px-1 rounded animate-pulse">В пути</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="text-[10px] text-slate-500 font-medium">
+                     Дозволов: {d.dozvolIds?.length || 0}
+                  </div>
+
+                  {/* Transferred permits list */}
+                  {d.dozvolIds && d.dozvolIds.length > 0 && (
+                    <div className="bg-white border border-slate-150 rounded-xl p-2 flex flex-col gap-1 text-[10px]">
+                      <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Передаваемые дозвола:</div>
+                      <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto custom-scrollbar">
+                        {d.dozvolIds.map(id => {
+                          const dozvol = dozvolsData[id];
+                          if (!dozvol) {
+                            return (
+                              <span key={id} className="inline-flex items-center bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[8px] font-mono border border-slate-200/30">
+                                {id.slice(0, 6)}...
+                              </span>
+                            );
+                          }
+                          return (
+                            <div 
+                              key={id} 
+                              className="inline-flex items-center gap-1 bg-slate-50 border border-slate-150 rounded-lg px-1.5 py-0.5 text-[9px] min-w-0"
+                              title={`${dozvol.type}${dozvol.comment ? ' • ' + dozvol.comment : ''}`}
+                            >
+                              <FileText className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                              <span className="font-mono font-bold text-slate-700 truncate">{dozvol.number}</span>
+                              <span className="text-[8px] text-blue-600 bg-blue-50 px-1 rounded truncate max-w-[65px] font-medium">
+                                {dozvol.type}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="text-[10px] text-slate-400">
+                     Отправлено: {d.sentAt}
+                     {d.receivedAt && ` • Получено: ${new Date(d.receivedAt).toLocaleDateString()}`}
+                  </div>
+                  {d.status === 'sent' && (
                      <button 
-                       onClick={() => handleEditDelivery(d)}
-                       className="p-1 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded transition"
+                       onClick={() => handleReceiveDelivery(d)} 
+                       className="mt-1 bg-emerald-50 text-emerald-600 border border-emerald-200 text-xs py-1.5 rounded-lg font-bold hover:bg-emerald-100 transition flex items-center justify-center gap-1.5"
                      >
-                       <Edit className="w-3.5 h-3.5" />
+                       <Truck className="w-3.5 h-3.5" />
+                       {hasRoute && currentIdx < routeLocs.length - 1 ? (
+                         <span>Подтвердить прибытие в пункт <strong>{activeToLocName}</strong></span>
+                       ) : (
+                         <span>Подтвердить получение в <strong>{activeToLocName}</strong></span>
+                       )}
                      </button>
-                     <button 
-                       onClick={() => handleDeleteDelivery(d.id)}
-                       className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded transition"
-                     >
-                       <Trash2 className="w-3.5 h-3.5" />
-                     </button>
-                   </div>
+                  )}
                 </div>
-                <div className="text-[10px] text-slate-500 font-medium">
-                   Дозволов: {d.dozvolIds?.length || 0}
-                </div>
-                <div className="text-[10px] text-slate-400">
-                   Отправлено: {d.sentAt}
-                   {d.receivedAt && ` • Получено: ${new Date(d.receivedAt).toLocaleDateString()}`}
-                </div>
-                {d.status === 'sent' && (
-                   <button onClick={() => handleReceiveDelivery(d)} className="mt-1 bg-emerald-50 text-emerald-600 border border-emerald-200 text-xs py-1 rounded-lg font-bold hover:bg-emerald-100 transition">
-                      Отметить получение
-                   </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
             {Object.keys(deliveries).length === 0 && (
                <div className="text-[11px] text-slate-400 font-medium text-center py-10">
                  Нет истории отправок.
@@ -821,61 +965,136 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
           {Object.values(deliveries).filter((d: DeliveryItem) => d.status === "sent").map((d: DeliveryItem) => {
             const fromLoc = locations[d.fromLocId];
-            const toLoc = locations[d.toLocId];
-            if (!fromLoc || !toLoc) return null;
+            if (!fromLoc) return null;
+
             const dozvolList = (d.dozvolIds || []).map((id: string) => ({ id, ...dozvolsData[id] })).filter((item: any) => !!item.number);
-            
+
+            const hasRoute = d.routeLocIds && d.routeLocIds.length > 0;
+            const routeLocIds = hasRoute ? d.routeLocIds! : [d.toLocId];
+            const currentStepIdx = d.currentStepIndex ?? 0;
+
             return (
-              <Polyline 
-                key={d.id} 
-                positions={[[fromLoc.lat, fromLoc.lng], [toLoc.lat, toLoc.lng]]}
-                pathOptions={{ 
-                  color: d.status === 'sent' ? '#3b82f6' : '#94a3b8', 
-                  weight: 4,
-                  dashArray: d.status === 'sent' ? '10, 10' : undefined
-                }}
-                className={d.status === 'sent' ? 'animate-pulse cursor-pointer' : 'cursor-pointer'}
-              >
-                <Popup closeButton={false}>
-                  <div className="w-52 bg-white rounded-xl flex flex-col gap-1.5 p-1 text-xs">
-                    <div className="font-bold text-slate-800 border-b border-slate-100 pb-1.5 mb-1">
-                      <div className="flex items-center gap-1 text-blue-600 mb-0.5">
-                        <Route className="w-3.5 h-3.5" />
-                        <span>В пути</span>
-                      </div>
-                      <div className="text-slate-700 font-black">
-                        {fromLoc.name} ➔ {toLoc.name}
-                      </div>
-                      <div className="text-[9px] text-slate-400 font-normal mt-1">
-                        Отправлено: {d.sentAt}
-                      </div>
-                    </div>
-                    <div className="text-[10px] font-bold text-slate-500 mb-1">
-                      Отправленные дозвола ({dozvolList.length}):
-                    </div>
-                    <div className="max-h-36 overflow-y-auto flex flex-col gap-1 custom-scrollbar">
-                      {dozvolList.map((item: any) => (
-                        <div key={item.id} className="bg-slate-50 border border-slate-100 rounded p-1.5 flex flex-col gap-0.5">
-                          <div className="flex justify-between items-center">
-                            <span className="font-mono font-bold text-slate-700 text-[10px]">{item.number}</span>
-                            <span className="text-[9px] text-slate-500 max-w-[80px] truncate font-medium" title={item.type}>{item.type}</span>
+              <React.Fragment key={d.id}>
+                {routeLocIds.map((locId, idx) => {
+                  const startLocId = idx === 0 ? d.fromLocId : routeLocIds[idx - 1];
+                  const endLocId = locId;
+
+                  const startLoc = locations[startLocId];
+                  const endLoc = locations[endLocId];
+                  if (!startLoc || !endLoc) return null;
+
+                  let lineColor = '#3b82f6'; // Blue for active
+                  let lineWeight = 4;
+                  let isDashed = true;
+                  let isPulse = true;
+                  let stageText = 'В пути';
+
+                  if (hasRoute) {
+                    if (idx < currentStepIdx) {
+                      lineColor = '#10b981'; // Green for completed segments
+                      lineWeight = 3;
+                      isDashed = false;
+                      isPulse = false;
+                      stageText = 'Пройдено';
+                    } else if (idx === currentStepIdx) {
+                      lineColor = '#3b82f6'; // Blue for active segment
+                      lineWeight = 5;
+                      isDashed = true;
+                      isPulse = true;
+                      stageText = 'В пути (активный этап)';
+                    } else {
+                      lineColor = '#94a3b8'; // Slate for future segments
+                      lineWeight = 2;
+                      isDashed = true;
+                      isPulse = false;
+                      stageText = 'Запланировано';
+                    }
+                  }
+
+                  return (
+                    <Polyline
+                      key={`${d.id}_seg_${idx}`}
+                      positions={[[startLoc.lat, startLoc.lng], [endLoc.lat, endLoc.lng]]}
+                      pathOptions={{
+                        color: lineColor,
+                        weight: lineWeight,
+                        dashArray: isDashed ? '10, 10' : undefined
+                      }}
+                      className={isPulse ? 'animate-pulse cursor-pointer' : 'cursor-pointer'}
+                    >
+                      <Popup closeButton={false}>
+                        <div className="w-56 bg-white rounded-xl flex flex-col gap-1.5 p-1 text-xs">
+                          <div className="font-bold text-slate-800 border-b border-slate-100 pb-1.5 mb-1">
+                            <div className="flex items-center justify-between gap-1 mb-0.5">
+                              <div className="flex items-center gap-1 text-blue-600">
+                                <Route className="w-3.5 h-3.5" />
+                                <span className="font-black">{stageText}</span>
+                              </div>
+                              {hasRoute && (
+                                <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">
+                                  Этап {idx + 1} из {routeLocIds.length}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-slate-700 font-black">
+                              {startLoc.name} ➔ {endLoc.name}
+                            </div>
+                            <div className="text-[9px] text-slate-400 font-normal mt-1">
+                              Отправлено: {d.sentAt}
+                            </div>
                           </div>
-                          {item.comment && (
-                            <div className="text-[9px] text-slate-400 italic border-t border-slate-100/30 pt-0.5 mt-0.5 leading-tight">
-                              {item.comment}
+                          
+                          {/* Route overview if multi-step */}
+                          {hasRoute && (
+                            <div className="bg-slate-50 border border-slate-100 rounded-lg p-1.5 mb-1">
+                              <div className="text-[9px] font-bold text-slate-500 mb-1 uppercase tracking-wider">Маршрут:</div>
+                              <div className="flex flex-col gap-1 text-[10px]">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                                  <span className="font-medium text-slate-700 truncate">{fromLoc.name}</span>
+                                </div>
+                                {routeLocIds.map((stepLocId, stepIdx) => {
+                                  const stepLoc = locations[stepLocId];
+                                  if (!stepLoc) return null;
+                                  const isStepCompleted = stepIdx < currentStepIdx;
+                                  const isStepActive = stepIdx === currentStepIdx;
+                                  return (
+                                    <div key={stepIdx} className="flex items-center gap-1.5 pl-3 border-l-2 border-dashed border-slate-200 ml-1 py-0.5">
+                                      <div className={`w-2 h-2 rounded-full shrink-0 ${isStepCompleted ? 'bg-emerald-500' : isStepActive ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'}`} />
+                                      <span className={`truncate ${isStepActive ? 'font-bold text-blue-600' : isStepCompleted ? 'text-slate-500 line-through' : 'text-slate-400'}`}>
+                                        {stepLoc.name}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
                           )}
+
+                          <div className="text-[10px] font-bold text-slate-500 mb-1">
+                            Отправленные дозвола ({dozvolList.length}):
+                          </div>
+                          <div className="max-h-28 overflow-y-auto flex flex-col gap-1 custom-scrollbar">
+                            {dozvolList.map((item: any) => (
+                              <div key={item.id} className="bg-slate-50 border border-slate-100 rounded p-1.5 flex flex-col gap-0.5">
+                                <div className="flex justify-between items-center">
+                                  <span className="font-mono font-bold text-slate-700 text-[10px]">{item.number}</span>
+                                  <span className="text-[9px] text-slate-500 max-w-[80px] truncate font-medium" title={item.type}>{item.type}</span>
+                                </div>
+                                {item.comment && (
+                                  <div className="text-[9px] text-slate-400 italic border-t border-slate-100/30 pt-0.5 mt-0.5 leading-tight">
+                                    {item.comment}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      ))}
-                      {dozvolList.length === 0 && (
-                        <div className="text-[10px] text-slate-400 italic text-center py-2">
-                          Нет прикрепленных дозволов
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </Popup>
-              </Polyline>
+                      </Popup>
+                    </Polyline>
+                  );
+                })}
+              </React.Fragment>
             );
           })}
         </MapContainer>
@@ -895,6 +1114,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                   setEditingDelivId(null);
                   setDelivFrom('');
                   setDelivTo('');
+                  setDelivRoute(['']);
                   setDelivDozvols([]);
                   setDelivSentAt('');
                   setDelivSearchQuery('');
@@ -905,28 +1125,78 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
               </button>
             </div>
             
-            <div className="flex gap-4">
-              <div className="flex-1 flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Откуда</label>
-                <select 
-                  value={delivFrom} 
-                  onChange={(e) => { setDelivFrom(e.target.value); setDelivDozvols([]); setDelivSearchQuery(''); }}
-                  className="w-full text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-blue-500"
+            <div className="flex flex-col gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200/60">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-700">Маршрут следования</span>
+                <button 
+                  type="button"
+                  onClick={() => setDelivRoute([...delivRoute, ''])}
+                  className="text-[11px] font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 px-2.5 py-1 rounded-lg flex items-center gap-1 transition"
                 >
-                  <option value="">Выберите локацию...</option>
-                  {Object.values(locations).map((l: LocationItem) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
+                  <Plus className="w-3.5 h-3.5" />
+                  Добавить этап
+                </button>
               </div>
-              <div className="flex-1 flex flex-col gap-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider pl-1">Куда</label>
-                <select 
-                  value={delivTo} 
-                  onChange={(e) => setDelivTo(e.target.value)}
-                  className="w-full text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 outline-none focus:border-blue-500"
-                >
-                  <option value="">Выберите локацию...</option>
-                  {Object.values(locations).map((l: LocationItem) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
+
+              <div className="flex flex-col gap-2.5 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                {/* Starting point */}
+                <div className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-full bg-emerald-500 text-white font-mono text-xs font-black flex items-center justify-center shrink-0">
+                    S
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-1">Откуда (Пункт отправления)</label>
+                    <select 
+                      value={delivFrom} 
+                      onChange={(e) => { setDelivFrom(e.target.value); setDelivDozvols([]); setDelivSearchQuery(''); }}
+                      className="w-full text-xs font-bold bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-blue-500 transition"
+                    >
+                      <option value="">Выберите локацию...</option>
+                      {Object.values(locations).map((l: LocationItem) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Route steps */}
+                {delivRoute.map((stepLocId, idx) => (
+                  <div key={idx} className="flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-full bg-blue-500 text-white font-mono text-xs font-black flex items-center justify-center shrink-0">
+                      {idx + 1}
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-1">
+                        {idx === delivRoute.length - 1 ? 'Конечный пункт назначения' : `Промежуточный пункт ${idx + 1}`}
+                      </label>
+                      <select 
+                        value={stepLocId} 
+                        onChange={(e) => {
+                          const nextRoute = [...delivRoute];
+                          nextRoute[idx] = e.target.value;
+                          setDelivRoute(nextRoute);
+                        }}
+                        className="w-full text-xs font-bold bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-blue-500 transition"
+                      >
+                        <option value="">Выберите локацию...</option>
+                        {Object.values(locations).filter((l: LocationItem) => l.id !== delivFrom).map((l: LocationItem) => (
+                          <option key={l.id} value={l.id}>{l.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {delivRoute.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextRoute = [...delivRoute];
+                          nextRoute.splice(idx, 1);
+                          setDelivRoute(nextRoute);
+                        }}
+                        className="p-1.5 mt-4 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition shrink-0"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -1037,6 +1307,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                   setEditingDelivId(null);
                   setDelivFrom('');
                   setDelivTo('');
+                  setDelivRoute(['']);
                   setDelivDozvols([]);
                   setDelivSentAt('');
                   setDelivSearchQuery('');
@@ -1047,7 +1318,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
               </button>
               <button 
                 onClick={handleSaveDelivery}
-                disabled={!delivFrom || !delivTo || delivDozvols.length === 0 || !delivSentAt}
+                disabled={!delivFrom || delivRoute.filter(r => r.trim().length > 0).length === 0 || delivDozvols.length === 0 || !delivSentAt}
                 className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-tight bg-blue-500 text-white hover:bg-blue-600 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-blue-500/20"
               >
                 {editingDelivId ? 'Сохранить изменения' : 'Оформить отправку'}

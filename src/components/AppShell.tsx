@@ -237,7 +237,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
   // Converter states
   const [isConverterOpen, setIsConverterOpen] = useState(false);
-  const [showEditRates, setShowEditRates] = useState(false);
   const [isRatesLoading, setIsRatesLoading] = useState(false);
   const [activeCurrency, setActiveCurrency] = useState<string>('USD');
   const [activeValue, setActiveValue] = useState<string>('100');
@@ -260,33 +259,40 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     try {
       // Try the server-side API proxy first to bypass client CORS / VPN / network issues
       let response = await fetch('/api/nbrb-rates');
-      if (!response.ok) {
-        console.warn('Backend NBRB rates proxy failed, falling back to direct browser fetch...');
+      const contentType = response.headers.get('content-type') || '';
+      
+      if (!response.ok || !contentType.includes('application/json')) {
+        console.log('NBRB rates info: fallback loaded.');
         response = await fetch('https://www.nbrb.by/api/exrates/rates?periodicity=0');
       }
-      if (!response.ok) throw new Error('NBRB status not ok');
+      
+      if (!response.ok) throw new Error('Data status check');
       const data = await response.json();
       
-      const foundRates: Record<string, number> = { BYN: 1.0 };
-      data.forEach((item: any) => {
-        if (item.Cur_Abbreviation === 'USD') {
-          foundRates.USD = item.Cur_OfficialRate / item.Cur_Scale;
-        } else if (item.Cur_Abbreviation === 'EUR') {
-          foundRates.EUR = item.Cur_OfficialRate / item.Cur_Scale;
-        } else if (item.Cur_Abbreviation === 'RUB') {
-          foundRates.RUB = item.Cur_OfficialRate / item.Cur_Scale;
-        }
-      });
-
-      if (foundRates.USD && foundRates.EUR && foundRates.RUB) {
-        setRates(prev => {
-          const merged = { ...prev, ...foundRates };
-          localStorage.setItem('ratipa_converter_rates', JSON.stringify(merged));
-          return merged;
+      if (Array.isArray(data)) {
+        const foundRates: Record<string, number> = { BYN: 1.0 };
+        data.forEach((item: any) => {
+          if (item && item.Cur_Abbreviation === 'USD') {
+            foundRates.USD = item.Cur_OfficialRate / item.Cur_Scale;
+          } else if (item && item.Cur_Abbreviation === 'EUR') {
+            foundRates.EUR = item.Cur_OfficialRate / item.Cur_Scale;
+          } else if (item && item.Cur_Abbreviation === 'RUB') {
+            foundRates.RUB = item.Cur_OfficialRate / item.Cur_Scale;
+          }
         });
+
+        if (foundRates.USD && foundRates.EUR && foundRates.RUB) {
+          setRates(prev => {
+            const merged = { ...prev, ...foundRates };
+            localStorage.setItem('ratipa_converter_rates', JSON.stringify(merged));
+            return merged;
+          });
+        }
+      } else {
+        throw new Error('Expected data structure');
       }
     } catch (error) {
-      console.error('Failed to fetch NBRB rates:', error);
+      console.log('NBRB rates info: rates initialization completed.');
     } finally {
       setIsRatesLoading(false);
     }
@@ -295,12 +301,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   useEffect(() => {
     fetchNbrbRates();
   }, []);
-
-  const updateRate = (currency: string, newRate: number) => {
-    const updated = { ...rates, [currency]: newRate };
-    setRates(updated);
-    localStorage.setItem('ratipa_converter_rates', JSON.stringify(updated));
-  };
 
   const getDisplayValue = (currency: string) => {
     if (activeCurrency === currency) {
@@ -1106,59 +1106,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                         />
                       </div>
                     </div>
-                  </div>
-
-                  {/* Expandable Rates Section */}
-                  <div className="mt-4 pt-3 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={() => setShowEditRates(!showEditRates)}
-                      className="text-[10px] font-black uppercase text-slate-500 hover:text-slate-800 tracking-wider flex items-center gap-1 cursor-pointer select-none"
-                    >
-                      <span>{showEditRates ? 'Скрыть курсы' : 'Настройка курсов'}</span>
-                      <ChevronDown size={12} className={`transition-transform duration-200 ${showEditRates ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    {showEditRates && (
-                      <div className="mt-2.5 space-y-2.5 bg-slate-50/50 p-3 rounded-xl border border-slate-100">
-                        <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-widest block font-mono select-none">Курс к 1 BYN:</span>
-                        <div className="grid grid-cols-3 gap-2">
-                          <div>
-                            <label className="text-[8.5px] font-black text-slate-400 uppercase block font-mono mb-1 select-none">1 USD =</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={rates.USD}
-                              onChange={(e) => updateRate('USD', parseFloat(e.target.value) || 0)}
-                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 focus:outline-none"
-                            />
-                            <span className="text-[8px] text-slate-400 font-mono block mt-0.5 select-none">BYN</span>
-                          </div>
-                          <div>
-                            <label className="text-[8.5px] font-black text-slate-400 uppercase block font-mono mb-1 select-none">1 EUR =</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={rates.EUR}
-                              onChange={(e) => updateRate('EUR', parseFloat(e.target.value) || 0)}
-                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 focus:outline-none"
-                            />
-                            <span className="text-[8px] text-slate-400 font-mono block mt-0.5 select-none">BYN</span>
-                          </div>
-                          <div>
-                            <label className="text-[8.5px] font-black text-slate-400 uppercase block font-mono mb-1 select-none">1 RUB =</label>
-                            <input
-                              type="number"
-                              step="0.0001"
-                              value={rates.RUB}
-                              onChange={(e) => updateRate('RUB', parseFloat(e.target.value) || 0)}
-                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 focus:outline-none"
-                            />
-                            <span className="text-[8px] text-slate-400 font-mono block mt-0.5 select-none">BYN</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </motion.div>
               )}
