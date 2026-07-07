@@ -249,22 +249,43 @@ function RouteDisplay({
           if (!newPos) return;
 
           try {
-            const res = await fetch(
-              `/api/reverse-geocode?lat=${newPos.lat()}&lng=${newPos.lng()}`,
-            );
-            if (res.ok) {
-              const data = await res.json();
-              if (data && data.address) {
-                if (i === 0) {
-                  if (onOriginChange) onOriginChange(data.address);
-                } else if (i === validCoords.length - 1) {
-                  if (onDestinationChange) onDestinationChange(data.address);
-                } else {
-                  const waypointIndex = i - 1;
-                  const newWps = [...waypoints];
-                  newWps[waypointIndex] = data.address;
-                  if (onWaypointsChange) onWaypointsChange(newWps);
+            let addressName: string | null = null;
+            try {
+              const res = await fetch(
+                `/api/reverse-geocode?lat=${newPos.lat()}&lng=${newPos.lng()}`,
+              );
+              const contentType = res.headers.get('content-type') || '';
+              if (res.ok && contentType.includes('application/json')) {
+                const data = await res.json();
+                if (data && data.address) {
+                  addressName = data.address;
                 }
+              }
+            } catch (err) {
+              console.warn("Proxy reverse geocode failed, trying Nominatim...", err);
+            }
+
+            if (!addressName) {
+              const url = `https://nominatim.openstreetmap.org/reverse?lat=${newPos.lat()}&lon=${newPos.lng()}&format=json`;
+              const res = await fetch(url);
+              if (res.ok) {
+                const data = await res.json();
+                if (data && data.display_name) {
+                  addressName = data.display_name;
+                }
+              }
+            }
+
+            if (addressName) {
+              if (i === 0) {
+                if (onOriginChange) onOriginChange(addressName);
+              } else if (i === validCoords.length - 1) {
+                if (onDestinationChange) onDestinationChange(addressName);
+              } else {
+                const waypointIndex = i - 1;
+                const newWps = [...waypoints];
+                newWps[waypointIndex] = addressName;
+                if (onWaypointsChange) onWaypointsChange(newWps);
               }
             }
           } catch (err) {
@@ -288,7 +309,8 @@ function RouteDisplay({
           const res = await fetch(
             `/api/geocode?address=${encodeURIComponent(address)}`,
           );
-          if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (res.ok && contentType.includes('application/json')) {
             const data = await res.json();
             if (
               data &&
@@ -299,7 +321,24 @@ function RouteDisplay({
             }
           }
         } catch (err) {
-          console.error("Geocode api failed:", err);
+          console.warn("Geocode proxy failed, trying Nominatim...", err);
+        }
+
+        try {
+          const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
+          const res = await fetch(url);
+          if (res.ok) {
+            const arr = await res.json();
+            if (Array.isArray(arr) && arr.length > 0) {
+              const lat = parseFloat(arr[0].lat);
+              const lng = parseFloat(arr[0].lon);
+              if (!isNaN(lat) && !isNaN(lng)) {
+                return new google.maps.LatLng(lat, lng);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Nominatim fallback failed:", err);
         }
         return null;
       };
@@ -462,7 +501,8 @@ function RouteDisplay({
           const res = await fetch(
             `/api/geocode?address=${encodeURIComponent(address)}`,
           );
-          if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (res.ok && contentType.includes('application/json')) {
             const data = await res.json();
             if (
               data &&
@@ -473,7 +513,24 @@ function RouteDisplay({
             }
           }
         } catch (err) {
-          console.error("Geocode api failed:", err);
+          console.warn("Geocode proxy failed, trying Nominatim...", err);
+        }
+
+        try {
+          const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
+          const res = await fetch(url);
+          if (res.ok) {
+            const arr = await res.json();
+            if (Array.isArray(arr) && arr.length > 0) {
+              const lat = parseFloat(arr[0].lat);
+              const lng = parseFloat(arr[0].lon);
+              if (!isNaN(lat) && !isNaN(lng)) {
+                return new google.maps.LatLng(lat, lng);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Nominatim fallback failed:", err);
         }
         return null;
       };

@@ -45,19 +45,38 @@ export default function BelarusMap({
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // Helper for geocoding via server API
+  // Helper for geocoding via server API with client-side Nominatim fallback
   const geocodeAddress = async (address: string): Promise<{ lat: number; lng: number; label: string } | null> => {
     if (!address || address.trim().length === 0) return null;
     try {
       const res = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
         if (data && typeof data.lat === 'number' && typeof data.lng === 'number') {
           return { lat: data.lat, lng: data.lng, label: address };
         }
       }
     } catch (err) {
-      console.error("Geocoding failed for: " + address, err);
+      console.warn("Geocoding proxy failed, falling back to Nominatim...", err);
+    }
+
+    // Direct Nominatim Client-side fallback
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const arr = await res.json();
+        if (Array.isArray(arr) && arr.length > 0) {
+          const lat = parseFloat(arr[0].lat);
+          const lng = parseFloat(arr[0].lon);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            return { lat, lng, label: address };
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Nominatim client geocode fallback failed too:", err);
     }
     return null;
   };
@@ -119,6 +138,36 @@ export default function BelarusMap({
     return null;
   };
 
+  const reverseGeocode = async (lat: number, lng: number): Promise<string | null> => {
+    try {
+      const res = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data && data.success && data.address) {
+          return data.address;
+        }
+      }
+    } catch (e) {
+      console.warn("Proxy reverse geocode failed, falling back to Nominatim...", e);
+    }
+
+    // Direct Nominatim fallback
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.display_name) {
+          return data.display_name;
+        }
+      }
+    } catch (e) {
+      console.error("Nominatim client reverse geocode failed:", e);
+    }
+    return null;
+  };
+
   // Listen to drag messages from inside Leaflet iframe
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
@@ -133,50 +182,30 @@ export default function BelarusMap({
         const { id, lat, lng } = event.data;
         
         // Reverse geocode the new lat/lng to get a place name
-        try {
-          const res = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data.success && data.address) {
-              const newAddress = data.address;
-              
-              // Now notify the parent component of the change!
-              if (id === 'origin' && onOriginChange) {
-                onOriginChange(newAddress);
-              } else if (id === 'destination' && onDestinationChange) {
-                onDestinationChange(newAddress);
-              } else if (id.startsWith('waypoint_') && onWaypointsChange && waypoints) {
-                const index = parseInt(id.split('_')[1], 10);
-                const newWps = [...waypoints];
-                newWps[index] = newAddress;
-                onWaypointsChange(newWps);
-              }
-            }
+        const newAddress = await reverseGeocode(lat, lng);
+        if (newAddress) {
+          // Now notify the parent component of the change!
+          if (id === 'origin' && onOriginChange) {
+            onOriginChange(newAddress);
+          } else if (id === 'destination' && onDestinationChange) {
+            onDestinationChange(newAddress);
+          } else if (id.startsWith('waypoint_') && onWaypointsChange && waypoints) {
+            const index = parseInt(id.split('_')[1], 10);
+            const newWps = [...waypoints];
+            newWps[index] = newAddress;
+            onWaypointsChange(newWps);
           }
-        } catch (e) {
-          console.error("Failed to reverse geocode dragged marker:", e);
         }
       } else if (event.data.type === 'ROUTE_LINE_DRAG_END') {
         const { legIndex, lat, lng } = event.data;
         
         // Reverse geocode the dragged route line position to get a place name
-        try {
-          const res = await fetch(`/api/reverse-geocode?lat=${lat}&lng=${lng}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data.success && data.address) {
-              const newAddress = data.address;
-              
-              if (onWaypointsChange && waypoints) {
-                const newWps = [...waypoints];
-                // Insert the new waypoint at the drag-defined leg segment index
-                newWps.splice(legIndex, 0, newAddress);
-                onWaypointsChange(newWps);
-              }
-            }
-          }
-        } catch (e) {
-          console.error("Failed to reverse geocode route line dragged point:", e);
+        const newAddress = await reverseGeocode(lat, lng);
+        if (newAddress && onWaypointsChange && waypoints) {
+          const newWps = [...waypoints];
+          // Insert the new waypoint at the drag-defined leg segment index
+          newWps.splice(legIndex, 0, newAddress);
+          onWaypointsChange(newWps);
         }
       }
     };
