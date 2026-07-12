@@ -1,0 +1,24 @@
+    }
+
+    const newRef = push(ref(db, 'vehicleFleet'));
+    const carBrand = (formData.brandModel || '').trim();
+    const trailerBrand = (formData.trailerMake || '').trim();
+    const carData = {
+      ...formData,
+      carNumber: cNum,
+      driverName: driverShortNameRu || trimmedDriver,
+      driverId: driverId || null,
+      driverRaw: trimmedDriver,
+      driverShortNameRu: driverShortNameRu || null,
+      migrationStatus,
+      brandModel: carBrand,
+      brands: carBrand,
+      brandsRu: carBrand,
+      trailerMake: trailerBrand,
+      status: 'base'
+    };
+    set(newRef, carData).then(() => {
+       logHistory(newRef.key as string, "vehicleFleet", "Запись создана", "", `Госномер: ${cNum}`, cNum);
+       setFormData({ carNumber: '', driverName: '', dateArrival: '', dateLoading: '', dateRepairStart: '', dateRepairEnd: '', dateDeparture: '', comment: '', brandModel: '', trailerMake: '' });
+    });
+  };

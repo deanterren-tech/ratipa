@@ -215,7 +215,7 @@ export default function DocumentsModule({ user }: Props) {
     // Load last TIR letter data
     setTirOutboxDate(todayStr);
     const tirRef = ref(database, 'bamapTirLastData');
-    onValue(tirRef, (snap) => {
+    const unsubTir = onValue(tirRef, (snap) => {
       const data = snap.val();
       if (data) {
         if (data.tirOutboxNum) setTirOutboxNum(data.tirOutboxNum);
@@ -236,6 +236,7 @@ export default function DocumentsModule({ user }: Props) {
     });
     return () => {
       unsubContacts();
+      unsubTir();
       unsubPlaces();
     };
   }, []);
@@ -243,6 +244,7 @@ export default function DocumentsModule({ user }: Props) {
   useEffect(() => {
     if (!selectedCoupleId) return;
     const couple = ferryCouples.find(c => c.id === selectedCoupleId);
+    let unsubOrder: (() => void) | undefined;
     if (couple) {
       setFerryStateNumber(couple.stateNumber);
       setFerryVehicleModel(couple.model);
@@ -253,7 +255,7 @@ export default function DocumentsModule({ user }: Props) {
       setFerryDriver2Details(couple.driver2 || '');
       
       // Load saved ferry order dynamic values (e.g. cargo details, date/port, conctact person) from database
-      onValue(ref(database, `ferryOrdersData/${selectedCoupleId}`), (snap) => {
+      unsubOrder = onValue(ref(database, `ferryOrdersData/${selectedCoupleId}`), (snap) => {
         const savedOrderObj = snap.val();
         if (savedOrderObj) {
           if (savedOrderObj.ferryOrgName) setFerryOrgName(savedOrderObj.ferryOrgName);
@@ -264,6 +266,9 @@ export default function DocumentsModule({ user }: Props) {
         }
       }, { onlyOnce: true });
     }
+    return () => {
+      if (unsubOrder) unsubOrder();
+    };
   }, [selectedCoupleId, ferryCouples]);
   // Save current dynamic order fields under the selected couple
   const handleSaveFerryDataForCar = () => {
@@ -334,7 +339,7 @@ export default function DocumentsModule({ user }: Props) {
         body: JSON.stringify({ text: coupleRawText, image: coupleImageBase64 })
       });
       if (!res.ok) {
-        let serverError = "Ошибка распознавания на сервере AI";
+        let serverError = "Ошибка распознавания на сервере парсинга";
         try {
           const errData = await res.json();
           if (errData && errData.error) {
@@ -1182,169 +1187,94 @@ export default function DocumentsModule({ user }: Props) {
     return matchesSearch && matchesDispatcher;
   });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans">
       {/* MODULE HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2 uppercase tracking-tight">
-            <Files className="h-6 w-6 text-[#0f7632]" />
-            Центр Документов
-          </h1>
-          <p className="text-xs text-slate-500 font-mono mt-1">
-            Генерация, хранение и печать транспортных и сопроводительных документов
-          </p>
+      <div className="bg-white/70 backdrop-blur-xl rounded-2xl p-4 border border-slate-200/40 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4 select-none">
+        <div className="flex items-center gap-3 w-full sm:w-auto font-sans">
+          <div className="w-9 h-9 rounded-xl bg-[#3765F6]/10 border border-[#3765F6]/20 flex items-center justify-center shrink-0">
+            <Files className="h-4.5 w-4.5 text-[#3765F6]" />
+          </div>
+          <div>
+            <h1 className="text-base sm:text-lg font-bold text-slate-950 font-sans tracking-tight">
+              Центр документов
+            </h1>
+            <p className="text-[11px] text-slate-500 mt-0.5 font-medium font-sans">
+              Генерация, хранение и печать транспортных и сопроводительных документов
+            </p>
+          </div>
         </div>
       </div>
       {/* COMPONENT NAVIGATION TABS */}
-      <div className="flex border-b border-slate-200 select-none bg-slate-50 p-1.5 rounded-2xl w-max gap-1">
+      <div className="flex items-center bg-slate-100/75 border border-slate-200/30 p-1 rounded-xl gap-1 shrink-0 w-max select-none font-sans">
         <button
           type="button"
           onClick={() => setActiveTab('ferry')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[11px] font-bold tracking-tight transition-all duration-150 cursor-pointer ${
             activeTab === 'ferry' 
-              ? 'bg-slate-900 text-[#70FC8E] shadow-sm' 
-              : 'text-slate-500 hover:text-slate-800'
+              ? 'bg-white text-[#3765F6] shadow-xs border border-slate-200/30' 
+              : 'text-slate-500 hover:text-slate-800 hover:bg-white/20'
           }`}
         >
-          <Truck size={14} />
+          <Truck size={13} className="stroke-[2px]" />
           Поручение на паром
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('bamap_tir')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[11px] font-bold tracking-tight transition-all duration-150 cursor-pointer ${
             activeTab === 'bamap_tir' 
-              ? 'bg-slate-900 text-[#70FC8E] shadow-sm' 
-              : 'text-slate-500 hover:text-slate-800'
+              ? 'bg-white text-[#3765F6] shadow-xs border border-slate-200/30' 
+              : 'text-slate-500 hover:text-slate-800 hover:bg-white/20'
           }`}
         >
-          <BookOpen size={14} />
+          <BookOpen size={13} className="stroke-[2px]" />
           Письмо БАМАП (МДП)
         </button>
       </div>
       {/* FERRY PORT ORDER GENERATOR */}
       {activeTab === 'ferry' && (
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start font-sans">
           
           {/* FERRY FORM (LEFT - 5 COLS) */}
-          <div className="xl:col-span-5 bg-white rounded-[2rem] p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col gap-4">
+          <div className="xl:col-span-5 bg-white/70 backdrop-blur-xl rounded-2xl p-5 border border-slate-200/40 shadow-xs flex flex-col gap-4">
             
-            <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
-              <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
-                <Truck size={15} className="text-[#0f7632]" />
+            <div className="border-b border-slate-100/80 pb-3 flex items-center justify-between">
+              <h2 className="text-[13px] font-bold text-slate-800 font-sans flex items-center gap-1.5">
+                <Truck size={15} className="text-[#3765F6] stroke-[2px]" />
                 Параметры поручения
               </h2>
-              <span className="text-[9px] bg-[#70FC8E]/30 text-[#0a5c25] px-2 py-0.5 rounded font-black uppercase font-mono">
-                Паром (поручение)
+              <span className="text-[10px] bg-[#3765F6]/10 text-[#3765F6] px-2.5 py-0.5 rounded-lg font-bold font-sans">
+                Паром
               </span>
             </div>
             {/* Tractor-Trailer Combinations Section (Отдельная база сцепка) */}
-            <div className="flex flex-col gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200/40">
+            <div className="flex flex-col gap-3 bg-slate-50/50 p-4 rounded-xl border border-slate-200/30">
               <div className="flex items-center justify-between">
-                <label className="text-[10px] font-black uppercase tracking-widest text-[#0f7632] font-mono flex items-center gap-1">
+                <label className="text-[11px] font-bold tracking-tight text-slate-700 font-sans flex items-center gap-1">
                   🚛 Сцепка тягач-прицеп
                 </label>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
                   <button
                     onClick={handleStartAddCouple}
-                    className="text-[9px] font-black text-[#0f7632] hover:underline flex items-center gap-0.5"
+                    className="text-[10px] font-semibold text-[#3765F6] hover:text-[#2555E5] transition-colors flex items-center gap-0.5 cursor-pointer"
                     title="Создать новую сцепку в базе"
                   >
-                    <Plus size={10} /> Добавить
+                    <Plus size={11} className="stroke-[2.5]" /> Добавить
                   </button>
                   <button
-                    onClick={handleStartEditCouple}
-                    className="text-[9px] font-black text-blue-600 hover:underline flex items-center gap-0.5"
+                    onClick={() => handleStartEditCouple()}
+                    className="text-[10px] font-semibold text-slate-600 hover:text-[#3765F6] transition-colors flex items-center gap-0.5 cursor-pointer"
                     title="Редактировать текущую сцепку"
                   >
-                    <Edit3 size={10} /> Изменить
+                    <Edit3 size={11} className="stroke-[2.5]" /> Изменить
                   </button>
                   <button
                     onClick={() => handleDeleteCouple(selectedCoupleId)}
-                    className="text-[9px] font-black text-rose-600 hover:underline flex items-center gap-0.5"
+                    className="text-[10px] font-semibold text-rose-500 hover:text-rose-600 transition-colors flex items-center gap-0.5 cursor-pointer"
                     title="Удалить текущую сцепку"
                   >
-                    <Trash2 size={10} /> Удалить
+                    <Trash2 size={11} className="stroke-[2.5]" /> Удалить
                   </button>
                 </div>
               </div>
@@ -1357,37 +1287,37 @@ export default function DocumentsModule({ user }: Props) {
                     setDispatcherFilter('all');
                     setShowVehicleModal(true);
                   }}
-                  className="w-full bg-white hover:bg-emerald-50/20 border border-slate-250 hover:border-[#0f7632]/40 text-slate-900 text-xs font-black px-3.5 py-3 rounded-xl flex items-center justify-between transition shadow-sm active:scale-[0.98]"
+                  className="w-full bg-white hover:bg-slate-50 border border-slate-200 hover:border-[#3765F6]/30 text-slate-900 text-xs px-3 py-2.5 rounded-xl flex items-center justify-between transition duration-150 shadow-xs cursor-pointer active:scale-[0.99]"
                 >
                   <div className="flex items-center gap-2.5 text-left">
-                    <span className="text-lg">🚛</span>
+                    <span className="text-base">🚛</span>
                     <div>
-                      <p className="text-[11px] text-slate-900 font-extrabold leading-tight">
+                      <p className="text-[11px] text-slate-900 font-bold leading-tight">
                         {ferryCouples.find(c => c.id === selectedCoupleId)?.stateNumber || "Выберите сцепку..."}
                       </p>
-                      <p className="text-[9px] text-slate-400 font-medium leading-normal">
+                      <p className="text-[10px] text-slate-400 font-medium leading-normal mt-0.5 font-sans">
                         Модель: {ferryCouples.find(c => c.id === selectedCoupleId)?.model || "не указана"}
                         {ferryCouples.find(c => c.id === selectedCoupleId)?.dispatcher ? ` • Диспетчер: ${ferryCouples.find(c => c.id === selectedCoupleId)?.dispatcher}` : ''}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 bg-[#0f7632]/15 text-[#0f7632] px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider font-mono shrink-0">
-                    Выбрать авто <Search size={10} className="stroke-[3px]" />
+                  <div className="flex items-center gap-1 bg-[#3765F6]/10 text-[#3765F6] px-2.5 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider font-sans shrink-0 border border-[#3765F6]/10">
+                    Выбрать авто <Search size={10} className="stroke-[2.5]" />
                   </div>
                 </button>
               </div>
               {/* COUPLE FORM / EDITOR */}
               {showCoupleEditor && (
-                <div className="mt-2 bg-emerald-50/30 border border-[#0f7632]/20 rounded-xl p-3 flex flex-col gap-3.5">
-                  <h3 className="text-[10px] font-black uppercase text-[#0f7632] tracking-wider font-mono">
+                <div className="mt-2 bg-white/50 border border-slate-200 rounded-xl p-3.5 flex flex-col gap-3 font-sans">
+                  <h3 className="text-[11px] font-bold uppercase text-[#3765F6] tracking-wider font-sans">
                     {editCoupleId ? "📝 Редактировать сцепку" : "➕ Новая сцепка в базе"}
                   </h3>
                   
                   {/* AI Parser Block */}
-                  <div className="bg-blue-50/50 p-2.5 rounded-xl border border-blue-100 flex flex-col gap-2">
-                    <label className="text-[8px] font-black uppercase text-blue-800 font-mono flex items-center justify-between">
-                      <span className="flex items-center gap-1"><Wand2 size={10} /> AI Нейросетевой Парсер (текст / скриншот / фото)</span>
-                      <span className="text-[7px] text-blue-500 lowercase bg-blue-100 px-1 py-0.5 rounded">Без VPN</span>
+                  <div className="bg-white/90 p-3 rounded-xl border border-slate-200/80 shadow-xs flex flex-col gap-2">
+                    <label className="text-[10px] font-bold text-slate-700 font-sans flex items-center justify-between">
+                      <span className="flex items-center gap-1 text-[#3765F6]"><Wand2 size={11} className="stroke-[2.5]" /> ИИ Помощник (Парсер)</span>
+                      <span className="text-[9px] text-[#3765F6] lowercase bg-[#3765F6]/10 px-1.5 py-0.5 rounded-md font-medium border border-[#3765F6]/10">Без VPN</span>
                     </label>
                     
                     <div 
@@ -1405,12 +1335,12 @@ export default function DocumentsModule({ user }: Props) {
                           onChange={e => setCoupleRawText(e.target.value)}
                           onPaste={handleCouplePaste}
                           placeholder="Вставьте текст или Ctrl+V скриншот..."
-                          className="w-full bg-white border border-blue-200 text-[10px] p-2 rounded-lg outline-none focus:border-blue-400 resize-none h-11"
+                          className="w-full bg-slate-50/50 border border-slate-200 text-xs p-2 rounded-xl outline-none focus:border-[#3765F6]/50 focus:bg-white resize-none h-11 transition"
                         />
                         <button
                           onClick={handleParseCouple}
                           disabled={isParsingCouple || (!coupleRawText.trim() && !coupleImageBase64)}
-                          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 rounded-lg text-[9px] font-black uppercase tracking-wider transition shrink-0 flex items-center justify-center gap-1"
+                          className="bg-[#3765F6] hover:bg-[#2555E5] disabled:opacity-50 text-white px-3.5 rounded-xl text-xs font-semibold transition shrink-0 flex items-center justify-center gap-1 cursor-pointer"
                         >
                           {isParsingCouple ? (
                             <span className="animate-pulse">Обработка...</span>
@@ -1420,8 +1350,8 @@ export default function DocumentsModule({ user }: Props) {
                         </button>
                       </div>
                       {/* File upload row */}
-                      <div className="flex items-center justify-between gap-2 text-[8px] text-slate-500">
-                        <label className="flex items-center gap-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-2 py-1 rounded-md cursor-pointer transition select-none">
+                      <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400 font-sans">
+                        <label className="flex items-center gap-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-2.5 py-1 rounded-lg cursor-pointer transition select-none text-[10px] font-semibold">
                           <span>📁 Загрузить картинку</span>
                           <input 
                             type="file" 
@@ -1445,13 +1375,13 @@ export default function DocumentsModule({ user }: Props) {
                             referrerPolicy="no-referrer"
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-[8px] font-black text-slate-700 truncate">Скриншот прикреплен</p>
-                            <p className="text-[7px] text-slate-400 font-mono">Готов к отправке в ИИ</p>
+                            <p className="text-[10px] font-bold text-slate-700 truncate font-sans">Скриншот прикреплен</p>
+                            <p className="text-[8px] text-slate-400 font-sans">Готово к распознаванию</p>
                           </div>
                           <button
                             type="button"
                             onClick={() => setCoupleImageBase64(null)}
-                            className="text-[8px] font-black text-rose-600 hover:underline px-1.5 py-1 bg-rose-50 rounded"
+                            className="text-[10px] font-bold text-rose-600 hover:underline px-2 py-1 bg-rose-50 rounded-lg cursor-pointer"
                           >
                             Удалить
                           </button>
@@ -1461,103 +1391,103 @@ export default function DocumentsModule({ user }: Props) {
                   </div>
                   
                   <div>
-                    <label className="text-[8px] font-black uppercase text-slate-500 font-mono">Госномер сцепки (Тягач+Прицеп)</label>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Госномер сцепки (Тягач+Прицеп)</label>
                     <input
                       type="text"
                       placeholder="1) AX1587-7/А1063Е-7"
                       value={coupleStateNumber}
                       onChange={e => setCoupleStateNumber(e.target.value)}
-                      className="w-full bg-white border border-slate-200 text-xs font-bold px-2.5 py-1.5 rounded-lg outline-none focus:border-[#0f7632]"
+                      className="w-full bg-slate-50/50 border border-slate-200 text-xs font-medium px-3.5 py-2 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[8px] font-black uppercase text-slate-500 font-mono">Модель автомобиля</label>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Модель автомобиля</label>
                       <input
                         type="text"
                         placeholder="МЕРСЕДЕС-БЕНЦ"
                         value={coupleModel}
                         onChange={e => setCoupleModel(e.target.value)}
-                        className="w-full bg-white border border-slate-200 text-xs font-bold px-2.5 py-1.5 rounded-lg outline-none focus:border-[#0f7632]"
+                        className="w-full bg-slate-50/50 border border-slate-200 text-xs font-medium px-3.5 py-2 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition"
                       />
                     </div>
                     <div>
-                      <label className="text-[8px] font-black uppercase text-slate-500 font-mono">Тип ТС</label>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Тип ТС</label>
                       <input
                         type="text"
                         placeholder="Тенты 90м3"
                         value={coupleVehicleType}
                         onChange={e => setCoupleVehicleType(e.target.value)}
-                        className="w-full bg-white border border-slate-200 text-xs font-bold px-2.5 py-1.5 rounded-lg outline-none focus:border-[#0f7632]"
+                        className="w-full bg-slate-50/50 border border-slate-200 text-xs font-medium px-3.5 py-2 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition"
                       />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[8px] font-black uppercase text-slate-500 font-mono">Габариты полуприцепа</label>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Габариты полуприцепа</label>
                       <input
                         type="text"
                         placeholder="13,6м х 2,45м х 2,7м"
                         value={coupleDimensions}
                         onChange={e => setCoupleDimensions(e.target.value)}
-                        className="w-full bg-white border border-slate-200 text-xs font-bold px-2.5 py-1.5 rounded-lg outline-none focus:border-[#0f7632]"
+                        className="w-full bg-slate-50/50 border border-slate-200 text-xs font-medium px-3.5 py-2 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition"
                       />
                     </div>
                     <div>
-                      <label className="text-[8px] font-black uppercase text-slate-500 font-mono">Вес ТС (Тягач+пп)</label>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Вес ТС (Тягач+пп)</label>
                       <input
                         type="text"
                         placeholder="1) 14,6т"
                         value={coupleWeight}
                         onChange={e => setCoupleWeight(e.target.value)}
-                        className="w-full bg-white border border-slate-200 text-xs font-bold px-2.5 py-1.5 rounded-lg outline-none focus:border-[#0f7632]"
+                        className="w-full bg-slate-50/50 border border-slate-200 text-xs font-medium px-3.5 py-2 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="text-[8px] font-black uppercase text-slate-500 font-mono">Водитель № 1 (ФИО, паспортные данные)</label>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Водитель № 1 (ФИО, паспортные данные)</label>
                     <textarea
                       rows={2}
                       placeholder="ФИО, серия и номер, дата выдачи, орган выдачи"
                       value={coupleDriver1}
                       onChange={e => setCoupleDriver1(e.target.value)}
-                      className="w-full bg-white border border-slate-200 text-xs font-medium px-2.5 py-1.5 rounded-lg outline-none focus:border-[#0f7632] resize-none"
+                      className="w-full bg-slate-50/50 border border-slate-200 text-xs font-medium px-3.5 py-2 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition resize-none font-sans"
                     />
                   </div>
                   <div>
-                    <label className="text-[8px] font-black uppercase text-slate-500 font-mono">Водитель № 2 (если есть)</label>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Водитель № 2 (если есть)</label>
                     <textarea
                       rows={1}
                       placeholder="Второй водитель..."
                       value={coupleDriver2}
                       onChange={e => setCoupleDriver2(e.target.value)}
-                      className="w-full bg-white border border-slate-200 text-xs font-medium px-2.5 py-1.5 rounded-lg outline-none focus:border-[#0f7632] resize-none"
+                      className="w-full bg-slate-50/50 border border-slate-200 text-xs font-medium px-3.5 py-2 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition resize-none font-sans"
                     />
                   </div>
                   <div>
-                    <label className="text-[8px] font-black uppercase text-slate-500 font-mono">Диспетчер (для фильтрации)</label>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Диспетчер (для фильтрации)</label>
                     <input
                       type="text"
                       placeholder="Например: Сергей Т., Мария К., Елена В."
                       value={coupleDispatcher}
                       onChange={e => setCoupleDispatcher(e.target.value)}
                       list="dispatcher-presets-dl"
-                      className="w-full bg-white border border-slate-200 text-xs font-bold px-2.5 py-1.5 rounded-lg outline-none focus:border-[#0f7632]"
+                      className="w-full bg-slate-50/50 border border-slate-200 text-xs font-medium px-3.5 py-2 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition"
                     />
                     <datalist id="dispatcher-presets-dl">
                       {ferryDispatchers.map(d => <option key={d} value={d} />)}
                     </datalist>
                   </div>
-                  <div className="flex gap-2 justify-end pt-1">
+                  <div className="flex gap-2.5 justify-end pt-1.5 font-sans">
                     <button
                       onClick={() => setShowCoupleEditor(false)}
-                      className="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-semibold rounded-lg"
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold rounded-xl cursor-pointer transition duration-150"
                     >
                       Отмена
                     </button>
                     <button
                       onClick={handleSaveCouple}
-                      className="px-3 py-1 bg-[#159e44] hover:bg-[#107d35] text-white text-[10px] font-bold rounded-lg"
+                      className="px-4 py-2 bg-[#3765F6] hover:bg-[#2555E5] text-white text-[11px] font-bold rounded-xl cursor-pointer transition duration-150 shadow-xs"
                     >
                       Сохранить в базу
                     </button>
@@ -1568,33 +1498,33 @@ export default function DocumentsModule({ user }: Props) {
               {!showCoupleEditor && ferryCouples.find(c => c.id === selectedCoupleId) && (() => {
                 const act = ferryCouples.find(c => c.id === selectedCoupleId)!;
                 return (
-                  <div className="mt-1 bg-white border border-slate-200/60 rounded-xl p-3 text-[11px] text-slate-700 flex flex-col gap-1 w-full shadow-sm">
-                    <p className="text-[9px] font-black text-slate-400 uppercase font-mono tracking-wider mb-1 text-center border-b border-slate-100 pb-1">
+                  <div className="mt-1 bg-white/60 border border-slate-200/40 rounded-xl p-3.5 text-[11px] text-slate-700 flex flex-col gap-1 w-full shadow-xs">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase font-sans tracking-wider mb-2 text-center border-b border-slate-100 pb-1.5">
                       Данные сцепки (Объединённый блок)
                     </p>
-                    <div className="grid grid-cols-5 gap-1 py-0.5">
-                      <span className="col-span-2 text-slate-400 text-[10px] font-medium">Тягач & ПП:</span>
+                    <div className="grid grid-cols-5 gap-1.5 py-0.5 font-sans">
+                      <span className="col-span-2 text-slate-400 text-[11px] font-medium">Тягач & ПП:</span>
                       <span className="col-span-3 text-slate-900 font-bold">{act.stateNumber}</span>
                     </div>
-                    <div className="grid grid-cols-5 gap-1 py-0.5">
-                      <span className="col-span-2 text-slate-400 text-[10px] font-medium">Модель тягача:</span>
+                    <div className="grid grid-cols-5 gap-1.5 py-0.5 font-sans">
+                      <span className="col-span-2 text-slate-400 text-[11px] font-medium">Модель тягача:</span>
                       <span className="col-span-3 text-slate-900 font-bold">{act.model}</span>
                     </div>
-                    <div className="grid grid-cols-5 gap-1 py-0.5">
-                      <span className="col-span-2 text-slate-400 text-[10px] font-medium">Тип & Габариты:</span>
+                    <div className="grid grid-cols-5 gap-1.5 py-0.5 font-sans">
+                      <span className="col-span-2 text-slate-400 text-[11px] font-medium">Тип & Габариты:</span>
                       <span className="col-span-3 text-slate-900 font-bold">{act.vehicleType} | {act.dimensions}</span>
                     </div>
-                    <div className="grid grid-cols-5 gap-1 py-0.5">
-                      <span className="col-span-2 text-slate-400 text-[10px] font-medium">Вес ТС (Тягач+пп):</span>
+                    <div className="grid grid-cols-5 gap-1.5 py-0.5 font-sans">
+                      <span className="col-span-2 text-slate-400 text-[11px] font-medium">Вес ТС (Тягач+пп):</span>
                       <span className="col-span-3 text-slate-900 font-bold">{act.weight}</span>
                     </div>
-                    <div className="grid grid-cols-5 gap-1 py-0.5">
-                      <span className="col-span-2 text-slate-400 text-[10px] font-medium">Водитель № 1:</span>
+                    <div className="grid grid-cols-5 gap-1.5 py-0.5 font-sans">
+                      <span className="col-span-2 text-slate-400 text-[11px] font-medium">Водитель № 1:</span>
                       <span className="col-span-3 text-slate-800 font-medium line-clamp-1" title={act.driver1}>{act.driver1 || "—"}</span>
                     </div>
                     {act.driver2 && (
-                      <div className="grid grid-cols-5 gap-1 py-0.5">
-                        <span className="col-span-2 text-slate-400 text-[10px] font-medium">Водитель № 2:</span>
+                      <div className="grid grid-cols-5 gap-1.5 py-0.5 font-sans">
+                        <span className="col-span-2 text-slate-400 text-[11px] font-medium">Водитель № 2:</span>
                         <span className="col-span-3 text-slate-800 font-medium line-clamp-1" title={act.driver2}>{act.driver2}</span>
                       </div>
                     )}
@@ -1605,34 +1535,34 @@ export default function DocumentsModule({ user }: Props) {
             <div className="flex flex-col gap-3.5 max-h-[500px] overflow-y-auto pr-1.5 custom-scrollbar">
               
               <div>
-                <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 font-mono">Номер приложения / Договор</label>
+                <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Номер приложения / Договор</label>
                 <input 
                   type="text" 
                   value={ferryOrgName}
                   onChange={e => setFerryOrgName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-xs font-black px-3.5 py-2 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition"
+                  className="w-full bg-slate-50/50 border border-slate-200 text-slate-900 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 font-mono">Дата & Порт погрузки</label>
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Дата & Порт погрузки</label>
                   <input 
                     type="text" 
                     placeholder="05.04.2026 Карасу"
                     value={ferryLoadingDatePort}
                     onChange={e => setFerryLoadingDatePort(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-xs font-black px-3.5 py-2 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition"
+                    className="w-full bg-slate-50/50 border border-slate-200 text-slate-900 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition"
                   />
                 </div>
                 <div>
-                  <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 font-mono">👤 Контактное лицо экспедитора</label>
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">👤 Контактное лицо экспедитора</label>
                   <input 
                     type="text" 
                     placeholder="Выберите из списка или введите нового..."
                     value={ferryContactPerson}
                     onChange={e => setFerryContactPerson(e.target.value)}
                     list="ferry-contacts-dl"
-                    className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-xs font-black px-3.5 py-2 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition"
+                    className="w-full bg-slate-50/50 border border-slate-200 text-slate-900 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition"
                   />
                   <datalist id="ferry-contacts-dl">
                     {ferryContactsList.map((contact, idx) => (
@@ -1642,25 +1572,25 @@ export default function DocumentsModule({ user }: Props) {
                 </div>
               </div>
               <div>
-                <label className="text-[9px] font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1">
+                <label className="text-[11px] font-bold text-slate-500 block mb-1 font-sans">
                   🔒 Организация - перевозчик (согласно CMR)
                 </label>
-                <div className="w-full bg-slate-100 border border-slate-200 text-slate-550 text-xs font-bold px-3.5 py-2.5 rounded-xl select-none">
+                <div className="w-full bg-slate-100/60 border border-slate-200/50 text-slate-500 text-xs font-medium px-3.5 py-2.5 rounded-xl select-none">
                   Общество с ограниченной ответственностью «РАТИПА»
                 </div>
-                <p className="text-[8px] text-slate-400 italic mt-0.5">Данное значение установлено по умолчанию и не редактируется</p>
+                <p className="text-[10px] text-slate-400 italic mt-1 font-sans">Данное значение установлено по умолчанию и не редактируется</p>
               </div>
               <div>
-                <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 font-mono">Наименование груза, вес, упаковка</label>
+                <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Наименование груза, вес, упаковка</label>
                 <textarea 
                   rows={2}
                   value={ferryCargoDetails}
                   onChange={e => setFerryCargoDetails(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-xs font-bold px-3.5 py-2 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition resize-none"
+                  className="w-full bg-slate-50/50 border border-slate-200 text-slate-900 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition resize-none font-sans"
                 />
               </div>
               <div>
-                <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 font-mono">
+                <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">
                   Количество партий (CMR) — редактируется только число
                 </label>
                 <div className="flex items-center gap-2">
@@ -1672,44 +1602,44 @@ export default function DocumentsModule({ user }: Props) {
                     placeholder="5"
                     value={consignmentsNum}
                     onChange={e => setConsignmentsNum(e.target.value)}
-                    className="w-20 bg-slate-50 border border-slate-200 text-slate-900 text-xs font-black px-3 py-1.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white text-center"
+                    className="w-20 bg-slate-50/50 border border-slate-200 text-slate-900 text-xs font-bold px-3 py-1.5 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white text-center transition"
                   />
                   <span className="text-slate-500 font-bold text-xs">CMR</span>
-                  <span className="text-[10px] text-slate-400 font-mono italic ml-2">Результат: {ferryConsignmentsCount}</span>
+                  <span className="text-[11px] text-slate-400 font-sans italic ml-2">Результат: {ferryConsignmentsCount}</span>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
-                <div className="text-[10px] text-slate-400 font-medium">
-                  <span className="font-mono block uppercase text-[8px] tracking-wider text-slate-400">Стоимость (USD)</span>
+              <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3.5 font-sans">
+                <div className="text-[11px] text-slate-400 font-medium">
+                  <span className="font-sans block uppercase text-[9px] tracking-wider text-slate-400 font-bold">Стоимость (USD)</span>
                   Без изменений (Blank) 🔒
                 </div>
-                <div className="text-[10px] text-slate-400 font-medium">
-                  <span className="font-mono block uppercase text-[8px] tracking-wider text-slate-400">Руководитель со стороны Клиента</span>
+                <div className="text-[11px] text-slate-400 font-medium">
+                  <span className="font-sans block uppercase text-[9px] tracking-wider text-slate-400 font-bold">Руководитель со стороны Клиента</span>
                   Директор Бориско В.В. 🔒
                 </div>
               </div>
             </div>
             {/* Save parameters node action */}
-            <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
+            <div className="pt-4 border-t border-slate-150/80 flex flex-col sm:flex-row gap-3">
               <button
                 onClick={handleSaveFerryDataForCar}
-                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-black uppercase py-3 rounded-full flex items-center justify-center gap-1.5 transition active:scale-95 border border-slate-250"
+                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-3 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95 border border-slate-200 cursor-pointer"
               >
                 {ferrySavedSuccess ? (
                   <>
-                    <Check className="h-4 w-4 text-[#0f7632]" />
+                    <Check className="h-4 w-4 text-[#3765F6] stroke-[2.5]" />
                     Параметры сохранены!
                   </>
                 ) : (
                   <>
-                    <FolderOpen className="h-4 w-4 text-slate-600" />
+                    <FolderOpen className="h-4 w-4 text-slate-500" />
                     Сохранить параметры
                   </>
                 )}
               </button>
               <button
                 onClick={handlePrintFerryOrder}
-                className="flex-1 bg-[#70FC8E] hover:bg-[#5ceb7d] text-slate-950 text-xs font-black uppercase py-3 rounded-full flex items-center justify-center gap-1.5 transition active:scale-95 border border-black/10 shadow-sm"
+                className="flex-1 bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-bold py-3 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95 border border-transparent shadow-xs cursor-pointer"
               >
                 <Printer className="h-4 w-4" />
                 Распечатать поручение
@@ -1717,7 +1647,7 @@ export default function DocumentsModule({ user }: Props) {
             </div>
           </div>
           {/* DRAFT PRINT PREVIEW PAPER CONTAINER (RIGHT - 7 COLS) */}
-          <div className="xl:col-span-7 bg-slate-100 border border-slate-200 rounded-[2rem] p-6 max-h-[850px] overflow-y-auto shadow-inner flex flex-col items-center gap-6">
+          <div className="xl:col-span-7 bg-slate-50/40 backdrop-blur-md border border-slate-200/30 rounded-2xl p-6 max-h-[850px] overflow-y-auto shadow-xs flex flex-col items-center gap-6">
             
             {/* PAPER BLOCK - PAGE 1 */}
             <div className="print-preview-paper bg-white rounded border border-slate-200 p-8 shadow-[0_15px_40px_rgba(0,0,0,0.06)] w-full max-w-[650px] aspect-[1/1.414] text-[10px] text-black font-serif leading-tight">
@@ -1954,15 +1884,15 @@ export default function DocumentsModule({ user }: Props) {
 
       {/* VEHICLE DATABASE MODAL (Менеджер сцепок) */}
       {showVehicleModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-[9999] p-4">
-          <div className="bg-white rounded-[2rem] w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+          <div className="bg-white/95 backdrop-blur-2xl rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl border border-slate-250/50 overflow-hidden font-sans">
             {/* Header */}
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between shrink-0">
+            <div className="bg-slate-50 border-b border-slate-200/40 px-6 py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">🚛</span>
                 <div>
-                  <h3 className="text-sm font-black uppercase tracking-wider font-mono text-[#70FC8E]">База авто (сцепок)</h3>
-                  <p className="text-[10px] text-slate-400">Просмотр, редактирование, поиск и разделение по диспетчерам</p>
+                  <h3 className="text-sm font-bold tracking-tight text-slate-900 font-sans">База авто (сцепок)</h3>
+                  <p className="text-[11px] text-slate-500 font-sans">Просмотр, редактирование, поиск и разделение по диспетчерам</p>
                 </div>
               </div>
               <button 
@@ -1970,36 +1900,36 @@ export default function DocumentsModule({ user }: Props) {
                   setShowVehicleModal(false);
                   setShowCoupleEditor(false);
                 }}
-                className="text-slate-400 hover:text-white transition p-1 bg-slate-800 hover:bg-slate-700 rounded-lg"
+                className="text-slate-400 hover:text-slate-600 transition p-1 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-5 bg-slate-50">
+            <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-5 bg-slate-50/50">
               
               {showCoupleEditor ? (
                 /* RENDER THE EDITOR DIRECTLY INSIDE THE MODAL */
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
+                <div className="bg-white/70 border border-slate-200/40 rounded-2xl p-5 flex flex-col gap-4 shadow-xs">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <h4 className="text-xs font-black uppercase tracking-wider text-[#0f7632] font-mono flex items-center gap-1.5">
+                    <h4 className="text-xs font-bold tracking-tight text-slate-900 font-sans flex items-center gap-1.5">
                       {editCoupleId ? "📝 Редактирование сцепки" : "➕ Создание новой сцепки"}
                     </h4>
                     <button
                       type="button"
                       onClick={() => setShowCoupleEditor(false)}
-                      className="text-[10px] font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                      className="text-[11px] font-bold text-[#3765F6] hover:text-[#2555E5] flex items-center gap-1 cursor-pointer"
                     >
                       ← Назад к списку
                     </button>
                   </div>
 
                   {/* AI Parser Row */}
-                  <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 flex flex-col gap-2">
-                    <label className="text-[8px] font-black uppercase text-blue-800 font-mono flex items-center justify-between">
-                      <span className="flex items-center gap-1"><Wand2 size={10} /> AI Нейросетевой Парсер (текст / скриншот / фото)</span>
-                      <span className="text-[7px] text-blue-500 lowercase bg-blue-100 px-1 py-0.5 rounded">Без VPN</span>
+                  <div className="bg-white/85 p-4 rounded-xl border-y border-r border-slate-200/40 border-l-4 border-l-[#3765F6] shadow-xs flex flex-col gap-2">
+                    <label className="text-[10px] font-bold text-slate-600 font-sans flex items-center justify-between">
+                      <span className="flex items-center gap-1"><Wand2 size={12} /> ИИ ПОМОЩНИК (ПАРСЕР)</span>
+                      <span className="text-[9px] text-[#1e3a8a] lowercase bg-blue-50 px-1.5 py-0.5 rounded font-medium">Без VPN</span>
                     </label>
                     <div 
                       onDragOver={(e) => e.preventDefault()}
@@ -2016,12 +1946,12 @@ export default function DocumentsModule({ user }: Props) {
                           onChange={e => setCoupleRawText(e.target.value)}
                           onPaste={handleCouplePaste}
                           placeholder="Вставьте скопированный текст авто/водителя или нажмите Ctrl+V для вставки скриншота..."
-                          className="w-full bg-white border border-blue-200 text-[11px] p-2 rounded-lg outline-none focus:border-blue-400 resize-none h-14"
+                          className="w-full bg-white border border-slate-200 text-xs font-medium p-2.5 rounded-xl outline-none focus:border-[#3765F6] resize-none h-16 transition"
                         />
                         <button
                           onClick={handleParseCouple}
                           disabled={isParsingCouple || (!coupleRawText.trim() && !coupleImageBase64)}
-                          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 rounded-lg text-[10px] font-black uppercase tracking-wider transition shrink-0 flex items-center justify-center gap-1"
+                          className="bg-[#3765F6] hover:bg-[#2555E5] disabled:opacity-50 text-white px-5 rounded-xl text-xs font-bold transition shrink-0 flex items-center justify-center gap-1 cursor-pointer"
                         >
                           {isParsingCouple ? (
                             <span className="animate-pulse">Обработка...</span>
@@ -2032,7 +1962,7 @@ export default function DocumentsModule({ user }: Props) {
                       </div>
                       {/* File upload row */}
                       <div className="flex items-center justify-between gap-2 text-[9px] text-slate-500">
-                        <label className="flex items-center gap-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-2 py-1 rounded-md cursor-pointer transition select-none">
+                        <label className="flex items-center gap-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-2 py-1 rounded-md cursor-pointer transition select-none font-sans">
                           <span>📁 Загрузить картинку</span>
                           <input 
                             type="file" 
@@ -2056,12 +1986,12 @@ export default function DocumentsModule({ user }: Props) {
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-[9px] font-black text-slate-700 truncate">Изображение прикреплено</p>
-                            <p className="text-[8px] text-slate-400 font-mono">Готово к анализу через AI</p>
+                            <p className="text-[8px] text-slate-400 font-mono">Готово к распознаванию</p>
                           </div>
                           <button
                             type="button"
                             onClick={() => setCoupleImageBase64(null)}
-                            className="text-[9px] font-black text-rose-600 hover:underline px-1.5 py-1 bg-rose-50 rounded"
+                            className="text-[9px] font-black text-rose-600 hover:underline px-1.5 py-1 bg-rose-50 rounded cursor-pointer"
                           >
                             Удалить
                           </button>
@@ -2073,91 +2003,91 @@ export default function DocumentsModule({ user }: Props) {
                   {/* Form fields */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[9px] font-black uppercase text-slate-500 font-mono">Госномер сцепки (Тягач+Прицеп)</label>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Госномер сцепки (Тягач+Прицеп)</label>
                       <input
                         type="text"
-                        placeholder="1) AX1587-7/А1063Е-7"
+                        placeholder="AX1587-7/А1063Е-7"
                         value={coupleStateNumber}
                         onChange={e => setCoupleStateNumber(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs font-bold px-3 py-2 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white text-slate-900"
+                        className="w-full bg-white border border-slate-200 text-xs font-semibold px-3 py-2.5 rounded-xl outline-none focus:border-[#3765F6] text-slate-900 transition"
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-black uppercase text-slate-500 font-mono">Модель автомобиля</label>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Модель автомобиля</label>
                       <input
                         type="text"
                         placeholder="МЕРСЕДЕС-БЕНЦ"
                         value={coupleModel}
                         onChange={e => setCoupleModel(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs font-bold px-3 py-2 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white text-slate-900"
+                        className="w-full bg-white border border-slate-200 text-xs font-semibold px-3 py-2.5 rounded-xl outline-none focus:border-[#3765F6] text-slate-900 transition"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="text-[9px] font-black uppercase text-slate-500 font-mono">Тип ТС</label>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Тип ТС</label>
                       <input
                         type="text"
                         placeholder="Тенты 90м3"
                         value={coupleVehicleType}
                         onChange={e => setCoupleVehicleType(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs font-bold px-3 py-2 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white text-slate-900"
+                        className="w-full bg-white border border-slate-200 text-xs font-semibold px-3 py-2.5 rounded-xl outline-none focus:border-[#3765F6] text-slate-900 transition"
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-black uppercase text-slate-500 font-mono">Габариты полуприцепа</label>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Габариты полуприцепа</label>
                       <input
                         type="text"
                         placeholder="13,6м х 2,45м х 2,7м"
                         value={coupleDimensions}
                         onChange={e => setCoupleDimensions(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs font-bold px-3 py-2 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white text-slate-900"
+                        className="w-full bg-white border border-slate-200 text-xs font-semibold px-3 py-2.5 rounded-xl outline-none focus:border-[#3765F6] text-slate-900 transition"
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-black uppercase text-slate-500 font-mono">Вес ТС (Тягач+пп)</label>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Вес ТС (Тягач+пп)</label>
                       <input
                         type="text"
-                        placeholder="1) 14,6т"
+                        placeholder="14,6т"
                         value={coupleWeight}
                         onChange={e => setCoupleWeight(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs font-bold px-3 py-2 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white text-slate-900"
+                        className="w-full bg-white border border-slate-200 text-xs font-semibold px-3 py-2.5 rounded-xl outline-none focus:border-[#3765F6] text-slate-900 transition"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-[9px] font-black uppercase text-slate-500 font-mono">Водитель № 1 (ФИО, паспортные данные)</label>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Водитель № 1 (ФИО, паспортные данные)</label>
                     <textarea
                       rows={2}
                       placeholder="ФИО, серия и номер, дата выдачи, орган выдачи"
                       value={coupleDriver1}
                       onChange={e => setCoupleDriver1(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-xs font-medium px-3 py-2 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white text-slate-900 resize-none"
+                      className="w-full bg-white border border-slate-200 text-xs font-medium px-3 py-2.5 rounded-xl outline-none focus:border-[#3765F6] text-slate-900 resize-none transition"
                     />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="text-[9px] font-black uppercase text-slate-500 font-mono">Водитель № 2 (если есть)</label>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Водитель № 2 (если есть)</label>
                       <textarea
                         rows={1}
                         placeholder="Второй водитель..."
                         value={coupleDriver2}
                         onChange={e => setCoupleDriver2(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 text-xs font-medium px-3 py-2 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white text-slate-900 resize-none h-[38px]"
+                        className="w-full bg-white border border-slate-200 text-xs font-medium px-3 py-2.5 rounded-xl outline-none focus:border-[#3765F6] text-slate-900 resize-none h-[42px] transition"
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-black uppercase text-slate-500 font-mono">Диспетчер (для разделения/фильтрации)</label>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1 font-sans">Диспетчер (для разделения/фильтрации)</label>
                       <input
                         type="text"
                         placeholder="Например: Сергей Т., Мария К."
                         value={coupleDispatcher}
                         onChange={e => setCoupleDispatcher(e.target.value)}
                         list="modal-dispatcher-presets"
-                        className="w-full bg-slate-50 border border-slate-200 text-xs font-bold px-3 py-2 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white text-slate-900"
+                        className="w-full bg-white border border-slate-200 text-xs font-semibold px-3 py-2.5 rounded-xl outline-none focus:border-[#3765F6] text-slate-900 transition"
                       />
                       <datalist id="modal-dispatcher-presets">
                         {ferryDispatchers.map(d => <option key={d} value={d} />)}
@@ -2165,16 +2095,16 @@ export default function DocumentsModule({ user }: Props) {
                     </div>
                   </div>
 
-                  <div className="flex gap-2.5 justify-end pt-2 border-t border-slate-100">
+                  <div className="flex gap-2.5 justify-end pt-3 border-t border-slate-100">
                     <button
                       onClick={() => setShowCoupleEditor(false)}
-                      className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-xl transition"
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition cursor-pointer"
                     >
                       Отмена
                     </button>
                     <button
                       onClick={handleSaveCouple}
-                      className="px-5 py-2 bg-[#159e44] hover:bg-[#107d35] text-white text-xs font-bold rounded-xl transition shadow-sm"
+                      className="px-5 py-2 bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
                     >
                       Сохранить в базу
                     </button>
@@ -2193,26 +2123,26 @@ export default function DocumentsModule({ user }: Props) {
                         placeholder="Быстрый поиск по госномеру, модели, водителю, диспетчеру..."
                         value={vehicleSearchQuery}
                         onChange={(e) => setVehicleSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-[#0f7632] focus:bg-white text-slate-900 transition"
+                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:border-[#3765F6] focus:bg-white text-slate-900 transition font-sans"
                       />
                     </div>
                     {/* Add Button */}
                     <button
                       onClick={handleStartAddCouple}
-                      className="bg-[#0f7632] hover:bg-[#0a5c25] text-white text-xs font-black px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition shrink-0 active:scale-95 shadow-sm"
+                      className="bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-bold px-4 py-3 rounded-xl flex items-center justify-center gap-1.5 transition shrink-0 active:scale-95 shadow-xs cursor-pointer"
                     >
                       <Plus size={14} className="stroke-[3px]" /> Добавить сцепку
                     </button>
                   </div>
 
                   {/* Dispatcher Separation Tabs */}
-                  <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200 pb-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200/50 pb-2 font-sans">
                     <button
                       onClick={() => setDispatcherFilter('all')}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                         dispatcherFilter === 'all'
-                          ? 'bg-slate-900 text-[#70FC8E]'
-                          : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-250 shadow-xs'
+                          ? 'bg-[#3765F6] text-white'
+                          : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/60 shadow-xs'
                       }`}
                     >
                       Все диспетчеры ({ferryCouples.length})
@@ -2223,10 +2153,10 @@ export default function DocumentsModule({ user }: Props) {
                       <button
                         key={disp}
                         onClick={() => setDispatcherFilter(disp)}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                           dispatcherFilter === disp
-                            ? 'bg-slate-900 text-[#70FC8E]'
-                            : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-250 shadow-xs'
+                            ? 'bg-[#3765F6] text-white'
+                            : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/60 shadow-xs'
                         }`}
                       >
                         👤 {disp} ({ferryCouples.filter(c => c.dispatcher === disp).length})
@@ -2237,10 +2167,10 @@ export default function DocumentsModule({ user }: Props) {
                     {ferryCouples.some(c => !c.dispatcher) && (
                       <button
                         onClick={() => setDispatcherFilter('none')}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                           dispatcherFilter === 'none'
-                            ? 'bg-slate-900 text-[#70FC8E]'
-                            : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-250 shadow-xs'
+                            ? 'bg-[#3765F6] text-white'
+                            : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/60 shadow-xs'
                         }`}
                       >
                         Без диспетчера ({ferryCouples.filter(c => !c.dispatcher).length})
@@ -2249,7 +2179,7 @@ export default function DocumentsModule({ user }: Props) {
                   </div>
 
                   {/* Couples List (Horizontal Strips) */}
-                  <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-3 font-sans">
                     {filteredCouples.length > 0 ? (
                       filteredCouples.map(couple => {
                         const isCurrentlySelected = selectedCoupleId === couple.id;
@@ -2258,8 +2188,8 @@ export default function DocumentsModule({ user }: Props) {
                             key={couple.id}
                             className={`bg-white rounded-xl p-3 border transition flex items-center justify-between gap-4 shadow-xs ${
                               isCurrentlySelected 
-                                ? 'border-[#0f7632] ring-1 ring-[#0f7632]/20 bg-emerald-50/10' 
-                                : 'border-slate-200 hover:border-slate-350'
+                                ? 'border-[#3765F6] ring-1 ring-[#3765F6]/20 bg-[#3765F6]/5' 
+                                : 'border-slate-200 hover:border-slate-300'
                             }`}
                           >
                             <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -2276,15 +2206,15 @@ export default function DocumentsModule({ user }: Props) {
                               {/* Specs */}
                               <div className="text-[10px] text-slate-600 flex gap-4 overflow-hidden">
                                 <div className="truncate">
-                                  <span className="text-slate-400 font-semibold mr-1">Тип:</span>
+                                  <span className="text-slate-400 font-semibold mr-1 font-sans">Тип:</span>
                                   <span className="font-bold text-slate-800">{couple.vehicleType}</span>
                                 </div>
                                 <div className="truncate">
-                                  <span className="text-slate-400 font-semibold mr-1">Размеры:</span>
+                                  <span className="text-slate-400 font-semibold mr-1 font-sans">Размеры:</span>
                                   <span className="font-bold text-slate-800">{couple.dimensions}</span>
                                 </div>
                                 <div className="truncate">
-                                  <span className="text-slate-400 font-semibold mr-1">Вод.1:</span>
+                                  <span className="text-slate-400 font-semibold mr-1 font-sans">Вод.1:</span>
                                   <span className="font-medium text-slate-700">{couple.driver1?.split(',')[0] || "—"}</span>
                                 </div>
                               </div>
@@ -2293,11 +2223,11 @@ export default function DocumentsModule({ user }: Props) {
                             {/* Status & Actions */}
                             <div className="flex items-center gap-3 shrink-0">
                               {couple.dispatcher ? (
-                                <span className="bg-blue-50 text-blue-800 text-[9px] font-black px-2 py-0.5 rounded-full border border-blue-100">
+                                <span className="bg-blue-50 text-blue-800 text-[9px] font-black px-2 py-0.5 rounded-full border border-blue-100 font-sans">
                                   👤 {couple.dispatcher}
                                 </span>
                               ) : (
-                                <span className="bg-slate-100 text-slate-400 text-[9px] font-black px-2 py-0.5 rounded-full italic">
+                                <span className="bg-slate-100 text-slate-400 text-[9px] font-black px-2 py-0.5 rounded-full italic font-sans">
                                   Без диспетчера
                                 </span>
                               )}
@@ -2306,7 +2236,7 @@ export default function DocumentsModule({ user }: Props) {
                                 <button
                                   type="button"
                                   onClick={() => handleStartEditCouple(couple.id)}
-                                  className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                  className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
                                   title="Редактировать сцепку"
                                 >
                                   <Edit3 size={13} />
@@ -2314,7 +2244,7 @@ export default function DocumentsModule({ user }: Props) {
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteCouple(couple.id)}
-                                  className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                                  className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
                                   title="Удалить сцепку"
                                 >
                                   <Trash2 size={13} />
@@ -2326,10 +2256,10 @@ export default function DocumentsModule({ user }: Props) {
                                   setSelectedCoupleId(couple.id);
                                   setShowVehicleModal(false);
                                 }}
-                                className={`text-[10px] font-black px-3 py-1.5 rounded-lg transition shadow-xs ${
+                                className={`text-[10px] font-bold px-3.5 py-1.5 rounded-xl transition shadow-xs cursor-pointer ${
                                   isCurrentlySelected
-                                    ? 'bg-[#0f7632]/10 text-[#0f7632] border border-[#0f7632]/20 cursor-default'
-                                    : 'bg-slate-900 hover:bg-slate-800 text-white'
+                                    ? 'bg-[#3765F6]/10 text-[#3765F6] border border-[#3765F6]/20 cursor-default'
+                                    : 'bg-[#3765F6] hover:bg-[#2555E5] text-white'
                                 }`}
                               >
                                 {isCurrentlySelected ? 'Выбрано' : 'Выбрать'}
@@ -2350,13 +2280,13 @@ export default function DocumentsModule({ user }: Props) {
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-slate-100 border-t border-slate-250 px-6 py-4 flex justify-end shrink-0">
+            <div className="bg-slate-50 border-t border-slate-200/40 px-6 py-4 flex justify-end shrink-0">
               <button
                 onClick={() => {
                   setShowVehicleModal(false);
                   setShowCoupleEditor(false);
                 }}
-                className="bg-slate-900 text-white hover:bg-slate-800 text-xs font-black uppercase tracking-wider px-6 py-2.5 rounded-full transition active:scale-95 shadow-sm"
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold uppercase tracking-wider px-6 py-3 rounded-xl transition active:scale-95 border border-slate-200 cursor-pointer"
               >
                 Закрыть
               </button>

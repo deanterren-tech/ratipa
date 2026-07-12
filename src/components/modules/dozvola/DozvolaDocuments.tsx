@@ -894,9 +894,9 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden">
-        <div className="p-5 bg-slate-50 border-b border-slate-200/55">
-          <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+      <div className="bg-white/80 backdrop-blur-xl border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] rounded-3xl overflow-hidden">
+        <div className="p-5 border-b border-slate-100">
+          <h2 className="text-sm font-bold text-slate-800">
             Генератор документов бланков
           </h2>
         </div>
@@ -904,13 +904,13 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
         <div className="p-6 md:p-8 flex flex-col lg:flex-row gap-8">
           <div className="w-full lg:w-1/2 space-y-5">
             <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
                 Тип документа
               </label>
               <select
                 value={docType}
                 onChange={(e) => setDocType(e.target.value)}
-                className="block w-full mt-1.5 px-3 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
               >
                 <option value="Заявление на получение разрешений">
                   Заявление на выдачу разрешений
@@ -921,41 +921,39 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                 <option value="Заявление по китайским копиям">
                   Заявление на китайские разрешения
                 </option>
-
               </select>
             </div>
 
             <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-mono mb-1.5">
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">
                     Дата заявления / документа
                 </label>
                 <input 
                     type="date"
-                    className="block w-full mt-1.5 px-3 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                    className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                     value={applicationDate}
                     onChange={e => setApplicationDate(e.target.value)}
                 />
             </div>
 
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/50">
-                <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                    {docType === "Заявление на получение разрешений" && "Документ формируется на основе активных заявок блока Планерки."}
+            <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-200/50">
+                <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                    {docType === "Заявление на получение разрешений" && "Документ формируется на основе активных заявок блока планерки."}
                     {docType === "Реестр возврата разрешений" && "В реестр возвращаемых бланков попадают бланки со статусом 'Сдан в офис'."}
-                    {docType === "Заявление по китайским копиям" && "Собирается из китайских дозволов (СHN 2, CHN 3) со сданной копией."}
-
+                    {docType === "Заявление по китайским копиям" && "Собирается из китайских дозволов (CHN 2, CHN 3) со сданной копией."}
                 </p>
             </div>
           </div>
 
-          <div className="w-full lg:w-1/2 rounded-2xl bg-slate-900 border border-slate-800 p-6 flex flex-col justify-center items-center text-center space-y-6">
-            <div className="bg-slate-800 p-4 rounded-full">
-              <FileText className="h-8 w-8 text-[#70FC8E]" />
+          <div className="w-full lg:w-1/2 rounded-3xl bg-slate-50/50 border border-slate-200/50 p-6 flex flex-col justify-center items-center text-center space-y-6">
+            <div className="bg-white p-4 rounded-full border border-slate-100 shadow-sm">
+              <FileText className="h-8 w-8 text-[#3765F6]" />
             </div>
             <div>
-              <h3 className="text-white font-black text-lg uppercase tracking-tight">
+              <h3 className="text-slate-800 font-bold text-lg">
                 Подготовка завершена
               </h3>
-              <p className="text-slate-400 text-xs font-medium max-w-sm mt-1 mx-auto leading-relaxed">
+              <p className="text-slate-500 text-xs font-medium max-w-sm mt-1.5 mx-auto leading-relaxed">
                 Вы можете сформировать файл Microsoft Word формата .doc для
                 дальнейшего редактирования, или сразу вывести печатную версию в
                 браузере.
@@ -965,17 +963,17 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
             <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs mx-auto">
               <button
                 onClick={handlePrintHTML}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 hover:bg-slate-700 text-white font-black rounded-xl text-xs uppercase tracking-tight transition cursor-pointer border border-slate-700"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-xl text-xs transition cursor-pointer border border-slate-200 shadow-sm"
               >
-                <Printer className="h-4 w-4 text-slate-300" />
+                <Printer className="h-4 w-4 text-slate-400" />
                 Печать
               </button>
               <button
                 onClick={generateDocx}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-[#70FC8E] hover:bg-[#60deb8] text-slate-950 font-black rounded-xl text-xs uppercase tracking-tight transition cursor-pointer"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold rounded-xl text-xs transition cursor-pointer shadow-sm shadow-blue-500/10"
               >
                 <Download className="h-4 w-4" />
-                WORD (DOC)
+                Word (doc)
               </button>
             </div>
           </div>
@@ -984,62 +982,62 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
 
       {/* Dynamic item selectors and editable lists */}
       {docType === "Заявление на получение разрешений" && (
-        <div className="bg-white rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] p-6 space-y-6">
+        <div className="bg-white/85 backdrop-blur-xl rounded-3xl border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] p-6 space-y-6">
           <div className="space-y-3">
-            <h3 className="text-sm font-black text-slate-900 uppercase">1. Выбор активных заявок планерки</h3>
+            <h3 className="text-sm font-bold text-slate-800">1. Выбор активных заявок планерки</h3>
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={() => setAllPermitsChecked(true)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase rounded-lg">Выбрать все</button>
-              <button onClick={() => setAllPermitsChecked(false)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase rounded-lg">Снять все</button>
-              <button onClick={rebuildPermitRows} className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase rounded-lg">Собрать по выбранным</button>
+              <button onClick={() => setAllPermitsChecked(true)} className="px-3.5 py-2 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Выбрать все</button>
+              <button onClick={() => setAllPermitsChecked(false)} className="px-3.5 py-2 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Снять все</button>
+              <button onClick={rebuildPermitRows} className="px-3.5 py-2 bg-[#3765F6] hover:bg-[#2555E5] shadow-sm shadow-blue-500/10 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по выбранным</button>
               <div className="flex-1 min-w-[200px]">
                 <input
                   type="text"
-                  placeholder="🔍 Поиск заявок по машине или виду разрешения..."
+                  placeholder="Поиск заявок по машине или виду разрешения..."
                   value={taskSearchQuery}
                   onChange={(e) => setTaskSearchQuery(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                  className="w-full px-3 py-1.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-[11px] font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                 />
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-3 bg-slate-50 border border-slate-200/50 rounded-2xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-3 bg-slate-50/50 border border-slate-200/50 rounded-2xl">
               {filteredActiveTasks.map((task: any) => (
-                <label key={task.id} className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50/50 transition">
+                <label key={task.id} className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-2xl cursor-pointer hover:bg-slate-50/50 transition">
                   <input 
                     type="checkbox" 
-                    className="mt-1 accent-emerald-500" 
+                    className="mt-1 accent-[#3765F6]" 
                     checked={!!selectedPermitTasks[task.id]}
                     onChange={(e) => setSelectedPermitTasks(prev => ({ ...prev, [task.id]: e.target.checked }))}
                   />
                   <div>
-                    <span className="font-black text-slate-900 text-xs">{task.car}</span>
-                    {task.note && <span className="block text-[10px] text-amber-600 font-bold mb-0.5">{task.note}</span>}
-                    <span className="block text-[10px] text-slate-500 font-bold">
+                    <span className="font-bold text-slate-900 text-xs">{task.car}</span>
+                    {task.note && <span className="block text-[10px] text-amber-600 font-semibold mb-0.5">{task.note}</span>}
+                    <span className="block text-[10px] text-slate-500 font-semibold mt-0.5">
                       {task.items.map((i: any) => `${i.type} × ${i.qty}`).join(', ')} · {task.createdAt}
                     </span>
                   </div>
                 </label>
               ))}
               {!activeTasks.length ? (
-                <div className="col-span-2 text-center text-slate-400 font-bold text-xs py-6">В планерке нет активных заявок</div>
+                <div className="col-span-2 text-center text-slate-400 font-semibold text-xs py-6">В планерке нет активных заявок</div>
               ) : !filteredActiveTasks.length ? (
-                <div className="col-span-2 text-center text-slate-400 font-bold text-xs py-6">Нет заявок, соответствующих поиску</div>
+                <div className="col-span-2 text-center text-slate-400 font-semibold text-xs py-6">Нет заявок, соответствующих поиску</div>
               ) : null}
             </div>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3 pt-4 border-t border-slate-100">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-black text-slate-900 uppercase">2. Содержимое заявления (Редактируемые строки)</h3>
-              <button onClick={addPermitRow} className="flex items-center gap-1 bg-slate-950 hover:bg-slate-800 text-[#70FC8E] px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight">+ Добавить строку</button>
+              <h3 className="text-sm font-bold text-slate-800">2. Содержимое заявления (Редактируемые строки)</h3>
+              <button onClick={addPermitRow} className="flex items-center gap-1 bg-[#3765F6] hover:bg-[#2555E5] text-white px-3 py-1.5 rounded-xl text-[10px] font-semibold transition cursor-pointer">+ Добавить строку</button>
             </div>
 
-            <div className="table-responsive select-none overflow-x-auto custom-scrollbar">
+            <div className="table-responsive select-none overflow-x-auto custom-scrollbar border border-slate-200/50 rounded-2xl bg-white">
               <table className="main-table w-full text-xs">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-150 text-[10px] font-black uppercase text-slate-400">
-                    <th className="p-3">Государство</th>
-                    <th className="p-3">Вид (категория) разрешения</th>
+                  <tr className="bg-slate-50/50 border-b border-slate-150 text-[10px] font-bold uppercase text-slate-400">
+                    <th className="p-3 text-left">Государство</th>
+                    <th className="p-3 text-left">Вид (категория) разрешения</th>
                     <th className="p-3 w-28 text-center">Год бланка</th>
                     <th className="p-3 w-28 text-center">Количество, шт.</th>
                     <th className="p-3 w-16 text-center">Убрать</th>
@@ -1047,11 +1045,11 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                 </thead>
                 <tbody>
                   {permitRows.map((row, index) => (
-                    <tr key={index} className="hover:bg-slate-50/50">
-                      <td className="p-2"><input className="input-flat font-bold text-slate-800" value={row.country} onChange={e => updatePermitRow(index, 'country', e.target.value)} /></td>
-                      <td className="p-2"><input className="input-flat font-bold text-slate-800" value={row.category} onChange={e => updatePermitRow(index, 'category', e.target.value)} /></td>
-                      <td className="p-2 text-center"><input type="number" className="input-flat text-center font-bold text-slate-800" value={row.year} onChange={e => updatePermitRow(index, 'year', e.target.value)} /></td>
-                      <td className="p-2 text-center"><input type="number" min="1" className="input-flat text-center font-bold text-slate-800" value={row.qty} onChange={e => updatePermitRow(index, 'qty', e.target.value)} /></td>
+                    <tr key={index} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.country} onChange={e => updatePermitRow(index, 'country', e.target.value)} /></td>
+                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.category} onChange={e => updatePermitRow(index, 'category', e.target.value)} /></td>
+                      <td className="p-2 text-center"><input type="number" className="w-20 px-2 py-1 bg-transparent border-0 text-center font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.year} onChange={e => updatePermitRow(index, 'year', e.target.value)} /></td>
+                      <td className="p-2 text-center"><input type="number" min="1" className="w-20 px-2 py-1 bg-transparent border-0 text-center font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.qty} onChange={e => updatePermitRow(index, 'qty', e.target.value)} /></td>
                       <td className="p-2 text-center">
                         <button onClick={() => deletePermitRow(index)} className="w-8 h-8 rounded-lg text-rose-500 hover:bg-rose-50 transition flex items-center justify-center mx-auto cursor-pointer">✕</button>
                       </td>
@@ -1059,7 +1057,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                   ))}
                   {!permitRows.length && (
                     <tr>
-                      <td colSpan={5} className="text-center p-8 text-slate-400 font-bold uppercase">Список строк заявления пуст</td>
+                      <td colSpan={5} className="text-center p-8 text-slate-400 font-semibold uppercase">Список строк заявления пуст</td>
                     </tr>
                   )}
                 </tbody>
@@ -1070,87 +1068,87 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
       )}
 
       {docType === "Реестр возврата разрешений" && (
-        <div className="bg-white rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] p-6 space-y-6">
+        <div className="bg-white/85 backdrop-blur-xl rounded-3xl border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] p-6 space-y-6">
           <div className="space-y-2">
-            <h3 className="text-sm font-black text-slate-900 uppercase">1. Выбор бланков, сданных в офис</h3>
+            <h3 className="text-sm font-bold text-slate-800">1. Выбор бланков, сданных в офис</h3>
             <div className="flex flex-wrap gap-2 items-center">
-              <button onClick={() => setAllReturnsChecked(true)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase rounded-lg">Выбрать все</button>
-              <button onClick={() => setAllReturnsChecked(false)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase rounded-lg">Снять все</button>
-              <button onClick={rebuildReturnRows} className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black uppercase rounded-lg">Собрать по выбранным</button>
-              <button onClick={loadLastAssembledStatement} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black uppercase rounded-lg">Собрать по предыдущим</button>
-              <label className="flex items-center gap-2 text-[10px] font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg cursor-pointer">
-                <input type="checkbox" checked={showArchiveReturns} onChange={(e) => setShowArchiveReturns(e.target.checked)} className="accent-amber-500" />
+              <button onClick={() => setAllReturnsChecked(true)} className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Выбрать все</button>
+              <button onClick={() => setAllReturnsChecked(false)} className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Снять все</button>
+              <button onClick={rebuildReturnRows} className="px-3 py-1.5 bg-[#3765F6] hover:bg-[#2555E5] shadow-sm shadow-blue-500/10 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по выбранным</button>
+              <button onClick={loadLastAssembledStatement} className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по предыдущим</button>
+              <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-600 bg-slate-100 px-3.5 py-2 rounded-xl cursor-pointer">
+                <input type="checkbox" checked={showArchiveReturns} onChange={(e) => setShowArchiveReturns(e.target.checked)} className="accent-[#3765F6]" />
                 Включить уже сданные в ТИ (Архив)
               </label>
               <div className="flex-1 min-w-[200px]">
                 <input
                   type="text"
-                  placeholder="🔍 Поиск бланков по номеру, типу или машине..."
+                  placeholder="Поиск бланков по номеру, типу или машине..."
                   value={returnSearchQuery}
                   onChange={(e) => setReturnSearchQuery(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                  className="w-full px-3 py-1.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-[11px] font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                 />
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-3 bg-slate-50 border border-slate-200/50 rounded-2xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-3 bg-slate-50/50 border border-slate-200/50 rounded-2xl">
               {filteredActiveReturns.map((item: any) => (
-                <label key={item.id} className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-xl cursor-pointer hover:bg-slate-50/50 transition">
+                <label key={item.id} className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-2xl cursor-pointer hover:bg-slate-50/50 transition">
                   <input 
                      type="checkbox" 
-                     className="mt-1 accent-amber-500" 
+                     className="mt-1 accent-[#3765F6]" 
                      checked={!!selectedReturnItems[item.id]}
                      onChange={(e) => setSelectedReturnItems(prev => ({ ...prev, [item.id]: e.target.checked }))}
                   />
                   <div>
-                    <span className="font-black text-slate-900 text-xs">{item.type} №{item.number}</span>
-                    <span className="block text-[10px] text-slate-500 font-bold">
+                    <span className="font-bold text-slate-900 text-xs">{item.type} №{item.number}</span>
+                    <span className="block text-[10px] text-slate-500 font-semibold mt-0.5">
                       {getPermitPrintMapping(item.type).country || item.type} · {item.car || 'без авто'} · {item.isCopy ? 'копия сдана' : 'оригинал'}
                     </span>
                   </div>
                 </label>
               ))}
               {!activeReturns.length ? (
-                <div className="col-span-2 text-center text-slate-400 font-bold text-xs py-6">В реестре офиса нет сданных бланков</div>
+                <div className="col-span-2 text-center text-slate-400 font-semibold text-xs py-6">В реестре офиса нет сданных бланков</div>
               ) : !filteredActiveReturns.length ? (
-                <div className="col-span-2 text-center text-slate-400 font-bold text-xs py-6">Нет бланков, соответствующих поиску</div>
+                <div className="col-span-2 text-center text-slate-400 font-semibold text-xs py-6">Нет бланков, соответствующих поиску</div>
               ) : null}
             </div>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3 pt-4 border-t border-slate-100">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-black text-slate-900 uppercase">2. Содержимое реестра (Редактируемые строки)</h3>
+              <h3 className="text-sm font-bold text-slate-800">2. Содержимое реестра (Редактируемые строки)</h3>
               <div className="flex gap-2">
                 {user.role === 'root_admin' && (
-                  <button onClick={markCheckedOfficeReturnsAsUsed} className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight shadow-sm cursor-pointer">
-                    <CheckCircle className="h-3 w-3" /> Списать (Сданы в инспекцию ТИ)
+                  <button onClick={markCheckedOfficeReturnsAsUsed} className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-[10px] font-semibold transition cursor-pointer shadow-xs">
+                    <CheckCircle className="h-3.5 w-3.5" /> Списать (Сданы в инспекцию ТИ)
                   </button>
                 )}
-                <button onClick={addReturnRow} className="flex items-center gap-1 bg-slate-950 hover:bg-slate-800 text-[#70FC8E] px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight cursor-pointer">+ Добавить строку</button>
+                <button onClick={addReturnRow} className="flex items-center gap-1 bg-[#3765F6] hover:bg-[#2555E5] text-white px-3 py-1.5 rounded-xl text-[10px] font-semibold transition cursor-pointer">+ Добавить строку</button>
               </div>
             </div>
 
-            <div className="table-responsive select-none overflow-x-auto custom-scrollbar">
+            <div className="table-responsive select-none overflow-x-auto custom-scrollbar border border-slate-200/50 rounded-2xl bg-white">
               <table className="main-table w-full text-xs">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-150 text-[10px] font-black uppercase text-slate-400">
-                    <th className="p-3">Государство</th>
-                    <th className="p-3">Вид бланков</th>
+                  <tr className="bg-slate-50/50 border-b border-slate-150 text-[10px] font-bold uppercase text-slate-400">
+                    <th className="p-3 text-left">Государство</th>
+                    <th className="p-3 text-left">Вид бланков</th>
                     <th className="p-3 w-24 text-center">Год</th>
-                    <th className="p-3">Номера бланков</th>
+                    <th className="p-3 text-left">Номера бланков</th>
                     <th className="p-3 w-24 text-center">Всего, шт.</th>
                     <th className="p-3 w-16 text-center">Убрать</th>
                   </tr>
                 </thead>
                 <tbody>
                   {returnRows.map((row, index) => (
-                    <tr key={index} className="hover:bg-slate-50/50">
-                      <td className="p-2"><input className="input-flat font-bold text-slate-800" value={row.country} onChange={e => updateReturnRow(index, 'country', e.target.value)} /></td>
-                      <td className="p-2"><input className="input-flat font-bold text-slate-800" value={row.category} onChange={e => updateReturnRow(index, 'category', e.target.value)} /></td>
-                      <td className="p-2 text-center"><input type="number" className="input-flat text-center font-bold text-slate-800" value={row.year} onChange={e => updateReturnRow(index, 'year', e.target.value)} /></td>
-                      <td className="p-2"><input className="input-flat font-mono font-bold text-slate-800" value={row.numbers} onChange={e => updateReturnRow(index, 'numbers', e.target.value)} /></td>
-                      <td className="p-2 text-center"><input type="number" min="1" className="input-flat text-center font-bold text-slate-800" value={row.qty} onChange={e => updateReturnRow(index, 'qty', e.target.value)} /></td>
+                    <tr key={index} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.country} onChange={e => updateReturnRow(index, 'country', e.target.value)} /></td>
+                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.category} onChange={e => updateReturnRow(index, 'category', e.target.value)} /></td>
+                      <td className="p-2 text-center"><input type="number" className="w-16 px-2 py-1 bg-transparent border-0 text-center font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.year} onChange={e => updateReturnRow(index, 'year', e.target.value)} /></td>
+                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-mono font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.numbers} onChange={e => updateReturnRow(index, 'numbers', e.target.value)} /></td>
+                      <td className="p-2 text-center"><input type="number" min="1" className="w-16 px-2 py-1 bg-transparent border-0 text-center font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.qty} onChange={e => updateReturnRow(index, 'qty', e.target.value)} /></td>
                       <td className="p-2 text-center">
                         <button onClick={() => deleteReturnRow(index)} className="w-8 h-8 rounded-lg text-rose-500 hover:bg-rose-50 transition flex items-center justify-center mx-auto cursor-pointer">✕</button>
                       </td>
@@ -1158,7 +1156,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                   ))}
                   {!returnRows.length && (
                     <tr>
-                      <td colSpan={6} className="text-center p-8 text-slate-400 font-bold uppercase">Список строк реестра пуст</td>
+                      <td colSpan={6} className="text-center p-8 text-slate-400 font-semibold uppercase">Список строк реестра пуст</td>
                     </tr>
                   )}
                 </tbody>
@@ -1169,33 +1167,33 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
       )}
 
       {docType === "Заявление по китайским копиям" && (
-        <div className="bg-white rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] p-6 space-y-6">
+        <div className="bg-white/85 backdrop-blur-xl rounded-3xl border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] p-6 space-y-6">
           <div className="space-y-2">
-            <h3 className="text-sm font-black text-slate-900 uppercase">1. Выбор сданных китайских копий</h3>
+            <h3 className="text-sm font-bold text-slate-800">1. Выбор сданных китайских копий</h3>
             <div className="flex flex-wrap gap-2 items-center">
-              <button onClick={() => setAllChinaChecked(true)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase rounded-lg">Выбрать все</button>
-              <button onClick={() => setAllChinaChecked(false)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-black uppercase rounded-lg">Снять все</button>
-              <button onClick={rebuildChinaRows} className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-black uppercase rounded-lg">Собрать по выбранным</button>
-              <label className="flex items-center gap-2 text-[10px] font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg cursor-pointer">
-                <input type="checkbox" checked={showArchiveChina} onChange={(e) => setShowArchiveChina(e.target.checked)} className="accent-purple-600" />
+              <button onClick={() => setAllChinaChecked(true)} className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Выбрать все</button>
+              <button onClick={() => setAllChinaChecked(false)} className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Снять все</button>
+              <button onClick={rebuildChinaRows} className="px-3 py-1.5 bg-[#3765F6] hover:bg-[#2555E5] shadow-sm shadow-blue-500/10 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по выбранным</button>
+              <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 shadow-sm px-3.5 py-1.5 rounded-xl cursor-pointer transition">
+                <input type="checkbox" checked={showArchiveChina} onChange={(e) => setShowArchiveChina(e.target.checked)} className="accent-[#3765F6]" />
                 Включить уже сданные в ТИ (Архив)
               </label>
-              <button onClick={() => markSelectedChinaCopiesAsSubmitted(true)} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase rounded-lg">Пометить как отправленные в ТИ</button>
-              <button onClick={() => markSelectedChinaCopiesAsSubmitted(false)} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase rounded-lg">Сбросить отметку сдачи</button>
+              <button onClick={() => markSelectedChinaCopiesAsSubmitted(true)} className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Пометить как отправленные в ТИ</button>
+              <button onClick={() => markSelectedChinaCopiesAsSubmitted(false)} className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Сбросить отметку сдачи</button>
               <div className="flex-1 min-w-[200px]">
                 <input
                   type="text"
-                  placeholder="🔍 Поиск копий по номеру или машине..."
+                  placeholder="Поиск копий по номеру или машине..."
                   value={chinaSearchQuery}
                   onChange={(e) => setChinaSearchQuery(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                  className="w-full px-3 py-1.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-[11px] font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                 />
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-3 bg-slate-50 border border-slate-200/50 rounded-2xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-3 bg-slate-50/50 border border-slate-200/50 rounded-2xl">
               {filteredActiveChinaCopies.map((item: any) => (
-                <label key={item.id} className={`flex items-start gap-3 p-3 border rounded-xl cursor-pointer hover:bg-slate-50/50 transition ${item.chinaCopySubmitted ? 'bg-purple-50/40 border-purple-100' : 'bg-white border-slate-100'}`}>
+                <label key={item.id} className={`flex items-start gap-3 p-3 border rounded-2xl cursor-pointer hover:bg-slate-50/50 transition ${item.chinaCopySubmitted ? 'bg-purple-50/20 border-purple-100/40' : 'bg-white border-slate-100'}`}>
                   <input 
                     type="checkbox" 
                     className="mt-1 accent-purple-600" 
@@ -1203,46 +1201,46 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                     onChange={(e) => setSelectedChinaItems(prev => ({ ...prev, [item.id]: e.target.checked }))}
                   />
                   <div>
-                    <span className="font-black text-slate-900 text-xs">
+                    <span className="font-bold text-slate-900 text-xs">
                       {item.type} №{item.number}
                       {item.chinaCopySubmitted && (
-                        <span className="ml-2 bg-purple-100 text-purple-700 text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-tight">Копия сдана/отправлена</span>
+                        <span className="ml-2 bg-purple-100 text-purple-700 text-[8px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Копия сдана/отправлена</span>
                       )}
                     </span>
-                    <span className="block text-[10px] text-slate-500 font-bold">
+                    <span className="block text-[10px] text-slate-500 font-semibold mt-0.5">
                       {item.car || 'без авто'} · {getStatusLabel(item.status)}
                     </span>
                   </div>
                 </label>
               ))}
               {!activeChinaCopies.length ? (
-                <div className="col-span-2 text-center text-slate-400 font-bold text-xs py-6 font-mono">Нет китайских дозволов с отметкой 'копия сдана'</div>
+                <div className="col-span-2 text-center text-slate-400 font-semibold text-xs py-6">Нет китайских дозволов с отметкой 'копия сдана'</div>
               ) : !filteredActiveChinaCopies.length ? (
-                <div className="col-span-2 text-center text-slate-400 font-bold text-xs py-6 font-mono">Нет копий, соответствующих поиску</div>
+                <div className="col-span-2 text-center text-slate-400 font-semibold text-xs py-6 font-mono">Нет копий, соответствующих поиску</div>
               ) : null}
             </div>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3 pt-4 border-t border-slate-100">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-black text-slate-900 uppercase">2. Содержимое заявления по копиям (Редактируемые строки)</h3>
-              <button onClick={addChinaRow} className="flex items-center gap-1 bg-slate-950 hover:bg-slate-800 text-[#70FC8E] px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-tight cursor-pointer">+ Добавить строку</button>
+              <h3 className="text-sm font-bold text-slate-800">2. Содержимое заявления по копиям (Редактируемые строки)</h3>
+              <button onClick={addChinaRow} className="flex items-center gap-1 bg-[#3765F6] hover:bg-[#2555E5] text-white px-3 py-1.5 rounded-xl text-[10px] font-semibold transition cursor-pointer">+ Добавить строку</button>
             </div>
 
-            <div className="table-responsive select-none overflow-x-auto custom-scrollbar">
+            <div className="table-responsive select-none overflow-x-auto custom-scrollbar border border-slate-200/50 rounded-2xl bg-white">
               <table className="main-table w-full text-xs">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-150 text-[10px] font-black uppercase text-slate-400">
-                    <th className="p-3 w-48">Страна</th>
-                    <th className="p-3">Номера разрешений</th>
+                  <tr className="bg-slate-50/50 border-b border-slate-150 text-[10px] font-bold uppercase text-slate-400">
+                    <th className="p-3 w-48 text-left">Страна</th>
+                    <th className="p-3 text-left">Номера разрешений</th>
                     <th className="p-3 w-16 text-center">Убрать</th>
                   </tr>
                 </thead>
                 <tbody>
                   {chinaRows.map((row, index) => (
-                    <tr key={index} className="hover:bg-slate-50/50">
-                      <td className="p-2"><input className="input-flat font-bold text-slate-800" value={row.country} onChange={e => updateChinaRow(index, 'country', e.target.value)} /></td>
-                      <td className="p-2"><input className="input-flat font-mono font-bold text-slate-800" value={row.numbers} onChange={e => updateChinaRow(index, 'numbers', e.target.value)} /></td>
+                    <tr key={index} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.country} onChange={e => updateChinaRow(index, 'country', e.target.value)} /></td>
+                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-mono font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.numbers} onChange={e => updateChinaRow(index, 'numbers', e.target.value)} /></td>
                       <td className="p-2 text-center">
                         <button onClick={() => deleteChinaRow(index)} className="w-8 h-8 rounded-lg text-rose-500 hover:bg-rose-50 transition flex items-center justify-center mx-auto cursor-pointer">✕</button>
                       </td>
@@ -1250,7 +1248,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                   ))}
                   {!chinaRows.length && (
                     <tr>
-                      <td colSpan={3} className="text-center p-8 text-slate-400 font-bold uppercase">Список строк заявления пуст</td>
+                      <td colSpan={3} className="text-center p-8 text-slate-400 font-semibold uppercase">Список строк заявления пуст</td>
                     </tr>
                   )}
                 </tbody>
@@ -1259,7 +1257,6 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
           </div>
         </div>
       )}
-
 
     </div>
   );

@@ -37,58 +37,68 @@ export default function AdminAnnouncementsBlock({ user, settings }: Props) {
   };
 
   return (
-    <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] mt-6 space-y-4">
-      <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-4">
-        <Megaphone className="h-4.5 w-4.5 text-slate-900 font-bold" style={{ fill: '#70FC8E' }} />
-        Системные уведомления (Dashboard)
-      </h2>
+    <div className="bg-white/60 backdrop-blur-2xl rounded-[2.5rem] p-6 lg:p-8 border border-white/40 shadow-xl space-y-8 w-full select-none">
+      
+      {/* Block Header */}
+      <div className="border-b border-white/40 pb-4">
+        <span className="bg-indigo-600 text-white font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-wider">
+          Dashboard Board
+        </span>
+        <h2 className="text-sm font-black uppercase tracking-tight text-slate-900 mt-2 flex items-center gap-1.5">
+          <Megaphone className="h-4.5 w-4.5 text-indigo-600 font-bold" />
+          Системные уведомления (Dashboard)
+        </h2>
+        <p className="text-[10px] text-slate-500 font-medium mt-1 leading-relaxed">
+          Публикация важных инструкций, объявлений и новостей на главной панели сотрудников.
+        </p>
+      </div>
 
       {isWritePermitted && (
-        <form onSubmit={handleAddAnnouncement} className="space-y-3.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200/50">
+        <form onSubmit={handleAddAnnouncement} className="space-y-4 bg-white/40 border border-white/45 backdrop-blur-md shadow-inner p-5 rounded-[1.8rem]">
           <textarea
             placeholder="Инструкция: Сдавать CMR строго до вторника, 12:00..."
             required
             value={annText}
             onChange={(e) => setAnnText(e.target.value)}
-            className="w-full p-3 bg-white text-xs rounded-xl border border-slate-200 h-20 resize-none focus:outline-none font-semibold text-slate-800"
+            className="w-full p-4 bg-white/40 border border-white/45 text-xs rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm h-24 resize-none transition-all font-semibold text-slate-800"
           />
-          <div className="flex justify-between items-center bg-white p-2 px-3 border border-slate-200 rounded-xl">
-            <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-500 select-none cursor-pointer">
+          <div className="flex justify-between items-center bg-white/40 border border-white/45 backdrop-blur-md p-3 shadow-inner rounded-2xl">
+            <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-500 select-none cursor-pointer group">
               <input
                 type="checkbox"
                 checked={annImportant}
                 onChange={(e) => setAnnImportant(e.target.checked)}
-                className="rounded border border-slate-350 accent-slate-900 h-3.5 w-3.5 cursor-pointer"
+                className="rounded border border-indigo-300 accent-indigo-600 h-4 w-4 cursor-pointer transition"
               />
-              Пометить как ВАЖНОЕ (рамка)
+              <span className="group-hover:text-slate-800 transition-colors">Пометить как ВАЖНОЕ (рамка)</span>
             </label>
-            <button type="submit" className="bg-slate-950 hover:bg-slate-855 text-[#70FC8E] rounded-xl text-[10px] font-black uppercase px-4 py-2 cursor-pointer transition">
+            <button type="submit" className="bg-indigo-600 hover:bg-indigo-750 active:scale-95 text-white shadow-md rounded-xl text-[10px] font-black uppercase px-4 py-2 cursor-pointer transition-all">
               Опубликовать
             </button>
           </div>
         </form>
       )}
 
-      <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1 text-xs">
+      <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 text-xs">
         {settings?.announcements?.map((ann) => (
           <div 
             key={ann.id} 
-            className={`p-4 rounded-2xl border flex justify-between gap-3 ${
+            className={`p-5 rounded-2xl border flex justify-between gap-3 transition-all ${
               ann.important 
-                ? 'border-amber-200 bg-amber-50/20' 
-                : 'bg-slate-50/70 border-slate-150'
+                ? 'border-amber-500/30 bg-amber-500/10' 
+                : 'bg-white/40 border border-white/45 shadow-sm'
             }`}
           >
-            <div className="flex-1">
-              <p className="text-slate-800 font-bold leading-normal">{ann.text}</p>
-              <span className="text-[9px] font-bold font-mono text-slate-400 mt-2 block uppercase">От: {ann.author} • {ann.date}</span>
+            <div className="flex-1 space-y-2">
+              <p className="text-slate-800 font-semibold leading-relaxed">{ann.text}</p>
+              <span className="text-[9px] font-bold font-mono text-slate-400 block uppercase tracking-wide">От: {ann.author} • {ann.date}</span>
             </div>
             {isWritePermitted && (
               <button 
                 onClick={() => handleDeleteAnnouncement(ann.id)} 
-                className="text-rose-500 hover:text-rose-700 bg-white border border-slate-200 rounded-lg p-1.5 self-start shadow-3xs cursor-pointer transition"
+                className="text-slate-450 hover:text-rose-600 hover:bg-rose-500/10 border border-white/45 shadow-sm rounded-xl p-2 self-start cursor-pointer transition-all active:scale-90"
               >
-                <Trash2 className="h-3 w-3" />
+                <Trash2 className="h-3.5 w-3.5" />
               </button>
             )}
           </div>

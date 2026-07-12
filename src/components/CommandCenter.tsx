@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { database, onValue } from '../firebase';
 import { ref } from 'firebase/database';
 import { UserProfile } from '../types';
+import { formatDriverShortName } from '../utils/driverSync';
 
 interface CommandCenterProps {
   user: UserProfile;
@@ -45,7 +46,7 @@ export default function CommandCenter({ user, isOpen, onClose, onNavigate }: Com
           setResults(found.map(f => ({
              type: 'tractor',
              title: f.name || f.carNumber,
-             subtitle: f.driver || f.driverName || 'Без водителя',
+             subtitle: (f.driver || f.driverName) ? formatDriverShortName(f.driver || f.driverName) : 'Без водителя',
              status: f.status || 'Свободен',
              module: 'baza'
           })));

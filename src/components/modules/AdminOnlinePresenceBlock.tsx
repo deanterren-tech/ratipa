@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile } from '../../types';
 import { dbService } from '../../firebase';
-import { Users, Clock, Compass, Calendar, RefreshCw, AlertCircle } from 'lucide-react';
+import { Users, Clock, Compass, Calendar, RefreshCw, Eye, History } from 'lucide-react';
 
 interface Props {
   user: UserProfile;
@@ -30,6 +30,17 @@ const MODULE_LABELS: Record<string, string> = {
   documents: "Шаблоны документов",
   settings: "Настройки",
   admin: "Администрирование",
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  root_admin: "Разработчик (Root)",
+  admin: "Администратор",
+  manager: "Менеджер",
+  accountant: "Бухгалтер",
+  dispatcher: "Диспетчер",
+  mechanic: "Механик",
+  viewer: "Наблюдатель",
+  logist: "Логист",
 };
 
 export default function AdminOnlinePresenceBlock({ user }: Props) {
@@ -72,14 +83,28 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
     };
   }, []);
 
-  const formatDate = (isoStr?: string) => {
-    if (!isoStr) return '—';
+  const formatLastSeen = (isoStr?: string) => {
+    if (!isoStr) return 'Никогда';
     try {
       const date = new Date(isoStr);
-      return date.toLocaleDateString('ru-RU', {
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMin = Math.floor(diffMs / (60 * 1000));
+      
+      if (diffMin < 1) return 'Только что';
+      if (diffMin < 60) return `${diffMin} мин. назад`;
+      
+      const diffHours = Math.floor(diffMin / 60);
+      if (diffHours < 24) {
+        return `Сегодня в ${date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+      }
+      
+      return date.toLocaleString('ru-RU', {
         day: '2-digit',
         month: '2-digit',
-        year: 'numeric'
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
       });
     } catch {
       return '—';
@@ -99,216 +124,194 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
     }
   };
 
-  const displayUsers = (() => {
-    const combined = allUsers.map(profile => {
-      const activeSession = onlineUsers.find(o => o.uid === profile.uid);
-      return {
-        profile,
-        isOnline: !!activeSession,
-        activeSession
-      };
+  // Divide users into online and offline
+  const onlineUids = new Set(onlineUsers.map(o => o.uid));
+  
+  const onlineList = allUsers
+    .filter(u => onlineUids.has(u.uid))
+    .map(u => {
+      const session = onlineUsers.find(o => o.uid === u.uid);
+      return { user: u, session };
     });
 
-    if (combined.length === 0) {
-      return onlineUsers.map(u => ({
-        profile: {
-          uid: u.uid,
-          name: u.name,
-          role: u.role,
-          email: `${u.name}@ratipa.com`,
-          createdAt: u.lastActive,
-          password: "",
-          permissions: {
-            dashboard: "read",
-            calculationsHistory: "read"
-          },
-          lastActive: u.lastActive
-        } as any as UserProfile,
-        isOnline: true,
-        activeSession: u
-      }));
-    }
-
-    return combined.sort((a, b) => {
-      if (a.isOnline && !b.isOnline) return -1;
-      if (!a.isOnline && b.isOnline) return 1;
-      
-      const timeA = new Date(a.isOnline ? (a.activeSession?.lastActive || a.profile.lastActive || 0) : (a.profile.lastActive || 0)).getTime();
-      const timeB = new Date(b.isOnline ? (b.activeSession?.lastActive || b.profile.lastActive || 0) : (b.profile.lastActive || 0)).getTime();
+  const offlineList = allUsers
+    .filter(u => !onlineUids.has(u.uid))
+    .sort((a, b) => {
+      const timeA = new Date(a.lastActive || a.createdAt || 0).getTime();
+      const timeB = new Date(b.lastActive || b.createdAt || 0).getTime();
       return timeB - timeA;
     });
-  })();
 
   return (
-    <div id="admin-presence-block" className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] mt-6">
-      <div className="flex items-center justify-between border-b border-slate-100 pb-3.5 mb-5 select-none">
-        <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
-          <Users className="h-4.5 w-4.5 text-[#000000]" style={{ fill: '#70FC8E' }} />
-          Активность пользователей
-        </h2>
+    <div id="admin-presence-block" className="bg-white/40 backdrop-blur-xl rounded-[1.8rem] p-6 lg:p-8 border border-white/45 shadow-sm space-y-8 select-none">
+      
+      {/* Block Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/40 pb-5">
+        <div>
+          <span className="bg-[#3765F6]/10 text-[#3765F6] border border-[#3765F6]/10 font-mono text-[9px] font-semibold uppercase tracking-widest px-2.5 py-0.5 rounded-full mb-1.5 inline-block">
+            Presence Monitor
+          </span>
+          <h2 className="text-sm font-bold tracking-tight text-slate-900 flex items-center gap-1.5">
+            <Compass className="h-4.5 w-4.5 text-[#3765F6]" />
+            Активность сотрудников Ratipa
+          </h2>
+        </div>
         <div className="flex items-center gap-2">
-          {onlineUsers.length > 0 && (
-            <span className="flex h-2.5 w-2.5 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-            </span>
-          )}
-          <span className="text-[10px] font-black uppercase tracking-wider bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded-full font-mono transition duration-150">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span className="text-[10px] font-bold tracking-wider font-mono bg-white/60 border border-white/50 px-3.5 py-1.5 rounded-xl text-slate-700 shadow-sm">
             {onlineUsers.length} онлайн
           </span>
         </div>
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-8 text-slate-400">
-          <RefreshCw className="h-5 w-5 animate-spin mb-2" />
-          <span className="text-[10px] font-black uppercase tracking-wider font-mono">Подключение к сессиям...</span>
+        <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+          <RefreshCw className="h-5 w-5 animate-spin mb-2 text-[#3765F6]" />
+          <span className="text-[10px] font-semibold tracking-wider font-mono text-slate-500">Подключение к сессиям...</span>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {displayUsers.map(({ profile, isOnline, activeSession }) => {
-            const isSelf = profile.uid === user.uid;
-
-            if (isOnline && activeSession) {
-              const moduleName = MODULE_LABELS[activeSession.currentModule] || activeSession.currentModule || 'Главная';
-              return (
-                <div 
-                  key={profile.uid} 
-                  className={`relative p-5 border rounded-2xl transition duration-155 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)] ${
-                    isSelf 
-                      ? 'bg-[#70FC8E]/5 border-[#70FC8E]/30' 
-                      : 'bg-slate-50 border-slate-200/65 hover:bg-white'
-                  }`}
-                >
-                  <span className="absolute top-4 right-4 flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-
-                  <div className="flex items-start justify-between gap-2 mb-3 pr-4">
-                    <div className="flex flex-col">
-                      <span className="font-extrabold text-[#111827] text-sm break-all leading-snug flex items-center gap-1.5 font-sans">
-                        👤 {profile.name}
-                        {isSelf && (
-                          <span className="text-[9px] bg-indigo-600 text-white font-mono uppercase px-1.5 py-0.5 rounded font-black">
-                            Вы
+        <div className="space-y-8">
+          
+          {/* 1. ACTIVE SESSIONS (ONLINE) */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-semibold tracking-wide text-slate-500 font-mono flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Активные сессии в системе ({onlineList.length})
+            </h3>
+            
+            {onlineList.length === 0 ? (
+              <div className="p-6 text-center bg-white/10 rounded-2xl border border-dashed border-white/30 text-slate-400 text-xs font-semibold leading-relaxed">
+                В данный момент в системе нет других активных сотрудников.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {onlineList.map(({ user: u, session }) => {
+                  const isSelf = u.uid === user.uid;
+                  const currentMod = session?.currentModule || 'dashboard';
+                  const moduleLabel = MODULE_LABELS[currentMod] || currentMod;
+                  const initial = u.name.charAt(0).toUpperCase();
+                  const roleLabel = ROLE_LABELS[u.role] || u.role;
+ 
+                  return (
+                    <div 
+                      key={u.uid}
+                      className={`relative p-4 rounded-[1.5rem] border transition-all duration-150 flex flex-col justify-between ${
+                        isSelf 
+                          ? 'bg-[#3765F6]/10 border-[#3765F6]/20 shadow-sm' 
+                          : 'bg-white/65 border-white/50 shadow-xs'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Avatar */}
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 border select-none ${
+                          isSelf ? 'bg-[#3765F6] text-white border-[#3765F6]/30' : 'bg-slate-900/5 text-slate-700 border-slate-900/10'
+                        }`}>
+                          {initial}
+                        </div>
+                        
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-black text-slate-900 truncate">
+                              {u.name}
+                            </span>
+                            {isSelf && (
+                              <span className="bg-[#3765F6] text-white font-mono text-[7.5px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider shrink-0 scale-95">
+                                Вы
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[9px] font-bold font-mono uppercase tracking-widest text-slate-400 block mt-0.5">
+                            {roleLabel}
                           </span>
-                        )}
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-405 uppercase tracking-widest mt-0.5 font-bold">
-                        {profile.role === 'admin' ? 'Администратор' : profile.role === 'manager' ? 'Логист' : profile.role === 'root_admin' ? 'Разработчик / Root' : profile.role}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 border-t border-slate-250/25 pt-3.5 text-xs font-mono">
-                    <div className="flex flex-col">
-                      <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider flex items-center gap-1 mb-0.5">
-                        <Calendar size={10} className="text-slate-400" /> Дата
-                      </span>
-                      <span className="font-extrabold text-slate-700 leading-tight">
-                        {formatDate(activeSession.loginTime || activeSession.lastActive)}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-col col-span-1">
-                      <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider flex items-center gap-1 mb-0.5">
-                        <Clock size={10} className="text-slate-400" /> Вход
-                      </span>
-                      <span className="font-extrabold text-slate-700 leading-tight">
-                        {formatTime(activeSession.loginTime || activeSession.lastActive)}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-col col-span-1">
-                      <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider flex items-center gap-1 mb-0.5">
-                        <Clock size={10} className="text-slate-400" /> Активность
-                      </span>
-                      <span className="font-extrabold text-slate-500 leading-tight">
-                        {formatTime(activeSession.lastActive)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 bg-slate-950 text-[#70FC8E] p-3 rounded-xl border border-slate-800 flex items-center justify-between">
-                    <span className="text-[8px] font-mono font-black uppercase tracking-widest text-slate-400 flex items-center gap-1">
-                      <Compass size={11} className="text-slate-400" /> Смотрит вкладку:
-                    </span>
-                    <span className="text-[10px] font-black uppercase tracking-widest font-mono text-white max-w-[50%] truncate animate-pulse font-bold">
-                      {moduleName}
-                    </span>
-                  </div>
-                </div>
-              );
-            } else {
-              const lastActiveIso = profile.lastActive || profile.createdAt;
-              const offlineDate = lastActiveIso ? formatDate(lastActiveIso) : 'Неизвестно';
-              const offlineTime = lastActiveIso ? formatTime(lastActiveIso) : '—';
-
-              return (
-                <div 
-                  key={profile.uid} 
-                  className="relative p-5 border border-slate-200/40 rounded-2xl bg-slate-50/50 text-slate-500 transition duration-150 hover:bg-slate-100/40"
-                >
-                  <span className="absolute top-4 right-4 flex h-2 w-2">
-                    <span className="inline-flex rounded-full h-2 w-2 bg-slate-300"></span>
-                  </span>
-
-                  <div className="flex items-start justify-between gap-2 mb-3 pr-4">
-                    <div className="flex flex-col">
-                      <span className="font-bold text-slate-700 text-sm break-all leading-snug flex items-center gap-1.5 font-sans">
-                        👤 {profile.name}
-                        {isSelf && (
-                          <span className="text-[9px] bg-indigo-400 text-white font-mono uppercase px-1.5 py-0.5 rounded font-black">
-                            Вы
+                        </div>
+                      </div>
+ 
+                      {/* Clean Activity Info */}
+                      <div className="mt-4 pt-3 border-t border-slate-200/40 flex flex-col gap-2">
+                        <div className="flex items-center justify-between text-[10px] font-medium text-slate-500">
+                          <span className="flex items-center gap-1 text-[9px] font-mono font-bold uppercase tracking-wider text-slate-400">
+                            <Clock size={11} className="text-slate-400" /> Активен в
                           </span>
-                        )}
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">
-                        {profile.role === 'admin' ? 'Администратор' : profile.role === 'manager' ? 'Логист' : profile.role === 'root_admin' ? 'Разработчик / Root' : profile.role}
-                      </span>
+                          <span className="font-mono font-bold text-slate-700">
+                            {formatTime(session?.lastActive)}
+                          </span>
+                        </div>
+                        
+                        <div className="bg-[#3765F6]/5 border border-[#3765F6]/10 p-2 rounded-xl flex items-center justify-between text-[10.5px]">
+                          <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1">
+                            <Compass size={11} className="text-[#3765F6]" /> Раздел:
+                          </span>
+                          <span className="font-extrabold text-[#1e3bb3] font-sans truncate max-w-[60%]">
+                            {moduleLabel}
+                          </span>
+                        </div>
+                      </div>
                     </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+ 
+          {/* 2. RECENT ACTIVITY (HISTORY) */}
+          <div className="space-y-4 pt-2">
+            <h3 className="text-xs font-semibold tracking-wide text-slate-500 font-mono flex items-center gap-2">
+              <History size={13} className="text-slate-400" />
+              История активности сотрудников ({offlineList.length})
+            </h3>
+
+            <div className="bg-white/30 rounded-2xl border border-white/40 overflow-hidden shadow-xs">
+              <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
+                {offlineList.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400 text-xs font-semibold">
+                    Нет истории активности.
                   </div>
+                ) : (
+                  <div className="divide-y divide-slate-100/40">
+                    {offlineList.map((u) => {
+                      const lastSeenStr = formatLastSeen(u.lastActive || u.createdAt);
+                      const initial = u.name.charAt(0).toUpperCase();
+                      const roleLabel = ROLE_LABELS[u.role] || u.role;
 
-                  <div className="grid grid-cols-2 gap-2 border-t border-slate-200/40 pt-3.5 text-xs font-mono">
-                    <div className="flex flex-col">
-                      <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider flex items-center gap-1 mb-0.5">
-                        <Calendar size={10} className="text-slate-400" /> Дата визита
-                      </span>
-                      <span className="font-bold text-slate-600 leading-tight">
-                        {offlineDate}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-col">
-                      <span className="text-[9px] uppercase font-black text-slate-400 tracking-wider flex items-center gap-1 mb-0.5">
-                        <Clock size={10} className="text-slate-400" /> Время визита
-                      </span>
-                      <span className="font-bold text-slate-600 leading-tight">
-                        {offlineTime}
-                      </span>
-                    </div>
+                      return (
+                        <div 
+                          key={u.uid}
+                          className="flex items-center justify-between p-3.5 hover:bg-white/40 transition duration-150"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-7.5 h-7.5 rounded-lg bg-slate-100/80 border border-slate-200/50 text-slate-500 flex items-center justify-center font-black text-[11px] shrink-0">
+                              {initial}
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-xs font-extrabold text-slate-800 block truncate">
+                                {u.name}
+                              </span>
+                              <span className="text-[8.5px] font-bold font-mono uppercase tracking-widest text-slate-400 block">
+                                {roleLabel}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="text-right shrink-0">
+                            <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                              Был в сети
+                            </span>
+                            <span className="text-xs font-bold text-slate-600 font-sans">
+                              {lastSeenStr}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-
-                  <div className="mt-4 bg-slate-100/60 text-slate-500 p-2.5 rounded-xl border border-slate-250/20 flex items-center justify-between font-mono text-[9px] uppercase tracking-widest font-black">
-                    <span>Был в сети:</span>
-                    <span className="text-slate-600 font-bold">
-                      {offlineDate} {offlineTime !== '—' ? `в ${offlineTime}` : ''}
-                    </span>
-                  </div>
-                </div>
-              );
-            }
-          })}
-
-          {displayUsers.length === 0 && (
-            <div className="md:col-span-2 text-center py-10 bg-slate-50 border border-slate-100 rounded-2xl">
-              <AlertCircle className="h-6 w-6 text-slate-350 mx-auto mb-2" />
-              <div className="text-[10px] uppercase font-mono font-black tracking-widest text-slate-400">
-                Пользователи не найдены
+                )}
               </div>
             </div>
-          )}
+          </div>
+
         </div>
       )}
     </div>

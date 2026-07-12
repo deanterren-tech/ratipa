@@ -35,27 +35,27 @@ export default function DozvolaModule({ user }: DozvolaModuleProps) {
       <div className="flex items-center gap-2 p-1.5 bg-slate-100 rounded-2xl w-fit overflow-x-auto shadow-inner border border-slate-200/50">
         <button
           onClick={() => setActiveTab('registry')}
-          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-tight transition whitespace-nowrap ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
             activeTab === 'registry' 
               ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' 
               : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
           }`}
         >
-          Реестр Дозволов
+          Реестр дозволов
         </button>
         <button
           onClick={() => setActiveTab('locations')}
-          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-tight transition whitespace-nowrap ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
             activeTab === 'locations' 
               ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' 
               : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
           }`}
         >
-          Карта Локаций
+          Карта локаций
         </button>
         <button
           onClick={() => setActiveTab('documents')}
-          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-tight transition whitespace-nowrap ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
             activeTab === 'documents' 
               ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' 
               : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
@@ -65,7 +65,7 @@ export default function DozvolaModule({ user }: DozvolaModuleProps) {
         </button>
         <button
           onClick={() => setActiveTab('history')}
-          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-tight transition whitespace-nowrap ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
             activeTab === 'history' 
               ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' 
               : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
@@ -75,13 +75,13 @@ export default function DozvolaModule({ user }: DozvolaModuleProps) {
         </button>
         <button
           onClick={() => setActiveTab('types')}
-          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-tight transition whitespace-nowrap ${
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
             activeTab === 'types' 
               ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' 
               : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
           }`}
         >
-          Справочник Видов
+          Справочник видов
         </button>
       </div>
 

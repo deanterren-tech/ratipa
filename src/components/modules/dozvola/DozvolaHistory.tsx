@@ -97,31 +97,31 @@ export default function DozvolaHistory({ user }: DozvolaHistoryProps) {
   const hasWriteAccess = user.role === 'root_admin' || user.permissions?.dozvola === 'write';
 
   return (
-    <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-6">
+    <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-6">
         
         {/* Tab switcher & Search */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-3 border-b border-slate-100 gap-4">
-          <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-xl w-fit">
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100/75 rounded-xl w-fit">
             <button
               onClick={() => setSubTab('actions')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-tight transition ${
+              className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
                 subTab === 'actions' 
-                  ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50' 
+                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40' 
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              Журнал Действий
+              Журнал действий
             </button>
             <button
               onClick={() => setSubTab('documents')}
-              className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-tight transition flex items-center gap-1.5 ${
+              className={`px-4 py-2 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
                 subTab === 'documents' 
-                  ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50' 
+                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40' 
                   : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              <FileText size={14} className="text-blue-500" />
-              История Документов
+              <FileText size={14} className="text-[#3765F6]" />
+              История документов
             </button>
           </div>
           
@@ -131,24 +131,22 @@ export default function DozvolaHistory({ user }: DozvolaHistoryProps) {
             </div>
             <input
                 type="text"
-                placeholder="Поиск по документам, авторам, действиям..."
+                placeholder="Поиск по документам, авторам..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 w-full bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-xl focus:ring-blue-500 focus:border-blue-500 block p-2 transition-all font-medium"
+                className="pl-9 w-full bg-slate-50/50 border border-slate-200/60 text-slate-700 text-xs rounded-xl focus:ring-0 focus:border-[#3765F6] block p-2.5 transition-all font-semibold"
             />
           </div>
         </div>
         
         {/* Swipe Help Badge for Mobile */}
-        <div className="block lg:hidden text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 text-center uppercase tracking-wider select-none">
-           <span className="inline-block animate-pulse text-blue-500 mr-1.5 font-sans">↔</span> Таблица прокручивается вправо для просмотра всех деталей
-        </div>
+        
 
         {subTab === 'actions' ? (
           <div className="overflow-x-auto custom-scrollbar">
               <table className="w-full text-left border-collapse">
                   <thead>
-                      <tr className="bg-slate-50/60 border-b border-slate-200/55 text-[10px] uppercase font-black text-slate-400 tracking-wider">
+                      <tr className="bg-slate-50/60 border-b border-slate-200/55 text-[10px] font-bold text-slate-400">
                           <th className="p-4 pl-6">Время</th>
                           <th className="p-4">Логист</th>
                           <th className="p-4">Бланк дозвола</th>
@@ -163,7 +161,7 @@ export default function DozvolaHistory({ user }: DozvolaHistoryProps) {
                               <td className="p-4 pl-6"><span className="text-[11px] text-slate-500 font-medium">{h.time}</span></td>
                               <td className="p-4"><strong>{h.logist}</strong></td>
                               <td className="p-4"><span className="font-bold text-slate-900">{h.doc}</span></td>
-                              <td className="p-4"><span className="font-bold text-slate-700">{h.action}</span></td>
+                              <td className="p-4"><span className="font-semibold text-slate-700">{h.action}</span></td>
                               <td className="p-4"><span className="font-medium text-slate-600 text-[11px] leading-tight block">{h.meta}</span></td>
                               {hasWriteAccess && (
                                 <td className="p-4 pr-6 text-right">
@@ -180,7 +178,7 @@ export default function DozvolaHistory({ user }: DozvolaHistoryProps) {
                       ))}
                       {filteredHistory.length === 0 && (
                           <tr>
-                              <td colSpan={6} className="text-center p-12 text-slate-400 font-black text-xs uppercase tracking-wider font-mono">
+                              <td colSpan={6} className="text-center p-12 text-slate-400 font-bold text-xs">
                                   Ничего не найдено.
                               </td>
                           </tr>
@@ -192,7 +190,7 @@ export default function DozvolaHistory({ user }: DozvolaHistoryProps) {
           <div className="overflow-x-auto custom-scrollbar">
               <table className="w-full text-left border-collapse">
                   <thead>
-                      <tr className="bg-slate-50/60 border-b border-slate-200/55 text-[10px] uppercase font-black text-slate-400 tracking-wider">
+                      <tr className="bg-slate-50/60 border-b border-slate-200/55 text-[10px] font-bold text-slate-400">
                           <th className="p-4 pl-6">Время формирования</th>
                           <th className="p-4">Логист</th>
                           <th className="p-4">Название документа</th>
@@ -207,7 +205,7 @@ export default function DozvolaHistory({ user }: DozvolaHistoryProps) {
                               <td className="p-4 pl-6"><span className="text-[11px] text-slate-500 font-medium">{h.time}</span></td>
                               <td className="p-4"><strong>{h.logist}</strong></td>
                               <td className="p-4"><span className="font-bold text-slate-900 flex items-center gap-1.5"><FileText size={13} className="text-slate-400" /> {h.documentName}</span></td>
-                              <td className="p-4"><span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-black text-[9px] uppercase tracking-wide">{h.action || 'Формирование'}</span></td>
+                              <td className="p-4"><span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-bold text-[9px]">{h.action || 'Формирование'}</span></td>
                               <td className="p-4"><span className="font-medium text-slate-600 text-[11px] leading-tight block max-w-md break-words">{h.details}</span></td>
                               {hasWriteAccess && (
                                 <td className="p-4 pr-6 text-right">
@@ -224,7 +222,7 @@ export default function DozvolaHistory({ user }: DozvolaHistoryProps) {
                       ))}
                       {filteredDocHistory.length === 0 && (
                           <tr>
-                              <td colSpan={6} className="text-center p-12 text-slate-400 font-black text-xs uppercase tracking-wider font-mono">
+                              <td colSpan={6} className="text-center p-12 text-slate-400 font-bold text-xs">
                                   Записей о формировании документов не найдено.
                               </td>
                           </tr>

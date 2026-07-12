@@ -18,6 +18,9 @@ interface ItemRecord {
   rate: string;
   contact: string;
   status: 'normal' | 'warning' | 'error';
+  color?: string;
+  createdAt?: string | number;
+  notes?: string;
 }
 
 interface GroupRecord {

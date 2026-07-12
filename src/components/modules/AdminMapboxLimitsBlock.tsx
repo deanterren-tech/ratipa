@@ -141,7 +141,7 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
 
   // UI colors based on usage
   const getProgressBarColor = (percent: number) => {
-    if (percent < 60) return 'bg-emerald-500';
+    if (percent < 60) return 'bg-indigo-500';
     if (percent < 90) return 'bg-amber-500';
     return 'bg-rose-500';
   };
@@ -153,18 +153,18 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
   };
 
   return (
-    <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-8 w-full">
+    <div className="bg-white/60 backdrop-blur-2xl rounded-[2.5rem] p-6 lg:p-8 border border-white/40 shadow-xl space-y-8 w-full select-none">
       
       {/* Block Header */}
-      <div className="border-b border-slate-100 pb-4">
-        <span className="bg-[#c3fb12] text-slate-950 font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-wider">
+      <div className="border-b border-white/40 pb-4">
+        <span className="bg-indigo-600 text-white font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-wider">
           API Management
         </span>
-        <h2 className="text-sm font-black uppercase tracking-tight text-slate-900 mt-1 flex items-center gap-1.5">
-          <Map className="h-4 w-4 text-slate-900" />
+        <h2 className="text-sm font-black uppercase tracking-tight text-slate-900 mt-2 flex items-center gap-1.5">
+          <Map className="h-4 w-4 text-slate-850" />
           Контроль и лимиты Mapbox API
         </h2>
-        <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+        <p className="text-[10px] text-slate-500 font-medium mt-1 leading-relaxed">
           Контроль навигационных запросов и показов интерактивной карты, ограничение затрат и автоматическое переключение на резервные шлюзы.
         </p>
       </div>
@@ -178,15 +178,15 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
           </h3>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           {/* Usage Card */}
-          <div className="md:col-span-2 bg-slate-50/50 border border-slate-100 rounded-2xl p-5 flex flex-col justify-between">
+          <div className="xl:col-span-2 bg-white/40 border border-white/45 backdrop-blur-md shadow-inner rounded-[1.8rem] p-6 flex flex-col justify-between">
             <div>
               <div className="flex justify-between items-start mb-2">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
                   Запросы маршрутов
                 </span>
-                <span className="text-xs font-black text-slate-900 bg-white border border-slate-100 px-2.5 py-1 rounded-lg uppercase tracking-tight shadow-sm">
+                <span className="text-xs font-black text-slate-900 bg-white/50 backdrop-blur-md border border-white/40 px-2.5 py-1 rounded-lg uppercase tracking-tight shadow-sm">
                   {getMonthLabel(currentMonth)}
                 </span>
               </div>
@@ -208,7 +208,7 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
               </div>
               
               {/* Progress bar container */}
-              <div className="w-full h-3 bg-slate-200/60 rounded-full overflow-hidden">
+              <div className="w-full h-3 bg-slate-900/10 rounded-full overflow-hidden">
                 <div 
                   className={`h-full ${getProgressBarColor(percentRequests)} rounded-full transition-all duration-500`}
                   style={{ width: `${percentRequests}%` }}
@@ -218,22 +218,22 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
           </div>
 
           {/* Action controls block */}
-          <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-5 flex flex-col justify-between space-y-4">
+          <div className="bg-white/40 border border-white/45 backdrop-blur-md shadow-inner rounded-[1.8rem] p-6 flex flex-col justify-between space-y-4">
             <div className="space-y-4">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono block">
                 Параметры шлюза запросов
               </span>
 
               {/* Switch exceed limits */}
-              <label className="flex items-start gap-3 cursor-pointer select-none">
+              <label className="flex items-start gap-3 cursor-pointer select-none group">
                 <input 
                   type="checkbox" 
                   checked={allowExceed}
                   onChange={(e) => handleToggleAllowExceed(e.target.checked)}
-                  className="mt-1 h-4 w-4 rounded text-slate-900 border-slate-300 focus:ring-slate-900"
+                  className="mt-1 h-4 w-4 rounded text-slate-900 border-indigo-300 focus:ring-indigo-500 text-indigo-600 cursor-pointer transition"
                 />
                 <div className="space-y-0.5">
-                  <span className="text-xs font-black text-slate-800 uppercase tracking-tight">
+                  <span className="text-xs font-black text-slate-800 uppercase tracking-tight group-hover:text-indigo-600 transition-colors">
                     Разрешить сверх лимита
                   </span>
                   <p className="text-[10px] text-slate-500 font-medium leading-normal">
@@ -252,7 +252,7 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
                     <button
                       key={val}
                       onClick={() => handleUpdateLimit(val)}
-                      className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition ${limit === val ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200/60 hover:bg-slate-100'}`}
+                      className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${limit === val ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white/50 backdrop-blur-md text-slate-600 border border-white/40 hover:bg-white/70'}`}
                     >
                       {(val / 1000) + ' тыс'}
                     </button>
@@ -261,10 +261,10 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
               </div>
             </div>
 
-            <div className="pt-2 border-t border-slate-200/40">
+            <div className="pt-2 border-t border-white/40">
               <button
                 onClick={handleResetCounter}
-                className="w-full flex items-center justify-center gap-2 bg-white hover:bg-rose-50 border border-slate-200 text-slate-700 hover:text-rose-700 font-black uppercase text-[10px] tracking-wider py-2 rounded-xl transition shadow-sm"
+                className="w-full flex items-center justify-center gap-2 bg-white/50 backdrop-blur-md hover:bg-rose-500/10 active:scale-95 border border-white/45 text-slate-700 shadow-sm hover:text-rose-700 font-black uppercase text-[10px] tracking-wider py-2.5 rounded-xl transition-all cursor-pointer"
               >
                 <RefreshCw className="h-3 w-3" />
                 Сбросить запросы
@@ -275,7 +275,7 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
       </div>
 
       {/* 2. MAP LOADS BLOCK */}
-      <div className="space-y-4 pt-4 border-t border-slate-100">
+      <div className="space-y-4 pt-4 border-t border-white/40">
         <div className="flex items-center gap-2">
           <Layers className="h-4 w-4 text-emerald-600" />
           <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
@@ -283,15 +283,15 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
           </h3>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           {/* Usage Card */}
-          <div className="md:col-span-2 bg-slate-50/50 border border-slate-100 rounded-2xl p-5 flex flex-col justify-between">
+          <div className="xl:col-span-2 bg-white/40 border border-white/45 backdrop-blur-md shadow-inner rounded-[1.8rem] p-6 flex flex-col justify-between">
             <div>
               <div className="flex justify-between items-start mb-2">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
                   Показы интерактивной карты
                 </span>
-                <span className="text-xs font-black text-slate-900 bg-white border border-slate-100 px-2.5 py-1 rounded-lg uppercase tracking-tight shadow-sm">
+                <span className="text-xs font-black text-slate-900 bg-white/50 backdrop-blur-md border border-white/40 px-2.5 py-1 rounded-lg uppercase tracking-tight shadow-sm">
                   {getMonthLabel(currentMonth)}
                 </span>
               </div>
@@ -313,7 +313,7 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
               </div>
               
               {/* Progress bar container */}
-              <div className="w-full h-3 bg-slate-200/60 rounded-full overflow-hidden">
+              <div className="w-full h-3 bg-slate-900/10 rounded-full overflow-hidden">
                 <div 
                   className={`h-full ${getProgressBarColor(percentLoads)} rounded-full transition-all duration-500`}
                   style={{ width: `${percentLoads}%` }}
@@ -323,22 +323,22 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
           </div>
 
           {/* Action controls block */}
-          <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-5 flex flex-col justify-between space-y-4">
+          <div className="bg-white/40 border border-white/45 backdrop-blur-md shadow-inner rounded-[1.8rem] p-6 flex flex-col justify-between space-y-4">
             <div className="space-y-4">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono block">
                 Параметры отображения карты
               </span>
 
               {/* Switch exceed limits */}
-              <label className="flex items-start gap-3 cursor-pointer select-none">
+              <label className="flex items-start gap-3 cursor-pointer select-none group">
                 <input 
                   type="checkbox" 
                   checked={allowExceedLoads}
                   onChange={(e) => handleToggleAllowExceedLoads(e.target.checked)}
-                  className="mt-1 h-4 w-4 rounded text-slate-900 border-slate-300 focus:ring-slate-900"
+                  className="mt-1 h-4 w-4 rounded text-slate-900 border-indigo-300 focus:ring-indigo-500 text-indigo-600 cursor-pointer transition"
                 />
                 <div className="space-y-0.5">
-                  <span className="text-xs font-black text-slate-800 uppercase tracking-tight">
+                  <span className="text-xs font-black text-slate-800 uppercase tracking-tight group-hover:text-indigo-600 transition-colors">
                     Разрешить сверх лимита
                   </span>
                   <p className="text-[10px] text-slate-500 font-medium leading-normal">
@@ -357,7 +357,7 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
                     <button
                       key={val}
                       onClick={() => handleUpdateLoadsLimit(val)}
-                      className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition ${loadsLimit === val ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200/60 hover:bg-slate-100'}`}
+                      className={`px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${loadsLimit === val ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white/50 backdrop-blur-md text-slate-600 border border-white/40 hover:bg-white/70'}`}
                     >
                       {(val / 1000) + ' тыс'}
                     </button>
@@ -366,10 +366,10 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
               </div>
             </div>
 
-            <div className="pt-2 border-t border-slate-200/40">
+            <div className="pt-2 border-t border-white/40">
               <button
                 onClick={handleResetLoadsCounter}
-                className="w-full flex items-center justify-center gap-2 bg-white hover:bg-rose-50 border border-slate-200 text-slate-700 hover:text-rose-700 font-black uppercase text-[10px] tracking-wider py-2 rounded-xl transition shadow-sm"
+                className="w-full flex items-center justify-center gap-2 bg-white/50 backdrop-blur-md hover:bg-rose-500/10 active:scale-95 border border-white/45 text-slate-700 shadow-sm hover:text-rose-700 font-black uppercase text-[10px] tracking-wider py-2.5 rounded-xl transition-all cursor-pointer"
               >
                 <RefreshCw className="h-3 w-3" />
                 Сбросить показы
@@ -380,13 +380,13 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
       </div>
 
       {/* Info Notice Banner */}
-      <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 flex gap-3.5">
-        <AlertCircle className="h-5 w-5 text-slate-600 shrink-0 mt-0.5" style={{ strokeWidth: 1.5 }} />
+      <div className="bg-white/40 border border-white/45 backdrop-blur-md shadow-inner rounded-[1.8rem] p-6 flex gap-3.5">
+        <AlertCircle className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5 animate-pulse" />
         <div className="text-xs text-slate-600 space-y-1 font-medium leading-relaxed">
           <p className="font-bold text-slate-800">Как распределяются лимиты?</p>
-          <ul className="list-disc list-inside space-y-1 pl-1 text-[11px]">
-            <li><strong className="text-slate-800">Запросы Directions API</strong> используются сервером при каждом расчете километража поездки. Лимит по умолчанию — 100 000 запросов в месяц. При превышении приложение плавно переключается на бесплатные OSRM-ноды.</li>
-            <li><strong className="text-slate-800">Показы карт Map Loads for Web</strong> расходуются непосредственно при отрисовке интерактивного окна карты Mapbox GL JS в браузере. Лимит по умолчанию — 50 000 показов в месяц.</li>
+          <ul className="list-disc list-inside space-y-1 pl-1 text-[11px] text-slate-500">
+            <li><strong className="text-slate-700">Запросы Directions API</strong> используются сервером при каждом расчете километража поездки. Лимит по умолчанию — 100 000 запросов в месяц. При превышении приложение плавно переключается на бесплатные OSRM-ноды.</li>
+            <li><strong className="text-slate-700">Показы карт Map Loads for Web</strong> расходуются непосредственно при отрисовке интерактивного окна карты Mapbox GL JS в браузере. Лимит по умолчанию — 50 000 показов в месяц.</li>
             <li>Оба счетчика календарно обновляются в начале каждого месяца.</li>
           </ul>
         </div>
@@ -394,8 +394,8 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
 
       {/* Feedback Messages */}
       {successMsg && (
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl p-3.5 flex items-center gap-2 text-xs font-bold animate-fade-in">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+        <div className="bg-emerald-500/10 border border-emerald-500/20 shadow-inner text-emerald-800 rounded-xl p-3.5 flex items-center gap-2 text-xs font-bold animate-fade-in">
+          <CheckCircle2 className="h-4 w-4 text-emerald-600 animate-bounce" />
           {successMsg}
         </div>
       )}

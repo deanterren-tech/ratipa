@@ -149,7 +149,17 @@ export default function AnalysisModule({ user }: AnalysisModuleProps) {
         </div>
       )}
 
-      {activeTab === 'report' ? (
+      {regions.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 bg-white border border-slate-200/60 rounded-[2rem] shadow-[0_8px_30px_rgba(0,0,0,0.01)] text-center p-8">
+          <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center border border-slate-100 mb-4 text-slate-300">
+            <LineChart className="w-8 h-8 stroke-[1.5]" />
+          </div>
+          <h3 className="text-base font-black text-slate-800 tracking-tight">Раздел аналитики в разработке</h3>
+          <p className="text-xs text-slate-400 mt-2 max-w-xs leading-relaxed">
+            В данный момент аналитические данные не добавлены. Пожалуйста, откройте «Настройку направлений» справа вверху, чтобы добавить первое направление.
+          </p>
+        </div>
+      ) : activeTab === 'report' ? (
         <AnalysisReport regions={regions} />
       ) : activeTab === 'constructor' ? (
         <AnalysisConstructor />

@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { UserProfile, AppSettings } from '../../types';
 import { dbService } from '../../firebase';
+import { getEmbeddableSheetUrl } from '../../utils/embed';
 import { 
   FileSpreadsheet, 
   Maximize2, 
@@ -66,34 +67,36 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
     return () => unsubscribe();
   }, []);
 
-  const dynamicTabs = settings?.planZagruzokTabs || [];
-  const allowedDynamicTabs = dynamicTabs.filter(t => user.role === 'root_admin' || user.role === 'admin' || (user.permissions && user.permissions[`planZagruzok_${t.id}`] !== 'none'));
-  const hasBasePermission = user.role === 'root_admin' || user.role === 'admin' || (user.permissions && user.permissions.planZagruzok !== 'none');
+  const allowedTabs = useMemo(() => {
+    const dynamicTabs = settings?.planZagruzokTabs || [];
+    const allowedDynamicTabs = dynamicTabs.filter(t => user.role === 'root_admin' || user.role === 'admin' || (user.permissions && user.permissions[`planZagruzok_${t.id}`] !== 'none'));
+    const hasBasePermission = user.role === 'root_admin' || user.role === 'admin' || (user.permissions && user.permissions.planZagruzok !== 'none');
 
-  const allowedTabs = [
-    ...(hasBasePermission ? [
-      { 
-        id: 'plan', 
-        name: 'План загрузок', 
-        sheetUrl: settings?.planZagruzokSheetUrl || settings?.googleSheetsUrl || "https://docs.google.com/spreadsheets/d/1qUSrRKGqqo3fZSlpZnxEw-59Y86KJ7tmSnf4liNoMM/edit#gid=0", 
-        variant: 'default' 
-      },
-      ...(settings?.planZagruzokBlacklistUrl ? [
+    return [
+      ...(hasBasePermission ? [
         { 
-          id: 'blacklist', 
-          name: 'Черный список', 
-          sheetUrl: settings?.planZagruzokBlacklistUrl, 
-          variant: 'rose' 
-        }
-      ] : [])
-    ] : []),
-    ...allowedDynamicTabs.map(t => ({
-      id: t.id,
-      name: t.name,
-      sheetUrl: t.sheetUrl,
-      variant: 'blue'
-    }))
-  ];
+          id: 'plan', 
+          name: 'План загрузок', 
+          sheetUrl: settings?.planZagruzokSheetUrl || settings?.googleSheetsUrl || "https://docs.google.com/spreadsheets/d/1qUSrRKGqqo3fZSlpZnxEw-59Y86KJ7tmSnf4liNoMM/edit#gid=0", 
+          variant: 'default' 
+        },
+        ...(settings?.planZagruzokBlacklistUrl ? [
+          { 
+            id: 'blacklist', 
+            name: 'Черный список', 
+            sheetUrl: settings?.planZagruzokBlacklistUrl, 
+            variant: 'rose' 
+          }
+        ] : [])
+      ] : []),
+      ...allowedDynamicTabs.map(t => ({
+        id: t.id,
+        name: t.name,
+        sheetUrl: t.sheetUrl,
+        variant: 'blue'
+      }))
+    ];
+  }, [settings, user.role, user.permissions]);
 
   useEffect(() => {
     if (allowedTabs.length > 0 && !activeTabId) {
@@ -115,33 +118,33 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
   };
 
   return (
-    <div className={`w-full space-y-2 font-sans flex flex-col ${isFocusMode ? 'fixed inset-0 z-50 bg-slate-900/10 backdrop-blur-md p-2 lg:p-4' : 'h-full'}`}>
+    <div className={`w-full space-y-4 font-sans flex flex-col ${isFocusMode ? 'fixed inset-0 z-50 bg-slate-900/10 backdrop-blur-md p-4 lg:p-6' : 'h-full'}`}>
       
-      <div className="bg-white rounded-2xl p-2.5 px-4 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col sm:flex-row items-center justify-between gap-3 select-none">
+      <div className="bg-white/60 backdrop-blur-md rounded-3xl p-4 lg:px-6 border border-slate-200/50 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 select-none">
         
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="w-8 h-8 rounded-full bg-[#70FC8E]/15 border border-[#70FC8E]/45 flex items-center justify-center shrink-0">
-            <FileSpreadsheet className="h-4 w-4 text-slate-900" />
+        <div className="flex items-center gap-3.5 w-full sm:w-auto">
+          <div className="w-10 h-10 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0 text-[#3765F6]">
+            <FileSpreadsheet className="h-5 w-5" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight">
-                План Загрузок {activeTabObj && activeTabObj.id !== 'plan' && activeTabObj.id !== 'blacklist' && `| ${activeTabObj.name}`}
+              <h1 className="text-base font-bold text-slate-900 tracking-tight">
+                План загрузок {activeTabObj && activeTabObj.id !== 'plan' && activeTabObj.id !== 'blacklist' && `| ${activeTabObj.name}`}
               </h1>
             </div>
-            <div className="flex gap-1.5 mt-1 flex-wrap">
+            <div className="flex gap-2 mt-2 flex-wrap">
               {allowedTabs.map(tab => (
                 <button 
                   key={tab.id}
                   onClick={() => setActiveTabId(tab.id)}
-                  className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md transition shrink-0 cursor-pointer ${
+                  className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl transition duration-150 shrink-0 cursor-pointer border ${
                     activeTabId === tab.id 
                       ? tab.variant === 'rose'
-                        ? 'bg-rose-500 text-white shadow-sm'
+                        ? 'bg-rose-600 border-rose-600 text-white shadow-xs'
                         : tab.variant === 'blue'
-                          ? 'bg-blue-500 text-white shadow-sm'
-                          : 'bg-slate-900 text-[#70FC8E] shadow-sm'
-                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800'
+                          ? 'bg-[#3765F6] border-[#3765F6] text-white shadow-xs'
+                          : 'bg-slate-900 border-slate-900 text-white shadow-xs'
+                      : 'bg-white/45 border-slate-200/50 text-slate-500 hover:bg-white/80 hover:text-slate-800'
                   }`}
                 >
                   {tab.name}
@@ -153,26 +156,26 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
 
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-start sm:justify-end">
           
-          <div className="flex bg-slate-100 p-0.5 rounded-lg items-center">
-             <button onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600 cursor-pointer"><ZoomOut className="w-3.5 h-3.5"/></button>
-             <span className="text-[9px] font-black w-8 text-center font-mono text-slate-700">{Math.round(zoomLevel * 100)}%</span>
-             <button onClick={() => setZoomLevel(z => Math.min(2, z + 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600 cursor-pointer"><ZoomIn className="w-3.5 h-3.5"/></button>
+          <div className="flex bg-white/45 border border-slate-200/50 p-1 rounded-xl items-center shadow-2xs">
+             <button onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))} className="p-1 hover:bg-white rounded-lg transition text-slate-500 hover:text-slate-800 cursor-pointer"><ZoomOut className="w-3.5 h-3.5"/></button>
+             <span className="text-[10px] font-bold w-10 text-center font-mono text-slate-700">{Math.round(zoomLevel * 100)}%</span>
+             <button onClick={() => setZoomLevel(z => Math.min(2, z + 0.1))} className="p-1 hover:bg-white rounded-lg transition text-slate-500 hover:text-slate-800 cursor-pointer"><ZoomIn className="w-3.5 h-3.5"/></button>
           </div>
 
           <button
             onClick={handleRefresh}
-            className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-[10px] font-black px-2.5 py-1.5 rounded-lg border border-slate-200/50 transition cursor-pointer"
+            className="flex items-center gap-1.5 bg-white/65 hover:bg-white border border-slate-200/50 hover:border-slate-300 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-xl transition shadow-2xs cursor-pointer"
             title="Перезагрузить фрейм"
           >
             <RefreshCw className="h-3.5 w-3.5 text-slate-500" />
-            <span className="hidden sm:inline">Обновить</span>
+            <span>Обновить</span>
           </button>
 
           <a
             href={sheetsExternalUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 bg-slate-950 hover:bg-slate-850 text-[#70FC8E] text-[10px] font-black px-2.5 py-1.5 rounded-lg transition cursor-pointer shadow-xs uppercase tracking-tight hidden sm:flex"
+            className="flex items-center gap-1.5 bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition cursor-pointer shadow-sm hidden sm:flex"
           >
             <ExternalLink className="h-3.5 w-3.5" />
             <span>Новая вкладка</span>
@@ -180,21 +183,21 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
 
           <button
             onClick={() => setIsFocusMode(!isFocusMode)}
-            className={`flex items-center gap-1.5 text-[10px] font-black px-2.5 py-1.5 rounded-lg border transition cursor-pointer uppercase tracking-tight ${
+            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition cursor-pointer ${
               isFocusMode 
-                ? 'bg-[#70FC8E] border-[#70FC8E] text-slate-950 hover:opacity-90 shadow-sm' 
-                : 'bg-white border-slate-250 text-slate-705 lg:hover:bg-slate-50'
+                ? 'bg-slate-900 border-slate-900 text-white hover:bg-slate-800 shadow-sm' 
+                : 'bg-white/65 border-slate-200/50 text-slate-700 hover:bg-white hover:border-slate-300 shadow-2xs'
             }`}
           >
             {isFocusMode ? (
               <>
                 <Minimize2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Свернуть</span>
+                <span>Свернуть</span>
               </>
             ) : (
               <>
                 <Maximize2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Экран</span>
+                <span>На весь экран</span>
               </>
             )}
           </button>
@@ -203,28 +206,49 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
       </div>
 
       <div 
-        className={`relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col min-h-0 ${isFocusMode ? '' : 'h-[880px]'}`}
+        className={`relative bg-white/60 backdrop-blur-md rounded-3xl p-1.5 border border-slate-200/50 shadow-sm overflow-hidden flex-1 flex flex-col min-h-0 ${isFocusMode ? '' : 'h-[880px]'}`}
       >
         
         {activeIsLoading && (
-          <div className="absolute inset-0 bg-white/85 backdrop-blur-md flex flex-col justify-center items-center z-10 transition duration-350 select-none">
-            <div className="relative">
-              <div className="h-14 w-14 rounded-full border-4 border-slate-100 border-t-slate-950 animate-spin" />
-              <FileSpreadsheet className="h-5 w-5 text-slate-900 absolute top-4.5 left-4.5" />
+          <div className="absolute inset-0 bg-white/95 rounded-3xl flex flex-col p-8 gap-6 z-10 transition duration-350 select-none">
+            {/* Skeleton Header */}
+            <div className="flex items-center justify-between">
+              <div className="h-6 w-48 bg-slate-200 rounded-lg animate-pulse" />
+              <div className="flex gap-2">
+                <div className="h-10 w-24 bg-slate-100 rounded-xl animate-pulse" />
+                <div className="h-10 w-24 bg-slate-100 rounded-xl animate-pulse" />
+              </div>
             </div>
-            <span className="text-sm font-black text-slate-900 mt-5 uppercase tracking-wider font-mono animate-pulse">
-              Интеграция Google Таблиц...
-            </span>
+            {/* Skeleton Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 flex-1 overflow-hidden">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="border border-slate-200/40 rounded-2xl p-5 space-y-4 bg-white/60 backdrop-blur-xs shadow-2xs">
+                  <div className="flex justify-between items-center">
+                    <div className="h-4 w-2/3 bg-slate-200 rounded animate-pulse" />
+                    <div className="h-4 w-1/4 bg-slate-100 rounded animate-pulse" />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-3 w-full bg-slate-100 rounded animate-pulse" />
+                    <div className="h-3 w-5/6 bg-slate-100 rounded animate-pulse" />
+                    <div className="h-3 w-4/6 bg-slate-100 rounded animate-pulse" />
+                  </div>
+                  <div className="pt-2 flex gap-2">
+                    <div className="h-7 w-16 bg-slate-100 rounded-lg animate-pulse" />
+                    <div className="h-7 w-16 bg-slate-100 rounded-lg animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
         {allowedTabs.length === 0 ? (
-          <div className="flex-1 flex flex-col justify-center items-center p-8 text-center bg-slate-50 select-none">
-            <Lock className="h-10 w-10 text-slate-900 mb-2" />
-            <span className="text-sm font-black text-slate-900 uppercase tracking-tight">Доступ Заблокирован</span>
+          <div className="flex-1 flex flex-col justify-center items-center p-8 text-center bg-slate-50/50 rounded-2xl select-none">
+            <Lock className="h-10 w-10 text-slate-400 mb-3" />
+            <span className="text-sm font-bold text-slate-800 uppercase tracking-tight">Доступ Заблокирован</span>
           </div>
         ) : (
-          <div ref={scrollContainerRef} className="w-full h-full relative overflow-auto bg-slate-100/50">
+          <div ref={scrollContainerRef} className="w-full h-full relative overflow-auto bg-slate-50/50 rounded-2xl">
             <div style={{
                width: `${100 / zoomLevel}%`,
                height: `${100 / zoomLevel}%`,
@@ -236,9 +260,9 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
               {allowedTabs.map(tab => (
                 <iframe
                   key={tab.id + '-' + (activeTabId === tab.id ? iframeKey : 0)}
-                  src={tab.sheetUrl}
+                  src={getEmbeddableSheetUrl(tab.sheetUrl)}
                   onLoad={() => setLoadedFrameIds(prev => ({ ...prev, [tab.id]: true }))}
-                  className="w-full h-full border-0 absolute top-0 left-0"
+                  className="w-full h-full border-0 absolute top-0 left-0 rounded-2xl"
                   style={{ display: activeTabId === tab.id ? 'block' : 'none' }}
                   allow="clipboard-write"
                   title={`План Загрузок Ratipa ${tab.name}`}

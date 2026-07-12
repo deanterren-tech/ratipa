@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile, SalaryLog, CarRateGroup, AppSettings, Driver } from '../../types';
+import { UserProfile, SalaryLog, CarRateGroup, AppSettings, Driver, Vehicle } from '../../types';
 import { dbService, database } from '../../firebase';
+import { pdService } from '../../firebase/planDohodService';
 import { ref, onValue } from 'firebase/database';
 import { Wallet, Calculator, Sparkles, Send, Trash2, Edit, Copy, Calendar } from 'lucide-react';
 import CalendarDaysCalculator from './CalendarDaysCalculator';
 import { useDialog } from '../DialogProvider';
 import { useToast } from '../ToastProvider';
+import { normalizePlate, findCarByPlate, getDriverById, getDriverIdForCar } from '../../utils/salaryAutofill';
+import { formatDriverShortName } from '../../utils/driverSync';
+import { CarConflictModal } from '../common/CarConflictModal';
+import { CarConflict, detectCarDataConflict } from '../../utils/carConflictHandler';
 
 interface SalaryModuleProps {
   user: UserProfile;
@@ -28,9 +33,18 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const [logs, setLogs] = useState<SalaryLog[]>([]);
   const [carsPool, setCarsPool] = useState<CarRateGroup[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [driversMap, setDriversMap] = useState<Record<string, string>>({});
   const [knownFleet, setKnownFleet] = useState<string[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Tab control states for Recent Logs
+  const [activeTab, setActiveTab] = useState<'current' | 'archive' | 'dispatcher'>('current');
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [selectedDispatcher, setSelectedDispatcher] = useState<string>('');
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+  const [availableDispatchers, setAvailableDispatchers] = useState<string[]>([]);
+  const [isMigrating, setIsMigrating] = useState(false);
 
   // AI Assistant State
   const [aiStep, setAiStep] = useState(0);
@@ -49,45 +63,290 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const [comment, setComment] = useState('');
   const [driverName, setDriverName] = useState('');
 
+  // Auto-association & Database linking states
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [carId, setCarId] = useState('');
+  const [driverId, setDriverId] = useState('');
+  const [autofillStatus, setAutofillStatus] = useState<{
+    type: 'success' | 'warning' | 'multiple' | 'none';
+    message: string;
+    matchedCars?: Vehicle[];
+  }>({ type: 'none', message: '' });
+
+  const [conflict, setConflict] = useState<{ isOpen: boolean; conflicts: CarConflict[]; oldCar: Vehicle; newCarData: Partial<Vehicle> } | null>(null);
+
   const [editingSalaryId, setEditingSalaryId] = useState<string | null>(null);
   const [editingSalaryData, setEditingSalaryData] = useState<Partial<SalaryLog>>({});
 
+  const getYearMonth = (item: SalaryLog): string => {
+    if (item.datetime) {
+      const parts = item.datetime.split('.');
+      if (parts.length === 3) {
+        return `${parts[2]}-${parts[1]}`;
+      }
+    }
+    const timestamp = parseInt(item.id || "");
+    if (!isNaN(timestamp)) {
+      const d = new Date(timestamp);
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      return `${d.getFullYear()}-${mm}`;
+    }
+    const d = new Date();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    return `${d.getFullYear()}-${mm}`;
+  };
+
+  const sanitizeKey = (key: string) => {
+    return String(key || "").trim().replace(/[.#$[\]\/]/g, "_");
+  };
+
+  // 1. Run legacy flat data migration on mount
   useEffect(() => {
-    const unsubLogs = dbService.getSalaries((data) => setLogs(data));
+    const migrateLegacySalaries = async () => {
+      try {
+        setIsMigrating(true);
+        const { get: rtdbGet, update: rtdbUpdate } = await import('firebase/database');
+        const snap = await rtdbGet(ref(database, 'salaryHistory'));
+        if (!snap.exists()) {
+          setIsMigrating(false);
+          return;
+        }
+        const data = snap.val();
+        
+        // If it's already migrated (has flat/months/byDispatcher) or is empty
+        if (data && (data.flat || data.months || data.byDispatcher)) {
+          setIsMigrating(false);
+          return;
+        }
+        
+        console.log("Migrating legacy flat salaryHistory to new structured paths...");
+        const updates: Record<string, any> = {};
+        for (const key of Object.keys(data)) {
+          const log = data[key];
+          if (!log || typeof log !== 'object') continue;
+          
+          const logId = log.id || key;
+          log.id = logId;
+          const ym = getYearMonth(log);
+          const dispatcher = sanitizeKey(log.logist || 'System');
+          
+          updates[`salaryHistory/flat/${logId}`] = log;
+          updates[`salaryHistory/months/${ym}/${logId}`] = log;
+          updates[`salaryHistory/byDispatcher/${dispatcher}/${logId}`] = log;
+          updates[`salaryHistory/${key}`] = null; // remove legacy root key
+        }
+        
+        if (Object.keys(updates).length > 0) {
+          await rtdbUpdate(ref(database), updates);
+          console.log("Legacy salary history migration completed successfully!");
+        }
+      } catch (err) {
+        console.error("Failed to migrate legacy salary history:", err);
+      } finally {
+        setIsMigrating(false);
+      }
+    };
+    
+    migrateLegacySalaries();
+  }, []);
+
+  // 2. Fetch months and dispatchers to populate available values
+  useEffect(() => {
+    const unsubMonths = onValue(ref(database, 'salaryHistory/months'), (snap) => {
+      const data = snap.val();
+      if (data) {
+        setAvailableMonths(Object.keys(data).sort().reverse());
+      } else {
+        const d = new Date();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        setAvailableMonths([`${d.getFullYear()}-${mm}`]);
+      }
+    });
+
+    const unsubDispatchers = onValue(ref(database, 'salaryHistory/byDispatcher'), (snap) => {
+      const data = snap.val();
+      if (data) {
+        setAvailableDispatchers(Object.keys(data).sort());
+      } else {
+        setAvailableDispatchers([]);
+      }
+    });
+
+    return () => {
+      unsubMonths();
+      unsubDispatchers();
+    };
+  }, []);
+
+  // 3. Set fallback initial values
+  useEffect(() => {
+    if (availableMonths.length > 0 && !selectedMonth) {
+      setSelectedMonth(availableMonths[0]);
+    }
+  }, [availableMonths, selectedMonth]);
+
+  useEffect(() => {
+    if (availableDispatchers.length > 0 && !selectedDispatcher) {
+      setSelectedDispatcher(availableDispatchers[0]);
+    }
+  }, [availableDispatchers, selectedDispatcher]);
+
+  // 4. Scoped reactive subscription for active tab
+  useEffect(() => {
+    let dbPath = '';
+    
+    if (activeTab === 'current') {
+      const d = new Date();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const currentYM = `${d.getFullYear()}-${mm}`;
+      dbPath = `salaryHistory/months/${currentYM}`;
+    } else if (activeTab === 'archive') {
+      if (selectedMonth) {
+        dbPath = `salaryHistory/months/${selectedMonth}`;
+      }
+    } else if (activeTab === 'dispatcher') {
+      if (selectedDispatcher) {
+        dbPath = `salaryHistory/byDispatcher/${selectedDispatcher}`;
+      }
+    }
+    
+    if (!dbPath) {
+      setLogs([]);
+      return;
+    }
+    
+    console.log(`Subscribing to scoped salary path: ${dbPath}`);
+    const unsub = onValue(ref(database, dbPath), (snap) => {
+      const data = snap.val();
+      if (data) {
+        const list: SalaryLog[] = Object.keys(data).map((key) => ({
+          id: key,
+          ...data[key],
+        }));
+        list.sort((a, b) => {
+          const aTime = parseInt(a.id.replace(/\D/g, "")) || 0;
+          const bTime = parseInt(b.id.replace(/\D/g, "")) || 0;
+          return bTime - aTime;
+        });
+        setLogs(list);
+      } else {
+        setLogs([]);
+      }
+    }, (err) => {
+      console.warn(`Failed to subscribe to ${dbPath}:`, err);
+      setLogs([]);
+    });
+    
+    return () => {
+      unsub();
+    };
+  }, [activeTab, selectedMonth, selectedDispatcher]);
+
+  // 5. General metadata subscriptions
+  useEffect(() => {
     const unsubCars = dbService.getCarRateGroups((data) => setCarsPool(data));
     const unsubDrivers = dbService.getDrivers((data) => setDrivers(data));
+    const unsubDriversMap = pdService.subscribeDriversCarMapping((m) => setDriversMap(m));
     const unsubSettings = dbService.getSettings((data) => setSettings(data));
+    const unsubVehicles = dbService.getVehicles((data) => setVehicles(data));
     const unsubKnownFleet = onValue(ref(database, 'known_fleet'), (snap) => {
       const data = snap.val() || {};
       setKnownFleet(Object.values(data).map((v: any) => String(v).trim().toUpperCase()).filter(Boolean));
     });
 
     return () => {
-        unsubLogs();
         unsubCars();
-        unsubDrivers();
+        unsubDrivers(); 
+        unsubDriversMap();
         unsubSettings();
+        unsubVehicles();
         unsubKnownFleet();
     };
   }, []);
 
-  const handleCarNumberChange = (val: string) => {
-    const typed = val.toUpperCase().trim();
-    // Normalize to handle extra spaces
-    const normalizedTyped = typed.replace(/\s+/g, ' ');
-    setCarNumber(typed);
+  const clearCarDriverAutofill = () => {
+    setCarId('');
+    setDriverId('');
+    setDriverName('');
+    setAutofillStatus({ type: 'none', message: '' });
+  };
 
-    // Find car in unified carsPool
+  const applyCarAndDriverToForm = (car: Vehicle, drv: Driver | undefined) => {
+    const plate = car.carNumber || car.vehicleNumbers || '';
+    setCarNumber(plate);
+    setCarId(car.id);
+
+    // Update rate from cars pool if matches
+    const normalizedCarPlate = normalizePlate(plate);
     const group = carsPool.find(g => 
-        (g.vehicles || []).some(v => v.toUpperCase().trim().replace(/\s+/g, ' ') === normalizedTyped)
+        (g.vehicles || []).some(v => normalizePlate(v) === normalizedCarPlate)
     );
-    
     if (group) {
         setRatePerKm(group.rate);
         setRatePerDiem(group.perDiemRate);
+    }
+
+    if (drv) {
+      setDriverId(drv.id);
+      setDriverName(drv.shortNameRu || formatDriverShortName(drv));
+      setAutofillStatus({
+        type: 'success',
+        message: `Машина и водитель успешно сопоставлены: ${drv.shortNameRu || formatDriverShortName(drv)}`
+      });
     } else {
-        setRatePerKm(0.125);
-        setRatePerDiem(undefined);
+      setDriverId('');
+      setDriverName('');
+      setAutofillStatus({
+        type: 'warning',
+        message: 'Для машины не назначен водитель'
+      });
+    }
+  };
+
+  const handleCarNumberChange = (val: string) => {
+    setCarNumber(val);
+
+    if (!val.trim()) {
+      clearCarDriverAutofill();
+      return;
+    }
+
+    const { matchType, matchedCars } = findCarByPlate(val, vehicles);
+
+    if (matchType === 'exact' || matchType === 'partial') {
+      const matchedCar = matchedCars[0];
+      const mDriverId = getDriverIdForCar(matchedCar, driversMap);
+      const matchedDriver = mDriverId ? getDriverById(mDriverId, drivers) : undefined;
+      applyCarAndDriverToForm(matchedCar, matchedDriver);
+    } else if (matchType === 'multiple') {
+      setCarId('');
+      setDriverId('');
+      setDriverName('');
+      setAutofillStatus({
+        type: 'multiple',
+        message: 'Найдено несколько похожих машин, выберите одну:',
+        matchedCars
+      });
+    } else {
+      setCarId('');
+      setDriverId('');
+      setAutofillStatus({
+        type: 'none',
+        message: 'Машина не найдена в базе автопарка'
+      });
+
+      // Still check if rate group has this vehicle plate
+      const normalizedTyped = normalizePlate(val);
+      const group = carsPool.find(g => 
+          (g.vehicles || []).some(v => normalizePlate(v) === normalizedTyped)
+      );
+      if (group) {
+          setRatePerKm(group.rate);
+          setRatePerDiem(group.perDiemRate);
+      } else {
+          setRatePerKm(0.125);
+          setRatePerDiem(undefined);
+      }
     }
   };
 
@@ -95,13 +354,21 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     setDriverName(val);
     
     // Find driver in drivers pool
-    const foundDriver = drivers.find(d => String(d.name || '').trim().toLowerCase() === val.trim().toLowerCase());
-    if (foundDriver && foundDriver.rateGroupId) {
-      const group = carsPool.find(g => g.id === foundDriver.rateGroupId);
-      if (group) {
-        setRatePerKm(group.rate);
-        setRatePerDiem(group.perDiemRate);
+    const foundDriver = drivers.find(d => 
+      String(d.name || '').trim().toLowerCase() === val.trim().toLowerCase() ||
+      (d.shortNameRu && d.shortNameRu.trim().toLowerCase() === val.trim().toLowerCase())
+    );
+    if (foundDriver) {
+      setDriverId(foundDriver.id);
+      if (foundDriver.rateGroupId) {
+        const group = carsPool.find(g => g.id === foundDriver.rateGroupId);
+        if (group) {
+          setRatePerKm(group.rate);
+          setRatePerDiem(group.perDiemRate);
+        }
       }
+    } else {
+      setDriverId('');
     }
   };
 
@@ -124,7 +391,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     setTotalDays(1);
     setBonus(0);
     setComment('');
-    setDriverName('');
+    clearCarDriverAutofill();
   };
 
   const saveToHistory = async () => {
@@ -135,13 +402,26 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
     const trimmedDriver = driverName.trim();
     if (trimmedDriver && trimmedDriver !== 'НЕ УКАЗАНО') {
-      const exists = drivers.some(d => String(d.name || '').trim().toLowerCase() === trimmedDriver.toLowerCase());
+      const exists = drivers.some(d => 
+        String(d.name || '').trim().toLowerCase() === trimmedDriver.toLowerCase() ||
+        (d.shortNameRu && d.shortNameRu.trim().toLowerCase() === trimmedDriver.toLowerCase())
+      );
       if (!exists) {
         const confirmAdd = await showConfirm(`Водитель "${trimmedDriver}" отсутствует в справочнике. Занести его в справочник?`);
         if (confirmAdd) {
+          const parts = trimmedDriver.split(/\s+/);
+          const last = parts[0] || '';
+          const first = parts[1] || '';
+          const middle = parts[2] || '';
+          const computedShort = formatDriverShortName(last, first, middle);
+
           const newDriver: Driver = {
             id: "dr_" + Date.now(),
             name: trimmedDriver,
+            lastNameRu: last,
+            firstNameRu: first,
+            middleNameRu: middle,
+            shortNameRu: computedShort || trimmedDriver,
           };
           dbService.saveDriver(newDriver, user.name, user.role);
           toast(`Водитель "${trimmedDriver}" добавлен в справочник!`, 'success');
@@ -166,7 +446,9 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
         comment: comment.trim(),
         driver: trimmedDriver || 'НЕ УКАЗАНО',
         totalSalary,
-        salaryPerDay
+        salaryPerDay,
+        carId: carId || undefined,
+        driverId: driverId || undefined
     };
 
     dbService.saveSalary(newLog, user.name, user.role);
@@ -195,7 +477,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   };
 
   const copyHistoryToForm = (log: SalaryLog) => {
-    setCarNumber('');
+    setCarNumber(log.car || '');
     setRatePerKm(log.rate || 0);
     setTotalKm(log.km || '');
     setTripMark(log.mark || 'Турция');
@@ -204,6 +486,23 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     setBonus(log.bonus || 0);
     setComment(log.comment || '');
     setDriverName(log.driver || '');
+    setCarId(log.carId || '');
+    setDriverId(log.driverId || '');
+
+    if (log.driverId && log.driver) {
+      setAutofillStatus({
+        type: 'success',
+        message: `Машина и водитель успешно сопоставлены: ${log.driver}`
+      });
+    } else if (log.carId) {
+      setAutofillStatus({
+        type: 'warning',
+        message: 'Для машины не назначен водитель'
+      });
+    } else {
+      setAutofillStatus({ type: 'none', message: '' });
+    }
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -212,13 +511,26 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     
     const trimmedDriver = (editingSalaryData.driver || '').trim();
     if (trimmedDriver && trimmedDriver !== 'НЕ УКАЗАНО') {
-      const exists = drivers.some(d => String(d.name || '').trim().toLowerCase() === trimmedDriver.toLowerCase());
+      const exists = drivers.some(d => 
+        String(d.name || '').trim().toLowerCase() === trimmedDriver.toLowerCase() ||
+        (d.shortNameRu && d.shortNameRu.trim().toLowerCase() === trimmedDriver.toLowerCase())
+      );
       if (!exists) {
         const confirmAdd = await showConfirm(`Водитель "${trimmedDriver}" отсутствует в справочнике. Занести его в справочник?`);
         if (confirmAdd) {
+          const parts = trimmedDriver.split(/\s+/);
+          const last = parts[0] || '';
+          const first = parts[1] || '';
+          const middle = parts[2] || '';
+          const computedShort = formatDriverShortName(last, first, middle);
+
           const newDriver: Driver = {
             id: "dr_" + Date.now(),
             name: trimmedDriver,
+            lastNameRu: last,
+            firstNameRu: first,
+            middleNameRu: middle,
+            shortNameRu: computedShort || trimmedDriver,
           };
           dbService.saveDriver(newDriver, user.name, user.role);
           toast(`Водитель "${trimmedDriver}" добавлен в справочник!`, 'success');
@@ -331,45 +643,54 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const uniqueDrivers = new Set(logs.map(r => r.driver || '').filter(Boolean)).size;
 
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full space-y-6">
         {/* Header Block */}
-        <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col sm:flex-row justify-between gap-4 select-none items-center">
+        <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-xl shadow-slate-900/5 flex flex-col sm:flex-row justify-between gap-4 select-none items-center">
             <div>
-                <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
-                  <Wallet className="h-6 w-6 text-slate-800" style={{ fill: '#70FC8E' }} />
+                <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#3765F6]/10 border border-[#3765F6]/20 flex items-center justify-center text-[#3765F6] shadow-2xs">
+                    <Wallet className="h-5 w-5" />
+                  </div>
                   Зарплата водителей
                 </h1>
             </div>
-             <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
             </div>
         </div>
 
         <div className="flex flex-col gap-6">
 
                 {/* AI Assistant Panel */}
-                <div className="bg-slate-900 rounded-[2rem] p-6 lg:p-8 text-white border border-slate-800 shadow-[0_8px_30px_rgba(0,0,0,0.12)] relative overflow-hidden flex flex-col h-auto min-h-[200px]">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><Sparkles className="h-24 w-24 text-[#70FC8E]" /></div>
+                <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-6 lg:p-8 text-slate-800 border border-slate-200/50 shadow-xl shadow-slate-900/5 relative overflow-hidden flex flex-col h-auto min-h-[200px]">
+                    <div className="absolute top-0 right-0 p-4 opacity-[0.04] pointer-events-none">
+                      <Sparkles className="h-24 w-24 text-[#3765F6]" />
+                    </div>
                     
                     <div className="flex justify-between items-start mb-6 z-10 relative">
                         <div>
                             <div className="flex items-center gap-2 mb-3">
-                               <div className="px-2 py-0.5 rounded-full bg-[#70FC8E] text-[#143e1d] text-[10px] font-black uppercase font-mono tracking-widest shadow-sm">AI помощник</div>
+                               <div className="px-2.5 py-1 rounded-full bg-[#3765F6]/10 border border-[#3765F6]/25 text-[#3765F6] text-[10px] font-bold uppercase tracking-wider shadow-3xs flex items-center gap-1.5">
+                                 <Sparkles className="h-3 w-3" />
+                                 ИИ ПОМОЩНИК
+                               </div>
                             </div>
-                            <h3 className="text-xl font-black text-slate-100 tracking-tight">Пошаговый расчет выплаты</h3>
-                            <p className="text-sm font-medium text-slate-400 mt-1 max-w-xl">Помощник задаст вопросы по рейсу и заполнит форму ниже. Для тарифов используйте вкладку «Настройки».</p>
+                            <h3 className="text-xl font-bold text-slate-900 tracking-tight">Пошаговый расчет выплаты</h3>
+                            <p className="text-xs font-medium text-slate-500 mt-1 max-w-xl">Помощник задаст вопросы по рейсу и заполнит форму ниже. Для тарифов используйте вкладку «Настройки».</p>
                         </div>
                         {aiStep > 0 && (
-                             <button onClick={resetAi} className="text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-slate-300 transition">Сброс</button>
+                             <button onClick={resetAi} className="text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-600 transition cursor-pointer">Сброс</button>
                         )}
                     </div>
                     
                     <div className="flex-1 flex flex-col gap-4 z-10 relative mt-auto">
-                        <div className="bg-slate-800/80 backdrop-blur-md rounded-2xl p-5 border border-slate-700/80 text-slate-300 text-sm font-medium leading-relaxed shadow-inner">
-                             {aiStep > 0 && <div className="text-[#70FC8E] text-[10px] font-black uppercase tracking-wider mb-2">Шаг {aiStep} из {salarySteps.length}</div>}
+                        <div className="bg-white/45 backdrop-blur-xs rounded-2xl p-5 border border-slate-200/40 text-slate-700 text-sm font-medium leading-relaxed shadow-3xs">
+                             {aiStep > 0 && <div className="text-[#3765F6] text-[10px] font-bold uppercase tracking-wider mb-2">Шаг {aiStep} из {salarySteps.length}</div>}
                              {renderAiLabel(aiOutput)}
                              {aiStep === 0 && (
                                  <div className="mt-4">
-                                     <button onClick={startAi} className="bg-[#70FC8E] text-slate-900 font-black px-5 py-2.5 rounded-xl text-xs uppercase tracking-wider hover:bg-[#5be277] shadow-sm transition border border-black/10">Начать расчет рейса</button>
+                                     <button onClick={startAi} className="bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold px-5 py-2.5 rounded-xl text-xs uppercase tracking-wider shadow-sm hover:shadow-md hover:shadow-blue-500/10 active:scale-95 transition-all duration-150 cursor-pointer">
+                                       Начать расчет рейса
+                                     </button>
                                  </div>
                              )}
                         </div>
@@ -382,13 +703,13 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                 placeholder={aiStep > 0 ? "Введите ответ помощнику..." : "Начните расчет..."}
                                 disabled={aiStep === 0}
                                 onKeyDown={e => e.key === 'Enter' && handleAiSubmit()}
-                                className="flex-1 bg-slate-800 border border-slate-700 text-slate-100 text-sm font-bold px-4 py-3.5 rounded-2xl outline-none focus:border-[#70FC8E] transition disabled:opacity-50 placeholder:text-slate-500" 
+                                className="flex-1 bg-white/45 border border-slate-200/50 text-slate-800 text-xs font-semibold px-4 py-3 rounded-2xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition disabled:opacity-50 placeholder:text-slate-400/80 shadow-inner focus:bg-white" 
                             />
                             <button 
                                 onClick={handleAiSubmit} 
                                 disabled={aiStep === 0}
-                                className="bg-[#70FC8E] hover:bg-[#5be277] text-slate-900 shadow-sm font-black px-6 rounded-2xl flex items-center justify-center transition disabled:opacity-50">
-                                <Send className="h-5 w-5" />
+                                className="bg-[#3765F6] hover:bg-[#2555E5] text-white shadow-sm hover:shadow-md hover:shadow-blue-500/10 font-semibold px-6 rounded-2xl flex items-center justify-center transition active:scale-95 disabled:opacity-50 cursor-pointer">
+                                <Send className="h-4 w-4" />
                             </button>
                         </div>
                     </div>
@@ -396,60 +717,118 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
                 {/* Calculator Form */}
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                    <div className="lg:col-span-3 bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] relative overflow-hidden">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-                            <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Калькулятор рейса водителя</h2>
+                    <div className="lg:col-span-3 bg-white/60 backdrop-blur-md rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-xl shadow-slate-900/5 relative overflow-hidden flex flex-col gap-6">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200/40 pb-4">
+                            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Калькулятор рейса водителя</h2>
                             <div className="flex gap-2">
-                                 <button onClick={clearForm} className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold px-4 py-2 rounded-xl text-xs transition">Очистить</button>
-                                 <button onClick={saveToHistory} className="bg-[#70FC8E] hover:bg-[#5be277] text-slate-900 font-black px-4 py-2 rounded-xl text-xs uppercase tracking-wide flex items-center gap-2 transition border border-black/5">
+                                 <button onClick={clearForm} className="bg-slate-100 hover:bg-slate-200/80 text-slate-600 font-bold px-4 py-2 rounded-xl text-xs transition active:scale-95 cursor-pointer shadow-3xs border border-slate-200/30">Очистить</button>
+                                 <button onClick={saveToHistory} className="bg-[#3765F6] hover:bg-[#2555E5] text-white font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wide flex items-center gap-2 transition hover:shadow-md hover:shadow-blue-500/10 active:scale-95 cursor-pointer">
                                      Фиксировать выплату <Wallet className="h-4 w-4" />
                                  </button>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Номер авто</label>
-                                <input type="text" list="salary-cars-list" value={carNumber} onChange={e => handleCarNumberChange(e.target.value)} placeholder="Начните вводить..." className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition uppercase" />
-                                <datalist id="salary-cars-list">
-                                    {carsPool.flatMap((g, i) => (g.vehicles || []).map((v, j) => <option key={`pool-${i}-${j}-${v}`} value={v}>Ставка: {g.rate} € ({g.name})</option>))}
-                                    {knownFleet.filter(k => !carsPool.some(g => (g.vehicles || []).map(x => x.toUpperCase()).includes(k.toUpperCase()))).map(k => <option key={`known-${k}`} value={k}>Автомобиль без тарифа</option>)}
-                                </datalist>
+                        <div className="flex flex-col gap-5">
+                            {/* Блок рейса */}
+                            <div className="bg-white/45 backdrop-blur-xs border border-slate-200/40 rounded-2xl p-4 flex flex-col gap-4 shadow-3xs">
+                                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200/40 pb-2">Блок рейса</div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Номер авто</label>
+                                        <input type="text" list="salary-cars-list" value={carNumber} onChange={e => handleCarNumberChange(e.target.value)} placeholder="Номер..." className="w-full bg-white/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:bg-white transition uppercase shadow-inner" />
+                                        <datalist id="salary-cars-list">
+                                            {carsPool.flatMap((g, i) => (g.vehicles || []).map((v, j) => <option key={`pool-${i}-${j}-${v}`} value={v}>Ставка: {g.rate} € ({g.name})</option>))}
+                                            {knownFleet.filter(k => !carsPool.some(g => (g.vehicles || []).map(x => x.toUpperCase()).includes(k.toUpperCase()))).map(k => <option key={`known-${k}`} value={k}>Автомобиль без тарифа</option>)}
+                                        </datalist>
+
+                                        {autofillStatus.type !== 'none' && autofillStatus.message && (
+                                          <div className={`text-[10px] font-semibold mt-1 px-2.5 py-1 rounded-lg border ${
+                                            autofillStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                            autofillStatus.type === 'warning' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                            autofillStatus.type === 'multiple' ? 'bg-blue-50 text-blue-700 border-blue-200 animate-pulse' :
+                                            'bg-slate-50 text-slate-600 border-slate-200'
+                                          }`}>
+                                            {autofillStatus.message}
+                                          </div>
+                                        )}
+
+                                        {autofillStatus.type === 'multiple' && autofillStatus.matchedCars && (
+                                          <div className="flex flex-wrap gap-1 mt-1.5 p-1.5 bg-blue-50/50 rounded-xl border border-blue-100">
+                                            {autofillStatus.matchedCars.slice(0, 5).map(car => {
+                                              const plate = car.carNumber || car.vehicleNumbers || '';
+                                              return (
+                                                <button
+                                                  key={car.id}
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const mDriverId = getDriverIdForCar(car, driversMap);
+                                                    const matchedDriver = mDriverId ? getDriverById(mDriverId, drivers) : undefined;
+                                                    applyCarAndDriverToForm(car, matchedDriver);
+                                                  }}
+                                                  className="text-[10px] font-bold bg-white text-[#3765F6] border border-blue-200/60 hover:bg-[#3765F6] hover:text-white transition px-2 py-1 rounded-lg cursor-pointer active:scale-95"
+                                                >
+                                                  {plate}
+                                                </button>
+                                              );
+                                            })}
+                                            {autofillStatus.matchedCars.length > 5 && (
+                                              <span className="text-[10px] text-blue-500 font-bold self-center px-1">
+                                                +{autofillStatus.matchedCars.length - 5} еще
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Пометка рейса</label>
+                                        <select value={tripMark} onChange={e => setTripMark(e.target.value)} className="w-full bg-white/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:bg-white transition cursor-pointer shadow-inner appearance-none">
+                                            <option value="Турция">Турция</option>
+                                            <option value="Китай">Китай</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Общий пробег (км)</label>
+                                        <input type="number" value={totalKm} onChange={e => setTotalKm(Number(e.target.value))} placeholder="5500" className="w-full bg-white/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:bg-white transition shadow-inner" />
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ставка за км (€)</label>
+                                        <input type="number" step="0.001" value={ratePerKm} onChange={e => setRatePerKm(Number(e.target.value))} className="w-full bg-white/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:bg-white transition shadow-inner" />
+                                    </div>
+                                </div>
                             </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Ставка за км (€)</label>
-                                <input type="number" step="0.001" value={ratePerKm} onChange={e => setRatePerKm(Number(e.target.value))} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
+
+                            {/* Блок дней и премий */}
+                            <div className="bg-white/45 backdrop-blur-xs border border-slate-200/40 rounded-2xl p-4 flex flex-col gap-4 shadow-3xs">
+                                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200/40 pb-2">Блок дней и премий</div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Дней простоя ({currentIdleRate} €/д)</label>
+                                        <input type="number" value={idleDays} onChange={e => setIdleDays(Number(e.target.value))} min="0" className="w-full bg-white/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:bg-white transition shadow-inner" />
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Дней в рейсе ({currentPerDiem} €/д)</label>
+                                        <input type="number" value={totalDays} onChange={e => setTotalDays(Number(e.target.value))} min="1" className="w-full bg-white/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:bg-white transition shadow-inner" />
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-amber-600">Премия (€)</label>
+                                        <input type="number" value={bonus} onChange={e => setBonus(Number(e.target.value))} min="0" className="w-full bg-amber-50/50 border border-amber-200/50 text-amber-900 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 focus:bg-white transition shadow-inner placeholder:text-amber-600/50" placeholder="0" />
+                                    </div>
+                                </div>
                             </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Общий пробег (км)</label>
-                                <input type="number" value={totalKm} onChange={e => setTotalKm(Number(e.target.value))} placeholder="5500" className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Пометка рейса</label>
-                                <select value={tripMark} onChange={e => setTripMark(e.target.value)} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition">
-                                    <option value="Турция">Турция</option>
-                                    <option value="Китай">Китай</option>
-                                </select>
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Дней простоя ({currentIdleRate} €/д)</label>
-                                <input type="number" value={idleDays} onChange={e => setIdleDays(Number(e.target.value))} min="0" className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Дней в рейсе ({currentPerDiem} €/д)</label>
-                                <input type="number" value={totalDays} onChange={e => setTotalDays(Number(e.target.value))} min="1" className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-yellow-600">Премия (€)</label>
-                                <input type="number" value={bonus} onChange={e => setBonus(Number(e.target.value))} min="0" className="w-full bg-yellow-50 border border-yellow-200 text-yellow-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-yellow-500 focus:bg-yellow-100 transition placeholder:text-yellow-600/50" placeholder="0" />
-                            </div>
-                            <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">ФИО Водителя</label>
-                                <input list="salary-drivers-dl" type="text" value={driverName} onChange={e => handleDriverNameChange(e.target.value)} placeholder="Иванов И.И." className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
-                            </div>
-                            <div className="flex flex-col gap-1.5 col-span-1 sm:col-span-2 lg:col-span-3">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Комментарий к выплате</label>
-                                <input type="text" value={comment} onChange={e => setComment(e.target.value)} placeholder="Опционально (штрафы, детали, премии...)" className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
+
+                            {/* Блок человека */}
+                            <div className="bg-white/45 backdrop-blur-xs border border-slate-200/40 rounded-2xl p-4 flex flex-col gap-4 shadow-3xs">
+                                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200/40 pb-2">Блок человека</div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    <div className="flex flex-col gap-1.5 sm:col-span-1">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">ФИО Водителя</label>
+                                        <input list="salary-drivers-dl" type="text" value={driverName} onChange={e => handleDriverNameChange(e.target.value)} placeholder="Иванов И.И." className="w-full bg-white/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:bg-white transition shadow-inner" />
+                                    </div>
+                                    <div className="flex flex-col gap-1.5 sm:col-span-2">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Комментарий к выплате</label>
+                                        <input type="text" value={comment} onChange={e => setComment(e.target.value)} placeholder="Опционально (штрафы, детали, премии...)" className="w-full bg-white/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:bg-white transition shadow-inner" />
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -458,175 +837,294 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                     </div>
                 </div>
 
+                {conflict && (
+                    <CarConflictModal
+                        isOpen={conflict.isOpen}
+                        conflicts={conflict.conflicts}
+                        onResolve={(resolution) => {
+                            // handle resolution...
+                            setConflict(null);
+                        }}
+                        onClose={() => setConflict(null)}
+                    />
+                )}
+
                 {/* Totals Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                    <div className="bg-white rounded-3xl p-5 border border-slate-200/60 flex flex-col justify-center">
-                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">За километраж</div>
-                        <div className="text-2xl font-black text-slate-900 tracking-tight">{Math.round(kmMoney).toLocaleString('ru-RU')} €</div>
+                    <div className="bg-white/60 backdrop-blur-md rounded-2xl p-5 border border-slate-200/50 flex flex-col justify-center shadow-md shadow-slate-900/5">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">За километраж</div>
+                        <div className="text-xl font-bold text-slate-800 tracking-tight font-mono">{Math.round(kmMoney).toLocaleString('ru-RU')} €</div>
                     </div>
-                    <div className="bg-white rounded-3xl p-5 border border-slate-200/60 flex flex-col justify-center">
-                        <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Простой + Суточные</div>
-                        <div className="text-2xl font-black text-slate-900 tracking-tight">{Math.round(idleMoney + daysMoney).toLocaleString('ru-RU')} €</div>
+                    <div className="bg-white/60 backdrop-blur-md rounded-2xl p-5 border border-slate-200/50 flex flex-col justify-center shadow-md shadow-slate-900/5">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Простой + Суточные</div>
+                        <div className="text-xl font-bold text-slate-800 tracking-tight font-mono">{Math.round(idleMoney + daysMoney).toLocaleString('ru-RU')} €</div>
                     </div>
-                    <div className="bg-yellow-50 rounded-3xl p-5 border border-yellow-200 flex flex-col justify-center">
-                        <div className="text-[10px] font-black uppercase tracking-widest text-yellow-600 mb-1">Премия</div>
-                        <div className="text-2xl font-black text-yellow-800 tracking-tight">{Math.round(bonus).toLocaleString('ru-RU')} €</div>
+                    <div className="bg-amber-50/60 backdrop-blur-md rounded-2xl p-5 border border-amber-200/50 flex flex-col justify-center shadow-md shadow-slate-900/5">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-amber-600 mb-1">Премия</div>
+                        <div className="text-xl font-bold text-amber-800 tracking-tight font-mono">{Math.round(bonus).toLocaleString('ru-RU')} €</div>
                     </div>
-                    <div className="bg-slate-900 rounded-3xl p-5 border border-slate-800 flex flex-col justify-center shadow-md">
-                        <div className="text-[10px] font-black uppercase tracking-widest text-[#70FC8E]/60 mb-1">З/П за сутки</div>
-                        <div className="text-3xl font-black text-[#70FC8E] tracking-tight">{Math.round(salaryPerDay).toLocaleString('ru-RU')} €</div>
+                    <div className="bg-white/60 backdrop-blur-md rounded-2xl p-5 border border-slate-200/50 flex flex-col justify-center shadow-md shadow-slate-900/5">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-[#3765F6] mb-1">З/П за сутки</div>
+                        <div className="text-xl font-black text-[#3765F6] tracking-tight font-mono">{Math.round(salaryPerDay).toLocaleString('ru-RU')} €</div>
                     </div>
-                    <div className="bg-slate-900 rounded-3xl p-5 border border-slate-800 flex flex-col justify-center shadow-md">
-                        <div className="text-[10px] font-black uppercase tracking-widest text-[#70FC8E]/60 mb-1">Итого водителю</div>
-                        <div className="text-3xl font-black text-[#70FC8E] tracking-tight">{Math.round(totalSalary).toLocaleString('ru-RU')} €</div>
+                    <div className="bg-gradient-to-br from-[#3765F6]/10 to-[#3765F6]/5 backdrop-blur-md rounded-2xl p-5 border border-[#3765F6]/25 flex flex-col justify-center shadow-md shadow-blue-900/5">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-[#3765F6] mb-1 font-sans">Итого водителю</div>
+                        <div className="text-2xl font-black text-[#3765F6] tracking-tight font-mono">{Math.round(totalSalary).toLocaleString('ru-RU')} €</div>
                     </div>
                 </div>
 
             </div>
 
         {/* Global Statistics Grid (Full Width) */}
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
-            <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight mb-5 flex items-center gap-2"><Calculator className="h-4 w-4 text-[#70FC8E] fill-[#70FC8E]/20" /> Статистика выплат (По всей истории)</h2>
+        <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-xl shadow-slate-900/5">
+            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-5 flex items-center gap-2 select-none">
+                <Calculator className="h-4 w-4 text-[#3765F6]" /> 
+                Статистика выплат ({activeTab === 'current' ? 'Текущий месяц' : activeTab === 'archive' ? 'За выбранный месяц' : 'По выбранному логисту'})
+            </h2>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                 <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col justify-center">
-                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Выплат всего</div>
-                    <div className="text-xl font-black text-slate-800">{logs.length}</div>
+                 <div className="bg-white/45 border border-slate-200/40 rounded-2xl p-5 flex flex-col justify-center shadow-3xs">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Выплат всего</div>
+                    <div className="text-xl font-bold text-slate-800 font-mono">{logs.length}</div>
                 </div>
-                <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 flex flex-col justify-center shadow-md">
-                    <div className="text-[10px] font-black uppercase tracking-widest text-[#70FC8E]/60 mb-1">Сумма всех выплат</div>
-                    <div className="text-xl font-black text-[#70FC8E]">{Math.round(totalPaid).toLocaleString('ru-RU')} €</div>
+                <div className="bg-gradient-to-br from-[#3765F6]/10 to-[#3765F6]/5 border border-[#3765F6]/25 rounded-2xl p-5 flex flex-col justify-center shadow-3xs">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#3765F6] mb-1 font-sans">Сумма всех выплат</div>
+                    <div className="text-xl font-bold text-[#3765F6] font-mono">{Math.round(totalPaid).toLocaleString('ru-RU')} €</div>
                 </div>
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col justify-center">
-                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Средняя выплата</div>
-                    <div className="text-xl font-black text-slate-800">{Math.round(avgPaid).toLocaleString('ru-RU')} €</div>
+                <div className="bg-white/45 border border-slate-200/40 rounded-2xl p-5 flex flex-col justify-center shadow-3xs">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Средняя выплата</div>
+                    <div className="text-xl font-bold text-slate-800 font-mono">{Math.round(avgPaid).toLocaleString('ru-RU')} €</div>
                 </div>
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col justify-center">
-                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Максимальная</div>
-                    <div className="text-xl font-black text-slate-800">{Math.round(maxPaid).toLocaleString('ru-RU')} €</div>
+                <div className="bg-white/45 border border-slate-200/40 rounded-2xl p-5 flex flex-col justify-center shadow-3xs">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Максимальная</div>
+                    <div className="text-xl font-bold text-slate-800 font-mono">{Math.round(maxPaid).toLocaleString('ru-RU')} €</div>
                 </div>
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col justify-center">
-                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Уникальных водителей</div>
-                    <div className="text-xl font-black text-slate-800">{uniqueDrivers}</div>
+                <div className="bg-white/45 border border-slate-200/40 rounded-2xl p-5 flex flex-col justify-center shadow-3xs">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Уникальных водителей</div>
+                    <div className="text-xl font-bold text-slate-800 font-mono">{uniqueDrivers}</div>
                 </div>
             </div>
         </div>
 
         {/* History Cards / Recent Logs (Full Width) */}
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
-            <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight mb-4">Журнал последних выплат</h2>
-            
-            <div className="mb-4">
-                <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Поиск: Водитель, логист..." className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] transition" />
+        <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-xl shadow-slate-900/5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                <h2 className="text-lg font-bold text-slate-900 uppercase tracking-wider">Журнал последних выплат</h2>
+                
+                {/* Available Months or Dispatchers dropdown inside header */}
+                <div className="flex flex-wrap items-center gap-3">
+                    {activeTab === 'archive' && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Период:</span>
+                            <select
+                                value={selectedMonth}
+                                onChange={(e) => setSelectedMonth(e.target.value)}
+                                className="bg-white/80 backdrop-blur-md border border-slate-200 text-slate-850 text-xs font-bold px-3 py-1.5 rounded-xl outline-none focus:border-[#3765F6] transition cursor-pointer shadow-3xs"
+                            >
+                                {availableMonths.map((m) => {
+                                    const [year, month] = m.split('-');
+                                    const monthsNamesRu = [
+                                        'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                                        'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+                                    ];
+                                    const mIndex = parseInt(month, 10) - 1;
+                                    const humanLabel = mIndex >= 0 && mIndex < 12 ? `${monthsNamesRu[mIndex]} ${year}` : m;
+                                    return (
+                                        <option key={m} value={m}>
+                                            {humanLabel}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                        </div>
+                    )}
+
+                    {activeTab === 'dispatcher' && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Логист:</span>
+                            <select
+                                value={selectedDispatcher}
+                                onChange={(e) => setSelectedDispatcher(e.target.value)}
+                                className="bg-white/80 backdrop-blur-md border border-slate-200 text-slate-850 text-xs font-bold px-3 py-1.5 rounded-xl outline-none focus:border-[#3765F6] transition cursor-pointer shadow-3xs"
+                            >
+                                {availableDispatchers.length === 0 ? (
+                                    <option value="">Нет данных</option>
+                                ) : (
+                                    availableDispatchers.map((d) => (
+                                        <option key={d} value={d}>
+                                            {d}
+                                        </option>
+                                    ))
+                                )}
+                            </select>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            <div className="space-y-3">
+            {/* Interactive Tabs Menu */}
+            <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl w-full sm:w-fit border border-slate-200/40 mb-6">
+                <button
+                    onClick={() => setActiveTab('current')}
+                    className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                        activeTab === 'current'
+                            ? 'bg-[#3765F6] text-white shadow-md shadow-blue-500/10'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-white/40'
+                    }`}
+                >
+                    Текущий месяц
+                </button>
+                <button
+                    onClick={() => setActiveTab('archive')}
+                    className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                        activeTab === 'archive'
+                            ? 'bg-[#3765F6] text-white shadow-md shadow-blue-500/10'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-white/40'
+                    }`}
+                >
+                    Архив месяцев
+                </button>
+                <button
+                    onClick={() => setActiveTab('dispatcher')}
+                    className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                        activeTab === 'dispatcher'
+                            ? 'bg-[#3765F6] text-white shadow-md shadow-blue-500/10'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-white/40'
+                    }`}
+                >
+                    По диспетчерам
+                </button>
+            </div>
+            
+            <div className="mb-6">
+                <input 
+                    type="text" 
+                    value={searchQuery} 
+                    onChange={e => setSearchQuery(e.target.value)} 
+                    placeholder="Поиск по водителю, логисту, транспортному средству..." 
+                    className="w-full bg-white/45 border border-slate-200/50 text-slate-800 text-xs font-semibold px-4 py-3 rounded-2xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-inner focus:bg-white placeholder:text-slate-400" 
+                />
+            </div>
+
+            <div className="space-y-4">
                 {filteredHistory.length === 0 ? (
-                    <div className="text-center py-10 text-slate-400 font-bold text-sm bg-slate-50 rounded-xl border border-slate-200/50 italic">История пустая</div>
+                    <div className="text-center py-12 text-slate-400 font-bold text-xs bg-white/45 rounded-2xl border border-slate-200/50 italic">История пустая</div>
                 ) : (
                     filteredHistory.slice(0, 50).map((rec) => (
-                        <div key={rec.id} className="bg-slate-50 border border-slate-200 rounded-[1.5rem] p-5 flex flex-col group hover:bg-white hover:border-[#70FC8E]/50 transition duration-300">
+                        <div key={rec.id} className="bg-white/45 border border-slate-200/40 rounded-[2rem] p-6 flex flex-col group hover:bg-white hover:border-[#3765F6]/40 hover:shadow-lg hover:shadow-slate-900/2 transition-all duration-300">
                             
                             {/* Header Row */}
-                            <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-200">
-                                <div className="flex items-center gap-3">
-                                    <div className="bg-slate-950 text-[#70FC8E] px-3 py-1.5 rounded-xl text-xs font-black uppercase font-mono tracking-widest">{rec.driver}</div>
-                                    <div className="text-xs font-bold text-slate-500 font-mono flex items-center gap-2">
-                                       <span className="text-slate-400">ТС:</span> <span className="text-slate-800">{rec.car}</span>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-4 border-b border-slate-200/50">
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <div className="bg-slate-900 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider">{formatDriverShortName(rec.driver)}</div>
+                                    <div className="text-xs font-bold text-slate-500 flex items-center gap-2">
+                                       <span className="text-slate-400 uppercase tracking-wider text-[10px]">ТС:</span> 
+                                       <span className="text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/50 font-mono text-[11px]">{rec.car}</span>
+                                    </div>
+                                    <span className="text-slate-300 hidden sm:inline">|</span>
+                                    <div className="text-xs text-slate-400 font-medium">
+                                       {rec.datetime} · <span className="text-slate-500 font-semibold">Логист: {rec.logist || 'Система'}</span>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-4">
-                                     <div className="text-xs font-mono font-bold text-slate-400 tracking-wider hidden sm:block">
-                                        {rec.datetime} · Логист: {rec.logist || 'Система'}
-                                     </div>
-                                     <div className="text-[10px] font-mono font-bold text-slate-400 tracking-wider sm:hidden">
-                                        {rec.logist || 'Система'}
-                                     </div>
-                                     <div className="flex gap-2">
-                                         <button onClick={() => copyHistoryToForm(rec)} title="Дублировать в форму" className="text-slate-400 hover:text-green-600 transition opacity-0 group-hover:opacity-100">
-                                             <Copy className="w-4 h-4" />
-                                         </button>
-                                         <button onClick={() => openEditModal(rec)} title="Редактировать" className="text-slate-400 hover:text-emerald-500 transition opacity-0 group-hover:opacity-100">
-                                             <Edit className="w-4 h-4" />
-                                         </button>
-                                         <button onClick={async () => {if(await showConfirm('Удалить эту выплату?')) dbService.deleteSalary(rec.id, user.name, user.role); }} title="Удалить" className="text-slate-400 hover:text-rose-500 transition opacity-0 group-hover:opacity-100">
-                                             <Trash2 className="w-4 h-4" />
-                                         </button>
-                                     </div>
+                                <div className="flex items-center gap-2 self-end sm:self-auto">
+                                     <button 
+                                         onClick={() => copyHistoryToForm(rec)} 
+                                         title="Дублировать в форму" 
+                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-[#3765F6] hover:bg-[#3765F6]/5 transition border border-transparent hover:border-[#3765F6]/10 cursor-pointer"
+                                     >
+                                         <Copy className="w-3.5 h-3.5" />
+                                         <span className="hidden md:inline">Дублировать</span>
+                                     </button>
+                                     <button 
+                                         onClick={() => openEditModal(rec)} 
+                                         title="Редактировать" 
+                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-[#3765F6] hover:bg-[#3765F6]/5 transition border border-transparent hover:border-[#3765F6]/10 cursor-pointer"
+                                     >
+                                         <Edit className="w-3.5 h-3.5" />
+                                         <span className="hidden md:inline">Править</span>
+                                     </button>
+                                     <button 
+                                         onClick={async () => { if(await showConfirm('Удалить эту выплату?')) dbService.deleteSalary(rec.id, user.name, user.role); }} 
+                                         title="Удалить" 
+                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition border border-transparent hover:border-rose-100 cursor-pointer"
+                                     >
+                                         <Trash2 className="w-3.5 h-3.5" />
+                                         <span className="hidden md:inline">Удалить</span>
+                                     </button>
                                 </div>
                             </div>
 
-                            {/* Details Grid (Row 1) */}
-                            <div className="flex flex-wrap gap-x-6 gap-y-4 items-center">
+                            {/* Details Grid */}
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4 bg-slate-50/40 p-4 rounded-xl border border-slate-200/30">
                                 <div className="flex flex-col">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-1">Пробег</span>
-                                    <span className="text-sm font-black text-slate-800 font-mono">{Math.round(rec.km || 0).toLocaleString('ru-RU')} км</span>
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Пробег</span>
+                                    <span className="text-xs font-bold text-slate-800 font-mono">{Math.round(rec.km || 0).toLocaleString('ru-RU')} км</span>
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-1">Ставка</span>
-                                    <span className="text-sm font-black text-slate-800 font-mono">{rec.rate || 0} <span className="text-slate-500 text-[10px]">€/км</span></span>
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Ставка за км</span>
+                                    <span className="text-xs font-bold text-slate-800 font-mono">{rec.rate || 0} €</span>
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-1">В рейсе</span>
-                                    <span className="text-sm font-black text-slate-800 font-mono">{rec.totalDays || 0} <span className="text-slate-400 text-[10px] ml-0.5">дн.</span></span>
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">В рейсе</span>
+                                    <span className="text-xs font-bold text-slate-800 font-mono">{rec.totalDays || 0} дн.</span>
                                 </div>
-                                {(rec.idleDays || 0) > 0 && (
                                 <div className="flex flex-col">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-1">Простой</span>
-                                    <span className="text-sm font-black text-slate-800 font-mono">{rec.idleDays} <span className="text-slate-400 text-[10px]">дн.</span></span>
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Простой</span>
+                                    <span className="text-xs font-bold text-slate-800 font-mono">{rec.idleDays || 0} дн.</span>
                                 </div>
-                                )}
                                 <div className="flex flex-col">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-1">Оценка</span>
-                                    {rec.mark === 'Отлично' ? 
-                                        <span className="text-[10px] font-bold text-[#143e1d] bg-[#70FC8E]/20 border border-[#70FC8E] px-2 py-0.5 rounded-lg w-max mt-0.5 shadow-sm">Отлично</span> 
-                                        : 
-                                        <span className="text-[10px] font-bold text-slate-700 bg-slate-200 border border-slate-300 px-2 py-0.5 rounded-lg w-max mt-0.5 shadow-sm">{rec.mark || 'Не оценено'}</span>
-                                    }
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Оценка</span>
+                                    <div>
+                                        {rec.mark === 'Отлично' ? 
+                                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/60 border border-emerald-200 px-2 py-0.5 rounded-md shadow-3xs">Отлично</span> 
+                                            : 
+                                            <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md shadow-3xs">{rec.mark || 'Не оценено'}</span>
+                                        }
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Second Row: Totals */}
-                            <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap gap-4 items-center justify-between">
-                                <div className="flex gap-4 flex-wrap">
+                            {/* Second Row: Detailed Breakdown & Total Payment */}
+                            <div className="pt-4 border-t border-slate-200/50 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                                <div className="flex flex-wrap gap-x-6 gap-y-2">
                                     <div className="flex flex-col">
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-1">З/П за КМ</span>
-                                        <span className="text-base font-black text-slate-700 font-mono">{Math.round(rec.kmMoney || 0).toLocaleString('ru-RU')} €</span>
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">З/П за км</span>
+                                        <span className="text-sm font-bold text-slate-700 font-mono">{Math.round(rec.kmMoney || 0).toLocaleString('ru-RU')} €</span>
                                     </div>
                                     <div className="flex flex-col">
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-1">Суточные</span>
-                                        <span className="text-base font-black text-slate-700 font-mono">{Math.round(rec.daysMoney || 0).toLocaleString('ru-RU')} €</span>
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Суточные</span>
+                                        <span className="text-sm font-bold text-slate-700 font-mono">{Math.round(rec.daysMoney || 0).toLocaleString('ru-RU')} €</span>
                                     </div>
                                     {(rec.idleMoney || 0) > 0 && (
                                     <div className="flex flex-col">
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-1">Простой</span>
-                                        <span className="text-base font-black text-slate-700 font-mono">{Math.round(rec.idleMoney || 0).toLocaleString('ru-RU')} €</span>
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Простой</span>
+                                        <span className="text-sm font-bold text-slate-700 font-mono">{Math.round(rec.idleMoney || 0).toLocaleString('ru-RU')} €</span>
                                     </div>
                                     )}
                                     {(rec.bonus || 0) > 0 && (
-                                    <div className="flex flex-col px-3 py-1 bg-yellow-50 rounded-xl border border-yellow-200">
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-yellow-600 font-mono mb-0.5">Премия</span>
-                                        <span className="text-base font-black text-yellow-700 font-mono">+{Math.round(rec.bonus || 0)} €</span>
+                                    <div className="flex flex-col px-2.5 py-0.5 bg-amber-50/60 rounded-lg border border-amber-200/50">
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-amber-600 mb-0.5">Премия</span>
+                                        <span className="text-sm font-bold text-amber-700 font-mono">+{Math.round(rec.bonus || 0)} €</span>
                                     </div>
                                     )}
                                 </div>
-                                <div className="flex gap-2.5">
+                                <div className="flex gap-3 w-full md:w-auto self-end md:self-auto justify-end">
                                     {(rec.totalDays || 0) > 0 && (
-                                        <div className="flex flex-col bg-slate-50 border border-slate-200 px-4 py-2 rounded-2xl justify-center items-end shadow-[0_2px_10px_rgba(0,0,0,0.01)] min-w-[120px]">
-                                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 font-mono mb-0.5">З/П в день</span>
-                                            <span className="text-2xl font-black text-slate-800 font-mono tracking-tight">{Math.round((rec.totalSalary || 0) / rec.totalDays).toLocaleString('ru-RU')} €</span>
+                                        <div className="flex flex-col bg-slate-50/80 border border-slate-200/30 px-4 py-2 rounded-xl items-end shadow-3xs min-w-[110px]">
+                                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5 font-sans">З/П в день</span>
+                                            <span className="text-lg font-bold text-slate-800 font-mono tracking-tight">{Math.round((rec.totalSalary || 0) / rec.totalDays).toLocaleString('ru-RU')} €</span>
                                         </div>
                                     )}
-                                    <div className="flex flex-col bg-slate-900 border border-slate-800 px-4 py-2 rounded-2xl justify-center items-end shadow-md min-w-[130px]">
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-[#70FC8E]/60 font-mono mb-0.5">Итого к выплате</span>
-                                        <span className="text-2xl font-black text-[#70FC8E] font-mono tracking-tight">{Math.round(rec.totalSalary || 0).toLocaleString('ru-RU')} €</span>
+                                    <div className="flex flex-col bg-gradient-to-br from-[#3765F6]/10 to-[#3765F6]/5 border border-[#3765F6]/25 px-4 py-2 rounded-xl items-end shadow-3xs min-w-[120px]">
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#3765F6]/70 mb-0.5 font-sans">Итого к выплате</span>
+                                        <span className="text-lg font-black text-[#3765F6] font-mono tracking-tight">{Math.round(rec.totalSalary || 0).toLocaleString('ru-RU')} €</span>
                                     </div>
                                 </div>
                             </div>
 
                             {rec.comment && (
-                                <div className="mt-5 pt-4 -mx-5 -mb-5 px-5 pb-4 border-t border-slate-200 text-sm font-medium text-slate-600 flex gap-2 items-start bg-slate-100/50 rounded-b-[1.5rem]">
-                                    <span className="text-slate-400 font-mono text-[10px] font-black uppercase tracking-widest mt-0.5">Комментарий:</span>
-                                    <span className="text-slate-800 font-mono text-xs">{rec.comment}</span>
+                                <div className="mt-4 pt-3 border-t border-slate-200/40 text-xs text-slate-600 flex gap-2 items-start bg-slate-50/30 -mx-6 -mb-6 p-4 rounded-b-[2rem]">
+                                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px] mt-0.5">Комментарий:</span>
+                                    <span className="text-slate-700 font-mono text-[11px] leading-normal">{rec.comment}</span>
                                 </div>
                             )}
                         </div>
@@ -636,43 +1134,82 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
         </div>
 
         {editingSalaryId && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-                <div className="bg-white rounded-[2rem] w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-fade-in">
+                <div className="bg-white/90 backdrop-blur-lg rounded-[2rem] w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200/50">
                     <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-[2rem]">
-                        <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                           <Edit className="w-5 h-5 text-emerald-500" /> Редактирование Выплаты
+                        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                           <Edit className="w-5 h-5 text-[#3765F6]" /> Редактирование выплаты
                         </h3>
-                        <button onClick={closeEditModal} className="text-slate-400 hover:text-slate-600 bg-white shadow-sm border border-slate-200 w-8 h-8 rounded-full flex items-center justify-center font-bold">×</button>
+                        <button onClick={closeEditModal} className="text-slate-400 hover:text-slate-600 bg-white shadow-3xs border border-slate-200 w-8 h-8 rounded-full flex items-center justify-center font-bold transition active:scale-90 cursor-pointer">×</button>
                     </div>
                     
                     <div className="p-6 space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="flex flex-col gap-1.5 col-span-2">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">ФИО Водителя</label>
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">ФИО Водителя</label>
                                 <input type="text" list="salary-drivers-dl" value={editingSalaryData.driver || ''} onChange={e => {
                                      const val = e.target.value;
-                                     const foundDriver = drivers.find(d => String(d.name || '').trim().toLowerCase() === val.trim().toLowerCase());
-                                     if (foundDriver && foundDriver.rateGroupId) {
-                                         const group = carsPool.find(g => g.id === foundDriver.rateGroupId);
-                                         if (group) {
-                                             setEditingSalaryData({
-                                                 ...editingSalaryData,
-                                                 driver: val,
-                                                 rate: group.rate
-                                             });
-                                             return;
+                                     const foundDriver = drivers.find(d => 
+                                        String(d.name || '').trim().toLowerCase() === val.trim().toLowerCase() ||
+                                        (d.shortNameRu && d.shortNameRu.trim().toLowerCase() === val.trim().toLowerCase())
+                                     );
+                                     let updatedData: Partial<SalaryLog> = { ...editingSalaryData, driver: val };
+                                     
+                                     if (foundDriver) {
+                                         updatedData.driverId = foundDriver.id;
+                                         if (foundDriver.rateGroupId) {
+                                             const group = carsPool.find(g => g.id === foundDriver.rateGroupId);
+                                             if (group) {
+                                                 updatedData.rate = group.rate;
+                                             }
                                          }
+                                     } else {
+                                         updatedData.driverId = '';
                                      }
-                                     setEditingSalaryData({...editingSalaryData, driver: val});
-                                 }} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
+                                     setEditingSalaryData(updatedData);
+                                 }} className="w-full bg-slate-50/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition focus:bg-white shadow-inner" />
                             </div>
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Транспорт</label>
-                                <input type="text" value={editingSalaryData.car || ''} onChange={e => setEditingSalaryData({...editingSalaryData, car: e.target.value})} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition uppercase" />
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Транспорт</label>
+                                <input type="text" value={editingSalaryData.car || ''} onChange={e => {
+                                      const val = e.target.value;
+                                      const { matchType, matchedCars } = findCarByPlate(val, vehicles);
+                                      let updatedData: Partial<SalaryLog> = { ...editingSalaryData, car: val };
+                                      
+                                      if (matchType === 'exact' || matchType === 'partial') {
+                                          const matchedCar = matchedCars[0];
+                                          updatedData.carId = matchedCar.id;
+                                          updatedData.car = matchedCar.carNumber || matchedCar.vehicleNumbers || val;
+                                          
+                                          // Find associated driver
+                                          const mDriverId = getDriverIdForCar(matchedCar, driversMap);
+                                          const matchedDriver = mDriverId ? getDriverById(mDriverId, drivers) : undefined;
+                                          if (matchedDriver) {
+                                              updatedData.driverId = matchedDriver.id;
+                                              updatedData.driver = matchedDriver.name;
+                                              
+                                              // Try updating rate
+                                              const normalizedCarPlate = normalizePlate(matchedCar.carNumber || matchedCar.vehicleNumbers || '');
+                                              const group = carsPool.find(g => 
+                                                  (g.vehicles || []).some(v => normalizePlate(v) === normalizedCarPlate)
+                                              );
+                                              if (group) {
+                                                  updatedData.rate = group.rate;
+                                              }
+                                          } else {
+                                              updatedData.driverId = '';
+                                              updatedData.driver = '';
+                                          }
+                                      } else {
+                                          updatedData.carId = '';
+                                          updatedData.driverId = '';
+                                      }
+                                      setEditingSalaryData(updatedData);
+                                 }} className="w-full bg-slate-50/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition focus:bg-white shadow-inner uppercase" />
                             </div>
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Оценка</label>
-                                <select value={editingSalaryData.mark || ''} onChange={e => setEditingSalaryData({...editingSalaryData, mark: e.target.value})} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition cursor-pointer appearance-none">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Оценка</label>
+                                <select value={editingSalaryData.mark || ''} onChange={e => setEditingSalaryData({...editingSalaryData, mark: e.target.value})} className="w-full bg-slate-50/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition focus:bg-white shadow-inner cursor-pointer appearance-none">
                                     <option value="Хорошо">Хорошо</option>
                                     <option value="Отлично">Отлично</option>
                                     <option value="Удовлетворительно">Удовлетворительно</option>
@@ -680,40 +1217,40 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                 </select>
                             </div>
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Ставка (€/км)</label>
-                                <input type="number" step="0.001" value={editingSalaryData.rate || 0} onChange={e => setEditingSalaryData({...editingSalaryData, rate: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ставка (€/км)</label>
+                                <input type="number" step="0.001" value={editingSalaryData.rate || 0} onChange={e => setEditingSalaryData({...editingSalaryData, rate: Number(e.target.value)})} className="w-full bg-slate-50/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition focus:bg-white shadow-inner" />
                             </div>
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Пробег (км)</label>
-                                <input type="number" value={editingSalaryData.km || 0} onChange={e => setEditingSalaryData({...editingSalaryData, km: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Пробег (км)</label>
+                                <input type="number" value={editingSalaryData.km || 0} onChange={e => setEditingSalaryData({...editingSalaryData, km: Number(e.target.value)})} className="w-full bg-slate-50/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition focus:bg-white shadow-inner" />
                             </div>
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Простой (дней)</label>
-                                <input type="number" value={editingSalaryData.idleDays || 0} onChange={e => setEditingSalaryData({...editingSalaryData, idleDays: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Простой (дней)</label>
+                                <input type="number" value={editingSalaryData.idleDays || 0} onChange={e => setEditingSalaryData({...editingSalaryData, idleDays: Number(e.target.value)})} className="w-full bg-slate-50/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition focus:bg-white shadow-inner" />
                             </div>
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Дней в рейсе</label>
-                                <input type="number" value={editingSalaryData.totalDays || 1} onChange={e => setEditingSalaryData({...editingSalaryData, totalDays: Number(e.target.value)})} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Дней в рейсе</label>
+                                <input type="number" value={editingSalaryData.totalDays || 1} onChange={e => setEditingSalaryData({...editingSalaryData, totalDays: Number(e.target.value)})} className="w-full bg-slate-50/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition focus:bg-white shadow-inner" />
                             </div>
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-yellow-600">Премия (€)</label>
-                                <input type="number" value={editingSalaryData.bonus || 0} onChange={e => setEditingSalaryData({...editingSalaryData, bonus: Number(e.target.value)})} className="w-full bg-yellow-50 border border-yellow-200 text-yellow-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-yellow-500 focus:bg-yellow-100 transition" />
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-amber-600">Премия (€)</label>
+                                <input type="number" value={editingSalaryData.bonus || 0} onChange={e => setEditingSalaryData({...editingSalaryData, bonus: Number(e.target.value)})} className="w-full bg-amber-50/50 border border-amber-200/50 text-amber-900 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 transition shadow-inner" />
                             </div>
                             <div className="flex flex-col gap-1.5 col-span-2">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Комментарий</label>
-                                <input type="text" value={editingSalaryData.comment || ''} onChange={e => setEditingSalaryData({...editingSalaryData, comment: e.target.value})} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Комментарий</label>
+                                <input type="text" value={editingSalaryData.comment || ''} onChange={e => setEditingSalaryData({...editingSalaryData, comment: e.target.value})} className="w-full bg-slate-50/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition focus:bg-white shadow-inner" />
                             </div>
                             <div className="flex flex-col gap-1.5 col-span-2">
-                                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">Логист / Кто внёс</label>
-                                <input type="text" value={editingSalaryData.logist || ''} onChange={e => setEditingSalaryData({...editingSalaryData, logist: e.target.value})} className="w-full bg-slate-50 border border-slate-200/60 text-slate-900 text-sm font-bold px-4 py-2.5 rounded-xl outline-none focus:border-[#0f7632] focus:bg-white transition" />
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Логист / Кто внёс</label>
+                                <input type="text" value={editingSalaryData.logist || ''} onChange={e => setEditingSalaryData({...editingSalaryData, logist: e.target.value})} className="w-full bg-slate-50/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition focus:bg-white shadow-inner" />
                             </div>
                         </div>
                     </div>
                     
                     <div className="p-6 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50 rounded-b-[2rem]">
-                        <button onClick={closeEditModal} className="px-6 py-3 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition cursor-pointer text-sm font-mono uppercase tracking-widest shadow-sm">Отмена</button>
-                        <button onClick={saveEditModal} className="px-6 py-3 rounded-xl font-bold text-slate-950 bg-[#70FC8E] hover:bg-[#5ceb7d] transition flex items-center justify-center gap-2 border border-black/10 shadow-sm text-sm font-mono uppercase tracking-widest cursor-pointer">
-                            Сохранить Изменения
+                        <button onClick={closeEditModal} className="px-5 py-2.5 rounded-xl font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 transition cursor-pointer text-xs uppercase tracking-wider shadow-3xs border border-slate-200/30">Отмена</button>
+                        <button onClick={saveEditModal} className="px-5 py-2.5 rounded-xl font-bold text-white bg-[#3765F6] hover:bg-[#2555E5] transition flex items-center justify-center gap-2 shadow-sm hover:shadow-md hover:shadow-blue-500/10 text-xs uppercase tracking-wider cursor-pointer">
+                            Сохранить изменения
                         </button>
                     </div>
                 </div>
@@ -722,7 +1259,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
         <datalist id="salary-drivers-dl">
             {drivers.map(drv => (
-                <option key={drv.id} value={drv.name} />
+                <option key={drv.id} value={drv.shortNameRu || formatDriverShortName(drv)} />
             ))}
         </datalist>
 

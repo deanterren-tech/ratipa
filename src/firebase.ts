@@ -9,6 +9,10 @@ import {
   remove,
   update,
   off,
+  query,
+  orderByChild,
+  limitToLast,
+  get as firebaseGet,
 } from "firebase/database";
 import {
   UserProfile,
@@ -142,6 +146,51 @@ export const onValue = (
       activeUnsubscribe();
     }
   };
+};
+
+// Custom onceValue wrapper to fetch data once after Auth is active.
+export const onceValue = (
+  dbRef: any,
+  callback: (snapshot: any) => void,
+  errorCallback?: (error: any) => void,
+) => {
+  let isCancelled = false;
+
+  ensureAuth().then((user) => {
+    if (isCancelled) return;
+    if (user && useFirebase) {
+      firebaseGet(dbRef)
+        .then((snapshot) => {
+          if (!isCancelled) {
+            callback(snapshot);
+          }
+        })
+        .catch((err) => {
+          if (!isCancelled && errorCallback) {
+            errorCallback(err);
+          }
+        });
+    } else {
+      if (errorCallback) {
+        errorCallback(new Error("Firebase auth not ready or local mode active"));
+      }
+    }
+  });
+
+  return () => {
+    isCancelled = true;
+  };
+};
+
+// Global in-memory cache for reference catalogs to prevent redundant queries upon route transitions
+const catalogCache: {
+  drivers: Driver[] | null;
+  users: UserProfile[] | null;
+  settings: AppSettings | null;
+} = {
+  drivers: null,
+  users: null,
+  settings: null,
 };
 
 // Resilient memory & localstorage state
@@ -375,6 +424,8 @@ const INITIAL_SETTINGS: AppSettings = {
     "https://docs.google.com/spreadsheets/d/1qUSrRKGqqo3fZSlpZnxEw-59Y86KJ7tmSnf4liNoMM/edit#gid=0",
   dispositionSheetUrl:
     "https://docs.google.com/spreadsheets/d/1qUSrRKGqqo3fZSlpZnxEw-59Y86KJ7tmSnf4liNoMM/edit#gid=0",
+  googleDriveUrl:
+    "https://drive.google.com/drive/folders/1qUSrRKGqqo3fZSlpZnxEw-59Y86KJ7tmSnf4liNoMM",
   announcements: [
     {
       id: "a1",
@@ -455,15 +506,430 @@ const userKey = (name: string) =>
     .toLowerCase()
     .replace(/[.#$[\]\/]/g, "_");
 
+// Shared memory caching and subscription pooling system for high-performance catalog loading
+function createSharedSubscription<T>(
+  fetchLive: (onData: (data: T) => void, onError: (err: any) => void) => () => void,
+  fallbackLocal: (onData: (data: T) => void) => void
+) {
+  let cachedData: T | null = null;
+  const callbacks = new Set<(data: T) => void>();
+  let unsubscribeLive: (() => void) | null = null;
+  let teardownTimeout: any = null;
+
+  return (callback: (data: T) => void) => {
+    if (cachedData !== null) {
+      callback(cachedData);
+    }
+
+    callbacks.add(callback);
+
+    if (!useFirebase) {
+      fallbackLocal((localData) => {
+        cachedData = localData;
+        callbacks.forEach((cb) => cb(localData));
+      });
+      return () => {
+        callbacks.delete(callback);
+      };
+    }
+
+    if (callbacks.size === 1) {
+      if (teardownTimeout) {
+        clearTimeout(teardownTimeout);
+        teardownTimeout = null;
+      }
+
+      if (!unsubscribeLive) {
+        unsubscribeLive = fetchLive(
+          (newData) => {
+            cachedData = newData;
+            callbacks.forEach((cb) => cb(newData));
+          },
+          (err) => {
+            console.warn(`Shared sub error:`, err);
+            fallbackLocal((localData) => {
+              cachedData = localData;
+              callbacks.forEach((cb) => cb(localData));
+            });
+          }
+        );
+      }
+    }
+
+    return () => {
+      callbacks.delete(callback);
+
+      if (callbacks.size === 0) {
+        if (teardownTimeout) clearTimeout(teardownTimeout);
+        teardownTimeout = setTimeout(() => {
+          if (callbacks.size === 0 && unsubscribeLive) {
+            unsubscribeLive();
+            unsubscribeLive = null;
+          }
+        }, 5000);
+      }
+    };
+  };
+}
+
+const sharedGetDrivers = createSharedSubscription<Driver[]>(
+  (onData, onError) => {
+    const dbRef = ref(database, "driversPool");
+    return onValue(
+      dbRef,
+      (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const list: Driver[] = Object.keys(data).map((key) => ({
+            id: key,
+            name: String(data[key].name || ""),
+            lastNameRu: data[key].lastNameRu ? String(data[key].lastNameRu) : undefined,
+            firstNameRu: data[key].firstNameRu ? String(data[key].firstNameRu) : undefined,
+            middleNameRu: data[key].middleNameRu ? String(data[key].middleNameRu) : undefined,
+            lastNameLat: data[key].lastNameLat ? String(data[key].lastNameLat) : undefined,
+            firstNameLat: data[key].firstNameLat ? String(data[key].firstNameLat) : undefined,
+            middleNameLat: data[key].middleNameLat ? String(data[key].middleNameLat) : undefined,
+            shortNameRu: data[key].shortNameRu ? String(data[key].shortNameRu) : undefined,
+            shortNameLat: data[key].shortNameLat ? String(data[key].shortNameLat) : undefined,
+            phone: data[key].phone ? String(data[key].phone) : undefined,
+            license: data[key].license ? String(data[key].license) : undefined,
+            rateGroupId: data[key].rateGroupId ? String(data[key].rateGroupId) : undefined,
+            comment: data[key].comment ? String(data[key].comment) : undefined,
+          }));
+          onData(list);
+        } else {
+          onData([]);
+        }
+      },
+      onError
+    );
+  },
+  (onData) => {
+    onData(getLocalStorageData<Driver[]>("ratipa_drivers", []));
+  }
+);
+
+const sharedGetVehicleFleet = createSharedSubscription<any[]>(
+  (onData, onError) => {
+    const q = query(ref(database, "vehicleFleet"), limitToLast(150));
+    return onValue(q, (snapshot) => {
+      const data = snapshot.val() || {};
+      const list = Object.keys(data).map((key) => {
+        const val = data[key];
+        const carNum = (val.carNumber || val.vehicleNumbers || "").trim().toUpperCase();
+        const brand = val.brandModel || val.brands || "";
+        const disp = val.dispatcherName || val.dispatcher || "";
+        const phoneNum = val.driverPhone || val.phone || "";
+        return {
+          id: key,
+          status: val.status || "base",
+          ...val,
+          carNumber: carNum,
+          vehicleNumbers: carNum,
+          brandModel: brand,
+          brands: brand,
+          dispatcherName: disp,
+          dispatcher: disp,
+          driverPhone: phoneNum,
+          phone: phoneNum,
+        };
+      });
+      onData(list);
+
+    }, onError);
+  },
+  (onData) => {
+    onData(getLocalStorageData<any[]>("ratipa_vehicle_fleet", []));
+  }
+);
+
+const sharedGetVehicles = createSharedSubscription<Vehicle[]>(
+  (onData, onError) => {
+    return sharedGetVehicleFleet((list) => {
+      onData(list);
+    });
+  },
+  (onData) => {
+    onData(getLocalStorageData<Vehicle[]>("ratipa_vehicle_fleet", INITIAL_VEHICLES));
+  }
+);
+
+const sharedGetCarRateGroups = createSharedSubscription<CarRateGroup[]>(
+  (onData, onError) => {
+    const dbRef = ref(database, "carsPool");
+    return onValue(
+      dbRef,
+      (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const list: CarRateGroup[] = Object.keys(data).map((key) => {
+            const val = data[key];
+            const vehicles = Array.isArray(val.vehicles)
+              ? val.vehicles
+              : Object.values(val.vehicles || {});
+            return {
+              id: key,
+              name: val.name || "",
+              rate: Number(val.rate || 0),
+              perDiemRate: val.perDiemRate ? Number(val.perDiemRate) : undefined,
+              vehicles,
+              comment: val.comment || "",
+            };
+          });
+          onData(list);
+        } else {
+          INITIAL_CARS_POOL.forEach((c) => {
+            set(ref(database, `carsPool/${c.id}`), {
+              name: c.name,
+              rate: c.rate,
+              vehicles: c.vehicles,
+              comment: c.comment || "",
+            }).catch((e) => console.warn(e));
+          });
+          onData(INITIAL_CARS_POOL);
+        }
+      },
+      onError
+    );
+  },
+  (onData) => {
+    onData(getLocalStorageData<CarRateGroup[]>("ratipa_cars_pool", INITIAL_CARS_POOL));
+  }
+);
+
+const sharedGetDirections = createSharedSubscription<DirectionPreset[]>(
+  (onData, onError) => {
+    const dbRef = ref(database, "directionsPool");
+    return onValue(
+      dbRef,
+      (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const list: DirectionPreset[] = Object.keys(data).map((key) => ({
+            id: key,
+            name: String(data[key].name || ""),
+            coeff: Number(data[key].coeff || 0),
+          }));
+          onData(list);
+        } else {
+          INITIAL_DIRECTIONS.forEach((d) => {
+            set(ref(database, `directionsPool/${d.id}`), {
+              name: d.name,
+              coeff: d.coeff,
+            }).catch((e) => console.warn(e));
+          });
+          onData(INITIAL_DIRECTIONS);
+        }
+      },
+      onError
+    );
+  },
+  (onData) => {
+    onData(getLocalStorageData<DirectionPreset[]>("ratipa_directions", INITIAL_DIRECTIONS));
+  }
+);
+
+const sharedGetFerryTemplates = createSharedSubscription<FerryTemplate[]>(
+  (onData, onError) => {
+    const dbRef = ref(database, "ferryTemplates");
+    return onValue(
+      dbRef,
+      (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const list: FerryTemplate[] = Object.keys(data).map((key) => ({
+            id: key,
+            ...data[key],
+          }));
+          onData(list);
+        } else {
+          INITIAL_FERRY_TEMPLATES.forEach((f) => {
+            set(ref(database, `ferryTemplates/${f.id}`), f).catch((e) =>
+              console.warn(e)
+            );
+          });
+          onData(INITIAL_FERRY_TEMPLATES);
+        }
+      },
+      onError
+    );
+  },
+  (onData) => {
+    onData(getLocalStorageData<FerryTemplate[]>("ratipa_ferry_templates", INITIAL_FERRY_TEMPLATES));
+  }
+);
+
+const sharedGetDistances = createSharedSubscription<DistancePreset[]>(
+  (onData, onError) => {
+    const dbRef = ref(database, "knownDistancesList");
+    return onValue(
+      dbRef,
+      (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const list: DistancePreset[] = Object.keys(data).map((key) => ({
+            id: key,
+            ...data[key],
+          }));
+          onData(list);
+        } else {
+          INITIAL_DISTANCES.forEach((d) => {
+            set(ref(database, `knownDistancesList/${d.id}`), d).catch((e) =>
+              console.warn(e)
+            );
+          });
+          onData(INITIAL_DISTANCES);
+        }
+      },
+      onError
+    );
+  },
+  (onData) => {
+    onData(getLocalStorageData<DistancePreset[]>("ratipa_distances", INITIAL_DISTANCES));
+  }
+);
+
+const sharedGetCurrencies = createSharedSubscription<CurrencyPreset[]>(
+  (onData, onError) => {
+    const dbRef = ref(database, "currenciesList");
+    return onValue(
+      dbRef,
+      (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const list: CurrencyPreset[] = Object.keys(data).map((key) => ({
+            id: key,
+            ...data[key],
+          }));
+          onData(list.sort((a, b) => a.code.localeCompare(b.code)));
+        } else {
+          const INITIAL_CURRENCIES: CurrencyPreset[] = [
+            { id: "1", code: "USD" },
+            { id: "2", code: "EUR" },
+            { id: "3", code: "RUB" },
+            { id: "4", code: "BYN" },
+            { id: "5", code: "TRY" },
+            { id: "6", code: "KZT" },
+            { id: "7", code: "CNY" },
+          ];
+          INITIAL_CURRENCIES.forEach((c) => {
+            set(ref(database, `currenciesList/${c.id}`), c).catch((e) =>
+              console.warn(e)
+            );
+          });
+          onData(INITIAL_CURRENCIES);
+        }
+      },
+      onError
+    );
+  },
+  (onData) => {
+    onData([]);
+  }
+);
+
+const sharedGetSettings = createSharedSubscription<AppSettings>(
+  (onData, onError) => {
+    const dbRef = ref(database, "appSettings");
+    return onValue(
+      dbRef,
+      (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          let updated = false;
+          if (!data.highlight) {
+            data.highlight = INITIAL_SETTINGS.highlight;
+            updated = true;
+          }
+          if (!data.highlights || !Array.isArray(data.highlights) || data.highlights.length === 0) {
+            data.highlights = data.highlight ? [{ ...data.highlight, id: data.highlight.id || "h1" }] : INITIAL_SETTINGS.highlights;
+            updated = true;
+          }
+          const actualMonth = new Date().toISOString().substring(0, 7);
+          if (!data.mapboxUsage) {
+            data.mapboxUsage = {
+              count: 0,
+              limit: 100000,
+              allowExceed: false,
+              loadsCount: 0,
+              loadsLimit: 50000,
+              allowExceedLoads: false,
+              currentMonth: actualMonth,
+              lastReset: new Date().toISOString()
+            };
+            updated = true;
+          } else {
+            let innerUpdated = false;
+            if (data.mapboxUsage.loadsCount === undefined) {
+              data.mapboxUsage.loadsCount = 0;
+              innerUpdated = true;
+            }
+            if (data.mapboxUsage.loadsLimit === undefined) {
+              data.mapboxUsage.loadsLimit = 50000;
+              innerUpdated = true;
+            }
+            if (data.mapboxUsage.allowExceedLoads === undefined) {
+              data.mapboxUsage.allowExceedLoads = false;
+              innerUpdated = true;
+            }
+            if (data.mapboxUsage.currentMonth !== actualMonth) {
+              data.mapboxUsage.count = 0;
+              data.mapboxUsage.loadsCount = 0;
+              data.mapboxUsage.currentMonth = actualMonth;
+              data.mapboxUsage.lastReset = new Date().toISOString();
+              innerUpdated = true;
+            }
+            if (innerUpdated) updated = true;
+          }
+          if (updated) {
+            set(dbRef, data).catch((err) => console.warn(err));
+          }
+          onData(data);
+        } else {
+          set(dbRef, INITIAL_SETTINGS).catch((err) => console.warn(err));
+          onData(INITIAL_SETTINGS);
+        }
+      },
+      onError
+    );
+  },
+  (onData) => {
+    onData(getLocalStorageData<AppSettings>("ratipa_settings", INITIAL_SETTINGS));
+  }
+);
+
+const sharedGetVehicleStatuses = createSharedSubscription<Record<string, 'base' | 'trip'>>(
+  (onData, onError) => {
+    return onValue(ref(database, "vehicle_statuses"), (snapshot) => {
+      onData(snapshot.val() || {});
+    }, onError);
+  },
+  (onData) => {
+    onData(getLocalStorageData<Record<string, 'base' | 'trip'>>("ratipa_vehicle_statuses", {}));
+  }
+);
+
+const sharedGetVehicleDriverData = createSharedSubscription<any[]>(
+  (onData, onError) => {
+    return sharedGetVehicleFleet((list) => {
+      onData(list);
+    });
+  },
+  (onData) => {
+    onData(getLocalStorageData<any[]>("ratipa_vehicle_fleet", []));
+  }
+);
+
 // Database Services mapping with robust localized fallbacks and error handling helpers
 export const dbService = {
   // Test/Connectivity state
   isOnline: () => useFirebase,
 
   // AUDIT LOGS
-  getAuditLogs: (callback: (logs: AuditLog[]) => void) => {
+  getAuditLogs: (callback: (logs: AuditLog[]) => void, limitCount = 100) => {
     if (useFirebase) {
-      const dbRef = ref(database, "auditLogs");
+      
+      const dbRef = query(ref(database, "auditLogs"), orderByChild("timestamp"), limitToLast(limitCount));
       return onValue(
         dbRef,
         (snapshot) => {
@@ -601,7 +1067,58 @@ export const dbService = {
     }
   },
 
+  getUsersOnce: (callback: (users: UserProfile[]) => void) => {
+    if (catalogCache.users !== null) {
+      callback(catalogCache.users);
+      return () => {};
+    }
+    if (useFirebase) {
+      return onceValue(
+        ref(database, "users_list"),
+        (snapshot) => {
+          const data = snapshot.val();
+          if (data) {
+            let list = Object.keys(data).map((key) => ({
+              uid: key,
+              ...data[key],
+            }));
+            // Self-healing: Deduplicate "Сергей" entries to prevent multiple accounts in UI
+            const sergeiList = list.filter((u) => u.name === "Сергей");
+            if (sergeiList.length > 1) {
+              const bestSergei =
+                sergeiList.find((u) => u.uid === "sergei-ru-uid-112") ||
+                sergeiList.find((u) => u.isRootAdmin) ||
+                sergeiList[0];
+              list = list.filter((u) => u.name !== "Сергей" || u.uid === bestSergei.uid);
+            }
+            catalogCache.users = list;
+            callback(list);
+          } else {
+            catalogCache.users = DEFAULT_USERS;
+            callback(DEFAULT_USERS);
+          }
+        },
+        (err) => {
+          console.warn("Once fetch users failure:", err);
+          callback(getLocalStorageData<UserProfile[]>("ratipa_users", DEFAULT_USERS));
+        }
+      );
+    } else {
+      const localUsers = getLocalStorageData<UserProfile[]>("ratipa_users", DEFAULT_USERS);
+      catalogCache.users = localUsers;
+      callback(localUsers);
+      return () => {};
+    }
+  },
+
+  saveUsersBatch: (usersMap: Record<string, any>) => {
+    catalogCache.users = null;
+    if (useFirebase) {
+      update(ref(database), usersMap).catch((err) => console.warn("Failed batch update:", err));
+    }
+  },
   saveUser: (user: UserProfile) => {
+    catalogCache.users = null;
     if (useFirebase) {
       set(ref(database, `users_list/${user.uid}`), user).catch((err) => {
         console.warn("Failed live save user:", err);
@@ -652,6 +1169,7 @@ export const dbService = {
   },
 
   deleteUser: (uid: string, name?: string) => {
+    catalogCache.users = null;
     if (useFirebase) {
       remove(ref(database, `users_list/${uid}`)).catch((err) => {
         console.warn("Failed live remove user:", err);
@@ -688,67 +1206,35 @@ export const dbService = {
 
   // ACTIVE FLEET / VEHICLES (Baza)
   getVehicles: (callback: (vehicles: Vehicle[]) => void) => {
-    if (useFirebase) {
-      const dbRef = ref(database, "bazacars");
-      return onValue(
-        dbRef,
-        (snapshot) => {
-          const data = snapshot.val();
-          if (data) {
-            const list: Vehicle[] = Object.keys(data).map((key) => ({
-              id: key,
-              ...data[key],
-            }));
-            callback(list);
-          } else {
-            // Feed initial structure
-            INITIAL_VEHICLES.forEach((v) => {
-              set(ref(database, `bazacars/${v.id}`), v).catch((e) =>
-                console.warn(e),
-              );
-            });
-            callback(INITIAL_VEHICLES);
-          }
-        },
-        (err) => {
-          console.warn(
-            "Vehicles get snapshot error, falling back locally:",
-            err,
-          );
-          const local = getLocalStorageData<Vehicle[]>(
-            "ratipa_bazacars",
-            INITIAL_VEHICLES,
-          );
-          callback(local);
-        },
-      );
-    } else {
-      const local = getLocalStorageData<Vehicle[]>(
-        "ratipa_bazacars",
-        INITIAL_VEHICLES,
-      );
-      callback(local);
-      return () => {};
-    }
+    return sharedGetVehicles(callback);
   },
 
   saveVehicle: (vehicle: Vehicle, user: string, role: string) => {
+    const carNum = (vehicle.carNumber || vehicle.vehicleNumbers || "").trim().toUpperCase();
+    const brand = vehicle.brandModel || vehicle.brands || "";
+    const disp = vehicle.dispatcherName || vehicle.dispatcher || "";
+    const phoneNum = vehicle.driverPhone || vehicle.phone || "";
+    const normalized = {
+      ...vehicle,
+      carNumber: carNum,
+      vehicleNumbers: carNum,
+      brandModel: brand,
+      brands: brand,
+      dispatcherName: disp,
+      dispatcher: disp,
+      driverPhone: phoneNum,
+      phone: phoneNum,
+    };
     if (useFirebase) {
-      set(ref(database, `bazacars/${vehicle.id}`), vehicle).catch((err) => {
-        console.warn("Live write vehicle base failed:", err);
+      set(ref(database, `vehicleFleet/${vehicle.id}`), normalized).catch((err) => {
+        console.warn("Live write vehicle Fleet failed:", err);
       });
     } else {
-      const local = getLocalStorageData<Vehicle[]>(
-        "ratipa_bazacars",
-        INITIAL_VEHICLES,
-      );
+      const local = getLocalStorageData<any[]>("ratipa_vehicle_fleet", []);
       const idx = local.findIndex((v) => v.id === vehicle.id);
-      if (idx >= 0) {
-        local[idx] = vehicle;
-      } else {
-        local.push(vehicle);
-      }
-      setLocalStorageData("ratipa_bazacars", local);
+      if (idx >= 0) local[idx] = normalized;
+      else local.push(normalized);
+      setLocalStorageData("ratipa_vehicle_fleet", local);
     }
     dbService.logAction(
       user,
@@ -756,107 +1242,31 @@ export const dbService = {
       vehicle.status === "archive" ? "Архивирование ТС" : "Сохранение ТС",
       "Baza",
       vehicle.id,
-      `ТС ${vehicle.carNumber} (${vehicle.driverName}) обновлено/архивировано`,
+      `ТС ${carNum} (${vehicle.driverName || ""}) обновлено/сохранено`,
     );
   },
 
   // ARCHIVE VEHICLES
   getArchiveVehicles: (callback: (vehicles: Vehicle[]) => void) => {
-    if (useFirebase) {
-      const dbRef = ref(database, "archivecars");
-      return onValue(
-        dbRef,
-        (snapshot) => {
-          const data = snapshot.val();
-          if (data) {
-            const list: Vehicle[] = Object.keys(data).map((key) => ({
-              id: key,
-              ...data[key],
-            }));
-            callback(list);
-          } else {
-            callback([]);
-          }
-        },
-        (err) => {
-          console.warn("Archive vehicles fetch failed:", err);
-          const local = getLocalStorageData<Vehicle[]>(
-            "ratipa_archivecars",
-            [],
-          );
-          callback(local);
-        },
-      );
-    } else {
-      const local = getLocalStorageData<Vehicle[]>("ratipa_archivecars", []);
-      callback(local);
-      return () => {};
-    }
+    return sharedGetVehicles((list) => {
+      callback(list.filter((v) => v.status === "archive"));
+    });
   },
 
   archiveVehicle: (vehicle: Vehicle, user: string, role: string) => {
     const archived: Vehicle = { ...vehicle, status: "archive" };
-
-    // First, remove from bazacars
-    if (useFirebase) {
-      remove(ref(database, `bazacars/${vehicle.id}`));
-      set(ref(database, `archivecars/${vehicle.id}`), archived);
-    } else {
-      const active = getLocalStorageData<Vehicle[]>(
-        "ratipa_bazacars",
-        INITIAL_VEHICLES,
-      );
-      const filtered = active.filter((v) => v.id !== vehicle.id);
-      setLocalStorageData("ratipa_bazacars", filtered);
-
-      const archivedList = getLocalStorageData<Vehicle[]>(
-        "ratipa_archivecars",
-        [],
-      );
-      archivedList.push(archived);
-      setLocalStorageData("ratipa_archivecars", archivedList);
-    }
-    dbService.logAction(
-      user,
-      role,
-      "Архивировать",
-      "Baza",
-      vehicle.id,
-      `ТС ${vehicle.carNumber} отправлено в архив`,
-    );
+    dbService.saveVehicle(archived, user, role);
   },
 
   restoreVehicle: (vehicle: Vehicle, user: string, role: string) => {
     const restored: Vehicle = { ...vehicle, status: "base" };
-
-    if (useFirebase) {
-      remove(ref(database, `archivecars/${vehicle.id}`));
-      set(ref(database, `bazacars/${vehicle.id}`), restored);
-    } else {
-      const archives = getLocalStorageData<Vehicle[]>("ratipa_archivecars", []);
-      const filtered = archives.filter((v) => v.id !== vehicle.id);
-      setLocalStorageData("ratipa_archivecars", filtered);
-
-      const active = getLocalStorageData<Vehicle[]>(
-        "ratipa_bazacars",
-        INITIAL_VEHICLES,
-      );
-      active.push(restored);
-      setLocalStorageData("ratipa_bazacars", active);
-    }
-    dbService.logAction(
-      user,
-      role,
-      "Восстановить",
-      "Archive",
-      vehicle.id,
-      `ТС ${vehicle.carNumber} восстановлено из архива`,
-    );
+    dbService.saveVehicle(restored, user, role);
   },
 
   // ROUTE CALCULATIONS (Dohod)
   getRouteCalculations: (
     callback: (calculations: RouteCalculation[]) => void,
+    limitCount = 100,
   ) => {
     const parseRuDateTime = (str: string): number => {
       if (!str) return 0;
@@ -884,7 +1294,7 @@ export const dbService = {
     };
 
     if (useFirebase) {
-      const dbRef = ref(database, "calculationsHistory");
+      const dbRef = query(ref(database, "calculationsHistory"), limitToLast(limitCount));
       return onValue(
         dbRef,
         (snapshot) => {
@@ -1029,8 +1439,8 @@ export const dbService = {
   // SALARY LOGS (Salary)
   getSalaries: (callback: (logs: SalaryLog[]) => void) => {
     if (useFirebase) {
-      const dbRef = ref(database, "salaryHistory");
-      return onValue(
+      const dbRef = ref(database, "salaryHistory/flat");
+      return firebaseOnValue(
         dbRef,
         (snapshot) => {
           const data = snapshot.val();
@@ -1073,11 +1483,44 @@ export const dbService = {
   },
 
   saveSalary: (log: SalaryLog, user: string, role: string) => {
+    const getYearMonth = (item: SalaryLog): string => {
+      if (item.datetime) {
+        const parts = item.datetime.split('.');
+        if (parts.length === 3) {
+          return `${parts[2]}-${parts[1]}`;
+        }
+      }
+      const timestamp = parseInt(item.id || "");
+      if (!isNaN(timestamp)) {
+        const d = new Date(timestamp);
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        return `${d.getFullYear()}-${mm}`;
+      }
+      const d = new Date();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      return `${d.getFullYear()}-${mm}`;
+    };
+
+    const sanitizeKey = (key: string) => {
+      return String(key || "").trim().replace(/[.#$[\]\/]/g, "_");
+    };
+
     if (useFirebase) {
-      const dbRef = ref(database, "salaryHistory");
+      const dbRef = ref(database, "salaryHistory/flat");
       const newRef = push(dbRef);
-      log.id = newRef.key || log.id;
-      set(newRef, log);
+      const logId = newRef.key || log.id || Date.now().toString();
+      log.id = logId;
+
+      const ym = getYearMonth(log);
+      const dispatcher = sanitizeKey(log.logist || 'System');
+
+      const updates: Record<string, any> = {
+        [`salaryHistory/flat/${logId}`]: log,
+        [`salaryHistory/months/${ym}/${logId}`]: log,
+        [`salaryHistory/byDispatcher/${dispatcher}/${logId}`]: log,
+        [`salaryHistory/${logId}`]: log
+      };
+      update(ref(database), updates);
     } else {
       const local = getLocalStorageData<SalaryLog[]>("ratipa_salaries", []);
       local.push(log);
@@ -1093,9 +1536,50 @@ export const dbService = {
     );
   },
 
-  deleteSalary: (id: string, user: string, role: string) => {
+  deleteSalary: (logOrId: any, user: string, role: string) => {
+    const isObject = typeof logOrId === 'object' && logOrId !== null;
+    const id = isObject ? logOrId.id : logOrId;
+
+    const getYearMonth = (item: SalaryLog): string => {
+      if (item.datetime) {
+        const parts = item.datetime.split('.');
+        if (parts.length === 3) {
+          return `${parts[2]}-${parts[1]}`;
+        }
+      }
+      const timestamp = parseInt(item.id || "");
+      if (!isNaN(timestamp)) {
+        const d = new Date(timestamp);
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        return `${d.getFullYear()}-${mm}`;
+      }
+      const d = new Date();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      return `${d.getFullYear()}-${mm}`;
+    };
+
+    const sanitizeKey = (key: string) => {
+      return String(key || "").trim().replace(/[.#$[\]\/]/g, "_");
+    };
+
     if (useFirebase) {
-      remove(ref(database, `salaryHistory/${id}`));
+      if (isObject) {
+        const ym = getYearMonth(logOrId);
+        const dispatcher = sanitizeKey(logOrId.logist || 'System');
+        const updates: Record<string, any> = {
+          [`salaryHistory/flat/${id}`]: null,
+          [`salaryHistory/months/${ym}/${id}`]: null,
+          [`salaryHistory/byDispatcher/${dispatcher}/${id}`]: null,
+          [`salaryHistory/${id}`]: null
+        };
+        update(ref(database), updates);
+      } else {
+        const updates: Record<string, any> = {
+          [`salaryHistory/${id}`]: null,
+          [`salaryHistory/flat/${id}`]: null
+        };
+        update(ref(database), updates);
+      }
     } else {
       const local = getLocalStorageData<SalaryLog[]>("ratipa_salaries", []);
       const filtered = local.filter((s) => s.id !== id);
@@ -1113,12 +1597,43 @@ export const dbService = {
 
   updateSalary: (
     id: string,
-    updates: Partial<SalaryLog>,
+    updates: any,
     user: string,
     role: string,
   ) => {
+    const getYearMonth = (item: SalaryLog): string => {
+      if (item.datetime) {
+        const parts = item.datetime.split('.');
+        if (parts.length === 3) {
+          return `${parts[2]}-${parts[1]}`;
+        }
+      }
+      const timestamp = parseInt(item.id || "");
+      if (!isNaN(timestamp)) {
+        const d = new Date(timestamp);
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        return `${d.getFullYear()}-${mm}`;
+      }
+      const d = new Date();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      return `${d.getFullYear()}-${mm}`;
+    };
+
+    const sanitizeKey = (key: string) => {
+      return String(key || "").trim().replace(/[.#$[\]\/]/g, "_");
+    };
+
     if (useFirebase) {
-      update(ref(database, `salaryHistory/${id}`), updates);
+      const ym = getYearMonth(updates);
+      const dispatcher = sanitizeKey(updates.logist || 'System');
+      const payload = { ...updates, id };
+      const dbUpdates: Record<string, any> = {
+        [`salaryHistory/flat/${id}`]: payload,
+        [`salaryHistory/months/${ym}/${id}`]: payload,
+        [`salaryHistory/byDispatcher/${dispatcher}/${id}`]: payload,
+        [`salaryHistory/${id}`]: payload
+      };
+      update(ref(database), dbUpdates);
     } else {
       const local = getLocalStorageData<SalaryLog[]>("ratipa_salaries", []);
       const idx = local.findIndex((s) => s.id === id);
@@ -1139,62 +1654,139 @@ export const dbService = {
 
   // VEHICLE DRIVER DATA
   getVehicleDriverData: (callback: (data: any[]) => void) => {
+    return sharedGetVehicleDriverData(callback);
+  },
+
+  getVehicleBrands: (callback: (brands: string[]) => void) => {
     if (useFirebase) {
-      return onValue(ref(database, "vehicle_driver_data"), (snapshot) => {
-        const data = snapshot.val() || {};
-        const list = Object.keys(data).map((key) => ({
-          id: key,
-          ...data[key],
-        }));
-        callback(list);
-      });
+      let b1: string[] = [];
+      let b2: string[] = [];
+      const trigger = () => {
+        const combined = Array.from(new Set([...b1, ...b2]));
+        callback(combined);
+      };
+      const unsub1 = onValue(ref(database, "brands/vehicleBrands"), (snap) => {
+        const val = snap.val();
+        b1 = val ? Object.values(val).map(v => String(v)) : [];
+        trigger();
+      }, () => {});
+      const unsub2 = onValue(ref(database, "vehicleBrands"), (snap) => {
+        const val = snap.val();
+        b2 = val ? Object.values(val).map(v => String(v)) : [];
+        trigger();
+      }, () => {});
+      return () => {
+        unsub1();
+        unsub2();
+      };
     } else {
-      const local = getLocalStorageData<any[]>(
-        "ratipa_vehicle_driver_data",
-        [],
-      );
-      callback(local);
+      callback([]);
       return () => {};
     }
   },
 
-  saveVehicleDriverRecord: (rec: any, user: string, role: string) => {
+  getTrailerBrands: (callback: (brands: string[]) => void) => {
     if (useFirebase) {
-      set(ref(database, `vehicle_driver_data/${rec.id}`), rec).catch((err) =>
-        console.warn(err),
-      );
+      let b1: string[] = [];
+      let b2: string[] = [];
+      const trigger = () => {
+        const combined = Array.from(new Set([...b1, ...b2]));
+        callback(combined);
+      };
+      const unsub1 = onValue(ref(database, "brands/trailerBrands"), (snap) => {
+        const val = snap.val();
+        b1 = val ? Object.values(val).map(v => String(v)) : [];
+        trigger();
+      }, () => {});
+      const unsub2 = onValue(ref(database, "trailerBrands"), (snap) => {
+        const val = snap.val();
+        b2 = val ? Object.values(val).map(v => String(v)) : [];
+        trigger();
+      }, () => {});
+      return () => {
+        unsub1();
+        unsub2();
+      };
     } else {
-      const local = getLocalStorageData<any[]>(
-        "ratipa_vehicle_driver_data",
-        [],
-      );
-      const idx = local.findIndex((x) => x.id === rec.id);
-      if (idx >= 0) local[idx] = rec;
-      else local.push(rec);
-      setLocalStorageData("ratipa_vehicle_driver_data", local);
+      callback([]);
+      return () => {};
     }
+  },
+
+  saveVehicleDriverRecord: (rec: any, user: string, role: string): Promise<void> => {
+    const carNum = (rec.vehicleNumbers || rec.carNumber || "").trim().toUpperCase();
+    const brand = rec.brandModel || rec.brands || "";
+    const trailer = rec.trailerMake || "";
+    const disp = rec.dispatcher || rec.dispatcherName || "";
+    const phoneNum = rec.phone || rec.driverPhone || "";
+    const normalized = {
+      ...rec,
+      carNumber: carNum,
+      vehicleNumbers: carNum,
+      brandModel: brand,
+      brands: brand,
+      trailerMake: trailer,
+      dispatcherName: disp,
+      dispatcher: disp,
+      driverPhone: phoneNum,
+      phone: phoneNum,
+    };
+    
+    let mainPromise: Promise<void>;
+    
+    if (useFirebase) {
+      mainPromise = set(ref(database, `vehicleFleet/${rec.id}`), normalized)
+        .then(() => {
+          // Save brand to master-nodes under brands / vehicleBrands / trailerBrands
+          if (brand) {
+            const brandKey = brand.trim().toUpperCase().replace(/[^A-Z0-9_\-]/g, '_');
+            if (brandKey) {
+              set(ref(database, `brands/vehicleBrands/${brandKey}`), brand.trim()).catch(() => {});
+              set(ref(database, `vehicleBrands/${brandKey}`), brand.trim()).catch(() => {});
+              set(ref(database, `brands/${brandKey}`), brand.trim()).catch(() => {});
+            }
+          }
+          if (trailer) {
+            const trailerKey = trailer.trim().toUpperCase().replace(/[^A-Z0-9_\-]/g, '_');
+            if (trailerKey) {
+              set(ref(database, `brands/trailerBrands/${trailerKey}`), trailer.trim()).catch(() => {});
+              set(ref(database, `trailerBrands/${trailerKey}`), trailer.trim()).catch(() => {});
+            }
+          }
+        });
+    } else {
+      const local = getLocalStorageData<any[]>("ratipa_vehicle_fleet", []);
+      const idx = local.findIndex((x) => x.id === rec.id);
+      if (idx >= 0) local[idx] = normalized;
+      else local.push(normalized);
+      setLocalStorageData("ratipa_vehicle_fleet", local);
+      mainPromise = Promise.resolve();
+    }
+    
     dbService.logAction(
       user,
       role,
       "Сохранение данных авто и водителя",
       "Baza",
       rec.id,
-      `Сохранены данные авто ${rec.vehicleNumbers || ""} / водитель ${rec.driverName || ""}`,
+      `Сохранены данные авто ${carNum} / водитель ${rec.driverNameRu || rec.driverName || ""}`,
     );
+    
+    return mainPromise;
   },
 
   deleteVehicleDriverRecord: (id: string, user: string, role: string) => {
     if (useFirebase) {
+      remove(ref(database, `vehicleFleet/${id}`)).catch((err) =>
+        console.warn(err),
+      );
       remove(ref(database, `vehicle_driver_data/${id}`)).catch((err) =>
         console.warn(err),
       );
     } else {
-      const local = getLocalStorageData<any[]>(
-        "ratipa_vehicle_driver_data",
-        [],
-      );
+      const local = getLocalStorageData<any[]>("ratipa_vehicle_fleet", []);
       const filtered = local.filter((x) => x.id !== id);
-      setLocalStorageData("ratipa_vehicle_driver_data", filtered);
+      setLocalStorageData("ratipa_vehicle_fleet", filtered);
     }
     dbService.logAction(
       user,
@@ -1670,30 +2262,29 @@ export const dbService = {
 
   // SYSTEM / APP SETTINGS (Google Sheets, etc.)
   getSettings: (callback: (settings: AppSettings) => void) => {
+    return sharedGetSettings(callback);
+  },
+
+  getSettingsOnce: (callback: (settings: AppSettings) => void) => {
+    if (catalogCache.settings !== null) {
+      callback(catalogCache.settings);
+      return () => {};
+    }
     if (useFirebase) {
-      const dbRef = ref(database, "appSettings");
-      return onValue(
-        dbRef,
+      return onceValue(
+        ref(database, "appSettings"),
         (snapshot) => {
           const data = snapshot.val();
           if (data) {
-            // Ensure new fields exist
             let updated = false;
             if (!data.highlight) {
               data.highlight = INITIAL_SETTINGS.highlight;
               updated = true;
             }
-            if (
-              !data.highlights ||
-              !Array.isArray(data.highlights) ||
-              data.highlights.length === 0
-            ) {
-              data.highlights = data.highlight
-                ? [{ ...data.highlight, id: data.highlight.id || "h1" }]
-                : INITIAL_SETTINGS.highlights;
+            if (!data.highlights || !Array.isArray(data.highlights) || data.highlights.length === 0) {
+              data.highlights = data.highlight ? [{ ...data.highlight, id: data.highlight.id || "h1" }] : INITIAL_SETTINGS.highlights;
               updated = true;
             }
-
             const actualMonth = new Date().toISOString().substring(0, 7);
             if (!data.mapboxUsage) {
               data.mapboxUsage = {
@@ -1721,50 +2312,30 @@ export const dbService = {
                 data.mapboxUsage.allowExceedLoads = false;
                 innerUpdated = true;
               }
-              if (data.mapboxUsage.currentMonth !== actualMonth) {
-                data.mapboxUsage.count = 0;
-                data.mapboxUsage.loadsCount = 0;
-                data.mapboxUsage.currentMonth = actualMonth;
-                data.mapboxUsage.lastReset = new Date().toISOString();
-                innerUpdated = true;
-              }
-              if (innerUpdated) {
-                updated = true;
-              }
+              if (innerUpdated) updated = true;
             }
-
-            if (updated) {
-              set(dbRef, data).catch((err) =>
-                console.warn("Failed to update database schema:", err),
-              );
-            }
-
+            catalogCache.settings = data;
             callback(data);
           } else {
-            set(dbRef, INITIAL_SETTINGS).catch((err) => console.warn(err));
+            catalogCache.settings = INITIAL_SETTINGS;
             callback(INITIAL_SETTINGS);
           }
         },
         (err) => {
-          console.warn("Settings error lock:", err);
-          const local = getLocalStorageData<AppSettings>(
-            "ratipa_settings",
-            INITIAL_SETTINGS,
-          );
-          callback(local);
-        },
+          console.warn("Once fetch settings failure:", err);
+          callback(getLocalStorageData<AppSettings>("ratipa_settings", INITIAL_SETTINGS));
+        }
       );
     } else {
-      const local = getLocalStorageData<AppSettings>(
-        "ratipa_settings",
-        INITIAL_SETTINGS,
-      );
+      const local = getLocalStorageData<AppSettings>("ratipa_settings", INITIAL_SETTINGS);
+      catalogCache.settings = local;
       callback(local);
       return () => {};
     }
   },
 
   saveSettings: (settings: AppSettings, user: string, role: string) => {
+    catalogCache.settings = null;
     const cleanSettings = sanitizeFirebaseObject(settings);
     if (useFirebase) {
       set(ref(database, "appSettings"), cleanSettings);
@@ -1783,44 +2354,7 @@ export const dbService = {
 
   // FERRY TEMPLATES
   getFerryTemplates: (callback: (templates: FerryTemplate[]) => void) => {
-    if (useFirebase) {
-      const dbRef = ref(database, "ferryTemplates");
-      return onValue(
-        dbRef,
-        (snapshot) => {
-          const data = snapshot.val();
-          if (data) {
-            const list: FerryTemplate[] = Object.keys(data).map((key) => ({
-              id: key,
-              ...data[key],
-            }));
-            callback(list);
-          } else {
-            INITIAL_FERRY_TEMPLATES.forEach((f) => {
-              set(ref(database, `ferryTemplates/${f.id}`), f).catch((e) =>
-                console.warn(e),
-              );
-            });
-            callback(INITIAL_FERRY_TEMPLATES);
-          }
-        },
-        (err) => {
-          console.warn("Ferry templates read fail:", err);
-          const local = getLocalStorageData<FerryTemplate[]>(
-            "ratipa_ferry_templates",
-            INITIAL_FERRY_TEMPLATES,
-          );
-          callback(local);
-        },
-      );
-    } else {
-      const local = getLocalStorageData<FerryTemplate[]>(
-        "ratipa_ferry_templates",
-        INITIAL_FERRY_TEMPLATES,
-      );
-      callback(local);
-      return () => {};
-    }
+    return sharedGetFerryTemplates(callback);
   },
 
   saveFerryTemplate: (t: FerryTemplate, user: string, role: string) => {
@@ -1883,44 +2417,7 @@ export const dbService = {
 
   // DISTANCES Presets
   getDistances: (callback: (presets: DistancePreset[]) => void) => {
-    if (useFirebase) {
-      const dbRef = ref(database, "knownDistancesList");
-      return onValue(
-        dbRef,
-        (snapshot) => {
-          const data = snapshot.val();
-          if (data) {
-            const list: DistancePreset[] = Object.keys(data).map((key) => ({
-              id: key,
-              ...data[key],
-            }));
-            callback(list);
-          } else {
-            INITIAL_DISTANCES.forEach((d) => {
-              set(ref(database, `knownDistancesList/${d.id}`), d).catch((e) =>
-                console.warn(e),
-              );
-            });
-            callback(INITIAL_DISTANCES);
-          }
-        },
-        (err) => {
-          console.warn("Distances query fail:", err);
-          const local = getLocalStorageData<DistancePreset[]>(
-            "ratipa_distances",
-            INITIAL_DISTANCES,
-          );
-          callback(local);
-        },
-      );
-    } else {
-      const local = getLocalStorageData<DistancePreset[]>(
-        "ratipa_distances",
-        INITIAL_DISTANCES,
-      );
-      callback(local);
-      return () => {};
-    }
+    return sharedGetDistances(callback);
   },
 
   saveDistance: (d: DistancePreset, user: string, role: string) => {
@@ -1969,43 +2466,7 @@ export const dbService = {
 
   // CURRENCIES Presets
   getCurrencies: (callback: (presets: CurrencyPreset[]) => void) => {
-    if (useFirebase) {
-      const dbRef = ref(database, "currenciesList");
-      return onValue(
-        dbRef,
-        (snapshot) => {
-          const data = snapshot.val();
-          if (data) {
-            const list: CurrencyPreset[] = Object.keys(data).map((key) => ({
-              id: key,
-              ...data[key],
-            }));
-            callback(list.sort((a, b) => a.code.localeCompare(b.code)));
-          } else {
-            const INITIAL_CURRENCIES: CurrencyPreset[] = [
-              { id: "1", code: "USD" },
-              { id: "2", code: "EUR" },
-              { id: "3", code: "RUB" },
-              { id: "4", code: "BYN" },
-              { id: "5", code: "TRY" },
-              { id: "6", code: "KZT" },
-              { id: "7", code: "CNY" },
-            ];
-            INITIAL_CURRENCIES.forEach((c) => {
-              set(ref(database, `currenciesList/${c.id}`), c).catch((e) =>
-                console.warn(e),
-              );
-            });
-            callback(INITIAL_CURRENCIES);
-          }
-        },
-        (err) => {
-          console.warn("Currencies query fail:", err);
-        },
-      );
-    } else {
-      return () => {};
-    }
+    return sharedGetCurrencies(callback);
   },
 
   saveCurrency: (c: CurrencyPreset, user: string, role: string) => {
@@ -2038,59 +2499,7 @@ export const dbService = {
 
   // CARS POOL (Тарифы по машинам)
   getCarRateGroups: (callback: (groups: CarRateGroup[]) => void) => {
-    if (useFirebase) {
-      const dbRef = ref(database, "carsPool");
-      return onValue(
-        dbRef,
-        (snapshot) => {
-          const data = snapshot.val();
-          if (data) {
-            const list: CarRateGroup[] = Object.keys(data).map((key) => {
-              const val = data[key];
-              const vehicles = Array.isArray(val.vehicles)
-                ? val.vehicles
-                : Object.values(val.vehicles || {});
-              return {
-                id: key,
-                name: val.name || "",
-                rate: Number(val.rate || 0),
-                perDiemRate: val.perDiemRate
-                  ? Number(val.perDiemRate)
-                  : undefined,
-                vehicles,
-                comment: val.comment || "",
-              };
-            });
-            callback(list);
-          } else {
-            INITIAL_CARS_POOL.forEach((c) => {
-              set(ref(database, `carsPool/${c.id}`), {
-                name: c.name,
-                rate: c.rate,
-                vehicles: c.vehicles,
-                comment: c.comment || "",
-              }).catch((e) => console.warn(e));
-            });
-            callback(INITIAL_CARS_POOL);
-          }
-        },
-        (err) => {
-          console.warn("Cars pool read fail:", err);
-          const local = getLocalStorageData<CarRateGroup[]>(
-            "ratipa_cars_pool",
-            INITIAL_CARS_POOL,
-          );
-          callback(local);
-        },
-      );
-    } else {
-      const local = getLocalStorageData<CarRateGroup[]>(
-        "ratipa_cars_pool",
-        INITIAL_CARS_POOL,
-      );
-      callback(local);
-      return () => {};
-    }
+    return sharedGetCarRateGroups(callback);
   },
 
   saveCarRateGroup: (g: CarRateGroup, user: string, role: string) => {
@@ -2145,46 +2554,7 @@ export const dbService = {
 
   // DIRECTIONS POOL (Направления и коэффициенты)
   getDirections: (callback: (presets: DirectionPreset[]) => void) => {
-    if (useFirebase) {
-      const dbRef = ref(database, "directionsPool");
-      return onValue(
-        dbRef,
-        (snapshot) => {
-          const data = snapshot.val();
-          if (data) {
-            const list: DirectionPreset[] = Object.keys(data).map((key) => ({
-              id: key,
-              name: String(data[key].name || ""),
-              coeff: Number(data[key].coeff || 0),
-            }));
-            callback(list);
-          } else {
-            INITIAL_DIRECTIONS.forEach((d) => {
-              set(ref(database, `directionsPool/${d.id}`), {
-                name: d.name,
-                coeff: d.coeff,
-              }).catch((e) => console.warn(e));
-            });
-            callback(INITIAL_DIRECTIONS);
-          }
-        },
-        (err) => {
-          console.warn("Directions pool read fail:", err);
-          const local = getLocalStorageData<DirectionPreset[]>(
-            "ratipa_directions",
-            INITIAL_DIRECTIONS,
-          );
-          callback(local);
-        },
-      );
-    } else {
-      const local = getLocalStorageData<DirectionPreset[]>(
-        "ratipa_directions",
-        INITIAL_DIRECTIONS,
-      );
-      callback(local);
-      return () => {};
-    }
+    return sharedGetDirections(callback);
   },
 
   saveDirection: (d: DirectionPreset, user: string, role: string) => {
@@ -2236,59 +2606,80 @@ export const dbService = {
 
   // DRIVERS POOL (Справочник водителей)
   getDrivers: (callback: (drivers: Driver[]) => void) => {
+    return sharedGetDrivers(callback);
+  },
+
+  getDriversOnce: (callback: (drivers: Driver[]) => void) => {
+    if (catalogCache.drivers !== null) {
+      callback(catalogCache.drivers);
+      return () => {};
+    }
     if (useFirebase) {
-      const dbRef = ref(database, "driversPool");
-      return onValue(
-        dbRef,
+      return onceValue(
+        ref(database, "driversPool"),
         (snapshot) => {
           const data = snapshot.val();
           if (data) {
             const list: Driver[] = Object.keys(data).map((key) => ({
               id: key,
               name: String(data[key].name || ""),
+              lastNameRu: data[key].lastNameRu ? String(data[key].lastNameRu) : undefined,
+              firstNameRu: data[key].firstNameRu ? String(data[key].firstNameRu) : undefined,
+              middleNameRu: data[key].middleNameRu ? String(data[key].middleNameRu) : undefined,
+              lastNameLat: data[key].lastNameLat ? String(data[key].lastNameLat) : undefined,
+              firstNameLat: data[key].firstNameLat ? String(data[key].firstNameLat) : undefined,
+              middleNameLat: data[key].middleNameLat ? String(data[key].middleNameLat) : undefined,
+              shortNameRu: data[key].shortNameRu ? String(data[key].shortNameRu) : undefined,
+              shortNameLat: data[key].shortNameLat ? String(data[key].shortNameLat) : undefined,
               phone: data[key].phone ? String(data[key].phone) : undefined,
-              license: data[key].license
-                ? String(data[key].license)
-                : undefined,
-              rateGroupId: data[key].rateGroupId
-                ? String(data[key].rateGroupId)
-                : undefined,
-              comment: data[key].comment
-                ? String(data[key].comment)
-                : undefined,
+              license: data[key].license ? String(data[key].license) : undefined,
+              rateGroupId: data[key].rateGroupId ? String(data[key].rateGroupId) : undefined,
+              comment: data[key].comment ? String(data[key].comment) : undefined,
             }));
+            catalogCache.drivers = list;
             callback(list);
           } else {
+            catalogCache.drivers = [];
             callback([]);
           }
         },
         (err) => {
-          console.warn("Drivers pool read fail, falling back locally:", err);
-          const local = getLocalStorageData<Driver[]>("ratipa_drivers", []);
-          callback(local);
-        },
+          console.warn("Once fetch drivers failure:", err);
+          callback(getLocalStorageData<Driver[]>("ratipa_drivers", []));
+        }
       );
     } else {
       const local = getLocalStorageData<Driver[]>("ratipa_drivers", []);
+      catalogCache.drivers = local;
       callback(local);
       return () => {};
     }
   },
 
   saveDriver: (d: Driver, user: string, role: string) => {
+    catalogCache.drivers = null;
+    const payload = {
+      name: d.name,
+      lastNameRu: d.lastNameRu || "",
+      firstNameRu: d.firstNameRu || "",
+      middleNameRu: d.middleNameRu || "",
+      lastNameLat: d.lastNameLat || "",
+      firstNameLat: d.firstNameLat || "",
+      middleNameLat: d.middleNameLat || "",
+      shortNameRu: d.shortNameRu || "",
+      shortNameLat: d.shortNameLat || "",
+      phone: d.phone || "",
+      license: d.license || "",
+      rateGroupId: d.rateGroupId || "",
+      comment: d.comment || "",
+    };
     if (useFirebase) {
-      set(ref(database, `driversPool/${d.id}`), {
-        name: d.name,
-        phone: d.phone || "",
-        license: d.license || "",
-        rateGroupId: d.rateGroupId || "",
-        comment: d.comment || "",
-      });
+      set(ref(database, `driversPool/${d.id}`), payload);
     } else {
       const local = getLocalStorageData<Driver[]>("ratipa_drivers", []);
       const idx = local.findIndex((x) => x.id === d.id);
-      if (idx >= 0) local[idx] = d;
-      else local.push(d);
+      if (idx >= 0) local[idx] = { ...d, ...payload };
+      else local.push({ ...d, ...payload });
       setLocalStorageData("ratipa_drivers", local);
     }
     dbService.logAction(
@@ -2302,6 +2693,7 @@ export const dbService = {
   },
 
   deleteDriver: (id: string, user: string, role: string) => {
+    catalogCache.drivers = null;
     if (useFirebase) {
       remove(ref(database, `driversPool/${id}`));
     } else {
@@ -2391,17 +2783,52 @@ export const dbService = {
     createdBy: string,
     user: string,
     role: string,
+    targetRoles?: string[],
+    notifType?: 'info' | 'warning' | 'success' | 'alert'
   ) => {
+    const roles = targetRoles || [];
+    const type = notifType || 'info';
+
     const newNotif = {
       text,
       createdAt: new Date().toISOString(),
       createdBy,
       readBy: {},
+      targetRoles: roles,
+      type: type
     };
+
+    // Prepare system notification item
+    const sysNotifId = "notif_push_" + Date.now();
+    
+    let title = "📢 Важное объявление";
+    if (type === 'alert') title = "🚨 Срочное сообщение";
+    else if (type === 'warning') title = "⚠️ Предупреждение системы";
+    else if (type === 'success') title = "✅ Системное уведомление";
+
+    const systemNotif = {
+      title,
+      text,
+      type,
+      date: new Date().toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).replace(',', ''),
+      dispatcher: createdBy,
+      targetRoles: roles
+    };
+
     if (useFirebase) {
       const dbRef = ref(database, "broadcastNotifications");
       const newRef = push(dbRef);
       set(newRef, newNotif);
+
+      // Save to system notifications feed
+      const sysRef = ref(database, `ratipa_notifications/${sysNotifId}`);
+      set(sysRef, systemNotif);
     } else {
       const local = getLocalStorageData<any[]>(
         "ratipa_broadcast_notifications",
@@ -2410,6 +2837,13 @@ export const dbService = {
       const withId = { id: "bn_" + Date.now(), ...newNotif };
       local.unshift(withId);
       setLocalStorageData("ratipa_broadcast_notifications", local);
+
+      // Save to local system notifications feed
+      const localSys = getLocalStorageData<any[]>("ratipa_notifications_local", []);
+      const withIdSys = { id: sysNotifId, ...systemNotif };
+      localSys.unshift(withIdSys);
+      setLocalStorageData("ratipa_notifications_local", localSys);
+
       window.dispatchEvent(new Event("ratipa_broadcast_notifications_changed"));
     }
     dbService.logAction(
@@ -2418,7 +2852,7 @@ export const dbService = {
       "Отправка пуш-уведомления",
       "Admin",
       "push",
-      `Отправлено пуш-уведомление: ${text}`,
+      `Отправлено пуш-уведомление (${type}, таргет: ${roles.join(',') || 'все'}): ${text}`,
     );
   },
 
@@ -2489,18 +2923,7 @@ export const dbService = {
   },
 
   getVehicleStatuses: (callback: (data: Record<string, 'base' | 'trip'>) => void) => {
-    if (useFirebase) {
-      return onValue(ref(database, "vehicle_statuses"), (snapshot) => {
-        callback(snapshot.val() || {});
-      });
-    } else {
-      const local = getLocalStorageData<Record<string, 'base' | 'trip'>>(
-        "ratipa_vehicle_statuses",
-        {},
-      );
-      callback(local);
-      return () => {};
-    }
+    return sharedGetVehicleStatuses(callback);
   },
 
   setVehicleStatus: (id: string, status: 'base' | 'trip') => {

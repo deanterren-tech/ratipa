@@ -1,3 +1,9 @@
+export interface PhoneNumber {
+  id: string;
+  number: string;
+  isPrimary: boolean;
+}
+
 export type UserRole =
   | "root_admin"
   | "admin"
@@ -31,6 +37,7 @@ export interface UserProfile {
   email: string;
   role: UserRole;
   permissions: UserPermissions;
+  customPermissions?: any;
   createdAt: string;
   lastActive?: string;
   isOnline?: boolean;
@@ -52,6 +59,10 @@ export interface Vehicle {
   id: string; // matches document or push key
   carNumber: string;
   driverName: string;
+  driverId?: string;
+  driverRaw?: string;
+  driverShortNameRu?: string;
+  migrationStatus?: 'matched' | 'ambiguous' | 'unmatched';
   dateArrival: string;
   dateLoading: string;
   dateRepairStart: string;
@@ -59,7 +70,23 @@ export interface Vehicle {
   dateDeparture: string;
   comment: string;
   status: "base" | "loading" | "repair" | "departure" | "archive";
+  currentStatus?: "ON_TRIP" | "ON_BASE";
   history?: VehicleHistoryItem[];
+  
+  // Dynamic fields merged from dispatcher/baza records
+  brandModel?: string;
+  brands?: string;
+  brandsRu?: string;
+  brandsLat?: string;
+  trailerMake?: string;
+  vehicleNumbers?: string;
+  trailerNumber?: string;
+  dispatcherName?: string;
+  dispatcher?: string;
+  driverPhone?: string;
+  phone?: string;
+  ownerName?: string;
+  tariffId?: string;
 }
 
 export interface Leg {
@@ -71,6 +98,7 @@ export interface Leg {
   emptyRun?: number;
   freight: number;
   infoRate?: number;
+  infoRateCurrency?: string;
   infoCurrency?: string;
   ferryCost?: number;
   ferryCurrency?: string;
@@ -78,6 +106,22 @@ export interface Leg {
   coeff: number;
   direction?: string;
   additionalExpenses?: number;
+  otherExpenses?: number;
+  distanceSource?: string;
+  isManual?: boolean;
+  isApproximate?: boolean;
+
+  // New map & route properties
+  origin?: string;
+  destination?: string;
+  waypoints?: string[];
+  mapProvider?: string;
+  vehicleType?: string;
+  selectedRouteIndex?: number;
+  routes?: any[];
+  segments?: any[];
+  totalDistanceKm?: number;
+  manualOverride?: boolean;
 }
 
 export interface RouteCalculation {
@@ -124,18 +168,29 @@ export interface SalaryLog {
   idleMoney?: number;
   daysMoney?: number;
   comment?: string;
+  carId?: string;
+  driverId?: string;
 }
 
 export interface LegPlan {
+  freightCurrency?: string;
+  infoCurrency?: string;
+  infoRateCurrency?: string;
   from: string;
   to: string;
   km: number;
   emptyRunKm?: number;
+  emptyRun?: number; // Added to match PlanDohodModule.tsx
   rate: number;
+  freight?: number; // Added to match PlanDohodModule.tsx
   referenceRate?: string;
   referenceCurrency?: string;
   ferry: number;
+  ferryCost?: number; // Added to match PlanDohodModule.tsx
+  infoRate?: number; // Added to match PlanDohodModule.tsx
   coeff: number;
+  waypoints?: string[];
+  mapProvider?: "google" | "yandex";
 }
 
 export interface PotentialLoad {
@@ -180,6 +235,7 @@ export interface TripPlan {
   potentialLoads?: PotentialLoad[];
   activeLegIndex: number;
   dispatcher: string;
+  driverName?: string;
   currentMonth: string;
   isArchived: boolean;
 }
@@ -238,6 +294,8 @@ export interface HighlightData {
   date: string;
   author: string;
   height?: number;
+  isImportant?: boolean;
+  linkUrl?: string;
 }
 
 export interface QuickLink {
@@ -286,6 +344,7 @@ export interface AppSettings {
   planZagruzokSheetUrl?: string;
   planZagruzokBlacklistUrl?: string;
   dispositionSheetUrl?: string;
+  googleDriveUrl?: string;
   gpsBeltranssputnikUrl?: string;
   gpsWialonUrl?: string;
   gpsEraGlonassUrl?: string;
@@ -300,6 +359,7 @@ export interface AppSettings {
   asmapUrl?: string;
   idleRate: number;
   perDiemRate: number;
+  rolePermissions?: Record<string, Record<string, string>>;
   moduleOrder: string[];
   customPhrases: string[];
   customPhrasesRoles?: string[];
@@ -314,6 +374,12 @@ export interface AppSettings {
     allowExceedLoads?: boolean;
     currentMonth: string;
     lastReset?: string;
+  };
+  notificationAccess?: {
+    enabledRoles?: string[];
+    configRoles?: string[];
+    roleNotificationTypes?: Record<string, string[]>;
+    roleAvailableChannels?: Record<string, string[]>;
   };
 }
 
@@ -367,6 +433,14 @@ export interface DirectionPreset {
 export interface Driver {
   id: string;
   name: string;
+  lastNameRu?: string;
+  firstNameRu?: string;
+  middleNameRu?: string;
+  lastNameLat?: string;
+  firstNameLat?: string;
+  middleNameLat?: string;
+  shortNameRu?: string;
+  shortNameLat?: string;
   phone?: string;
   license?: string;
   rateGroupId?: string;

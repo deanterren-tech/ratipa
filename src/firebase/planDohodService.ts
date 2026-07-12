@@ -1,4 +1,4 @@
-import { ref, set, remove, push, update, onDisconnect } from 'firebase/database';
+import { ref, set, remove, push, update, onDisconnect, query, orderByChild, equalTo } from 'firebase/database';
 import { database, useFirebase, dbService, onValue } from '../firebase';
 import { TripPlan } from '../types';
 
@@ -31,9 +31,12 @@ const setLocalData = <T>(key: string, value: T) => {
 
 export const pdService = {
   // --- TRIPS DASHBOARD ---
-  subscribeTrips: (callback: (trips: TripPlan[]) => void) => {
+  subscribeTrips: (callback: (trips: TripPlan[]) => void, isArchivedFilter?: boolean) => {
     if (!useFirebase) return () => {};
-    const dbRef = ref(database, 'trips_dashboard');
+    let dbRef: any = ref(database, 'trips_dashboard');
+    if (isArchivedFilter !== undefined) {
+      dbRef = query(dbRef, orderByChild('isArchived'), equalTo(isArchivedFilter));
+    }
     return onValue(dbRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
@@ -49,13 +52,13 @@ export const pdService = {
     });
   },
 
-  createTrip: (trip: TripPlan, user: string, role: string) => {
+  createTrip: async (trip: TripPlan, user: string, role: string) => {
     if (!useFirebase) return;
     try {
       const dbRef = ref(database, 'trips_dashboard');
       const newRef = push(dbRef);
       const cleanTrip = JSON.parse(JSON.stringify({ ...trip, id: newRef.key }, (k, v) => v === undefined ? null : v));
-      set(newRef, cleanTrip);
+      await set(newRef, cleanTrip);
       dbService.logAction(user, role, 'Создание плана рейса', 'PlanDohod', newRef.key!, `Создан план рейса для ТС ${trip.carNumber}`);
     } catch (e) {
       console.error("Error creating trip in Firebase:", e);
@@ -63,7 +66,7 @@ export const pdService = {
     }
   },
 
-  updateTrip: (id: string, tripInfo: any, user: string, role: string) => {
+  updateTrip: async (id: string, tripInfo: any, user: string, role: string) => {
     if (!useFirebase) return;
     try {
       const cleanInfo = JSON.parse(JSON.stringify(tripInfo, (k, v) => v === undefined ? null : v));
@@ -87,7 +90,7 @@ export const pdService = {
     dbService.logAction(user, role, 'Восстановление плана рейса', 'PlanDohod', id, `Восстановлен план рейса ${id}`);
   },
 
-  deleteTrip: (id: string, user: string, role: string) => {
+  deleteTrip: async (id: string, user: string, role: string) => {
     if (!useFirebase) return;
     remove(ref(database, `trips_dashboard/${id}`));
     dbService.logAction(user, role, 'Удаление плана рейса', 'PlanDohod', id, `Удален план рейса ${id}`);
@@ -195,6 +198,23 @@ export const pdService = {
     set(ref(database, 'dispatchers_car_mapping'), mapping);
   },
 
+    // --- DRIVERS CAR MAPPING ---
+  subscribeDriversCarMapping: (callback: (mapping: Record<string, string>) => void) => {
+    if (!useFirebase) {
+        callback({});
+        return () => {};
+    }
+    const dbRef = ref(database, 'drivers_car_mapping');
+    return onValue(dbRef, (s) => {
+      callback(s.val() || {});
+    });
+  },
+
+  updateDriversCarMapping: (mapping: Record<string, string>) => {
+    if (!useFirebase) return;
+    set(ref(database, 'drivers_car_mapping'), mapping);
+  },
+
   // --- DISPATCHERS COLORS ---
   subscribeDispatchersColors: (callback: (colors: Record<string, string>) => void) => {
     if (!useFirebase) return () => {};
@@ -260,10 +280,17 @@ export const pdService = {
       const notes = getLocalData<Record<string, string>>(`ratipa_nb_notes_${key}`, {});
       delete notes[carNumber];
       setLocalData(`ratipa_nb_notes_${key}`, notes);
+
+      const statuses = getLocalData<Record<string, "baza" | "reis" | "none">>(`ratipa_nb_statuses_${key}`, {});
+      delete statuses[carNumber];
+      setLocalData(`ratipa_nb_statuses_${key}`, statuses);
+
       window.dispatchEvent(new Event(`ratipa_nb_changed_${key}`));
+      window.dispatchEvent(new Event(`ratipa_nb_statuses_changed_${key}`));
       return;
     }
     remove(ref(database, `user_widgets/${key}/${carNumber}`));
+    remove(ref(database, `user_widgets_status/${key}/${carNumber}`));
   },
 
   saveNotebookOrder: (username: string, order: string[]) => {
@@ -276,14 +303,14 @@ export const pdService = {
     set(ref(database, `user_widgets_order/${key}`), order);
   },
 
-  subscribeNotebookStatuses: (username: string, callback: (statuses: Record<string, "base" | "trip">) => void) => {
+  subscribeNotebookStatuses: (username: string, callback: (statuses: Record<string, "baza" | "reis" | "none">) => void) => {
     const key = safeUserKey(username);
     if (!useFirebase) {
-      const statuses = getLocalData<Record<string, "base" | "trip">>(`ratipa_nb_statuses_${key}`, {});
+      const statuses = getLocalData<Record<string, "baza" | "reis" | "none">>(`ratipa_nb_statuses_${key}`, {});
       callback(statuses);
 
       const handleLocalChange = () => {
-        const updatedStatuses = getLocalData<Record<string, "base" | "trip">>(`ratipa_nb_statuses_${key}`, {});
+        const updatedStatuses = getLocalData<Record<string, "baza" | "reis" | "none">>(`ratipa_nb_statuses_${key}`, {});
         callback(updatedStatuses);
       };
 
@@ -299,24 +326,16 @@ export const pdService = {
     return unsubStatuses;
   },
 
-  saveNotebookStatus: (username: string, carNumber: string, status: "base" | "trip" | null) => {
+  saveNotebookStatus: (username: string, carNumber: string, status: "baza" | "reis" | "none") => {
     const key = safeUserKey(username);
     if (!useFirebase) {
-      const statuses = getLocalData<Record<string, "base" | "trip">>(`ratipa_nb_statuses_${key}`, {});
-      if (status === null) {
-        delete statuses[carNumber];
-      } else {
-        statuses[carNumber] = status;
-      }
+      const statuses = getLocalData<Record<string, "baza" | "reis" | "none">>(`ratipa_nb_statuses_${key}`, {});
+      statuses[carNumber] = status;
       setLocalData(`ratipa_nb_statuses_${key}`, statuses);
       window.dispatchEvent(new Event(`ratipa_nb_statuses_changed_${key}`));
       return;
     }
-    if (status === null) {
-      remove(ref(database, `user_widgets_status/${key}/${carNumber}`));
-    } else {
-      set(ref(database, `user_widgets_status/${key}/${carNumber}`), status);
-    }
+    set(ref(database, `user_widgets_status/${key}/${carNumber}`), status);
   },
 
   // --- SYSTEM REGISTRY ---

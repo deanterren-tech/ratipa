@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Virtuoso } from "react-virtuoso";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useToast } from "../ToastProvider";
+import { TripList } from './TripList';
+import { Virtuoso } from 'react-virtuoso';
 import {
   UserProfile,
   TripPlan,
@@ -9,11 +11,10 @@ import {
   DISPATCHER_COLORS_PRESETS,
   PotentialLoad,
   CurrencyPreset,
-  AppSettings,
 } from "../../types";
+import { calculateTripFinances } from "../../utils/financeCalculators";
 import { dbService } from "../../firebase";
 import { pdService } from "../../firebase/planDohodService";
-import { useDialog } from "../DialogProvider";
 import {
   Plus,
   Trash2,
@@ -29,809 +30,25 @@ import {
   Minus,
   Bot,
   Search,
-} from "lucide-react";
-import {
-  APIProvider,
-  Map,
-  useMap,
-  useMapsLibrary,
-} from "@vis.gl/react-google-maps";
-
-const API_KEY =
-  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
-  (window as any).GOOGLE_MAPS_PLATFORM_KEY ||
-  "";
-const hasValidKey = Boolean(API_KEY) && API_KEY !== "YOUR_API_KEY";
-
-function normalizeRoadString(s: string): string {
-  if (!s) return "";
-  return s
-    .toLowerCase()
-    .replace(/m/g, "м")
-    .replace(/e/g, "е")
-    .replace(/a/g, "а")
-    .replace(/o/g, "о")
-    .replace(/p/g, "р")
-    .replace(/c/g, "с")
-    .replace(/x/g, "х")
-    .replace(/t/g, "т");
-}
-
-function RouteDisplay({
-  origin,
-  destination,
-  onDistance,
-  avoidTolls,
-  avoidHighways,
-  avoidFerries,
-  vehicleType,
-  avoidKeywords,
-  onRouteStatus,
-  waypoints = [],
-  onOriginChange,
-  onDestinationChange,
-  onWaypointsChange,
-}: {
-  origin: string;
-  destination: string;
-  onDistance: (km: number) => void;
-  avoidTolls: boolean;
-  avoidHighways: boolean;
-  avoidFerries: boolean;
-  vehicleType: string;
-  avoidKeywords: string;
-  onRouteStatus?: (status: {
-    matches: string[];
-    isAlternative: boolean;
-    avoidedSuccessfully: boolean;
-    attempted: boolean;
-  }) => void;
-  waypoints?: string[];
-  onOriginChange?: (addr: string) => void;
-  onDestinationChange?: (addr: string) => void;
-  onWaypointsChange?: (wps: string[]) => void;
-}) {
-  const map = useMap();
-  const routesLib = useMapsLibrary("routes");
-  const [debouncedOrigin, setDebouncedOrigin] = useState(origin);
-  const [debouncedDestination, setDebouncedDestination] = useState(destination);
-  const rendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
-  const polylinesRef = useRef<google.maps.Polyline[]>([]);
-  const [pdSettings, setPdSettings] = useState<any>({
-    routingProvider: "osrm",
-    openRouteServiceApiKey: "",
-  });
-  const [globalSettings, setGlobalSettings] = useState<AppSettings | null>(null);
-  const [offlineMode, setOfflineMode] = useState(() => localStorage.getItem('offline_mode') === 'true');
-
-  useEffect(() => {
-    const unsub = dbService.getSettings(setGlobalSettings);
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    const handleOfflineChange = () => {
-      setOfflineMode(localStorage.getItem('offline_mode') === 'true');
-    };
-    window.addEventListener('ratipa-offline-mode-change', handleOfflineChange);
-    return () => window.removeEventListener('ratipa-offline-mode-change', handleOfflineChange);
-  }, []);
-
-  useEffect(() => {
-    const unsub = pdService.subscribePlanDohodSettings(setPdSettings);
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedOrigin(origin);
-      setDebouncedDestination(destination);
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [origin, destination]);
-
-  useEffect(() => {
-    if (!map) return;
-
-    let active = true;
-
-    // MANDATORY: Clear everything first to prevent old/random/accidental markers from staying on the map!
-    polylinesRef.current.forEach((p) => {
-      p.setMap(null);
-      if ((p as any)._fallback_markers) {
-        (p as any)._fallback_markers.forEach((m: any) => m.setMap(null));
-      }
-      if ((p as any)._listeners) {
-        (p as any)._listeners.forEach((l: any) =>
-          google.maps.event.removeListener(l),
-        );
-      }
-    });
-    polylinesRef.current = [];
-
-    if (rendererRef.current) {
-      rendererRef.current.setMap(null);
-    }
-
-    if (!debouncedOrigin || !debouncedDestination) return;
-
-    const isOrs = pdSettings?.routingProvider === "openrouteservice";
-
-    if (isOrs) {
-      runORS();
-    } else {
-      runOSRM();
-    }
-
-    // Helper setup function to build draggable & interactive polylines/markers
-    const setupInteractiveRoute = (
-      polylinePath: google.maps.LatLngLiteral[],
-      validCoords: google.maps.LatLng[],
-      initialDistanceKm: number,
-    ) => {
-      if (!active) return;
-
-      const line = new google.maps.Polyline({
-        path: polylinePath,
-        geodesic: true,
-        strokeColor: "#3b82f6",
-        strokeWeight: 6,
-        map: map,
-        editable: false,
-        draggable: false,
-      });
-      polylinesRef.current.push(line);
-
-      // Listen for path modifications
-      const path = line.getPath();
-      const onPathChanged = () => {
-        let totalMeters = 0;
-        for (let idx = 0; idx < path.getLength() - 1; idx++) {
-          const p1 = path.getAt(idx);
-          const p2 = path.getAt(idx + 1);
-          const R = 6371e3; // Earth radius in meters
-          const lat1 = (p1.lat() * Math.PI) / 180;
-          const lat2 = (p2.lat() * Math.PI) / 180;
-          const deltaLat = ((p2.lat() - p1.lat()) * Math.PI) / 180;
-          const deltaLng = ((p2.lng() - p1.lng()) * Math.PI) / 180;
-
-          const a =
-            Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-            Math.cos(lat1) *
-              Math.cos(lat2) *
-              Math.sin(deltaLng / 2) *
-              Math.sin(deltaLng / 2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          totalMeters += R * c;
-        }
-        const updatedKm = Math.round(totalMeters / 1000);
-        onDistance(updatedKm);
-      };
-
-      const setAtListener = google.maps.event.addListener(
-        path,
-        "set_at",
-        onPathChanged,
-      );
-      const insertAtListener = google.maps.event.addListener(
-        path,
-        "insert_at",
-        onPathChanged,
-      );
-      const removeAtListener = google.maps.event.addListener(
-        path,
-        "remove_at",
-        onPathChanged,
-      );
-      (line as any)._listeners = [
-        setAtListener,
-        insertAtListener,
-        removeAtListener,
-      ];
-
-      // Draw markers with drag support
-      const fallbackMarkers: google.maps.Marker[] = [];
-      validCoords.forEach((coord, i) => {
-        let label = "•";
-        if (i === 0) label = "A";
-        else if (i === validCoords.length - 1) label = "B";
-        else label = String(i);
-
-        const m = new google.maps.Marker({
-          position: coord,
-          map: map,
-          label: { text: label, color: "#ffffff", fontWeight: "bold" },
-          draggable: true,
-        });
-
-        m.addListener("dragend", async () => {
-          const newPos = m.getPosition();
-          if (!newPos) return;
-
-          try {
-            let addressName: string | null = null;
-            try {
-              const res = await fetch(
-                `/api/reverse-geocode?lat=${newPos.lat()}&lng=${newPos.lng()}`,
-              );
-              const contentType = res.headers.get('content-type') || '';
-              if (res.ok && contentType.includes('application/json')) {
-                const data = await res.json();
-                if (data && data.address) {
-                  addressName = data.address;
-                }
-              }
-            } catch (err) {
-              console.warn("Proxy reverse geocode failed, trying Nominatim...", err);
-            }
-
-            if (!addressName) {
-              const url = `https://nominatim.openstreetmap.org/reverse?lat=${newPos.lat()}&lon=${newPos.lng()}&format=json`;
-              const res = await fetch(url);
-              if (res.ok) {
-                const data = await res.json();
-                if (data && data.display_name) {
-                  addressName = data.display_name;
-                }
-              }
-            }
-
-            if (addressName) {
-              if (i === 0) {
-                if (onOriginChange) onOriginChange(addressName);
-              } else if (i === validCoords.length - 1) {
-                if (onDestinationChange) onDestinationChange(addressName);
-              } else {
-                const waypointIndex = i - 1;
-                const newWps = [...waypoints];
-                newWps[waypointIndex] = addressName;
-                if (onWaypointsChange) onWaypointsChange(newWps);
-              }
-            }
-          } catch (err) {
-            console.error("Reverse geocoding marker failed:", err);
-          }
-        });
-
-        fallbackMarkers.push(m);
-      });
-      (line as any)._fallback_markers = fallbackMarkers;
-
-      onDistance(initialDistanceKm);
-    };
-
-    async function runORS() {
-      const apiKey = pdSettings?.openRouteServiceApiKey || "";
-      const resolve = async (
-        address: string,
-      ): Promise<google.maps.LatLng | null> => {
-        try {
-          const res = await fetch(
-            `/api/geocode?address=${encodeURIComponent(address)}`,
-          );
-          const contentType = res.headers.get('content-type') || '';
-          if (res.ok && contentType.includes('application/json')) {
-            const data = await res.json();
-            if (
-              data &&
-              typeof data.lat === "number" &&
-              typeof data.lng === "number"
-            ) {
-              return new google.maps.LatLng(data.lat, data.lng);
-            }
-          }
-        } catch (err) {
-          console.warn("Geocode proxy failed, trying Nominatim...", err);
-        }
-
-        try {
-          const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
-          const res = await fetch(url);
-          if (res.ok) {
-            const arr = await res.json();
-            if (Array.isArray(arr) && arr.length > 0) {
-              const lat = parseFloat(arr[0].lat);
-              const lng = parseFloat(arr[0].lon);
-              if (!isNaN(lat) && !isNaN(lng)) {
-                return new google.maps.LatLng(lat, lng);
-              }
-            }
-          }
-        } catch (err) {
-          console.error("Nominatim fallback failed:", err);
-        }
-        return null;
-      };
-
-      const activeWaypoints = waypoints.filter((w) => w && w.trim().length > 0);
-      const coords = await Promise.all([
-        resolve(debouncedOrigin),
-        ...activeWaypoints.map((w) => resolve(w)),
-        resolve(debouncedDestination),
-      ]);
-
-      if (!active) return;
-
-      const validCoords = coords.filter(
-        (c): c is google.maps.LatLng => c !== null,
-      );
-      if (validCoords.length < 2) return;
-
-      let distanceKm = 0;
-      let polylinePath: google.maps.LatLngLiteral[] = [];
-      let avoidedSuccessfully = true;
-      let matchedKeywords: string[] = [];
-      let attempted = false;
-
-      const keywordsToAvoid = avoidKeywords
-        ? avoidKeywords
-            .split(/[\s,;]+/)
-            .map((k) => normalizeRoadString(k.trim()))
-            .filter((k) => k.length > 0)
-        : [];
-
-      if (keywordsToAvoid.length > 0) {
-        attempted = true;
-      }
-
-      if (apiKey && apiKey.trim() !== "" && !offlineMode) {
-        const coordinates = validCoords.map((vc) => [vc.lng(), vc.lat()]);
-        try {
-          const response = await fetch(
-            "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: apiKey,
-              },
-              body: JSON.stringify({
-                coordinates: coordinates,
-                preference: "fastest",
-                options: {
-                  avoid_features: [
-                    ...(avoidTolls ? ["tollways"] : []),
-                    ...(avoidHighways ? ["highways"] : []),
-                    ...(avoidFerries ? ["ferries"] : []),
-                  ],
-                },
-              }),
-            },
-          );
-
-          if (!active) return;
-
-          if (response.ok) {
-            const data = await response.json();
-            if (data.features && data.features[0]) {
-              const feature = data.features[0];
-              const distanceMeters = feature.properties?.summary?.distance || 0;
-              const rawCoordinates = feature.geometry?.coordinates || [];
-              polylinePath = rawCoordinates.map((coord: any) => ({
-                lat: coord[1],
-                lng: coord[0],
-              }));
-              distanceKm = Math.round(distanceMeters / 1000);
-
-              // Basic scan for keywords in OpenRouteService response segment names
-              if (keywordsToAvoid.length > 0 && feature.properties?.segments) {
-                const matches: string[] = [];
-                for (const segment of feature.properties.segments) {
-                  if (segment.steps) {
-                    for (const step of segment.steps) {
-                      const stepName = normalizeRoadString(
-                        step.name || "",
-                      ).replace(/[-\s]/g, "");
-                      for (const kw of keywordsToAvoid) {
-                        const targetKw = kw.replace(/[-\s]/g, "");
-                        if (stepName.includes(targetKw)) {
-                          if (!matches.includes(kw)) matches.push(kw);
-                        }
-                      }
-                    }
-                  }
-                }
-                if (matches.length > 0) {
-                  avoidedSuccessfully = false;
-                  matchedKeywords = matches;
-                }
-              }
-            }
-          } else {
-            console.warn(
-              "OpenRouteService API returned error status:",
-              response.status,
-            );
-          }
-        } catch (e) {
-          console.error("OpenRouteService API call failed:", e);
-        }
-      }
-
-      if (!active) return;
-
-      if (polylinePath.length === 0) {
-        polylinePath = validCoords.map((vc) => ({
-          lat: vc.lat(),
-          lng: vc.lng(),
-        }));
-        let totalMeters = 0;
-        for (let i = 0; i < validCoords.length - 1; i++) {
-          const p1 = validCoords[i];
-          const p2 = validCoords[i + 1];
-          const R = 6371e3;
-          const lat1 = (p1.lat() * Math.PI) / 180;
-          const lat2 = (p2.lat() * Math.PI) / 180;
-          const deltaLat = ((p2.lat() - p1.lat()) * Math.PI) / 180;
-          const deltaLng = ((p2.lng() - p1.lng()) * Math.PI) / 180;
-
-          const a =
-            Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-            Math.cos(lat1) *
-              Math.cos(lat2) *
-              Math.sin(deltaLng / 2) *
-              Math.sin(deltaLng / 2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          totalMeters += R * c;
-        }
-        distanceKm = Math.round((totalMeters / 1000) * 1.28);
-      }
-
-      setupInteractiveRoute(polylinePath, validCoords, distanceKm);
-
-      if (onRouteStatus) {
-        onRouteStatus({
-          matches: matchedKeywords,
-          isAlternative: false,
-          avoidedSuccessfully: avoidedSuccessfully,
-          attempted: attempted,
-        });
-      }
-
-      const bounds = new google.maps.LatLngBounds();
-      validCoords.forEach((c) => bounds.extend(c));
-      map.fitBounds(bounds);
-    }
-
-    async function runOSRM() {
-      const resolve = async (
-        address: string,
-      ): Promise<google.maps.LatLng | null> => {
-        try {
-          const res = await fetch(
-            `/api/geocode?address=${encodeURIComponent(address)}`,
-          );
-          const contentType = res.headers.get('content-type') || '';
-          if (res.ok && contentType.includes('application/json')) {
-            const data = await res.json();
-            if (
-              data &&
-              typeof data.lat === "number" &&
-              typeof data.lng === "number"
-            ) {
-              return new google.maps.LatLng(data.lat, data.lng);
-            }
-          }
-        } catch (err) {
-          console.warn("Geocode proxy failed, trying Nominatim...", err);
-        }
-
-        try {
-          const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
-          const res = await fetch(url);
-          if (res.ok) {
-            const arr = await res.json();
-            if (Array.isArray(arr) && arr.length > 0) {
-              const lat = parseFloat(arr[0].lat);
-              const lng = parseFloat(arr[0].lon);
-              if (!isNaN(lat) && !isNaN(lng)) {
-                return new google.maps.LatLng(lat, lng);
-              }
-            }
-          }
-        } catch (err) {
-          console.error("Nominatim fallback failed:", err);
-        }
-        return null;
-      };
-
-      const activeWaypoints = waypoints.filter((w) => w && w.trim().length > 0);
-      const coords = await Promise.all([
-        resolve(debouncedOrigin),
-        ...activeWaypoints.map((w) => resolve(w)),
-        resolve(debouncedDestination),
-      ]);
-
-      if (!active) return;
-
-      const validCoords = coords.filter(
-        (c): c is google.maps.LatLng => c !== null,
-      );
-      if (validCoords.length < 2) return;
-
-      let distanceKm = 0;
-      let polylinePath: google.maps.LatLngLiteral[] = [];
-      let avoidedSuccessfully = true;
-      let matchedKeywords: string[] = [];
-      let attempted = false;
-
-      const keywordsToAvoid = avoidKeywords
-        ? avoidKeywords
-            .split(/[\s,;]+/)
-            .map((k) => normalizeRoadString(k.trim()))
-            .filter((k) => k.length > 0)
-        : [];
-
-      if (keywordsToAvoid.length > 0) {
-        attempted = true;
-      }
-
-      const mapboxUsage = globalSettings?.mapboxUsage;
-      const bypassMapbox = mapboxUsage
-        ? (mapboxUsage.count >= (mapboxUsage.limit || 100000) && !mapboxUsage.allowExceed)
-        : false;
-
-      const coordinates = validCoords
-        .map((vc) => `${vc.lng()},${vc.lat()}`)
-        .join(";");
-      try {
-        let response = null;
-        let usedDirectMapbox = false;
-        if (!offlineMode) {
-          try {
-            const bypassParam = bypassMapbox ? "&bypassMapbox=true" : "";
-            response = await fetch(
-              `/api/osrm-route?coordinates=${coordinates}&steps=true&alternatives=true${bypassParam}`,
-            );
-            if (!response.ok) {
-              throw new Error("Proxy routing fetch returned error status");
-            }
-          } catch (proxyError) {
-            console.warn("Proxy routing failed, trying direct Mapbox fallback:", proxyError);
-            if (!bypassMapbox) {
-              try {
-                const mapboxToken = "pk.eyJ1Ijoic2VyZ2VpdGVyZXoiLCJhIjoiY21yN3FqeTNzMTV2ZTJ3czlobGM0ZTF2NiJ9.GeagZG4Ev2U2a7NfnLicyg";
-                response = await fetch(
-                  `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinates}?geometries=geojson&overview=full&steps=true&alternatives=true&access_token=${mapboxToken}`,
-                );
-                if (!response.ok) {
-                  throw new Error("Direct Mapbox fetch returned error status");
-                }
-                usedDirectMapbox = true;
-              } catch (directError) {
-                console.warn("Direct Mapbox fallback failed, trying public OSRM fallback:", directError);
-                try {
-                  response = await fetch(
-                    `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true&alternatives=true`,
-                  );
-                } catch (ossError) {
-                  console.error("All front-end Mapbox & OSRM routing attempts failed:", ossError);
-                }
-              }
-            } else {
-              try {
-                response = await fetch(
-                  `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true&alternatives=true`,
-                );
-              } catch (ossError) {
-                console.error("All front-end OSRM routing attempts failed:", ossError);
-              }
-            }
-          }
-        }
-
-        if (!active) return;
-
-        if (response && response.ok) {
-          const data = await response.json();
-          if (data.source === "mapbox" || usedDirectMapbox) {
-            dbService.incrementMapboxUsage();
-          }
-          if (data.code === "Ok" && data.routes && data.routes.length > 0) {
-            let selectedRoute = data.routes[0];
-
-            if (keywordsToAvoid.length > 0) {
-              let foundClearRoute = false;
-              for (const r of data.routes) {
-                const matches: string[] = [];
-                if (r.legs) {
-                  for (const leg of r.legs) {
-                    if (leg.steps) {
-                      for (const step of leg.steps) {
-                        const stepName = normalizeRoadString(
-                          step.name || "",
-                        ).replace(/[-\s]/g, "");
-                        const stepRef = normalizeRoadString(
-                          step.ref || "",
-                        ).replace(/[-\s]/g, "");
-                        for (const kw of keywordsToAvoid) {
-                          const targetKw = kw.replace(/[-\s]/g, "");
-                          if (
-                            stepName.includes(targetKw) ||
-                            stepRef.includes(targetKw)
-                          ) {
-                            if (!matches.includes(kw)) matches.push(kw);
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-                const summaryNorm = normalizeRoadString(
-                  r.summary || "",
-                ).replace(/[-\s]/g, "");
-                for (const kw of keywordsToAvoid) {
-                  const targetKw = kw.replace(/[-\s]/g, "");
-                  if (summaryNorm.includes(targetKw)) {
-                    if (!matches.includes(kw)) matches.push(kw);
-                  }
-                }
-
-                if (matches.length === 0) {
-                  selectedRoute = r;
-                  foundClearRoute = true;
-                  break;
-                }
-              }
-
-              if (!foundClearRoute) {
-                avoidedSuccessfully = false;
-                const r0 = data.routes[0];
-                const mainMatches: string[] = [];
-                if (r0.legs) {
-                  for (const leg of r0.legs) {
-                    if (leg.steps) {
-                      for (const step of leg.steps) {
-                        const stepName = normalizeRoadString(
-                          step.name || "",
-                        ).replace(/[-\s]/g, "");
-                        const stepRef = normalizeRoadString(
-                          step.ref || "",
-                        ).replace(/[-\s]/g, "");
-                        for (const kw of keywordsToAvoid) {
-                          const targetKw = kw.replace(/[-\s]/g, "");
-                          if (
-                            stepName.includes(targetKw) ||
-                            stepRef.includes(targetKw)
-                          ) {
-                            if (!mainMatches.includes(kw)) mainMatches.push(kw);
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-                const summaryNorm = normalizeRoadString(
-                  r0.summary || "",
-                ).replace(/[-\s]/g, "");
-                for (const kw of keywordsToAvoid) {
-                  const targetKw = kw.replace(/[-\s]/g, "");
-                  if (summaryNorm.includes(targetKw)) {
-                    if (!mainMatches.includes(kw)) mainMatches.push(kw);
-                  }
-                }
-                matchedKeywords = mainMatches;
-              } else {
-                avoidedSuccessfully = true;
-                matchedKeywords = [];
-              }
-            }
-
-            const distanceMeters = selectedRoute.distance || 0;
-            const rawCoordinates = selectedRoute.geometry?.coordinates || [];
-            polylinePath = rawCoordinates.map((coord: any) => ({
-              lat: coord[1],
-              lng: coord[0],
-            }));
-            distanceKm = Math.round(distanceMeters / 1000);
-          }
-        }
-      } catch (e) {
-        console.error("OSRM PlanDohodModule failed:", e);
-      }
-
-      if (!active) return;
-
-      if (polylinePath.length === 0) {
-        polylinePath = validCoords.map((vc) => ({
-          lat: vc.lat(),
-          lng: vc.lng(),
-        }));
-        let totalMeters = 0;
-        for (let i = 0; i < validCoords.length - 1; i++) {
-          const p1 = validCoords[i];
-          const p2 = validCoords[i + 1];
-          const R = 6371e3;
-          const lat1 = (p1.lat() * Math.PI) / 180;
-          const lat2 = (p2.lat() * Math.PI) / 180;
-          const deltaLat = ((p2.lat() - p1.lat()) * Math.PI) / 180;
-          const deltaLng = ((p2.lng() - p1.lng()) * Math.PI) / 180;
-
-          const a =
-            Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-            Math.cos(lat1) *
-              Math.cos(lat2) *
-              Math.sin(deltaLng / 2) *
-              Math.sin(deltaLng / 2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          totalMeters += R * c;
-        }
-        distanceKm = Math.round((totalMeters / 1000) * 1.28);
-      }
-
-      setupInteractiveRoute(polylinePath, validCoords, distanceKm);
-
-      if (onRouteStatus) {
-        onRouteStatus({
-          matches: matchedKeywords,
-          isAlternative: false,
-          avoidedSuccessfully: avoidedSuccessfully,
-          attempted: attempted,
-        });
-      }
-
-      const bounds = new google.maps.LatLngBounds();
-      validCoords.forEach((c) => bounds.extend(c));
-      map.fitBounds(bounds);
-    }
-
-    return () => {
-      active = false;
-      polylinesRef.current.forEach((p) => {
-        p.setMap(null);
-        if ((p as any)._fallback_markers) {
-          (p as any)._fallback_markers.forEach((m: any) => m.setMap(null));
-        }
-        if ((p as any)._listeners) {
-          (p as any)._listeners.forEach((l: any) =>
-            google.maps.event.removeListener(l),
-          );
-        }
-      });
-      polylinesRef.current = [];
-      if (rendererRef.current) {
-        rendererRef.current.setMap(null);
-      }
-    };
-  }, [
-    map,
-    debouncedOrigin,
-    debouncedDestination,
-    onDistance,
-    avoidTolls,
-    avoidHighways,
-    avoidFerries,
-    vehicleType,
-    avoidKeywords,
-    waypoints,
-    pdSettings,
-    onOriginChange,
-    onDestinationChange,
-    onWaypointsChange,
-  ]);
-
-  return null;
-}
+Receipt, CircleDollarSign, MessageSquare, FileText} from "lucide-react";
+import MapRouteModal from "../MapRouteModal";
 
 interface PlanDohodModuleProps {
   user: UserProfile;
 }
 
-// Helper to match user name with dispatcher name case-insensitively and stripping titles
-const matchUserAndDispatcher = (user: string, dispatcher: string): boolean => {
-  if (!user || !dispatcher) return false;
-  const clean = (name: string) => {
-    return name
-      .toLowerCase()
-      .replace(/^(диспетчер|логист|водитель|dispatcher|logist|driver)\s+/gi, "")
-      .trim();
-  };
-  return clean(user) === clean(dispatcher);
-};
-
 export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
-  const { showConfirm } = useDialog();
+  const formatToTitleCase = (str: string) => {
+    if (!str) return "";
+    const trimmed = str.trim();
+    if (trimmed.toUpperCase() === "ВСЕ ДИСПЕТЧЕРЫ") return "Все диспетчеры";
+    if (trimmed.toUpperCase() === "ВСЕ НАПРАВЛЕНИЯ") return "Все направления";
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+  };
+
   const [searchQuery, setSearchQuery] = useState("");
+  const { toast: addToast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [tableScale, setTableScale] = useState<number>(() => {
     const saved = localStorage.getItem("pd_table_scale");
     return saved ? Number(saved) : 100;
@@ -848,7 +65,12 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   } | null>(null);
 
   // Realtime Data
-  const [trips, setTrips] = useState<TripPlan[]>([]);
+  const [activeTrips, setActiveTrips] = useState<TripPlan[]>([]);
+  const [archiveTrips, setArchiveTrips] = useState<TripPlan[]>([]);
+  const trips = useMemo(() => {
+    return [...activeTrips, ...archiveTrips];
+  }, [activeTrips, archiveTrips]);
+
   const [savedCars, setSavedCars] = useState<string[]>([]);
   const [carDispatcherMapping, setCarDispatcherMapping] = useState<
     Record<string, string>
@@ -895,7 +117,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       if (Array.isArray(saved)) setManualTripsOrder(saved);
     } catch (e) {}
 
-    const unsubTrips = pdService.subscribeTrips(setTrips);
+    const unsubTrips = pdService.subscribeTrips(setActiveTrips, false);
     const unsubCars = pdService.subscribeCars(setSavedCars);
     const unsubDirs = pdService.subscribeDirections(setDirections);
     const unsubDist = pdService.subscribeKnownDistances(setDistances);
@@ -907,23 +129,41 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       setDispatchers(disp);
       setDispatchersOrder(order);
     });
-    const unsubLogs = dbService.getAuditLogs((data) => {
-      setLogs(data.filter((l) => l.module === "PlanDohod"));
-    });
     pdService.setPresence(user.name);
 
     return () => {
       unsubTrips();
+      
       unsubCars();
       unsubDirs();
       unsubDist();
       unsubCurrencies();
       unsubSet();
       unsubDisp();
-      unsubLogs();
       unsubColors();
     };
   }, [user.name]);
+
+  // Lazy-load Archive Trips
+  useEffect(() => {
+    if (activeTab !== "archive") {
+      setArchiveTrips([]);
+      return;
+    }
+    const unsubArchive = pdService.subscribeTrips(setArchiveTrips, true);
+    return () => {
+      unsubArchive();
+    };
+  }, [activeTab]);
+
+  // Lazy-load Audit Logs
+  useEffect(() => {
+    if (activeTab !== "history") return;
+    const unsubLogs = dbService.getAuditLogs((data) => {
+      setLogs(data.filter((l) => l.module === "PlanDohod"));
+    });
+    return () => unsubLogs();
+  }, [activeTab]);
 
   // --- NOTEBOOK STATE & EFFECTS ---
   const [isNotebookOpen, setIsNotebookOpen] = useState<boolean>(() => {
@@ -1105,18 +345,19 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   }, [nbResizing, nbResizeStartSize]);
 
   // Derived state for dispatchers
-  const filterDispatchers = dispatchersOrder.filter(
+  const filterDispatchers = useMemo(() => dispatchersOrder.filter(
     (d) =>
       d &&
       d.trim() !== "Общая" &&
       d.trim() !== "All" &&
       d.trim() !== "Все" &&
-      d.trim() !== "Все диспетчеры",
-  );
-  const activeDispatchers =
-    filterDispatchers.length > 0
+      d.trim() !== "Все диспетчеры"
+  ), [dispatchersOrder]);
+  const activeDispatchers = useMemo(() => {
+    return filterDispatchers.length > 0
       ? ["Все диспетчеры", ...filterDispatchers]
       : [];
+  }, [filterDispatchers]);
 
   useEffect(() => {
     if (activeDispatchers.length > 0) {
@@ -1127,7 +368,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         setActiveDispatcherTab(activeDispatchers[0]);
       }
     }
-  }, [dispatchersOrder, activeDispatcherTab]);
+  }, [dispatchersOrder]);
 
   const [selectedNotebookUser, setSelectedNotebookUser] = useState<string>(
     user.name,
@@ -1135,9 +376,8 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [notebookNotes, setNotebookNotes] = useState<Record<string, string>>(
     {},
   );
-  const [notebookStatuses, setNotebookStatuses] = useState<Record<string, "base" | "trip">>(
-    {},
-  );
+  const [notebookStatuses, setNotebookStatuses] = useState<Record<string, "baza" | "reis" | "none">>({});
+  const [addCarStatus, setAddCarStatus] = useState<"baza" | "reis" | "none">("none");
   const [notebookOrder, setNotebookOrder] = useState<string[]>([]);
   const [notebookCarInput, setNotebookCarInput] = useState<string>("");
 
@@ -1156,7 +396,8 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   });
 
   useEffect(() => {
-    fetch("https://api.nbrb.by/exrates/rates?periodicity=0")
+    const controller = new AbortController();
+    fetch("https://api.nbrb.by/exrates/rates?periodicity=0", { signal: controller.signal })
       .then((res) => res.json())
       .then((data: any[]) => {
         const updated: Record<string, { scale: number; rate: number }> = {
@@ -1189,7 +430,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       .catch(console.warn);
   }, []);
 
-  const calculateEuroFreight = (infoRateRaw: string, currency: string) => {
+  function calculateEuroFreight(infoRateRaw: string, currency: string) {
     // Info rate might contain specific exchange rate like "80000 110"
     const parts = (infoRateRaw || "").trim().split(/\s+/);
     const infoRate = parseFloat(parts[0]) || 0;
@@ -1212,9 +453,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       : 0;
     const rateEur = nbrbRates["EUR"] ? nbrbRates["EUR"].rate : 1;
     return rateEur > 0 ? Math.round((infoRate * rateX) / rateEur) : 0;
-  };
+  }
 
   useEffect(() => {
+    if (!isNotebookOpen) return;
     const unsubPermissions = pdService.subscribePermissions(
       user.name,
       (isAdmin, isNotebookViewer) => {
@@ -1223,9 +465,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       },
     );
     return () => unsubPermissions();
-  }, [user.name]);
+  }, [user.name, isNotebookOpen]);
 
   useEffect(() => {
+    if (!isNotebookOpen) return;
     const unsubNotebook = pdService.subscribeNotebook(
       selectedNotebookUser,
       (notes, order) => {
@@ -1233,17 +476,19 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         setNotebookOrder(order || []);
       },
     );
+    return () => unsubNotebook();
+  }, [selectedNotebookUser, isNotebookOpen]);
+
+  useEffect(() => {
+    if (!isNotebookOpen) return;
     const unsubStatuses = pdService.subscribeNotebookStatuses(
       selectedNotebookUser,
       (statuses) => {
         setNotebookStatuses(statuses || {});
       },
     );
-    return () => {
-      unsubNotebook();
-      unsubStatuses();
-    };
-  }, [selectedNotebookUser]);
+    return () => unsubStatuses();
+  }, [selectedNotebookUser, isNotebookOpen]);
 
   const handleNoteChange = (car: string, val: string) => {
     setNotebookNotes((prev) => ({ ...prev, [car]: val }));
@@ -1261,9 +506,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     const car = notebookCarInput.trim().toUpperCase();
     if (!car) return;
     pdService.saveNotebookNote(selectedNotebookUser, car, "");
-    const normalizedOrder = notebookOrder.map(c => c.trim().toUpperCase());
-    if (!normalizedOrder.includes(car)) {
-      const newOrder = [...normalizedOrder, car];
+    pdService.saveNotebookStatus(selectedNotebookUser, car, addCarStatus);
+    if (!notebookOrder.includes(car)) {
+      const newOrder = [...notebookOrder, car];
       pdService.saveNotebookOrder(selectedNotebookUser, newOrder);
     }
     setNotebookCarInput("");
@@ -1271,33 +516,34 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
   const handleRemoveCarFromNotebook = (car: string) => {
     pdService.removeNotebookCar(selectedNotebookUser, car);
-    pdService.saveNotebookStatus(selectedNotebookUser, car, null);
-    const newOrder = notebookOrder.filter((c) => c.trim().toUpperCase() !== car.trim().toUpperCase());
+    const newOrder = notebookOrder.filter((c) => c !== car);
     pdService.saveNotebookOrder(selectedNotebookUser, newOrder);
   };
 
   const handleAddMyCarsToNotebook = () => {
     const myCars: string[] = [];
-    Object.entries(carDispatcherMapping).forEach(([carPlate, dispatcherName]) => {
-      if (dispatcherName && matchUserAndDispatcher(user.name, dispatcherName as string)) {
-        myCars.push(carPlate.trim().toUpperCase());
+    trips.forEach((trip) => {
+      if (
+        (trip.logist === user.name || trip.dispatcher === user.name) &&
+        trip.carNumber
+      ) {
+        myCars.push(trip.carNumber.trim().toUpperCase());
       }
     });
     const uniqueCars = Array.from(new Set(myCars));
     if (uniqueCars.length === 0) {
-      alert("У вас пока нет привязанных машин в справочнике.");
+      alert("У вас пока нет оформленных машин в текущем журнале.");
       return;
     }
 
-    const normalizedExistingOrder = notebookOrder.map(c => c.trim().toUpperCase());
-    const newOrder = [...normalizedExistingOrder];
+    const newOrder = [...notebookOrder];
     let addedCount = 0;
     uniqueCars.forEach((car) => {
-      if (!newOrder.includes(car)) {
-        newOrder.push(car);
-        const existingNoteKey = Object.keys(notebookNotes).find(k => k.trim().toUpperCase() === car);
-        if (!existingNoteKey) {
-          pdService.saveNotebookNote(selectedNotebookUser, car, "");
+      if (notebookNotes[car] === undefined) {
+        pdService.saveNotebookNote(selectedNotebookUser, car, "");
+        pdService.saveNotebookStatus(selectedNotebookUser, car, "none");
+        if (!newOrder.includes(car)) {
+          newOrder.push(car);
         }
         addedCount++;
       }
@@ -1334,30 +580,15 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       return null;
     }
 
-    // All cars that are in order or have notes, normalized to prevent duplicates
-    const normalizedOrder = notebookOrder.map(c => c.trim().toUpperCase());
-    const normalizedNotesKeys = Object.keys(notebookNotes).map(c => c.trim().toUpperCase());
+    // All cars that are in order or have notes
     const cars = Array.from(
-      new Set([...normalizedOrder, ...normalizedNotesKeys])
-    ).filter((car) => {
-      const isOrdered = normalizedOrder.includes(car);
-      const noteVal = notebookNotes[car] !== undefined && notebookNotes[car] !== null
-        ? notebookNotes[car]
-        : Object.entries(notebookNotes).find(([k]) => k.trim().toUpperCase() === car)?.[1];
-      const hasNote = noteVal !== undefined && noteVal !== null;
-      return isOrdered || hasNote;
-    });
+      new Set([...notebookOrder, ...Object.keys(notebookNotes)]),
+    ).filter((car) => notebookNotes[car] !== undefined);
 
-    const realCars = cars.filter((car) => car !== 'ПЛАН');
-    const totalCarsCount = realCars.length;
-    const baseCount = realCars.filter((car) => {
-      const status = notebookStatuses[car] || Object.entries(notebookStatuses).find(([k]) => k.trim().toUpperCase() === car)?.[1];
-      return status === 'base';
-    }).length;
-    const tripCount = realCars.filter((car) => {
-      const status = notebookStatuses[car] || Object.entries(notebookStatuses).find(([k]) => k.trim().toUpperCase() === car)?.[1];
-      return status === 'trip';
-    }).length;
+    // Compute status counters
+    const countBaza = cars.filter((car) => notebookStatuses[car] === "baza").length;
+    const countReis = cars.filter((car) => notebookStatuses[car] === "reis").length;
+    const countNone = cars.filter((car) => !notebookStatuses[car] || notebookStatuses[car] === "none").length;
 
     if (isNbMinimized) {
       return (
@@ -1368,7 +599,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               setIsNbMinimized(false);
               localStorage.setItem("ratipa_notebook_minimized", "false");
             }}
-            className="bg-amber-500 hover:bg-amber-600 font-sans text-white text-xs font-black uppercase tracking-widest py-3 px-6 rounded-full flex items-center gap-2 shadow-[0_10px_25px_rgba(245,158,11,0.4)] border border-amber-600 transition-all duration-150 transform hover:scale-105 active:scale-95 cursor-pointer"
+            className="bg-amber-500 hover:bg-amber-600 font-sans text-white text-xs font-semibold py-2.5 px-5 rounded-full flex items-center gap-2 shadow-[0_8px_20px_rgba(245,158,11,0.25)] border border-amber-500 transition-all duration-150 transform hover:scale-105 active:scale-95 cursor-pointer"
           >
             <BookOpen size={14} />
             <span>📋 Блокнот ({cars.length})</span>
@@ -1376,10 +607,6 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         </div>
       );
     }
-
-    const myMappedCars = Object.entries(carDispatcherMapping)
-      .filter(([_, dispatcherName]) => dispatcherName && matchUserAndDispatcher(user.name, dispatcherName as string))
-      .map(([carPlate]) => carPlate.trim().toUpperCase());
 
     const permittedToSwitch =
       isAdminUser || isNotebookViewer || user.role === "root_admin";
@@ -1397,18 +624,18 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
           height: `${nbCoords.h}px`,
           zIndex: 20000,
         }}
-        className="bg-white rounded-[2rem] border border-slate-300 shadow-[0_15px_50px_rgba(0,0,0,0.15)] flex flex-col pointer-events-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        className="bg-white rounded-[2rem] border border-slate-200 shadow-[0_15px_45px_rgba(0,0,0,0.1)] flex flex-col pointer-events-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150"
       >
         {/* Header Drag Handle */}
         <div
           onMouseDown={handleNbDragStart}
-          className="flex items-center justify-between border-b border-slate-100 p-4 bg-slate-50 cursor-grab active:cursor-grabbing select-none"
+          className="flex items-center justify-between border-b border-slate-100 p-4 bg-slate-50/80 cursor-grab active:cursor-grabbing select-none"
         >
           <div className="flex items-center gap-2">
-            <span className="p-1 px-2.5 bg-yellow-500/10 text-yellow-600 font-black text-[9px] rounded-full uppercase tracking-wider font-mono">
+            <span className="p-1 px-2.5 bg-amber-500/10 text-amber-600 font-medium text-[10px] rounded-full tracking-wider font-mono">
               Блокнот
             </span>
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">
+            <h3 className="text-sm font-semibold text-slate-800 tracking-tight">
               Блокнот по авто
             </h3>
           </div>
@@ -1443,13 +670,13 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
           {/* Switcher selector */}
           {permittedToSwitch ? (
             <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-black uppercase text-slate-400 font-mono tracking-widest">
+              <label className="text-[10px] font-semibold text-slate-400 tracking-wider uppercase font-sans">
                 Выбор Блокнота
               </label>
               <select
                 value={selectedNotebookUser}
                 onChange={(e) => setSelectedNotebookUser(e.target.value)}
-                className="p-2 bg-slate-50 text-xs font-bold text-slate-800 rounded-xl border border-slate-200 focus:outline-none"
+                className="p-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-xl text-xs font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
               >
                 {notebookUsersList.map((u) => (
                   <option key={u} value={u}>
@@ -1460,11 +687,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             </div>
           ) : (
             <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-black uppercase text-slate-400 font-mono tracking-widest">
+              <label className="text-[10px] font-semibold text-slate-400 tracking-wider uppercase font-sans">
                 Ваш Блокнот
               </label>
-              <div className="p-2 bg-slate-50 text-xs font-black text-slate-800 rounded-xl border border-slate-200 uppercase font-mono tracking-wider font-bold">
-                📝{" "}
+              <div className="p-2 bg-slate-50 text-xs font-semibold text-slate-800 rounded-xl border border-slate-200 tracking-wide font-sans">
+                📋{" "}
                 {selectedNotebookUser === user.name
                   ? `Личный блокнот`
                   : `Блокнот: ${selectedNotebookUser}`}
@@ -1473,7 +700,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 <button
                   type="button"
                   onClick={() => setSelectedNotebookUser(user.name)}
-                  className={`py-1 px-2 rounded-lg text-[9px] font-black uppercase tracking-wider transition ${selectedNotebookUser === user.name ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}
+                  className="py-1 px-2 rounded-lg text-[10px] font-semibold tracking-wider transition bg-slate-900 text-white shadow-sm cursor-pointer"
                 >
                   Мой
                 </button>
@@ -1481,36 +708,78 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             </div>
           )}
 
-          <div className="text-[9px] font-bold text-slate-500 text-center bg-blue-500/5 py-1 px-2 rounded-xl border border-blue-500/10">
+          <div className="text-[10px] font-medium text-slate-500 text-center bg-blue-500/5 py-1.5 px-2.5 rounded-xl border border-blue-500/10">
             {selectedNotebookUser === user.name
               ? "Редактируется ваш личный блокнот"
               : `Просмотр блокнота: ${selectedNotebookUser}`}
           </div>
 
-          {/* Counters Banner */}
-          <div className="grid grid-cols-3 gap-1.5 p-2 bg-slate-50 rounded-2xl border border-slate-200/40">
-            <div className="flex flex-col items-center justify-center p-1.5 bg-white rounded-xl border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-              <span className="text-[8px] font-black uppercase text-slate-400 font-mono tracking-widest leading-none mb-1">Машин</span>
-              <span className="text-xs font-black text-slate-800 leading-none">{totalCarsCount}</span>
+          {/* Status counters */}
+          <div className="grid grid-cols-3 gap-1.5 bg-slate-50 p-2 rounded-xl border border-slate-100 select-none">
+            <div className="text-center">
+              <div className="text-[10px] text-slate-400 font-semibold tracking-tight">На базе</div>
+              <div className="text-sm font-bold text-emerald-600 font-sans">{countBaza}</div>
             </div>
-            <div className="flex flex-col items-center justify-center p-1.5 bg-white rounded-xl border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-              <span className="text-[8px] font-black uppercase text-emerald-500 font-mono tracking-widest leading-none mb-1">На базе</span>
-              <span className="text-xs font-black text-emerald-600 leading-none">{baseCount}</span>
+            <div className="text-center border-x border-slate-200/60">
+              <div className="text-[10px] text-slate-400 font-semibold tracking-tight">В рейсе</div>
+              <div className="text-sm font-bold text-sky-600 font-sans">{countReis}</div>
             </div>
-            <div className="flex flex-col items-center justify-center p-1.5 bg-white rounded-xl border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-              <span className="text-[8px] font-black uppercase text-blue-500 font-mono tracking-widest leading-none mb-1">В рейсе</span>
-              <span className="text-xs font-black text-blue-600 leading-none">{tripCount}</span>
+            <div className="text-center">
+              <div className="text-[10px] text-slate-400/80 font-semibold tracking-tight">Без ст.</div>
+              <div className="text-sm font-bold text-slate-500 font-sans">{countNone}</div>
             </div>
           </div>
 
-          <div className="flex gap-1.5 border-t border-slate-100 pt-2.5">
+          <div className="flex gap-1.5 border-t border-slate-100 pt-2">
             <button
               type="button"
               onClick={handleAddMyCarsToNotebook}
-              className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-[10px] font-black uppercase tracking-wider transition cursor-pointer text-center"
+              className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200/85 text-slate-800 rounded-xl text-[11px] font-semibold tracking-wide transition cursor-pointer text-center"
             >
               Внести свои авто
             </button>
+          </div>
+
+          {/* Status selector for adding */}
+          <div className="flex flex-col gap-1 border-t border-slate-100 pt-2">
+            <span className="text-[9px] font-bold text-slate-400/90 tracking-wider uppercase font-sans">
+              Статус для добавления авто
+            </span>
+            <div className="flex bg-slate-100 p-0.5 rounded-lg text-[10px] font-semibold w-full">
+              <button
+                type="button"
+                onClick={() => setAddCarStatus("baza")}
+                className={`flex-1 py-1 text-center rounded-md transition cursor-pointer text-[9px] ${
+                  addCarStatus === "baza"
+                    ? "bg-emerald-500 text-white shadow-sm font-bold"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                На базе
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddCarStatus("reis")}
+                className={`flex-1 py-1 text-center rounded-md transition cursor-pointer text-[9px] ${
+                  addCarStatus === "reis"
+                    ? "bg-sky-500 text-white shadow-sm font-bold"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                В рейсе
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddCarStatus("none")}
+                className={`flex-1 py-1 text-center rounded-md transition cursor-pointer text-[9px] ${
+                  addCarStatus === "none"
+                    ? "bg-white text-slate-800 shadow-sm font-semibold"
+                    : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Без статуса
+              </button>
+            </div>
           </div>
 
           {/* Input adding direct car */}
@@ -1524,30 +793,27 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleAddCarToNotebook();
               }}
-              className="flex-1 p-2 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none placeholder:text-[10px] uppercase font-bold text-slate-800"
+              className="flex-1 p-2 bg-white border border-slate-200 text-slate-800 rounded-xl text-xs font-medium outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all placeholder:text-slate-400 uppercase"
             />
             <datalist id="notebook-vehicles-list">
-              {myMappedCars.map((car) => (
+              {savedCars.map((car) => (
                 <option key={car} value={car} />
               ))}
             </datalist>
             <button
               type="button"
               onClick={handleAddCarToNotebook}
-              className="w-8 h-8 bg-slate-950 hover:bg-slate-800 text-white font-black flex items-center justify-center rounded-xl transition cursor-pointer text-base leading-none"
+              className="w-8 h-8 bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium flex items-center justify-center rounded-xl transition cursor-pointer text-base leading-none"
             >
               +
             </button>
           </div>
 
           {/* Cars list */}
-          <div className="space-y-2.5 overflow-y-auto pr-1 custom-scrollbar max-h-[calc(100%-180px)]">
+          <div className="space-y-2.5 overflow-y-auto pr-1 custom-scrollbar max-h-[calc(100%-250px)] flex-1">
             {cars.map((car) => {
-              const valText = notebookNotes[car] !== undefined && notebookNotes[car] !== null
-                ? notebookNotes[car]
-                : (Object.entries(notebookNotes).find(([k]) => k.trim().toUpperCase() === car)?.[1] || "");
+              const valText = notebookNotes[car] || "";
               const isHighlighted = highlightedCar === car;
-              const carStatus = notebookStatuses[car] || Object.entries(notebookStatuses).find(([k]) => k.trim().toUpperCase() === car)?.[1];
 
               return (
                 <div
@@ -1558,7 +824,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                   }}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => handleNotebookCarDrop(e, car)}
-                  className={`bg-slate-50/50 hover:bg-slate-50 border rounded-2xl p-2.5 flex flex-col space-y-1.5 transition group relative cursor-move ${isHighlighted ? "border-blue-500 ring-2 ring-blue-500/20 shadow-md" : "border-slate-200/40 hover:border-slate-300"}`}
+                  className={`bg-white border rounded-xl p-2.5 flex flex-col space-y-1.5 transition group relative cursor-move ${isHighlighted ? "border-blue-300 ring-2 ring-blue-500/10 shadow-sm" : "border-slate-200/60 hover:border-slate-300"}`}
                 >
                   <div className="flex items-center justify-between">
                     <button
@@ -1567,7 +833,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         setHighlightedCar(car === highlightedCar ? null : car);
                         setTimeout(() => {
                           const items = Array.from(
-                            document.querySelectorAll(".car-strip-item"),
+                             document.querySelectorAll(".car-strip-item"),
                           );
                           const matchingItem = items.find((el) =>
                             el.textContent?.includes(car),
@@ -1580,69 +846,58 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                           }
                         }, 100);
                       }}
-                      className="flex-shrink-0 transition transform hover:scale-102 focus:outline-none focus:ring-0 active:scale-98 cursor-pointer text-left"
+                      className="flex-shrink-0 transition transform hover:scale-[1.01] active:scale-98 cursor-pointer text-left"
                       title="Нажмите, чтобы подсветить рейс"
                     >
-                      <div className="flex items-stretch bg-white border border-slate-300 rounded overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.1)] h-6 text-xs font-black select-none">
-                        <div className="bg-blue-600 text-white w-3.5 flex flex-col items-center justify-center text-[4px] leading-[5px] font-sans px-0.5">
-                          <span className="text-yellow-400 font-extrabold -mb-[1px]">
-                            ★
-                          </span>
-                          <span className="text-yellow-400 font-extrabold -mt-[1px]">
-                            ★
-                          </span>
-                          <span className="font-extrabold text-[5px] tracking-tighter mt-0.5">
-                            BY
-                          </span>
-                        </div>
-                        <div className="px-2 flex items-center justify-center text-slate-900 uppercase tracking-tight font-sans text-[10px] font-black leading-none">
-                          {car}
-                        </div>
+                      <div className="px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 tracking-tight select-none">
+                        {car}
                       </div>
                     </button>
-
-                    {car !== "ПЛАН" && (
-                      <div className="flex items-center gap-1 mx-2 flex-1 justify-end">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const current = notebookStatuses[car] || Object.entries(notebookStatuses).find(([k]) => k.trim().toUpperCase() === car)?.[1];
-                            const nextStatus = current === "base" ? null : "base";
-                            pdService.saveNotebookStatus(selectedNotebookUser, car, nextStatus);
-                          }}
-                          className={`px-2 py-1 text-[8px] font-black uppercase tracking-wider rounded-lg border transition duration-150 cursor-pointer ${
-                            carStatus === "base"
-                              ? "bg-emerald-500 border-emerald-600 text-white shadow-sm font-extrabold"
-                              : "bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50"
-                          }`}
-                        >
-                          на базе
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const current = notebookStatuses[car] || Object.entries(notebookStatuses).find(([k]) => k.trim().toUpperCase() === car)?.[1];
-                            const nextStatus = current === "trip" ? null : "trip";
-                            pdService.saveNotebookStatus(selectedNotebookUser, car, nextStatus);
-                          }}
-                          className={`px-2 py-1 text-[8px] font-black uppercase tracking-wider rounded-lg border transition duration-150 cursor-pointer ${
-                            carStatus === "trip"
-                              ? "bg-blue-500 border-blue-600 text-white shadow-sm font-extrabold"
-                              : "bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-50"
-                          }`}
-                        >
-                          в рейсе
-                        </button>
-                      </div>
-                    )}
 
                     <button
                       type="button"
                       onClick={() => handleRemoveCarFromNotebook(car)}
-                      className="text-slate-400 hover:text-rose-500 transition p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+                      className="text-slate-400 hover:text-slate-600 transition p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
                       title="Удалить машину"
                     >
                       <X size={12} />
+                    </button>
+                  </div>
+
+                  {/* Status Selection Pill Group */}
+                  <div className="flex bg-slate-50 border border-slate-200/50 p-0.5 rounded-lg text-[9px] font-semibold w-full select-none">
+                    <button
+                      type="button"
+                      onClick={() => pdService.saveNotebookStatus(selectedNotebookUser, car, "baza")}
+                      className={`flex-1 py-0.5 text-center rounded-md transition cursor-pointer text-[9px] ${
+                        notebookStatuses[car] === "baza"
+                          ? "bg-emerald-500 text-white shadow-sm font-bold"
+                          : "text-slate-400 hover:text-slate-600"
+                      }`}
+                    >
+                      На базе
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => pdService.saveNotebookStatus(selectedNotebookUser, car, "reis")}
+                      className={`flex-1 py-0.5 text-center rounded-md transition cursor-pointer text-[9px] ${
+                        notebookStatuses[car] === "reis"
+                          ? "bg-sky-500 text-white shadow-sm font-bold"
+                          : "text-slate-400 hover:text-slate-600"
+                      }`}
+                    >
+                      В рейсе
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => pdService.saveNotebookStatus(selectedNotebookUser, car, "none")}
+                      className={`flex-1 py-0.5 text-center rounded-md transition cursor-pointer text-[9px] ${
+                        notebookStatuses[car] === "none" || !notebookStatuses[car]
+                          ? "bg-white text-slate-600 border border-slate-200/40 shadow-sm font-bold"
+                          : "text-slate-400 hover:text-slate-600"
+                      }`}
+                    >
+                      Без статуса
                     </button>
                   </div>
 
@@ -1664,14 +919,14 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         localStorage.getItem(`ratipa_nb_height_${user.name}`) ||
                         "auto",
                     }}
-                    className="w-full p-2 bg-white text-xs border border-slate-200/60 rounded-xl focus:outline-none placeholder:text-[10px] text-slate-800 font-bold leading-relaxed resize-y focus:border-slate-400 font-sans min-h-[48px]"
+                    className="w-full p-2 bg-white text-xs border border-slate-200 text-slate-800 rounded-xl focus:outline-none placeholder:text-[10px] font-medium leading-relaxed resize-y focus:border-slate-400 font-sans min-h-[48px] focus:ring-1 focus:ring-slate-400 transition-all"
                   />
                 </div>
               );
             })}
 
             {cars.length === 0 && (
-              <div className="text-center py-8 text-slate-400 text-[10px] font-mono font-black uppercase tracking-widest bg-slate-50 rounded-2xl border border-slate-200/30">
+              <div className="text-center py-8 text-slate-400 text-xs font-mono font-medium tracking-wide bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
                 Блокнот пуст. Внесите номера авто выше.
               </div>
             )}
@@ -1759,7 +1014,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [dateEnd, setDateEnd] = useState("");
   const [extraExpense, setExtraExpense] = useState<number>(0);
   const [extraExpenseNote, setExtraExpenseNote] = useState("");
-
+  
   const [ferryCost, setFerryCost] = useState(0);
   const [referenceRate, setReferenceRate] = useState<number | undefined>(
     undefined,
@@ -1797,58 +1052,23 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [mapKmResult, setMapKmResult] = useState<number>(0);
   const [mapIsCheckingPl, setMapIsCheckingPl] = useState(false);
   const [saveToDirectoryChecked, setSaveToDirectoryChecked] = useState(false);
-  const [mapAvoidTolls, setMapAvoidTolls] = useState(false);
-  const [mapAvoidHighways, setMapAvoidHighways] = useState(false);
-  const [mapAvoidFerries, setMapAvoidFerries] = useState(false);
-  const [mapVehicleType, setMapVehicleType] = useState("TRUCK");
-  const [mapAvoidKeywords, setMapAvoidKeywords] = useState(
-    () => localStorage.getItem("ratipa_map_avoid_keywords") || "",
-  );
   const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
-  const [mapAvoidedStatus, setMapAvoidedStatus] = useState<{
-    matches: string[];
-    isAlternative: boolean;
-    avoidedSuccessfully: boolean;
-    attempted: boolean;
-  }>({
-    matches: [],
-    isAlternative: false,
-    avoidedSuccessfully: false,
-    attempted: false,
-  });
+  const [currentProvider, setCurrentProvider] = useState<"google" | "yandex">("google");
 
-  useEffect(() => {
-    localStorage.setItem("ratipa_map_avoid_keywords", mapAvoidKeywords);
-  }, [mapAvoidKeywords]);
-
-  // Sync coefficient if directions change
-  useEffect(() => {
-    const c = directions[direction];
-    if (c !== undefined) {
-      setLegs((prev) => {
-        let changed = false;
-        const newLegs = prev.map((l) => {
-          if (l.coeff !== c) {
-             changed = true;
-             return { ...l, coeff: c };
-          }
-          return l;
-        });
-        return changed ? newLegs : prev;
-      });
-      setPlLegs((prev) => {
-        let changed = false;
-        const newLegs = prev.map((l) => {
-          if (l.coeff !== c) {
-             changed = true;
-             return { ...l, coeff: c };
-          }
-          return l;
-        });
-        return changed ? newLegs : prev;
-      });
-    }
-  }, [directions, direction]);
+  const mapLeg = useMemo(() => {
+    if (mapLegIndex === null) return null;
+    return {
+      from: mapOrigin,
+      origin: mapOrigin,
+      to: mapDestination,
+      destination: mapDestination,
+      waypoints: mapWaypoints,
+      mapProvider: currentProvider,
+      totalDistanceKm: mapKmResult,
+      dist: mapKmResult,
+      distance: mapKmResult,
+    };
+  }, [mapLegIndex, mapOrigin, mapDestination, mapWaypoints, currentProvider, mapKmResult]);
 
   // Potential Load Form States
   const [plEditingId, setPlEditingId] = useState<string | null>(null);
@@ -1891,7 +1111,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     if (activeDispatcherTab !== d)
       return "bg-slate-50 text-slate-500 hover:bg-slate-100";
     if (d === "All" || d === "Все диспетчеры")
-      return "bg-slate-900 text-[#70FC8E] shadow-sm border border-slate-900";
+      return "bg-slate-900 text-white shadow-xs border-slate-900 font-semibold";
 
     const colorKey = dispatchersColors[d];
     const preset = DISPATCHER_COLORS_PRESETS.find((p) => p.key === colorKey);
@@ -1919,11 +1139,6 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       orange: "bg-orange-500/10",
       slate: "bg-slate-500/10",
       yellow: "bg-yellow-500/10",
-      cyan: "bg-cyan-500/10",
-      lime: "bg-lime-500/10",
-      fuchsia: "bg-fuchsia-500/10",
-      pink: "bg-pink-500/10",
-      red: "bg-red-500/10",
     };
     return highlightBgs[colorKey] || "bg-blue-500/10";
   };
@@ -1934,87 +1149,19 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setLegs(legs.map((l) => ({ ...l, coeff: c })));
   };
 
-
-  const checkManualDistanceUpdate = (from: string, to: string, newDist: number) => {
-    if (!from || !to || newDist <= 0) return;
-    const matched = distances.find((d) => {
-      const a = (d.from || "").trim().toLowerCase();
-      const b = (d.to || "").trim().toLowerCase();
-      return (
-        (a === from.trim().toLowerCase() && b === to.trim().toLowerCase()) ||
-        (a === to.trim().toLowerCase() && b === from.trim().toLowerCase())
-      );
-    });
-
-    if (!matched || matched.distance !== newDist) {
-      const q = matched
-        ? `Изменить расстояние ${from} - ${to} в базе шаблонов с ${matched.distance} км на ${newDist} км?`
-        : `Сохранить новое плечо ${from} - ${to} (${newDist} км) в общую базу шаблонов расстояний?`;
-
-      setTimeout(async () => {
-        if (await showConfirm(q)) {
-          if (matched) {
-            dbService.saveDistance(
-              { ...matched, distance: newDist },
-              user.name,
-              user.role,
-            );
-          } else {
-            dbService.saveDistance(
-              { id: "dist_" + Date.now(), from, to, distance: newDist },
-              user.name,
-              user.role,
-            );
-          }
-        }
-      }, 500);
-    }
-  };
-
   const checkLegDistance = (idx: number, isPotentialList: boolean = false) => {
     const list = isPotentialList ? plLegs : legs;
     const leg = list[idx];
-    
-    let newKm = leg.km;
-    let newEmptyRun = leg.emptyRunKm;
-    
-    if (settings.useDistanceLookup) {
-      if (leg.from && leg.to && leg.km === 0) {
+    if (leg.from && leg.to) {
+      if (settings.useDistanceLookup) {
         const d = findDistance(leg.from, leg.to);
-        if (d !== null) newKm = d;
-      }
-      
-      if (leg.from && (!leg.emptyRunKm || leg.emptyRunKm === 0)) {
-        const prevTo = idx === 0 ? "Минск" : list[idx - 1]?.to;
-        if (prevTo) {
-          const emptyRunD = findDistance(prevTo, leg.from);
-          if (emptyRunD !== null) {
-            newEmptyRun = emptyRunD;
-          }
-        }
-      }
-      
-      if (newKm !== leg.km || newEmptyRun !== leg.emptyRunKm) {
-        if (isPotentialList) {
-          const nl = [...plLegs];
-          if (newKm !== leg.km) nl[idx].km = newKm;
-          if (newEmptyRun !== leg.emptyRunKm) nl[idx].emptyRunKm = newEmptyRun;
-          setPlLegs(nl);
-        } else {
-          updateLeg(idx, { 
-            ...(newKm !== leg.km ? { km: newKm } : {}), 
-            ...(newEmptyRun !== leg.emptyRunKm ? { emptyRunKm: newEmptyRun } : {})
-          });
-        }
-      } else {
-        // If they didn't change (meaning they were manually typed), prompt to save if they don't match db
-        if (leg.km > 0 && leg.from && leg.to) {
-          checkManualDistanceUpdate(leg.from, leg.to, leg.km);
-        }
-        if (leg.emptyRunKm > 0 && leg.from) {
-          const prevTo = idx === 0 ? "Минск" : list[idx - 1]?.to;
-          if (prevTo) {
-            checkManualDistanceUpdate(prevTo, leg.from, leg.emptyRunKm);
+        if (d !== null && leg.km === 0) {
+          if (isPotentialList) {
+            const nl = [...plLegs];
+            nl[idx].km = d;
+            setPlLegs(nl);
+          } else {
+            updateLeg(idx, { km: d });
           }
         }
       }
@@ -2027,30 +1174,40 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     destination: string,
     isPl: boolean,
   ) => {
+    const sourceLegs = isPl ? plLegs : legs;
+    const leg = sourceLegs[idx];
+
     setMapLegIndex(idx);
-    setMapOrigin(origin);
-    setMapDestination(destination);
-    setMapKmResult(0);
-    setMapWaypoints([]);
+    setMapOrigin(origin || "");
+    setMapDestination(destination || "");
+    setMapKmResult(leg?.km || 0);
+    setMapWaypoints(leg?.waypoints || []);
+    setCurrentProvider(leg?.mapProvider || "google");
     setMapIsCheckingPl(isPl);
     setMapModalOpen(true);
   };
 
-  const applyMapRoute = () => {
+  const applyMapRoute = useCallback(() => {
     if (mapLegIndex !== null) {
       const cleanOrigin = mapOrigin.trim();
       const cleanDestination = mapDestination.trim();
+      const cleanWaypoints = mapWaypoints.map(wp => wp.trim()).filter(wp => wp !== "");
+
       if (mapIsCheckingPl) {
         const nl = [...plLegs];
         nl[mapLegIndex].km = mapKmResult;
         nl[mapLegIndex].from = cleanOrigin;
         nl[mapLegIndex].to = cleanDestination;
+        nl[mapLegIndex].waypoints = cleanWaypoints;
+        nl[mapLegIndex].mapProvider = currentProvider;
         setPlLegs(nl);
       } else {
         updateLeg(mapLegIndex, {
           km: mapKmResult,
           from: cleanOrigin,
           to: cleanDestination,
+          waypoints: cleanWaypoints,
+          mapProvider: currentProvider,
         });
       }
 
@@ -2069,7 +1226,19 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     }
     setMapModalOpen(false);
     setSaveToDirectoryChecked(false);
-  };
+  }, [mapLegIndex, mapOrigin, mapDestination, mapWaypoints, mapIsCheckingPl, plLegs, mapKmResult, currentProvider, saveToDirectoryChecked, user.name, user.role, updateLeg]);
+
+  const handleUpdateLegRoute = useCallback((idx: number, updatedFields: any) => {
+    if (updatedFields.from !== undefined) setMapOrigin(updatedFields.from);
+    if (updatedFields.to !== undefined) setMapDestination(updatedFields.to);
+    if (updatedFields.waypoints !== undefined) setMapWaypoints(updatedFields.waypoints);
+    if (updatedFields.mapProvider !== undefined) setCurrentProvider(updatedFields.mapProvider);
+    if (updatedFields.totalDistanceKm !== undefined) setMapKmResult(updatedFields.totalDistanceKm);
+  }, []);
+
+  const handleCloseMapModal = useCallback(() => setMapModalOpen(false), []);
+  const handleApplyMapRoute = useCallback(() => applyMapRoute(), [applyMapRoute]);
+
   const addLeg = (idx: number) => {
     const newLegs = [...legs];
     newLegs.splice(idx + 1, 0, {
@@ -2090,35 +1259,22 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     if (activeLegIndex === idx) setActiveLegIndex(undefined);
   };
 
-  const updateLeg = (index: number, updatedFields: Partial<LegPlan>) => {
-    setLegs(
-      legs.map((l, i) => {
+  function updateLeg(index: number, updatedFields: Partial<LegPlan>) {
+    setLegs(prevLegs => 
+      prevLegs.map((l, i) => {
         if (i === index) {
           const merged = { ...l, ...updatedFields };
           if (
             settings.useDistanceLookup &&
             (updatedFields.from !== undefined || updatedFields.to !== undefined)
           ) {
-            const matchedDist = findDistance(merged.from, merged.to);
+            const matchedDist = findDistance(merged.from || "", merged.to || "");
             if (
               matchedDist !== null &&
               matchedDist > 0 &&
               typeof updatedFields.km === "undefined"
             ) {
               merged.km = matchedDist;
-            }
-            
-            // Auto populate emptyRunKm (доезд)
-            const prevTo = i === 0 ? "Минск" : legs[i - 1]?.to;
-            if (prevTo && merged.from) {
-              const emptyRunDist = findDistance(prevTo, merged.from);
-              if (
-                emptyRunDist !== null &&
-                emptyRunDist > 0 &&
-                typeof updatedFields.emptyRunKm === "undefined"
-              ) {
-                merged.emptyRunKm = emptyRunDist;
-              }
             }
           }
 
@@ -2140,11 +1296,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
           return merged;
         }
         return l;
-      }),
+      })
     );
-  };
+  }
 
-  const findDistance = (c1: string, c2: string) => {
+  function findDistance(c1: string, c2: string) {
     if (!c1 || !c2) return null;
     const from = c1.trim().toLowerCase();
     const to = c2.trim().toLowerCase();
@@ -2154,7 +1310,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       return (a === from && b === to) || (a === to && b === from);
     });
     return found ? found.distance : null;
-  };
+  }
 
   const getTripDays = () => {
     if (!dateStart || !dateEnd) return 1;
@@ -2167,37 +1323,20 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   };
 
   const calculateTotals = () => {
-    const days = getTripDays();
-    const totalKm = legs.reduce(
-      (acc, l) => acc + Number(l.km || 0) + Number(l.emptyRunKm || 0),
-      0,
-    );
-    const totalFreight = legs.reduce((acc, l) => acc + Number(l.rate || 0), 0);
-
-    let baseExpenses = legs.reduce(
-      (acc, l) =>
-        acc +
-        (Number(l.km || 0) * Number(l.coeff || 0) +
-          Number(l.emptyRunKm || 0) * Number(l.coeff || 0) +
-          Number(l.ferry || 0)),
-      0,
-    );
-    const totalExpensesPlan =
-      baseExpenses + Number(extraExpense || 0) + Number(ferryCost || 0);
-    const profit = totalFreight - totalExpensesPlan;
-
-    let totalExpenses = totalExpensesPlan;
-    let profitFact = profit;
-
-    const fKm = Number(factKm || 0);
-    if (fKm > 0 && totalKm > 0) {
-      const expensePerKm = totalExpensesPlan / totalKm;
-      const factExpenses = expensePerKm * fKm;
-      totalExpenses = factExpenses;
-      profitFact = totalFreight - factExpenses;
-    }
-
-    return { days, totalKm, totalFreight, totalExpenses, profit, profitFact };
+    const fin = calculateTripFinances(legs, dateStart, dateEnd, Number(extraExpense), Number(ferryCost), Number(factKm));
+    return {
+      days: fin.days,
+      daysPlan: fin.daysPlan,
+      daysFact: fin.daysFact,
+      totalKm: fin.totalKm,
+      totalFreight: fin.totalFreight,
+      totalExpensesPlan: fin.totalExpensesPlan,
+      totalExpenses: fin.totalExpensesFact,
+      profit: fin.profitPlan,
+      profitFact: fin.profitFact,
+      profitPerDay: fin.profitPerDay,
+      profitPerDayPlan: fin.planProfitPerDay
+    };
   };
 
   const resetForm = () => {
@@ -2209,7 +1348,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setDateEnd("");
     setExtraExpense(0);
     setExtraExpenseNote("");
-
+    
     setFerryCost(0);
     setReferenceRate(undefined);
     setReferenceCurrency("EUR");
@@ -2242,72 +1381,108 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
   const [aiRouteInput, setAiRouteInput] = useState<string>("");
   const [aiRouteFeedback, setAiRouteFeedback] = useState<string>("");
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
 
   const parseSmartNumber = (val: string | undefined): number => {
     if (!val) return 0;
     return parseFloat(val.replace(/\s/g, "").replace(",", ".")) || 0;
   };
 
-  const processAiRoute = async () => {
+  const processAiRoute = () => {
+    setIsAiProcessing(true);
     const raw = aiRouteInput.trim();
     if (!raw) {
       setAiRouteFeedback("Вставьте текст маршрута...");
+      setIsAiProcessing(false);
       return;
     }
 
-    try {
-      const res = await fetch("/api/parse-plandohod-text", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: raw }),
-      });
-      if (!res.ok) {
-        let serverError = "Ошибка распознавания ИИ";
-        try {
-          const errData = await res.json();
-          if (errData && errData.error) {
-            serverError = errData.error;
+    const chunks = raw
+      .split(/\n|;/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const parsedRows = chunks
+      .map((line) => {
+        let from = "";
+        let to = "";
+        const routePatterns = [
+          /(?:из|от)\s+([а-яёa-z\s.-]+?)\s+(?:в|на|до|—|->|→|-)\s+([а-яёa-z\s.-]+)/i,
+          /^([а-яёa-z\s.-]+?)\s*(?:—|->|→|-)\s*([а-яёa-z\s.-]+)/i,
+          /^([а-яёa-z\s.-]+?)\s+(?:в|на|до)\s+([а-яёa-z\s.-]+)/i,
+        ];
+        for (const pattern of routePatterns) {
+          const match = line.match(pattern);
+          if (match) {
+            from = match[1]
+              .replace(
+                /\b(ставка|фрахт|цена|паром|переправа|коэф|коэффициент|км|евро|eur|usd|долл|руб).*/i,
+                "",
+              )
+              .replace(/[,:;]+$/g, "")
+              .trim()
+              .replace(/\s+/g, " ")
+              .replace(/^./, (ch) => ch.toUpperCase());
+            to = match[2]
+              .replace(
+                /\b(ставка|фрахт|цена|паром|переправа|коэф|коэффициент|км|евро|eur|usd|долл|руб).*/i,
+                "",
+              )
+              .replace(/[,:;]+$/g, "")
+              .trim()
+              .replace(/\s+/g, " ")
+              .replace(/^./, (ch) => ch.toUpperCase());
+            break;
           }
-        } catch (_) {}
-        throw new Error(serverError);
-      }
-      const data = await res.json();
-
-      const parsedRows = data.legs || [];
-      if (parsedRows.length === 0) {
-        setAiRouteFeedback(
-          "Не удалось распознать маршрут. Попробуйте формат: Минск — Стамбул, ставка 4300 евро, 2450 км.",
-        );
-        return;
-      }
-
-      // Apply fallback coefficients if 0
-      parsedRows.forEach((r: any) => {
-        if (!r.coeff) r.coeff = directions[direction] || 0;
-        if (!r.referenceRate) r.referenceRate = "";
-      });
-
-      setLegs((prev) => {
-        if (
-          prev.length === 1 &&
-          !prev[0].from &&
-          !prev[0].to &&
-          !prev[0].rate &&
-          !prev[0].km
-        ) {
-          return parsedRows;
         }
-        return [...prev, ...parsedRows];
-      });
-      setAiRouteInput("");
-      setAiRouteFeedback(`Добавлено плеч: ${parsedRows.length}`);
-      setTimeout(() => setAiRouteFeedback(""), 5000);
-    } catch (e: any) {
-      setAiRouteFeedback(e?.message || "Ошибка распознавания ИИ");
+        const rateMatch = line.match(
+          /(?:ставка|фрахт|цена)?\D*?(\d[\d\s.,]*)\s*(?:€|евро|eur)\b/i,
+        );
+        const kmMatch = line.match(/(\d[\d\s.,]*)\s*(?:км|km)\b/i);
+        const ferryMatch = line.match(/(?:паром|переправа)\D*?(\d[\d\s.,]*)/i);
+        const coeffMatch = line.match(
+          /(?:коэф|коэффициент)\D*?(\d+(?:[.,]\d+)?)/i,
+        );
+
+        return {
+          from,
+          to,
+          km: kmMatch ? parseSmartNumber(kmMatch[1]) : 0,
+          rate: rateMatch ? parseSmartNumber(rateMatch[1]) : 0,
+          ferry: ferryMatch ? parseSmartNumber(ferryMatch[1]) : 0,
+          coeff: coeffMatch
+            ? parseSmartNumber(coeffMatch[1])
+            : directions[direction] || 0,
+          referenceRate: "",
+        };
+      })
+      .filter((r) => r.from !== "" || r.to !== "" || r.km > 0 || r.rate > 0);
+
+    if (parsedRows.length === 0) {
+      setAiRouteFeedback(
+        "Не удалось распознать маршрут. Попробуйте формат: Минск — Стамбул, ставка 4300 евро, 2450 км.",
+      );
+      return;
     }
+
+    setLegs((prev) => {
+      // If only one blank leg exists, replace it
+      if (
+        prev.length === 1 &&
+        !prev[0].from &&
+        !prev[0].to &&
+        !prev[0].rate &&
+        !prev[0].km
+      ) {
+        return parsedRows;
+      }
+      return [...prev, ...parsedRows];
+    });
+    setAiRouteInput("");
+    setAiRouteFeedback(`Добавлено плеч: ${parsedRows.length}`);
+    setTimeout(() => setAiRouteFeedback(""), 5000);
   };
 
-  const loadTripToForm = (trip: TripPlan) => {
+  const loadTripToForm = useCallback((trip: TripPlan) => {
     setEditingTripId(trip.id);
     setCarNumber(trip.carNumber || "");
     setDirection(trip.direction || "");
@@ -2315,7 +1490,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setDateEnd(trip.dateEnd || "");
     setExtraExpense(trip.extraExpense || 0);
     setExtraExpenseNote(trip.extraExpenseNote || "");
-
+    
     setFerryCost(trip.ferryCost || 0);
     setReferenceRate(trip.referenceRate);
     setReferenceCurrency(trip.referenceCurrency || "EUR");
@@ -2349,75 +1524,100 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setPlEditingId(null);
     setPlName("");
     setIsModalOpen(true);
+  }, [directions]);
+
+  const parseAiRouteClient = (
+    raw: string,
+    defaultDir: string,
+    directionsMap: Record<string, number>,
+  ): LegPlan[] => {
+    const chunks = raw
+      .split(/\n|;/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const parsedRows = chunks
+      .map((line) => {
+        let from = "";
+        let to = "";
+        const routePatterns = [
+          /(?:из|от)\s+([а-яёa-z\s.-]+?)\s+(?:в|на|до|—|->|→|-)\s+([а-яёa-z\s.-]+)/i,
+          /^([а-яёa-z\s.-]+?)\s*(?:—|->|→|-)\s*([а-яёa-z\s.-]+)/i,
+          /^([а-яёa-z\s.-]+?)\s+(?:в|на|до)\s+([а-яёa-z\s.-]+)/i,
+        ];
+        for (const pattern of routePatterns) {
+          const match = line.match(pattern);
+          if (match) {
+            from = match[1]
+              .replace(
+                /\b(ставка|фрахт|цена|паром|переправа|коэф|коэффициент|км|евро|eur|usd|долл|руб).*/i,
+                "",
+              )
+              .replace(/[,:;]+$/g, "")
+              .trim()
+              .replace(/\s+/g, " ")
+              .replace(/^./, (ch) => ch.toUpperCase());
+            to = match[2]
+              .replace(
+                /\b(ставка|фрахт|цена|паром|переправа|коэф|коэффициент|км|евро|eur|usd|долл|руб).*/i,
+                "",
+              )
+              .replace(/[,:;]+$/g, "")
+              .trim()
+              .replace(/\s+/g, " ")
+              .replace(/^./, (ch) => ch.toUpperCase());
+            break;
+          }
+        }
+        const rateMatch = line.match(
+          /(?:ставка|фрахт|цена)?\D*?(\d[\d\s.,]*)\s*(?:€|евро|eur)\b/i,
+        );
+        const kmMatch = line.match(/(\d[\d\s.,]*)\s*(?:км|km)\b/i);
+        const ferryMatch = line.match(/(?:паром|переправа)\D*?(\d[\d\s.,]*)/i);
+        const coeffMatch = line.match(
+          /(?:коэф|коэффициент)\D*?(\d+(?:[.,]\d+)?)/i,
+        );
+
+        return {
+          from,
+          to,
+          km: kmMatch ? parseSmartNumber(kmMatch[1]) : 0,
+          rate: rateMatch ? parseSmartNumber(rateMatch[1]) : 0,
+          ferry: ferryMatch ? parseSmartNumber(ferryMatch[1]) : 0,
+          coeff: coeffMatch
+            ? parseSmartNumber(coeffMatch[1])
+            : directionsMap[defaultDir] || 0,
+          referenceRate: "",
+        };
+      })
+      .filter((r) => r.from !== "" || r.to !== "" || r.km > 0 || r.rate > 0);
+    return parsedRows;
   };
 
   const processPlAiRoute = async () => {
     if (!plAiInput.trim()) return;
     setPlAiFeedback("");
     try {
-      const res = await fetch("/api/parse-plandohod-text", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: plAiInput.trim() }),
-      });
-      if (!res.ok) {
-        let serverError = "Ошибка распознавания";
-        try {
-          const errData = await res.json();
-          if (errData && errData.error) {
-            serverError = errData.error;
-          }
-        } catch (_) {}
-        throw new Error(serverError);
-      }
-      const data = await res.json();
-
-      const parsedRows = data.legs || [];
-
+      const parsedRows = parseAiRouteClient(
+        plAiInput,
+        Object.keys(directions)[0] || "",
+        directions,
+      );
       if (parsedRows.length === 0) {
         setPlAiFeedback("Не удалось распознать маршрут.");
         return;
       }
-
-      // Apply fallback coefficients if 0
-      parsedRows.forEach((r: any) => {
-        if (!r.coeff)
-          r.coeff =
-            Object.keys(directions).length > 0
-              ? directions[Object.keys(directions)[0]]
-              : 0;
-        if (!r.referenceRate) r.referenceRate = "";
-      });
-
       setPlLegs(parsedRows);
       setPlAiInput("");
       setPlAiFeedback(`Успешно распознано ${parsedRows.length} плечей`);
       setTimeout(() => setPlAiFeedback(""), 3000);
-    } catch (err: any) {
-      setPlAiFeedback(err?.message || "Ошибка распознавания");
+    } catch (err) {
+      setPlAiFeedback("Ошибка распознавания");
     }
   };
 
   const calculatePlTotals = () => {
-    const totalKm = plLegs.reduce(
-      (acc, l) => acc + Number(l.km || 0) + Number(l.emptyRunKm || 0),
-      0,
-    );
-    const totalFreight = plLegs.reduce(
-      (acc, l) => acc + Number(l.rate || 0),
-      0,
-    );
-    const baseExpenses = plLegs.reduce(
-      (acc, l) =>
-        acc +
-        Number(l.km || 0) * Number(l.coeff || 0) +
-        Number(l.emptyRunKm || 0) * Number(l.coeff || 0),
-      0,
-    );
-    const totalExpensesPlan =
-      baseExpenses + Number(plExtraExpense || 0) + Number(plFerryCost || 0);
-    const profit = totalFreight - totalExpensesPlan;
-    return { totalKm, totalFreight, totalExpenses: totalExpensesPlan, profit };
+    const fin = calculateTripFinances(plLegs, "", "", Number(plExtraExpense), Number(plFerryCost), 0);
+    return { totalKm: fin.totalKm, totalFreight: fin.totalFreight, totalExpenses: fin.totalExpensesPlan, profit: fin.profitPlan };
   };
 
   const savePotentialLoad = () => {
@@ -2477,8 +1677,8 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setPlReferenceCurrency(pl.referenceCurrency || "EUR");
   };
 
-  const deletePotentialLoad = async (id: string) => {
-    if (await showConfirm("Удалить просчет?")) {
+  const deletePotentialLoad = (id: string) => {
+    if (confirm("Удалить просчет?")) {
       setPotentialLoads(potentialLoads.filter((p) => p.id !== id));
       if (plEditingId === id) {
         // Stop editing if deleted
@@ -2499,9 +1699,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     }
   };
 
-  const applyPlToMain = async (pl: PotentialLoad) => {
+  const applyPlToMain = (pl: PotentialLoad) => {
     if (
-      await showConfirm(
+      confirm(
         "Осторожно: Это заменит текущие плечи в основной форме. Продолжить?",
       )
     ) {
@@ -2516,113 +1716,135 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     }
   };
 
-  const saveTrip = () => {
+  const saveTrip = async () => {
+    if (isSubmitting) return;
     const trimmedCar = carNumber.trim().toUpperCase();
     if (!trimmedCar) {
-      alert("Укажите номер автомобиля");
+      addToast("Укажите номер автомобиля", "error");
       return;
     }
+    
+    setIsSubmitting(true);
+    try {
+      if (!savedCars.includes(trimmedCar)) {
+        pdService.addCar([...savedCars, trimmedCar]);
+      }
 
-    if (!savedCars.includes(trimmedCar)) {
-      pdService.addCar([...savedCars, trimmedCar]);
-    }
-
-    const ObjectWithoutUndefinedInfo = (val: any) =>
-      val === undefined ? null : val;
-
-    const totals = calculateTotals();
-    const tripObj: TripPlan = {
-      id: editingTripId || "",
-      carNumber: trimmedCar,
-      logist: user.name,
-      direction,
-      dateStart,
-      dateEnd,
-      days: totals.days,
-      totalKm: totals.totalKm,
-      totalFreight: totals.totalFreight,
-      totalExpenses: totals.totalExpenses,
-      extraExpense: Number(extraExpense || 0),
-      extraExpenseNote,
-
-      ferryCost: Number(ferryCost || 0),
-      referenceRate,
-      referenceCurrency,
-      profit: totals.profit,
-      factKm: Number(factKm || 0),
-      profitFact: totals.profitFact,
-      tripNote,
-      stripColor: stripColor || "bg-blue-500",
-      legs,
-      potentialLoads,
-      activeLegIndex: activeLegIndex !== undefined ? activeLegIndex : -1,
-      dispatcher: dispatcher || user.name,
-      currentMonth,
-      isArchived: editingTripId
-        ? trips.find((t) => t.id === editingTripId)?.isArchived || false
-        : false,
-    };
-
-    if (editingTripId) {
-      pdService.updateTrip(editingTripId, tripObj, user.name, user.role);
-    } else {
-      pdService.createTrip(tripObj, user.name, user.role);
-    }
-
-    // Automatically bind the car Number to the dispatcher in Administration
-    const finalDispatcher = dispatcher || user.name;
-    if (
-      trimmedCar &&
-      finalDispatcher &&
-      finalDispatcher !== "Все диспетчеры" &&
-      finalDispatcher !== "Общая" &&
-      finalDispatcher !== "All" &&
-      finalDispatcher !== "Все"
-    ) {
-      const updatedMapping = {
-        ...carDispatcherMapping,
-        [trimmedCar]: finalDispatcher,
+      const totals = calculateTotals();
+      const tripObj: TripPlan = {
+        driverName: undefined,
+        id: editingTripId || "",
+        carNumber: trimmedCar,
+        logist: user.name,
+        direction,
+        dateStart,
+        dateEnd,
+        days: totals.days,
+        totalKm: totals.totalKm,
+        totalFreight: totals.totalFreight,
+        totalExpenses: totals.totalExpenses,
+        extraExpense: Number(extraExpense || 0),
+        extraExpenseNote,
+        ferryCost: Number(ferryCost || 0),
+        referenceRate,
+        referenceCurrency,
+        profit: totals.profit,
+        factKm: Number(factKm || 0),
+        profitFact: totals.profitFact,
+        tripNote,
+        stripColor: stripColor || "bg-blue-500",
+        legs,
+        potentialLoads,
+        activeLegIndex: activeLegIndex !== undefined ? activeLegIndex : -1,
+        dispatcher: dispatcher || carDispatcherMapping[trimmedCar] || user.name,
+        currentMonth,
+        isArchived: editingTripId
+          ? trips.find((t) => t.id === editingTripId)?.isArchived || false
+          : false,
       };
-      pdService.updateDispatchersCarMapping(updatedMapping);
-    }
 
-    resetForm();
-    setIsModalOpen(false);
+      if (editingTripId) {
+        await pdService.updateTrip(editingTripId, tripObj, user.name, user.role);
+        addToast("План рейса обновлен", "success");
+      } else {
+        await pdService.createTrip(tripObj, user.name, user.role);
+        addToast("План рейса создан", "success");
+      }
+
+      const finalDispatcher = dispatcher || user.name;
+      if (
+        trimmedCar &&
+        finalDispatcher &&
+        finalDispatcher !== "Все диспетчеры" &&
+        finalDispatcher !== "Общая" &&
+        finalDispatcher !== "All" &&
+        finalDispatcher !== "Все"
+      ) {
+        const updatedMapping = {
+          ...carDispatcherMapping,
+          [trimmedCar]: finalDispatcher,
+        };
+        pdService.updateDispatchersCarMapping(updatedMapping);
+      }
+
+      resetForm();
+      setIsModalOpen(false);
+    } catch (error: any) {
+      console.error("Save error:", error);
+      addToast("Ошибка при сохранении: " + (error.message || "Unknown error"), "error");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const finishTripToArchive = (trip: TripPlan, isModal: boolean = false) => {
+  const finishTripToArchive = useCallback((trip: TripPlan, isModal: boolean = false) => {
     let month = "";
     if (trip.dateEnd) {
       const date = new Date(trip.dateEnd);
       if (!isNaN(date.getTime())) {
-        const raw = date.toLocaleString("ru-RU", {
-          month: "long",
-          year: "numeric",
-        });
+        const raw = date.toLocaleString("ru-RU", { month: "long", year: "numeric" });
         let formatted = raw.replace(/\s*г\.?$/, "");
         formatted = formatted.charAt(0).toUpperCase() + formatted.slice(1);
         month = formatted;
       }
     }
     if (!month) {
-      const fallbackMonth =
-        trip.currentMonth ||
-        new Date().toLocaleString("ru-RU", { month: "long", year: "numeric" });
+      const fallbackMonth = trip.currentMonth || new Date().toLocaleString("ru-RU", { month: "long", year: "numeric" });
       let formatted = fallbackMonth.replace(/\s*г\.?$/, "");
       formatted = formatted.charAt(0).toUpperCase() + formatted.slice(1);
       month = formatted;
     }
     pdService.archiveTrip(trip.id, month, user.name, user.role);
     if (isModal) setIsModalOpen(false);
+  }, [user.name, user.role]);
+
+  const deleteTrip = async (id: string, isModal: boolean = false) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await pdService.deleteTrip(id, user.name, user.role);
+      addToast("План рейса удален", "info");
+      if (isModal) setIsModalOpen(false);
+    } catch (error: any) {
+      console.error("Delete error:", error);
+      addToast("Ошибка при удалении", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const deleteTrip = (id: string, isModal: boolean = false) => {
-    pdService.deleteTrip(id, user.name, user.role);
-    if (isModal) setIsModalOpen(false);
-  };
-
-  const { totalKm, totalFreight, totalExpenses, profit, profitFact } =
-    calculateTotals();
+  const {
+    totalKm,
+    totalFreight,
+    totalExpenses,
+    totalExpensesPlan,
+    profit,
+    profitFact,
+    profitPerDay: rawProfitPerDay,
+    profitPerDayPlan: rawProfitPerDayPlan,
+    daysPlan,
+    daysFact,
+  } = calculateTotals();
 
   const renderCurrentFormModal = () => {
     if (!isModalOpen) return null;
@@ -2631,388 +1853,321 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       ? trips.find((t) => t.id === editingTripId)
       : null;
 
+
+    const profitPerDay = Math.round(rawProfitPerDay);
+    const profitPerDayPlan = Math.round(rawProfitPerDayPlan);
+
     return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/40 backdrop-blur-sm animate-fade-in overflow-y-auto">
-        <div className="bg-slate-100 rounded-[2rem] w-full shadow-2xl overflow-hidden flex flex-col relative my-auto">
-          <div className="bg-white px-6 py-5 border-b border-slate-200/60 shadow-sm flex items-center justify-between sticky top-0 z-10">
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-500/20 p-2 rounded-xl border border-blue-500/30">
-                <Calculator className="w-5 h-5 text-blue-900" />
-              </div>
-              <div>
-                <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+        <div className="bg-white/90 backdrop-blur-xl rounded-3xl w-full max-w-[1400px] shadow-2xl overflow-hidden flex flex-col relative my-auto">
+          
+          {/* Header */}
+          <div className="bg-white px-6 py-4 flex flex-col md:flex-row md:items-center justify-between sticky top-0 z-10 border-b border-slate-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+            <div className="flex flex-col">
+              <div className="flex items-center gap-3">
+                <Calculator className="w-5 h-5 text-slate-400" />
+                <h2 className="text-lg font-semibold text-slate-900 tracking-tight">
                   {editingTripId ? "Редактирование плана" : "Новый план"}
                 </h2>
-                <span className="text-[10px] font-black font-mono text-slate-400 uppercase tracking-widest">
-                  Конструктор рейса - Firebase DB Sync
-                </span>
+              </div>
+              <div className="flex flex-wrap gap-4 text-xs font-medium text-slate-500 ml-0 mt-1.5 gap-y-1">
+                <span className="text-blue-600 font-semibold">Авто: {carNumber || "—"}</span>
+                <span>Направление: {direction || "—"}</span>
+                <span>Диспетчер: {dispatcher || "—"}</span>
+                <span>Сроки: {dateStart ? new Date(dateStart).toLocaleDateString('ru-RU') : "—"} — {dateEnd ? new Date(dateEnd).toLocaleDateString('ru-RU') : "—"}</span>
               </div>
             </div>
 
-            <div className="flex bg-slate-100 rounded-xl p-1 gap-1">
+            <div className="flex items-center gap-6 mt-4 md:mt-0">
+              <div className="flex bg-slate-100 rounded-full p-1 gap-1 border border-slate-200/50">
+                <button
+                  type="button"
+                  onClick={() => setModalTab("main")}
+                  className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${modalTab === "main" ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-800"}`}
+                >
+                  Форма
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalTab("potential")}
+                  className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${modalTab === "potential" ? "bg-white shadow-sm text-purple-700" : "text-slate-500 hover:text-slate-800"}`}
+                >
+                  Потенциал. грузы
+                  {potentialLoads.length > 0 && (
+                    <span className="ml-1.5 bg-purple-500 text-white rounded-full px-1.5 py-0.5 text-[8px] font-bold">
+                      {potentialLoads.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setModalTab("main")}
-                className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition ${modalTab === "main" ? "bg-white shadow-sm text-blue-600" : "text-slate-500 hover:text-slate-800 hover:bg-slate-200"}`}
+                onClick={() => setIsModalOpen(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-800 transition"
               >
-                Форма
-              </button>
-              <button
-                type="button"
-                onClick={() => setModalTab("potential")}
-                className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition ${modalTab === "potential" ? "bg-purple-100 shadow-sm text-purple-700" : "text-slate-500 hover:text-slate-800 hover:bg-slate-200"}`}
-              >
-                Потенциал. грузы{" "}
-                {potentialLoads.length > 0 && (
-                  <span className="ml-1 bg-purple-500 text-white rounded-full px-1.5 py-0.5 text-[8px]">
-                    {potentialLoads.length}
-                  </span>
-                )}
+                <X className="w-4 h-4" />
               </button>
             </div>
-
-            <button
-              onClick={() => setIsModalOpen(false)}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
 
-          <div className="p-4 sm:p-5 lg:p-6 space-y-6 overflow-y-auto custom-scrollbar max-h-[80vh]">
+          <div className="p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto custom-scrollbar max-h-[80vh]">
             {modalTab === "main" ? (
               <>
-                <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">
-                      Автомобиль
-                    </label>
-                    <input
-                      type="text"
-                      list="saved-cars-list"
-                      placeholder="АХ 1234-7"
-                      value={carNumber}
-                      onChange={(e) => handleCarNumberChange(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-bold uppercase outline-none focus:border-blue-500 transition"
-                    />
-                     <datalist id="saved-cars-list">
-                      {Array.from(
-                        new Set([
-                          ...savedCars,
-                          ...Object.keys(carDispatcherMapping),
-                        ])
-                      ).map((c) => (
-                        <option key={c} value={c} />
-                      ))}
-                    </datalist>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">
-                      Направление
-                    </label>
-                    <select
-                      value={direction}
-                      onChange={(e) => handleDirChange(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-blue-500 transition"
-                    >
-                      {Object.keys(directions).map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">
-                      Диспетчер
-                    </label>
-                    <select
-                      value={dispatcher}
-                      onChange={(e) => setDispatcher(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-blue-500 transition"
-                    >
-                      <option value="">Не выбран</option>
-                      {dispatchers.map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-blue-500 font-mono mb-2 block">
-                      Дата старта
-                    </label>
-                    <input
-                      type="date"
-                      value={dateStart}
-                      onChange={(e) => setDateStart(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-blue-500 transition"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">
-                      Дата финиша
-                    </label>
-                    <input
-                      type="date"
-                      value={dateEnd}
-                      onChange={(e) => setDateEnd(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-blue-500 transition"
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden">
-                  <div className="mb-6 p-4 bg-blue-50/50 border border-blue-100 rounded-2xl flex flex-col gap-3">
-                    <div className="flex flex-col">
-                      <h4 className="text-xs font-black uppercase text-blue-900 tracking-widest font-mono">
-                        AI-Ассистент Маршрута
-                      </h4>
-                      <span className="text-[10px] text-blue-600 font-bold leading-tight mt-1">
-                        Вставьте текст маршрута из чата (напр: "Минск — Стамбул,
-                        ставка 4300 евро, 2450 км, паром 300, коэф 1.1")
-                      </span>
+                <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-6">
+                  {/* Основные реквизиты */}
+                  <div className="bg-white/50 backdrop-blur-md rounded-3xl p-6 border border-slate-200/50 flex flex-col">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2 mb-5">
+                      <FileText className="w-4 h-4 text-slate-400"/>
+                      Основные реквизиты
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                      <div>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Автомобиль</label>
+                        <input
+                          type="text"
+                          list="saved-cars-list"
+                          placeholder="АХ 1234-7"
+                          value={carNumber}
+                          onChange={(e) => handleCarNumberChange(e.target.value)}
+                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium uppercase outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                        />
+                        <datalist id="saved-cars-list">
+                          {savedCars.map((c) => (
+                            <option key={c} value={c} />
+                          ))}
+                        </datalist>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Направление</label>
+                        <select
+                          value={direction}
+                          onChange={(e) => handleDirChange(e.target.value)}
+                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all appearance-none"
+                        >
+                          {Object.keys(directions).map((d) => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Диспетчер</label>
+                        <select
+                          value={dispatcher}
+                          onChange={(e) => setDispatcher(e.target.value)}
+                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all appearance-none"
+                        >
+                          <option value="">Не выбран</option>
+                          {dispatchers.map((d) => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-blue-500 mb-1.5 block">Дата старта</label>
+                        <input
+                          type="date"
+                          value={dateStart}
+                          onChange={(e) => setDateStart(e.target.value)}
+                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Дата финиша</label>
+                        <input
+                          type="date"
+                          value={dateEnd}
+                          onChange={(e) => setDateEnd(e.target.value)}
+                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                        />
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <textarea
+                  </div>
+
+                  {/* AI Assistant */}
+                  <div className="bg-white/50 backdrop-blur-md rounded-3xl p-6 border border-slate-200/50 flex flex-col">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2 mb-4">
+                      <Bot className="w-4 h-4 text-slate-400"/>
+                      AI-Ассистент маршрута
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mb-3">Вставьте текст (например: Минск — Стамбул, 4300 евро, 2450 км, паром 300)</p>
+                    <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200/85 focus-within:bg-white focus-within:border-slate-400 focus-within:ring-1 focus-within:ring-slate-400 transition-all h-11 items-center">
+                      <input 
                         value={aiRouteInput}
                         onChange={(e) => setAiRouteInput(e.target.value)}
-                        placeholder="Вставить текст..."
-                        className="flex-1 bg-white border border-blue-200 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:border-blue-400 min-h-[44px] resize-y"
+                        placeholder="Вставить текст для автоматического распознавания..."
                         onKeyDown={(e) => {
                           if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
                             e.preventDefault();
                             processAiRoute();
                           }
                         }}
+                        className="flex-1 bg-transparent px-3 text-xs font-medium outline-none placeholder-slate-400"
                       />
-                      <button
+                      <button 
+                        type="button"
                         onClick={processAiRoute}
-                        className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition"
+                        disabled={isAiProcessing}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition ${isAiProcessing ? "bg-slate-300 text-slate-500" : "bg-slate-900 text-white hover:bg-slate-800"}`}
                       >
-                        Распознать
+                        {isAiProcessing ? "..." : "Распознать"}
                       </button>
                     </div>
                     {aiRouteFeedback && (
-                      <span className="text-[11px] font-black text-blue-800">
+                      <span className="text-xs font-medium text-blue-600 mt-2 block">
                         {aiRouteFeedback}
                       </span>
                     )}
                   </div>
+                </div>
 
-                  <h3 className="text-xs font-black uppercase tracking-widest text-slate-800 font-mono flex items-center gap-2 mb-4">
-                    <MapPin className="w-4 h-4 text-blue-500" /> Плечи маршрута
-                  </h3>
-
-                  {/* Swipe Help Badge for Mobile */}
-                  <div className="block lg:hidden text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 mb-3 text-center uppercase tracking-wider select-none">
-                    <span className="inline-block text-blue-500 mr-1.5 font-sans">
-                      ↔
-                    </span>{" "}
-                    Таблица прокручивается вправо для изменения км, ставок,
-                    парома и коэффициентов
+                {/* Плечи маршрута */}
+                <div className="bg-white rounded-2xl p-6 border border-slate-100">
+                  <div className="flex justify-between items-center mb-5">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-slate-400"/>
+                      Плечи маршрута
+                    </h3>
+                    <span className="text-[11px] text-slate-400 hover:text-slate-600 transition font-medium cursor-pointer">Маршрутная сетка</span>
                   </div>
 
-                  <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
-                    <table className="w-full min-w-[950px] border-collapse relative">
-                      <thead className="bg-slate-50/50">
+                  
+
+                  <div className="hidden lg:block w-full overflow-x-auto pb-4 custom-scrollbar">
+                    <table className="w-full w-full flex-wrap border-collapse relative">
+                      <thead>
                         <tr>
-                          <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider text-center rounded-tl-xl w-10">
-                            Акт.
-                          </th>
-                          <th className="p-3 text-[10px] font-black uppercase text-slate-500 tracking-wider text-left w-8">
-                            #
-                          </th>
-                          <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-32">
-                            Откуда
-                          </th>
-                          <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-32">
-                            Куда
-                          </th>
-                          <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-24">
-                            Км
-                          </th>
-                          <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-24">
-                            Доезд (км)
-                          </th>
-                          <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-24">
-                            Фрахт €
-                          </th>
-                          <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-32">
-                            Инфо Ставка
-                          </th>
-                          <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-24">
-                            Паром €
-                          </th>
-                          <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-left w-16">
-                            Коэфф.
-                          </th>
-                          <th className="p-3 text-xs font-black uppercase text-slate-500 tracking-wider text-right rounded-tr-xl w-24"></th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-center w-12">Акт.</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left w-8">#</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Откуда</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Куда</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Км</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Доезд (км)</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Фрахт €</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Инфо ставка (Доп)</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Паром € (Доп)</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Коэфф.</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-right"></th>
                         </tr>
                       </thead>
                       <tbody className="space-y-2">
                         {legs.map((leg, idx) => (
-                          <tr
-                            key={idx}
-                            className={`border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition ${getActiveLegRowBg(idx)}`}
-                          >
-                            <td className="p-2 text-center">
+                          <tr key={idx}>
+                            <td className="py-1.5 text-center">
                               <button
-                                onClick={() =>
-                                  setActiveLegIndex(
-                                    idx === activeLegIndex ? undefined : idx,
-                                  )
-                                }
-                                className={`w-5 h-5 rounded flex items-center justify-center border transition mx-auto cursor-pointer ${activeLegIndex === idx ? "bg-blue-500 border-blue-500 text-white" : "bg-white border-slate-300 text-transparent hover:border-blue-500"}`}
+                                type="button"
+                                onClick={() => setActiveLegIndex(idx === activeLegIndex ? undefined : idx)}
+                                className={`w-5 h-5 rounded flex items-center justify-center border transition mx-auto cursor-pointer ${activeLegIndex === idx ? "bg-slate-900 border-slate-900 text-white" : "bg-white border-slate-300 text-transparent"}`}
                               >
-                                <Check className="w-3.5 h-3.5" />
+                                <Check className="w-3 h-3" />
                               </button>
                             </td>
-                            <td className="p-2 text-[10px] font-black text-slate-400">
-                              {idx + 1}
-                            </td>
-                            <td className="p-2">
+                            <td className="py-1.5 text-xs font-semibold text-slate-400 font-mono">{idx + 1}</td>
+                            <td className="py-1.5 pr-2">
                               <input
                                 list="cities-db-pl"
                                 value={leg.from}
-                                onChange={(e) =>
-                                  updateLeg(idx, { from: e.target.value })
-                                }
+                                onChange={(e) => updateLeg(idx, { from: e.target.value })}
                                 onBlur={() => checkLegDistance(idx)}
-                                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none"
-                                placeholder="Город..."
+                                className="w-full text-left px-3 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:bg-white focus:border-slate-400 transition"
                               />
                             </td>
-                            <td className="p-2">
+                            <td className="py-1.5 pr-2">
                               <input
                                 list="cities-db-pl"
                                 value={leg.to}
-                                onChange={(e) =>
-                                  updateLeg(idx, { to: e.target.value })
-                                }
+                                onChange={(e) => updateLeg(idx, { to: e.target.value })}
                                 onBlur={() => checkLegDistance(idx)}
-                                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none"
-                                placeholder="Город..."
+                                className="w-full text-left px-3 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:bg-white focus:border-slate-400 transition"
                               />
                             </td>
-                            <td className="p-2 relative">
+                            <td className="py-1.5 pr-2 relative">
                               <input
                                 type="number"
+                                onFocus={(e) => e.target.select()}
                                 value={leg.km || ""}
-                                onChange={(e) =>
-                                  updateLeg(idx, { km: Number(e.target.value) })
-                                }
-                                className="w-full pl-3 pr-8 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none"
+                                onChange={(e) => updateLeg(idx, { km: Number(e.target.value) })}
+                                className="w-full text-left pl-3 pr-8 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 transition"
                               />
                               <button
-                                onClick={() =>
-                                  openMapRouteModal(
-                                    idx,
-                                    leg.from,
-                                    leg.to,
-                                    false,
-                                  )
-                                }
-                                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-500 transition"
+                                type="button"
+                                onClick={() => openMapRouteModal(idx, leg.from, leg.to, false)}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition"
                               >
-                                <MapPin className="w-4 h-4" />
+                                <MapPin className="w-3.5 h-3.5" />
                               </button>
                             </td>
-                            <td className="p-2 relative">
+                            <td className="py-1.5 pr-2">
                               <input
                                 type="number"
+                                onFocus={(e) => e.target.select()}
                                 value={leg.emptyRunKm || ""}
-                                onChange={(e) =>
-                                  updateLeg(idx, {
-                                    emptyRunKm: Number(e.target.value),
-                                  })
-                                }
-                                onBlur={() => checkLegDistance(idx)}
-                                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none"
+                                onChange={(e) => updateLeg(idx, { emptyRunKm: Number(e.target.value) })}
+                                className="w-full text-left px-3 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 transition"
                               />
                             </td>
-                            <td className="p-2">
+                            <td className="py-1.5 pr-2">
                               <input
                                 type="number"
+                                onFocus={(e) => e.target.select()}
                                 value={leg.rate || ""}
-                                onChange={(e) =>
-                                  updateLeg(idx, {
-                                    rate: Number(e.target.value),
-                                  })
-                                }
-                                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none"
+                                onChange={(e) => updateLeg(idx, { rate: Number(e.target.value) })}
+                                className="w-full text-left px-3 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 transition"
                               />
                             </td>
-                            <td className="p-2">
-                              <div className="flex bg-white border border-slate-200 rounded-lg overflow-hidden focus-within:border-blue-500 transition">
+                            <td className="py-1.5 pr-2">
+                              <div className="flex bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg overflow-hidden focus-within:bg-white focus-within:border-slate-400 transition">
                                 <input
                                   type="text"
                                   value={leg.referenceRate || ""}
-                                  onChange={(e) =>
-                                    updateLeg(idx, {
-                                      referenceRate: e.target.value,
-                                    })
-                                  }
-                                  className="w-full px-3 py-2.5 bg-transparent text-xs font-bold outline-none placeholder-slate-300"
-                                  placeholder="напр. 3800"
+                                  onChange={(e) => updateLeg(idx, { referenceRate: e.target.value })}
+                                  className="w-full px-3 py-1.5 bg-transparent text-xs font-medium outline-none"
                                 />
                                 <select
                                   value={leg.referenceCurrency || ""}
-                                  onChange={(e) =>
-                                    updateLeg(idx, {
-                                      referenceCurrency: e.target.value,
-                                    })
-                                  }
-                                  className="bg-slate-50/50 border-l border-slate-200 text-slate-600 text-xs font-bold outline-none px-2 cursor-pointer max-w-[60px]"
+                                  onChange={(e) => updateLeg(idx, { referenceCurrency: e.target.value })}
+                                  className="bg-transparent border-l border-slate-200 text-slate-500 text-[10px] font-semibold outline-none px-1 cursor-pointer"
                                 >
                                   <option value=""></option>
                                   {currencies.map((c) => (
-                                    <option key={c.id} value={c.code}>
-                                      {c.code}
-                                    </option>
+                                    <option key={c.id} value={c.code}>{c.code}</option>
                                   ))}
                                 </select>
                               </div>
                             </td>
-                            <td className="p-2">
+                            <td className="py-1.5 pr-2">
                               <input
                                 type="number"
+                                onFocus={(e) => e.target.select()}
                                 value={leg.ferry || ""}
-                                onChange={(e) =>
-                                  updateLeg(idx, {
-                                    ferry: Number(e.target.value),
-                                  })
-                                }
-                                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 outline-none"
+                                onChange={(e) => updateLeg(idx, { ferry: Number(e.target.value) })}
+                                className="w-full text-left px-3 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 transition"
                               />
                             </td>
-                            <td className="p-2">
+                            <td className="py-1.5 pr-2">
                               <input
                                 type="number"
                                 step="0.01"
                                 value={leg.coeff}
-                                onChange={(e) =>
-                                  updateLeg(idx, {
-                                    coeff: Number(e.target.value),
-                                  })
-                                }
-                                className="w-full px-1 py-2.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold outline-none text-center"
+                                onChange={(e) => updateLeg(idx, { coeff: Number(e.target.value) })}
+                                className="w-full px-3 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 transition"
                               />
                             </td>
-                            <td className="p-2 text-right space-x-1 whitespace-nowrap">
+                            <td className="py-1.5 text-right whitespace-nowrap space-x-1">
                               <button
+                                type="button"
                                 onClick={() => addLeg(idx)}
-                                className="w-8 h-8 inline-flex items-center justify-center rounded-xl bg-slate-50 hover:bg-blue-500/20 text-slate-500 hover:text-blue-900 transition"
+                                className="w-6 h-6 inline-flex items-center justify-center text-slate-400 hover:text-slate-800 transition"
                               >
-                                <Plus className="w-4 h-4" />
+                                <Plus className="w-3.5 h-3.5" />
                               </button>
                               <button
+                                type="button"
                                 onClick={() => removeLeg(idx)}
                                 disabled={legs.length <= 1}
-                                className="w-8 h-8 inline-flex items-center justify-center rounded-xl bg-slate-50 hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition disabled:opacity-30"
+                                className="w-6 h-6 inline-flex items-center justify-center text-slate-400 hover:text-rose-500 transition disabled:opacity-30"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </td>
                           </tr>
@@ -3020,284 +2175,408 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Mobile Cards View for Legs */}
+                  <div className="block lg:hidden space-y-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-1 pb-4">
+                    {legs.map((leg, idx) => (
+                      <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-4 relative shadow-sm">
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-black text-slate-500 bg-slate-100 px-2 py-1 rounded-md">#{idx + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => setActiveLegIndex(idx === activeLegIndex ? undefined : idx)}
+                              className={`w-6 h-6 rounded flex items-center justify-center border transition cursor-pointer ${activeLegIndex === idx ? "bg-slate-900 border-slate-900 text-white" : "bg-white border-slate-300 text-transparent"}`}
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => addLeg(idx)}
+                              className="w-8 h-8 inline-flex items-center justify-center rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 transition cursor-pointer"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => removeLeg(idx)}
+                              disabled={legs.length <= 1}
+                              className="w-8 h-8 inline-flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 transition disabled:opacity-30 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-[10px] uppercase font-black text-slate-400">Откуда</span>
+                            <input
+                              list="cities-db-pl"
+                              value={leg.from}
+                              onChange={(e) => updateLeg(idx, { from: e.target.value })}
+                              onBlur={() => checkLegDistance(idx)}
+                              className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-[10px] uppercase font-black text-slate-400">Куда</span>
+                            <input
+                              list="cities-db-pl"
+                              value={leg.to}
+                              onChange={(e) => updateLeg(idx, { to: e.target.value })}
+                              onBlur={() => checkLegDistance(idx)}
+                              className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex flex-col gap-1.5 relative">
+                            <span className="text-[10px] uppercase font-black text-slate-400">Км</span>
+                            <input
+                              type="number"
+                              value={leg.km || ""}
+                              onChange={(e) => updateLeg(idx, { km: Number(e.target.value) })}
+                              className="w-full pl-3 pr-8 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => openMapRouteModal(idx, leg.from, leg.to, false)}
+                              className="absolute right-2 bottom-1.5 text-slate-400 hover:text-slate-600 p-1"
+                            >
+                              <MapPin className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="flex flex-col gap-1.5 relative">
+                            <span className="text-[10px] uppercase font-black text-slate-400">Доезд (км)</span>
+                            <input
+                              type="number"
+                              value={leg.emptyRun || ""}
+                              onChange={(e) => updateLeg(idx, { emptyRun: Number(e.target.value) })}
+                              className="w-full pl-3 pr-8 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => openMapRouteModal(idx, leg.from, leg.to, true)}
+                              className="absolute right-2 bottom-1.5 text-slate-400 hover:text-slate-600 p-1"
+                            >
+                              <MapPin className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-[10px] uppercase font-black text-slate-400">Фрахт</span>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                value={leg.freight || ""}
+                                onChange={(e) => updateLeg(idx, { freight: Number(e.target.value) })}
+                                className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums outline-none"
+                              />
+                              <select
+                                value={leg.freightCurrency}
+                                onChange={(e) => updateLeg(idx, { freightCurrency: e.target.value })}
+                                className="w-16 px-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold"
+                              >
+                                {currencies.map((c) => (
+                                  <option key={c.id} value={c.code}>{c.code}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-[10px] uppercase font-black text-slate-400">Инфо ставка</span>
+                            <div className="flex gap-1">
+                              <input
+                                type="number"
+                                value={leg.infoRate || ""}
+                                onChange={(e) => updateLeg(idx, { infoRate: Number(e.target.value) })}
+                                className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums outline-none"
+                              />
+                              <select
+                                value={leg.infoRateCurrency || "EUR"}
+                                onChange={(e) => updateLeg(idx, { infoCurrency: e.target.value })}
+                                className="w-16 px-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold"
+                              >
+                                <option value=""></option>
+                                {currencies.map((c) => (
+                                  <option key={c.id} value={c.code}>{c.code}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-[10px] uppercase font-black text-slate-400">Паром €</span>
+                            <input
+                              type="number"
+                              value={leg.ferry || ""}
+                              onChange={(e) => updateLeg(idx, { ferry: Number(e.target.value) })}
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums outline-none"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-[10px] uppercase font-black text-slate-400">Коэфф.</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={leg.coeff}
+                              onChange={(e) => updateLeg(idx, { coeff: Number(e.target.value) })}
+                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums outline-none"
+                            />
+                          </div>
+                        </div>
+
+                      </div>
+                    ))}
+                  </div>
+
                   <datalist id="cities-db-pl">
-                    {Array.from(
-                      new Set(distances.flatMap((d) => [d.from, d.to])),
-                    ).map((c) => c && <option key={c} value={c} />)}
+                    {Array.from(new Set(distances.flatMap((d) => [d.from, d.to]))).map((c) => c && <option key={c} value={c} />)}
                   </datalist>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                  <div className="lg:col-span-8 bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col justify-between">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-4">
+                {/* Financial Params & Comment */}
+                <div className="bg-white rounded-2xl p-6 border border-slate-100 flex flex-col gap-6">
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2 mb-5">
+                      <CircleDollarSign className="w-4 h-4 text-slate-400"/>
+                      Финансовые параметры
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                       <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">
-                          Доп Расходы €
-                        </label>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Доп расходы €</label>
                         <input
                           type="number"
                           value={extraExpense || ""}
-                          onChange={(e) =>
-                            setExtraExpense(Number(e.target.value))
-                          }
-                          className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-blue-500 transition"
+                          onChange={(e) => setExtraExpense(Number(e.target.value))}
+                          className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">
-                          Коммент расходов
-                        </label>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Коммент расходов</label>
                         <input
                           type="text"
                           value={extraExpenseNote}
                           onChange={(e) => setExtraExpenseNote(e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 transition"
+                          className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">
-                          Паром (общ) €
-                        </label>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Факт км</label>
                         <input
                           type="number"
-                          value={ferryCost || ""}
-                          onChange={(e) => setFerryCost(Number(e.target.value))}
-                          className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-blue-500 transition"
+                          placeholder="Введите факт км"
+                          value={factKm || ""}
+                          onChange={(e) => setFactKm(e.target.value ? Number(e.target.value) : undefined)}
+                          className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">
-                          Справ. ставка
-                        </label>
-                        <div className="flex bg-slate-50 border border-slate-200 rounded-xl overflow-hidden focus-within:border-blue-500 transition">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={referenceRate || ""}
-                            onChange={(e) =>
-                              setReferenceRate(
-                                e.target.value
-                                  ? Number(e.target.value)
-                                  : undefined,
-                              )
-                            }
-                            className="w-full bg-transparent text-slate-800 px-4 py-3 text-sm font-bold outline-none"
-                          />
-                          <select
-                            value={referenceCurrency}
-                            onChange={(e) =>
-                              setReferenceCurrency(e.target.value as any)
-                            }
-                            className="bg-slate-100/50 border-l border-slate-200 text-slate-600 text-xs font-bold outline-none px-2 cursor-pointer font-mono min-w-[70px]"
-                          >
-                            {currencies.length === 0 && (
-                              <>
-                                <option value="EUR">€</option>
-                                <option value="USD">$</option>
-                                <option value="RUB">₽</option>
-                                <option value="BYN">Br</option>
-                              </>
-                            )}
-                            {currencies.map((c) => (
-                              <option key={c.id} value={c.code}>
-                                {c.code}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">
-                        Факт КМ
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="Оставьте пустым для расчета по плану"
-                        value={factKm || ""}
-                        onChange={(e) =>
-                          setFactKm(
-                            e.target.value ? Number(e.target.value) : undefined,
-                          )
-                        }
-                        className="w-full md:w-1/2 bg-yellow-50 border border-yellow-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-yellow-500 transition mb-4"
-                      />
-
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono mb-2 block">
-                        Комментарий к рейсу
-                      </label>
-                      <textarea
-                        value={tripNote}
-                        onChange={(e) => setTripNote(e.target.value)}
-                        rows={2}
-                        className="w-full bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-blue-500 resize-none transition"
-                      />
-
-                      <div className="mt-4 flex gap-2">
-                        {[
-                          "bg-slate-200",
-                          "bg-blue-300",
-                          "bg-blue-500",
-                          "bg-[#70FC8E]",
-                          "bg-emerald-500",
-                          "bg-teal-400",
-                          "bg-cyan-400",
-                          "bg-amber-300",
-                          "bg-orange-400",
-                          "bg-rose-300",
-                          "bg-pink-400",
-                          "bg-purple-500",
-                          "bg-indigo-400",
-                          "bg-fuchsia-400",
-                          "bg-lime-400",
-                          "bg-red-500",
-                          "bg-slate-800",
-                        ].map((cc) => (
-                          <button
-                            key={cc}
-                            onClick={() => setStripColor(cc)}
-                            className={`w-6 h-6 rounded-full border-2 ${stripColor === cc ? "border-slate-800 scale-110" : "border-transparent"} ${cc} transition`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="mt-6 flex justify-between items-center bg-slate-950 p-4 rounded-2xl shadow-xs border border-slate-800 text-white flex-wrap gap-4">
-                      <div className="flex gap-6 flex-wrap">
-                        <div className="flex flex-col">
-                          <span className="text-[9px] uppercase tracking-widest font-mono text-slate-500">
-                            План км
-                          </span>
-                          <span className="text-xl font-black font-mono">
-                            {Math.round(totalKm)} км
-                          </span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[9px] uppercase tracking-widest font-mono text-slate-500">
-                            Фрахт
-                          </span>
-                          <span className="text-xl font-black font-mono text-blue-400">
-                            {Math.round(totalFreight)} €
-                          </span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[9px] uppercase tracking-widest font-mono text-slate-500">
-                            Расходы (План)
-                          </span>
-                          <span className="text-xl font-black font-mono text-amber-500">
-                            {Math.round(totalExpenses)} €
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex gap-2 ml-auto">
-                        {isEditing && currentEditingTrip && (
-                          <>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2 block">Цвет плашки рейса</label>
+                        <div className="flex gap-2">
+                          {[
+                            "bg-slate-200",
+                            "bg-blue-300",
+                            "bg-blue-500",
+                            "bg-[#70FC8E]",
+                            "bg-amber-300",
+                            "bg-rose-300",
+                            "bg-purple-500",
+                            "bg-slate-800",
+                          ].map((cc) => (
                             <button
-                              onClick={() => deleteTrip(editingTripId, true)}
-                              className="bg-rose-100 hover:bg-rose-200 text-rose-700 flex items-center gap-2 px-4 py-3 rounded-xl font-black text-sm uppercase tracking-tight transition shadow-sm border border-rose-200"
-                            >
-                              <Trash2 className="w-4 h-4" /> Удалить
-                            </button>
-                            {currentEditingTrip.isArchived ? (
-                              <button
-                                onClick={() => {
-                                  pdService.restoreTrip(
-                                    editingTripId,
-                                    user.name,
-                                    user.role,
-                                  );
-                                  setIsModalOpen(false);
-                                }}
-                                className="bg-blue-100 hover:bg-blue-200 text-blue-800 flex items-center gap-2 px-4 py-3 rounded-xl font-black text-sm uppercase tracking-tight transition shadow-sm border border-blue-200"
-                              >
-                                <Archive className="w-4 h-4" /> Из архива
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() =>
-                                  finishTripToArchive(currentEditingTrip, true)
-                                }
-                                className="bg-amber-100 hover:bg-amber-200 text-amber-800 flex items-center gap-2 px-4 py-3 rounded-xl font-black text-sm uppercase tracking-tight transition shadow-sm border border-amber-200"
-                              >
-                                <Archive className="w-4 h-4" /> В архив
-                              </button>
-                            )}
-                          </>
-                        )}
-                        <button
-                          onClick={saveTrip}
-                          className="bg-blue-500 hover:bg-blue-400 text-white flex items-center gap-2 px-6 py-3 rounded-xl font-black text-sm uppercase tracking-tight transition shadow-sm"
-                        >
-                          <Save className="w-4 h-4" /> Сохранить
-                        </button>
+                              type="button"
+                              key={cc}
+                              onClick={() => setStripColor(cc)}
+                              className={`w-6 h-6 rounded-full border-2 ${stripColor === cc ? "border-slate-800 scale-110" : "border-transparent"} ${cc} transition`}
+                            />
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="lg:col-span-4 flex flex-col gap-4">
-                    <div className="bg-slate-50 rounded-[1.5rem] p-6 border border-slate-200 text-center flex flex-col justify-center relative overflow-hidden flex-1 shadow-sm">
-                      <div
-                        className={`absolute top-0 left-0 w-full h-1.5 ${stripColor}`}
-                      />
-                      <span className="text-[10px] uppercase font-black tracking-widest text-slate-500 font-mono mb-2">
-                        Прибыль Общая
-                      </span>
-                      <span
-                        className={`text-4xl font-black tracking-tighter ${profitFact < 0 ? "text-rose-500" : "text-slate-800"}`}
-                      >
-                        {Math.round(profitFact)}{" "}
-                        <span className="text-xl text-slate-400">€</span>
-                      </span>
-                      <div className="flex justify-center gap-4 mt-3">
-                        <span className="text-[10px] font-bold text-slate-400 font-mono">
-                          План: {Math.round(profit)} €
-                        </span>
-                        {factKm && factKm > 0 && (
-                          <span className="text-[10px] font-bold text-emerald-600 font-mono">
-                            Факт: {Math.round(profitFact)} €
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                  <div className="border-t border-slate-100 pt-6">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2 mb-4">
+                      <MessageSquare className="w-4 h-4 text-slate-400"/>
+                      Комментарий к рейсу
+                    </h3>
+                    <input
+                      type="text"
+                      value={tripNote}
+                      onChange={(e) => setTripNote(e.target.value)}
+                      placeholder="Введите дополнительные примечания к рейсу..."
+                      className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2.5 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                    />
+                  </div>
+                </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-white rounded-2xl p-4 border border-slate-200 text-center flex flex-col justify-center flex-1 shadow-sm">
-                        <span className="text-[9px] uppercase font-black tracking-widest text-slate-500 font-mono mb-1">
-                          Прибыль в день (План)
-                        </span>
-                        <span
-                          className={`text-xl font-black tracking-tighter ${Math.round(profit / (getTripDays() || 1)) < 0 ? "text-rose-500" : "text-slate-700"}`}
-                        >
-                          {Math.round(profit / (getTripDays() || 1))} €
-                        </span>
-                      </div>
-                      <div className="bg-white rounded-2xl p-4 border border-emerald-100 text-center flex flex-col justify-center flex-1 shadow-sm relative overflow-hidden">
-                        {factKm && factKm > 0 && (
-                          <div className="absolute top-0 right-0 w-8 h-8 bg-emerald-500 rounded-bl-[100%] z-0 opacity-10"></div>
-                        )}
-                        <span className="text-[9px] uppercase font-black tracking-widest text-emerald-600/70 font-mono mb-1 relative z-10">
-                          Прибыль в день (Факт)
-                        </span>
-                        <span
-                          className={`text-xl font-black tracking-tighter relative z-10 ${Math.round(profitFact / (getTripDays() || 1)) < 0 ? "text-rose-500" : "text-emerald-700"}`}
-                        >
-                          {Math.round(profitFact / (getTripDays() || 1))} €
-                        </span>
-                      </div>
+                {/* Dark Finance Dashboard */}
+                <div className="bg-slate-950 rounded-2xl p-6 text-white border border-slate-900 shadow-md">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                    {/* Card 1: Profit Total */}
+                    <div className="border-l-2 border-emerald-500 pl-4 flex flex-col justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Прибыль общая</span>
+                      {factKm && factKm > 0 ? (
+                        <>
+                          <span className="text-3xl sm:text-4xl font-bold text-emerald-400 tracking-tight leading-none mb-4 font-sans">
+                            {Math.round(profitFact).toLocaleString("ru-RU")} <span className="text-lg text-slate-400 font-medium">€</span>
+                            <span className="text-[9px] uppercase tracking-wider text-emerald-400 block mt-2 font-semibold font-mono">Факт</span>
+                          </span>
+                          <div className="flex justify-between items-center text-[10px] border-t border-slate-900 pt-2 text-slate-400 mt-auto">
+                            <span className="font-mono text-slate-500 uppercase tracking-wider">План:</span>
+                            <span className="font-semibold text-slate-300 font-mono tabular-nums">{Math.round(profit).toLocaleString("ru-RU")} €</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-3xl sm:text-4xl font-bold text-emerald-400 tracking-tight leading-none mb-4 font-sans">
+                            {Math.round(profit).toLocaleString("ru-RU")} <span className="text-lg text-slate-400 font-medium">€</span>
+                          </span>
+                          <div className="flex justify-between items-center text-[10px] border-t border-slate-900 pt-2 text-slate-500 mt-auto">
+                            <span>План</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    
+                    {/* Card 2: Profit per Day */}
+                    <div className="border-l-2 border-blue-500 pl-4 flex flex-col justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Прибыль в день</span>
+                      {factKm && factKm > 0 ? (
+                        <>
+                          <span className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-none mb-4 font-sans">
+                            {profitPerDay.toLocaleString("ru-RU")} <span className="text-lg text-slate-400 font-medium">€</span>
+                            <span className="text-[9px] uppercase tracking-wider text-blue-400 block mt-2 font-semibold font-mono">Факт</span>
+                          </span>
+                          <div className="flex justify-between items-center text-[10px] border-t border-slate-900 pt-2 text-slate-400 mt-auto">
+                            <span className="font-mono text-slate-500 uppercase tracking-wider">План:</span>
+                            <span className="font-semibold text-slate-300 font-mono tabular-nums">{profitPerDayPlan} €/дн</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-none mb-4 font-sans">
+                            {profitPerDayPlan.toLocaleString("ru-RU")} <span className="text-lg text-slate-400 font-medium">€</span>
+                          </span>
+                          <div className="flex justify-between items-center text-[10px] border-t border-slate-900 pt-2 text-slate-500 mt-auto">
+                            <span>План</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    
+                    {/* Card 3: Days count */}
+                    <div className="border-l-2 border-orange-500 pl-4 flex flex-col justify-center">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Количество дней</span>
+                      {factKm && factKm > 0 && daysFact !== daysPlan ? (
+                        <>
+                          <span className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-none mb-4 font-sans">
+                            {daysFact} <span className="text-lg text-slate-400 font-medium">дн.</span>
+                            <span className="text-[9px] uppercase tracking-wider text-orange-400 block mt-2 font-semibold font-mono">Факт</span>
+                          </span>
+                          <div className="flex justify-between items-center text-[10px] border-t border-slate-900 pt-2 text-slate-400 mt-auto">
+                            <span className="font-mono text-slate-500 uppercase tracking-wider">План:</span>
+                            <span className="font-semibold text-slate-300 font-mono tabular-nums">{daysPlan} дн.</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-none font-sans">
+                            {daysPlan} <span className="text-lg text-slate-400 font-medium">дн.</span>
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 bg-slate-900/50 rounded-xl p-5 border border-slate-900">
+                    <div>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+                        {factKm && factKm > 0 ? "Километраж" : "План км"}
+                      </span>
+                      {factKm && factKm > 0 ? (
+                        <div className="flex flex-col">
+                          <span className="text-base font-bold text-white font-mono tabular-nums">
+                            {Math.round(factKm).toLocaleString("ru-RU")} км
+                            <span className="text-[9px] uppercase tracking-wider text-emerald-400 ml-2 font-semibold font-mono">Факт</span>
+                          </span>
+                          <span className="text-xs text-slate-500 mt-0.5 font-mono">План: {Math.round(totalKm).toLocaleString("ru-RU")} км</span>
+                        </div>
+                      ) : (
+                        <span className="text-base font-bold text-white font-mono tabular-nums">{Math.round(totalKm).toLocaleString("ru-RU")} км</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">Фрахт</span>
+                      <span className="text-base font-bold text-blue-400 font-mono tabular-nums">{Math.round(totalFreight).toLocaleString("ru-RU")} €</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+                        {factKm && factKm > 0 ? "Расходы" : "Расходы (План)"}
+                      </span>
+                      {factKm && factKm > 0 ? (
+                        <div className="flex flex-col">
+                          <span className="text-base font-bold text-orange-400 font-mono tabular-nums">
+                            {Math.round(totalExpenses).toLocaleString("ru-RU")} €
+                            <span className="text-[9px] uppercase tracking-wider text-emerald-400 ml-2 font-semibold font-mono">Факт</span>
+                          </span>
+                          <span className="text-xs text-slate-500 mt-0.5 font-mono">План: {Math.round(totalExpensesPlan).toLocaleString("ru-RU")} €</span>
+                        </div>
+                      ) : (
+                        <span className="text-base font-bold text-orange-400 font-mono tabular-nums">{Math.round(totalExpensesPlan).toLocaleString("ru-RU")} €</span>
+                      )}
                     </div>
                   </div>
                 </div>
+
+                {/* Footer Buttons */}
+                <div className="flex flex-wrap justify-end gap-3 mt-4">
+                  {isEditing && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => deleteTrip(editingTripId!, true)}
+                        className="px-5 py-2.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 flex items-center gap-1.5 transition"
+                      >
+                        <Trash2 className="w-4 h-4"/> Удалить
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => finishTripToArchive(currentEditingTrip, true)}
+                        className="px-5 py-2.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 flex items-center gap-1.5 transition"
+                      >
+                        <Archive className="w-4 h-4"/> В архив
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={saveTrip}
+                    disabled={isSubmitting}
+                    className="px-6 py-2.5 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 flex items-center gap-1.5 transition shadow-sm disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4"/> Сохранить
+                  </button>
+                </div>
               </>
             ) : modalTab === "potential" ? (
-              <div className="bg-slate-100/50 rounded-[2rem] p-5 lg:p-6 flex flex-col xl:flex-row gap-6 min-h-[500px]">
+
+              <div className="bg-slate-50 border border-slate-200/50 rounded-[2rem] p-6 lg:p-8 flex flex-col xl:flex-row gap-6 min-h-[500px]">
                 {/* Left side: List of saved Potential Loads */}
-                <div className="flex-1 w-full xl:w-1/3 xl:max-w-[400px] bg-white rounded-2xl p-6 border border-slate-200/60 shadow-sm flex flex-col gap-4">
-                  <h3 className="text-sm font-black uppercase text-purple-700 font-mono tracking-widest border-b border-purple-100 pb-3">
-                    Сохраненные просчеты ({potentialLoads.length}/3)
+                <div className="flex-1 w-full xl:w-1/3 xl:max-w-[400px] bg-white rounded-2xl p-5 border border-slate-200/60 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col gap-4">
+                  <h3 className="text-sm font-semibold text-purple-700 tracking-tight border-b border-slate-100 pb-3 flex items-center justify-between">
+                    <span>Сохраненные просчеты</span>
+                    <span className="text-xs bg-purple-50 text-purple-700 font-mono font-semibold px-2 py-0.5 rounded-full">{potentialLoads.length}/3</span>
                   </h3>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3.5 overflow-y-auto max-h-[380px] pr-1.5 custom-scrollbar">
                     {potentialLoads.map((pl) => {
                       const days = pl.totalKm
                         ? Math.max(1, Math.round(pl.totalKm / 500))
@@ -3306,94 +2585,94 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       return (
                         <div
                           key={pl.id}
-                          className={`p-4 rounded-[1.5rem] border ${plEditingId === pl.id ? "border-purple-400 bg-purple-50 shadow-md shadow-purple-500/10" : "border-slate-200 bg-slate-50 hover:border-slate-300"} transition cursor-pointer flex flex-col gap-3 relative`}
+                          className={`p-3.5 rounded-2xl border ${plEditingId === pl.id ? "border-purple-400 bg-purple-50/30 shadow-sm" : "border-slate-150 bg-slate-50/50 hover:border-slate-300 hover:bg-slate-50"} transition cursor-pointer flex flex-col gap-2.5 relative`}
                           onClick={() => editPotentialLoad(pl)}
                         >
-                          <div className="flex justify-between items-start">
-                            <span className="font-black text-sm text-slate-800 uppercase tracking-tight">
+                          <div className="flex justify-between items-center">
+                            <span className="font-semibold text-xs text-slate-800 tracking-tight truncate max-w-[170px]">
                               {pl.name}
                             </span>
                             <div
-                              className="flex gap-1.5"
+                              className="flex gap-1"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <button
-                                className="p-2 text-blue-600 bg-blue-100 hover:bg-blue-200 shadow-sm border border-blue-200 rounded-xl transition"
+                                className="p-1.5 text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100/80 rounded-lg transition"
                                 title="Перенести в основную форму"
                                 onClick={() => applyPlToMain(pl)}
                               >
-                                <Calculator className="w-4 h-4" />
+                                <Calculator className="w-3.5 h-3.5" />
                               </button>
                               <button
-                                className="p-2 text-rose-500 hover:bg-rose-100 rounded-xl transition"
+                                className="p-1.5 text-rose-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
                                 title="Удалить"
                                 onClick={() => deletePotentialLoad(pl.id)}
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-                            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-center items-center">
-                              <span className="text-[9px] uppercase font-bold text-slate-400 font-mono">
-                                Доход Общий
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="bg-white p-2 rounded-xl border border-slate-100/80 flex flex-col justify-center items-center text-center">
+                              <span className="text-[9px] uppercase tracking-wider font-medium text-slate-400">
+                                Прибыль
                               </span>
                               <span
-                                className={`text-base font-black ${pl.profit < 0 ? "text-rose-500" : "text-emerald-600"}`}
+                                className={`text-xs font-semibold font-mono tabular-nums ${pl.profit < 0 ? "text-rose-600" : "text-emerald-600"}`}
                               >
-                                {Math.round(pl.profit)}€
+                                {Math.round(pl.profit).toLocaleString("ru-RU")} €
                               </span>
                             </div>
-                            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-center items-center">
-                              <span className="text-[9px] uppercase font-bold text-slate-400 font-mono">
-                                Доход в День
+                            <div className="bg-white p-2 rounded-xl border border-slate-100/80 flex flex-col justify-center items-center text-center">
+                              <span className="text-[9px] uppercase tracking-wider font-medium text-slate-400">
+                                В день
                               </span>
                               <span
-                                className={`text-base font-black ${profitPerDay < 0 ? "text-rose-500" : "text-blue-600"}`}
+                                className={`text-xs font-semibold font-mono tabular-nums ${profitPerDay < 0 ? "text-rose-600" : "text-blue-600"}`}
                               >
-                                {profitPerDay}€
+                                {profitPerDay.toLocaleString("ru-RU")} €
                               </span>
                             </div>
-                            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-center items-center">
-                              <span className="text-[9px] uppercase font-bold text-slate-400 font-mono">
+                            <div className="bg-white p-2 rounded-xl border border-slate-100/80 flex flex-col justify-center items-center text-center">
+                              <span className="text-[9px] uppercase tracking-wider font-medium text-slate-400">
                                 Дней в пути
                               </span>
-                              <span className="text-base font-black text-slate-800">
+                              <span className="text-xs font-semibold text-slate-700 font-mono tabular-nums">
                                 {days}
                               </span>
                             </div>
-                            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-center items-center">
-                              <span className="text-[9px] uppercase font-bold text-slate-400 font-mono">
-                                Километраж
+                            <div className="bg-white p-2 rounded-xl border border-slate-100/80 flex flex-col justify-center items-center text-center">
+                              <span className="text-[9px] uppercase tracking-wider font-medium text-slate-400">
+                                Пробег
                               </span>
-                              <span className="text-base font-black text-slate-800">
-                                {Math.round(pl.totalKm)}
+                              <span className="text-xs font-semibold text-slate-700 font-mono tabular-nums">
+                                {Math.round(pl.totalKm).toLocaleString("ru-RU")} км
                               </span>
                             </div>
                           </div>
 
-                          <div className="mt-1 bg-slate-100 rounded-xl p-3 border border-slate-200/50">
-                            <div className="text-[9px] font-black uppercase text-slate-400 mb-2 font-mono">
+                          <div className="mt-0.5 bg-white rounded-xl p-2.5 border border-slate-100">
+                            <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-2 font-sans">
                               Маршрут (Плечи)
                             </div>
-                            <div className="space-y-1.5 border-l-2 border-dashed border-slate-300 ml-1 pl-3 relative">
+                            <div className="space-y-1 border-l border-dashed border-slate-200 ml-1 pl-2.5 relative">
                               {pl.legs.map((leg, idx) => (
                                 <div key={idx} className="relative">
-                                  <div className="absolute -left-[17px] top-1.5 w-2 h-2 bg-slate-400 rounded-full border-2 border-slate-100"></div>
+                                  <div className="absolute -left-[13px] top-1.5 w-1.5 h-1.5 bg-slate-300 rounded-full border border-white"></div>
                                   <div className="flex justify-between items-center text-[10px]">
-                                    <span className="font-bold text-slate-700 truncate mr-2">
+                                    <span className="font-medium text-slate-600 truncate mr-2">
                                       {leg.from || "?"}{" "}
-                                      <span className="text-slate-400 mx-1">
+                                      <span className="text-slate-300 mx-1">
                                         →
                                       </span>{" "}
                                       {leg.to || "?"}
                                     </span>
-                                    <div className="flex gap-2 font-mono whitespace-nowrap">
-                                      <span className="text-slate-500">
+                                    <div className="flex gap-2 font-mono whitespace-nowrap text-slate-400">
+                                      <span>
                                         {leg.km} км
                                       </span>
-                                      <span className="text-blue-600 font-bold">
+                                      <span className="text-blue-600 font-semibold">
                                         {leg.rate}€
                                       </span>
                                     </div>
@@ -3406,20 +2685,20 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       );
                     })}
                     {potentialLoads.length === 0 && (
-                      <span className="text-xs text-slate-400 font-bold block text-center py-6">
+                      <span className="text-xs text-slate-400 font-medium font-mono text-center block py-10">
                         Нет сохраненных просчетов
                       </span>
                     )}
                   </div>
 
                   {potentialLoads.length < 3 && plEditingId === null && (
-                    <button className="w-full mt-auto py-3 bg-purple-100 text-purple-700 font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-purple-200 transition">
+                    <div className="w-full mt-auto py-2 px-3 bg-purple-50 text-purple-700 border border-purple-100 font-semibold text-[11px] rounded-xl text-center shadow-none cursor-default font-sans">
                       Можно создать еще {3 - potentialLoads.length}
-                    </button>
+                    </div>
                   )}
                   {plEditingId !== null && (
                     <button
-                      className="w-full mt-auto py-2.5 bg-slate-200 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-300 transition"
+                      className="w-full mt-auto py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-xs rounded-xl transition cursor-pointer text-center"
                       onClick={() => {
                         setPlEditingId(null);
                         setPlName("");
@@ -3432,26 +2711,27 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 </div>
 
                 {/* Right side: Editor */}
-                <div className="flex-[2] bg-white rounded-2xl p-6 border border-slate-200/60 shadow-sm flex flex-col gap-6">
+                <div className="flex-[2] bg-white rounded-2xl p-6 border border-slate-200/60 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col gap-5">
                   <div className="flex items-center gap-4 border-b border-slate-100 pb-4">
                     <input
                       type="text"
                       placeholder="Название (напр: Груз на Москву)..."
                       value={plName}
                       onChange={(e) => setPlName(e.target.value)}
-                      className="flex-1 bg-slate-50 border border-slate-200 text-slate-800 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-purple-400 transition"
+                      className="flex-1 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-xs font-medium outline-none focus:bg-white focus:border-purple-400 focus:ring-1 focus:ring-purple-400 transition-all placeholder:text-slate-400"
                     />
                     <button
                       onClick={savePotentialLoad}
-                      className="px-6 py-3 bg-purple-600 text-white rounded-xl text-xs font-black shadow-sm shadow-purple-600/20 hover:bg-purple-700 transition uppercase tracking-widest min-w-[140px]"
+                      className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold shadow-sm shadow-purple-600/10 transition tracking-wide min-w-[120px] cursor-pointer"
                     >
                       {plEditingId ? "Обновить" : "Сохранить"}
                     </button>
                   </div>
 
-                  <div className="p-4 bg-purple-50/50 border border-purple-100 rounded-2xl flex flex-col gap-3">
-                    <div className="flex flex-col">
-                      <h4 className="text-[10px] font-black uppercase text-purple-900 tracking-widest font-mono">
+                  <div className="p-4 bg-purple-50/40 border border-purple-100/60 rounded-2xl flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                      <Bot className="w-4 h-4 text-purple-600" />
+                      <h4 className="text-[11px] font-semibold uppercase tracking-wider text-purple-900 font-sans">
                         AI-Ассистент Маршрута
                       </h4>
                     </div>
@@ -3460,7 +2740,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         value={plAiInput}
                         onChange={(e) => setPlAiInput(e.target.value)}
                         placeholder="Вставить текст груза из чата..."
-                        className="flex-1 bg-white border border-purple-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-purple-400 min-h-[44px] resize-y"
+                        className="flex-1 bg-white border border-purple-100 text-slate-800 rounded-xl px-3.5 py-2 text-xs font-medium outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400 transition-all min-h-[44px] resize-y placeholder:text-slate-400 font-sans"
                         onKeyDown={(e) => {
                           if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
                             e.preventDefault();
@@ -3470,35 +2750,35 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       />
                       <button
                         onClick={processPlAiRoute}
-                        className="px-5 bg-purple-600/10 text-purple-700 hover:bg-purple-600/20 rounded-xl text-xs font-black uppercase tracking-widest transition flex flex-col items-center justify-center gap-1 min-w-[100px] border border-purple-600/20"
+                        className="px-4 bg-purple-600 text-white hover:bg-purple-700 rounded-xl text-xs font-semibold tracking-wide transition flex flex-col items-center justify-center gap-1 min-w-[100px] border border-purple-600 cursor-pointer shadow-sm shadow-purple-600/10"
                       >
-                        <Bot className="w-5 h-5" /> AI Parse
+                        AI Parse
                       </button>
                     </div>
                     {plAiFeedback && (
-                      <div className="text-xs font-bold text-emerald-600 mt-1">
+                      <div className="text-[11px] font-semibold text-emerald-600 mt-0.5">
                         {plAiFeedback}
                       </div>
                     )}
                   </div>
 
-                  <div className="overflow-x-auto pb-4">
+                  <div className="hidden lg:block overflow-x-auto pb-2">
                     <table className="w-full text-left border-collapse min-w-[600px]">
                       <thead>
-                        <tr>
-                          <th className="p-2 text-[10px] uppercase font-black text-slate-400">
+                        <tr className="border-b border-slate-100">
+                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">
                             Откуда
                           </th>
-                          <th className="p-2 text-[10px] uppercase font-black text-slate-400">
+                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">
                             Куда
                           </th>
-                          <th className="p-2 text-[10px] uppercase font-black text-slate-400 w-24">
+                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans w-24">
                             КМ
                           </th>
-                          <th className="p-2 text-[10px] uppercase font-black text-slate-400 w-24">
+                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans w-24">
                             Доезд (КМ)
                           </th>
-                          <th className="p-2 text-[10px] uppercase font-black text-slate-400 w-28">
+                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans w-28">
                             Ставка €
                           </th>
                           <th></th>
@@ -3506,7 +2786,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       </thead>
                       <tbody>
                         {plLegs.map((leg, i) => (
-                          <tr key={i} className="border-b border-slate-100/50">
+                          <tr key={i} className="border-b border-slate-100/60 last:border-b-0">
                             <td className="p-1">
                               <input
                                 type="text"
@@ -3517,7 +2797,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                                   setPlLegs(nl);
                                 }}
                                 onBlur={() => checkLegDistance(i, true)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none"
+                                className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all font-sans"
                               />
                             </td>
                             <td className="p-1">
@@ -3530,25 +2810,26 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                                   setPlLegs(nl);
                                 }}
                                 onBlur={() => checkLegDistance(i, true)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none"
+                                className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all font-sans"
                               />
                             </td>
                             <td className="p-1 relative">
                               <input
                                 type="number"
+                                onFocus={(e) => e.target.select()}
                                 value={leg.km || ""}
                                 onChange={(e) => {
                                   const nl = [...plLegs];
                                   nl[i].km = Number(e.target.value);
                                   setPlLegs(nl);
                                 }}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-8 py-2 text-xs font-bold outline-none"
+                                className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-lg pl-2.5 pr-8 py-1.5 text-xs font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all tabular-nums font-mono"
                               />
                               <button
                                 onClick={() =>
                                   openMapRouteModal(i, leg.from, leg.to, true)
                                 }
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-500 transition"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-500 transition cursor-pointer"
                               >
                                 <MapPin className="w-3.5 h-3.5" />
                               </button>
@@ -3556,26 +2837,27 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                             <td className="p-1 relative">
                               <input
                                 type="number"
+                                onFocus={(e) => e.target.select()}
                                 value={leg.emptyRunKm || ""}
                                 onChange={(e) => {
                                   const nl = [...plLegs];
                                   nl[i].emptyRunKm = Number(e.target.value);
                                   setPlLegs(nl);
                                 }}
-                                onBlur={() => checkLegDistance(i, true)}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold outline-none"
+                                className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all tabular-nums font-mono"
                               />
                             </td>
                             <td className="p-1">
                               <input
                                 type="number"
+                                onFocus={(e) => e.target.select()}
                                 value={leg.rate || ""}
                                 onChange={(e) => {
                                   const nl = [...plLegs];
                                   nl[i].rate = Number(e.target.value);
                                   setPlLegs(nl);
                                 }}
-                                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-blue-600 outline-none"
+                                className="w-full bg-white hover:bg-slate-50/50 border border-slate-200 text-blue-600 rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-all tabular-nums font-mono"
                               />
                             </td>
                             <td className="p-1 w-20 text-right">
@@ -3593,7 +2875,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                                     });
                                     setPlLegs(nl);
                                   }}
-                                  className="w-7 h-7 rounded bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-100"
+                                  className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-100 transition cursor-pointer"
                                 >
                                   <Plus className="w-3.5 h-3.5" />
                                 </button>
@@ -3605,7 +2887,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                                       setPlLegs(nl);
                                     }
                                   }}
-                                  className="w-7 h-7 rounded bg-rose-50 text-rose-500 flex items-center justify-center hover:bg-rose-100"
+                                  className="w-7 h-7 rounded-lg bg-rose-50 text-rose-500 flex items-center justify-center hover:bg-rose-100 transition cursor-pointer"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -3620,6 +2902,49 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               </div>
             ) : null}
           </div>
+          {modalTab === "main" && (
+            <div className="bg-white px-6 py-4 border-t border-slate-200/60 shadow-sm flex items-center justify-between sticky bottom-0 z-10">
+              <div className="flex items-center gap-3">
+                {isEditing && currentEditingTrip && (
+                  <button
+                    onClick={() => deleteTrip(editingTripId!, true)}
+                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-4 py-2.5 rounded-xl text-sm font-black uppercase tracking-tight transition flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" /> Удалить
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                {isEditing && currentEditingTrip && (
+                  currentEditingTrip.isArchived ? (
+                    <button
+                      onClick={() => {
+                        pdService.restoreTrip(editingTripId, user.name, user.role);
+                        setIsModalOpen(false);
+                      }}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2.5 rounded-xl font-black text-sm uppercase tracking-tight transition"
+                    >
+                      Из архива
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => finishTripToArchive(currentEditingTrip, true)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-2.5 rounded-xl font-black text-sm uppercase tracking-tight transition flex items-center gap-2"
+                    >
+                      <Archive className="w-4 h-4" /> В архив
+                    </button>
+                  )
+                )}
+                <button
+                  onClick={saveTrip}
+                  disabled={isSubmitting}
+                  className={`${isSubmitting ? "bg-blue-300 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-500"} text-white px-8 py-2.5 rounded-xl font-black text-sm uppercase tracking-tight transition flex items-center gap-2 shadow-sm`}
+                >
+                  <Save className="w-4 h-4" /> {isSubmitting ? "Сохранение..." : "Сохранить"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -3667,11 +2992,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     }
     if (searchCarQuery.trim()) {
       const q = searchCarQuery.trim().toLowerCase();
-      list = list.filter((t) =>
-        String(t.carNumber || "")
-          .toLowerCase()
-          .includes(q),
-      );
+      list = list.filter((t) => String(t.carNumber || '').toLowerCase().includes(q));
     }
 
     // Sort logic
@@ -3710,23 +3031,14 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       list.sort((a, b) => {
         const idxA = manualTripsOrder.indexOf(a.id);
         const idxB = manualTripsOrder.indexOf(b.id);
-        if (idxA === -1 && idxB === -1)
-          return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+        if (idxA === -1 && idxB === -1) return b.id.localeCompare(a.id);
         if (idxA === -1) return -1; // New trips go to the top
-        if (idxB === -1) return 1; // New trips go to the top
+        if (idxB === -1) return 1;  // New trips go to the top
         return idxA - idxB;
       });
     }
     return list;
-  }, [
-    trips,
-    activeDispatcherTab,
-    filterDispatchers,
-    activeDirectionTab,
-    searchCarQuery,
-    sortConfig,
-    manualTripsOrder,
-  ]);
+  }, [trips, activeDispatcherTab, filterDispatchers, activeDirectionTab, searchCarQuery, sortConfig, manualTripsOrder]);
 
   const archiveTripsMonths = useMemo(() => {
     return Array.from(
@@ -3742,11 +3054,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     let list = trips.filter((t) => !!t.isArchived);
     if (searchCarQuery.trim()) {
       const q = searchCarQuery.trim().toLowerCase();
-      list = list.filter((t) =>
-        String(t.carNumber || "")
-          .toLowerCase()
-          .includes(q),
-      );
+      list = list.filter((t) => String(t.carNumber || '').toLowerCase().includes(q));
     }
     let targetMonth = archiveMonth;
     if (!targetMonth && archiveTripsMonths.length > 0) {
@@ -3779,9 +3087,6 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         } else if (sortConfig.key === "profit") {
           valA = a.profitFact || 0;
           valB = b.profitFact || 0;
-        } else if (sortConfig.key === "profitDay") {
-          valA = (a.profitFact || 0) / (a.days || 1);
-          valB = (b.profitFact || 0) / (b.days || 1);
         }
 
         if (valA < valB) return sortConfig.dir === "asc" ? -1 : 1;
@@ -3789,45 +3094,21 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         return 0;
       });
     } else {
-      list.sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+      list.sort((a, b) => b.id.localeCompare(a.id));
     }
     return list;
-  }, [
-    trips,
-    searchCarQuery,
-    archiveMonth,
-    archiveTripsMonths,
-    sortConfig,
-    manualTripsOrder,
-  ]);
+  }, [trips, searchCarQuery, archiveMonth, archiveTripsMonths, sortConfig, manualTripsOrder]);
 
   const renderTripsGrid = (archived: boolean) => {
-    const list = archived
-      ? [...archiveTripsComputed]
-      : [...activeTripsComputed];
+    const list = archived ? archiveTripsComputed : activeTripsComputed;
 
-    const normalizeCarNum = (num: string) => String(num || "").trim().replace(/\s+/g, "").toUpperCase();
-
-    const getCarNotebookStatus = (car: string) => {
-      if (!car) return null;
-      const normalized = normalizeCarNum(car);
-      const foundKey = Object.keys(notebookStatuses).find(k => normalizeCarNum(k) === normalized);
-      return foundKey ? notebookStatuses[foundKey] : null;
-    };
-
-    const getCarNotebookNote = (car: string) => {
-      if (!car) return null;
-      const normalized = normalizeCarNum(car);
-      const foundKey = Object.keys(notebookNotes).find(k => normalizeCarNum(k) === normalized);
-      return foundKey ? notebookNotes[foundKey] : null;
-    };
-
-    if (list.length === 0)
+    if (list.length === 0) {
       return (
-        <div className="text-center font-bold text-slate-400 py-10 uppercase tracking-widest font-mono text-sm">
-          Пусто
+        <div className="text-center font-medium text-slate-400 py-12 font-mono text-sm border border-dashed border-slate-200/50 rounded-2xl">
+          Список пуст
         </div>
       );
+    }
 
     // Сводка
     let sumProfit = 0;
@@ -3861,84 +3142,161 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       });
     };
 
-    const SortIndicator = ({ sortKey }: { sortKey: string }) => {
+    const renderSortIndicator = (sortKey: string) => {
       if (sortConfig?.key !== sortKey) return null;
       return (
-        <span className="text-blue-500 ml-1">
+        <span className="text-slate-500 ml-1">
           {sortConfig.dir === "asc" ? "↑" : "↓"}
         </span>
       );
     };
 
-    return (
-      <div
-        className="flex flex-col gap-3 relative w-full overflow-x-auto transition-all duration-150"
-        style={{ zoom: tableScale / 100 } as any}
-      >
-        {/* Table Headers */}
-        <div className="hidden lg:flex px-6 pb-2 border-b border-slate-200/50 text-[10px] uppercase font-black tracking-widest text-slate-400 font-mono self-start w-full cursor-pointer select-none">
-          <div
-            className="min-w-[200px] hover:text-blue-500 transition"
-            onClick={() => handleSort("carNumber")}
-          >
-            Автомобиль <SortIndicator sortKey="carNumber" />
+    const marginRate = sumFreight > 0 ? Math.round((sumProfit / sumFreight) * 100) : 0;
+    const profitPerDayValue = sumDays > 0 ? Math.round(sumProfit / sumDays) : 0;
+    const listQuality = list.length > 0 ? Math.round((profitableCount / list.length) * 100) : 0;
+
+    const renderKpiSummary = (isBottom: boolean) => {
+      return (
+        <div className={`grid grid-cols-2 lg:grid-cols-5 gap-6 bg-slate-50/40 border border-slate-200/50 rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.01)] ${isBottom ? "mt-4" : "mb-2"}`}>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
+              Общая прибыль
+            </span>
+            <span className={`text-2xl lg:text-3xl font-bold tracking-tight font-sans tabular-nums ${sumProfit >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+              {Math.round(sumProfit).toLocaleString("ru-RU")} <span className="text-sm font-medium text-slate-400">€</span>
+            </span>
           </div>
-          <div
-            className="min-w-[140px] hover:text-blue-500 transition"
-            onClick={() => handleSort("dateStart")}
-          >
-            Даты <SortIndicator sortKey="dateStart" />
+          <div className="flex flex-col lg:border-l lg:border-slate-200/60 lg:pl-6">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
+              Маржинальность
+            </span>
+            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900 font-sans tabular-nums">
+              {marginRate}%
+            </span>
           </div>
-          <div className="flex-1 min-w-[220px]">Маршрут</div>
-          <div className="min-w-[280px] flex gap-4 pl-6">
-            <span
-              className="w-16 hover:text-blue-500 transition"
-              onClick={() => handleSort("km")}
-            >
-              КМ <SortIndicator sortKey="km" />
+          <div className="flex flex-col lg:border-l lg:border-slate-200/60 lg:pl-6">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
+              Прибыль в день
             </span>
-            <span
-              className="w-16 hover:text-blue-500 transition"
-              onClick={() => handleSort("freight")}
-            >
-              Фрахт <SortIndicator sortKey="freight" />
+            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900 font-sans tabular-nums">
+              {profitPerDayValue.toLocaleString("ru-RU")} <span className="text-sm font-medium text-slate-400">€</span>
             </span>
-            <span
-              className="w-16 hover:text-blue-500 transition"
-              onClick={() => handleSort("expenses")}
-            >
-              Расх <SortIndicator sortKey="expenses" />
+          </div>
+          <div className="flex flex-col lg:border-l lg:border-slate-200/60 lg:pl-6">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
+              Общий пробег
             </span>
-            <span
-              className="w-[120px] ml-auto text-right hover:text-blue-500 transition"
-              onClick={() => handleSort("profit")}
-            >
-              Прибыль <SortIndicator sortKey="profit" /> / Дни
+            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900 font-sans tabular-nums">
+              {Math.round(sumKm).toLocaleString("ru-RU")} <span className="text-xs font-medium text-slate-400">км</span>
+            </span>
+          </div>
+          <div className="flex flex-col lg:border-l lg:border-slate-200/60 lg:pl-6 col-span-2 lg:col-span-1">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
+              Качество списка
+            </span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900 font-sans tabular-nums">
+                {listQuality}%
+              </span>
+              <span className="text-xs font-semibold text-emerald-600 font-sans">
+                +{profitableCount} в плюс
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-400 font-medium mt-0.5">
+              Всего: {profitableCount} из {list.length}
             </span>
           </div>
         </div>
+      );
+    };
 
-        <Virtuoso
-          useWindowScroll
-          data={list}
-          itemContent={(idx, trip) => {
+    return (
+      <div className="flex flex-col gap-4 relative w-full overflow-x-auto transition-all duration-150" style={{ zoom: tableScale / 100 } as any}>
+        
+        {/* KPI Summary Dashboard Panel - ABOVE for Archive */}
+        {archived && renderKpiSummary(false)}
+
+        {/* Table Headers */}
+        <div className="hidden lg:flex px-6 pb-3 border-b border-slate-200/40 text-xs font-medium text-slate-400 self-start w-full cursor-pointer select-none tracking-normal">
+          <div
+            className="min-w-[200px] hover:text-slate-700 transition flex items-center gap-1"
+            onClick={() => handleSort("carNumber")}
+          >
+            Автомобиль {renderSortIndicator("carNumber")}
+          </div>
+          <div
+            className="min-w-[140px] hover:text-slate-700 transition flex items-center gap-1"
+            onClick={() => handleSort("dateStart")}
+          >
+            Даты {renderSortIndicator("dateStart")}
+          </div>
+          <div className="flex-1 min-w-[220px]">Маршрут</div>
+          <div className="min-w-[480px] flex gap-4 pl-6 justify-end">
+            <span
+              className="w-20 hover:text-slate-700 transition flex items-center gap-1 justify-end"
+              onClick={() => handleSort("km")}
+            >
+              Км {renderSortIndicator("km")}
+            </span>
+            <span
+              className="w-20 hover:text-slate-700 transition flex items-center gap-1 justify-end"
+              onClick={() => handleSort("freight")}
+            >
+              Фрахт {renderSortIndicator("freight")}
+            </span>
+            <span
+              className="w-20 hover:text-slate-700 transition flex items-center gap-1 justify-end"
+              onClick={() => handleSort("expenses")}
+            >
+              Расходы {renderSortIndicator("expenses")}
+            </span>
+            <span
+              className="w-24 hover:text-slate-700 transition flex items-center gap-1 justify-end"
+              onClick={() => handleSort("profit")}
+            >
+              Прибыль {renderSortIndicator("profit")}
+            </span>
+            <span className="w-12 text-right">Дни</span>
+            <span className="w-20 text-right">В день</span>
+          </div>
+        </div>
+
+        {/* Pure Map List instead of Virtuoso (solves ResizeObserver infinite loops under CSS zoom) */}
+        <div className="flex flex-col gap-3 w-full">
+          {list.map((trip) => {
             const firstLeg = trip.legs?.[0];
             const lastLeg = trip.legs?.[trip.legs.length - 1];
             const routeTitle =
               firstLeg?.from && lastLeg?.to
                 ? `${firstLeg.from} ➔ ${lastLeg.to}`
                 : "Плечи маршрута";
-            const cardBg = getDispatcherColor(trip.dispatcher || "");
 
             const isHighlighted =
               trip.carNumber &&
               highlightedCar === trip.carNumber.trim().toUpperCase();
+
+            // Set up clean direction badge colors
+            const getDirectionBadgeClass = (dir: string) => {
+              const d = (dir || "").toLowerCase();
+              if (d.includes("китай")) return "bg-amber-50 text-amber-700 border-amber-200/40";
+              if (d.includes("турция")) return "bg-blue-50 text-blue-700 border-blue-200/40";
+              return "bg-slate-50 text-slate-600 border-slate-200/40";
+            };
+
+            // Set up clean dispatcher badges
+            const dispatcherName = trip.dispatcher || trip.logist || "—";
+            const colorKey = dispatchersColors[dispatcherName];
+            const preset = DISPATCHER_COLORS_PRESETS.find((p) => p.key === colorKey);
+            const dispBadgeStyle = preset
+              ? `${preset.bg} ${preset.darkText} border-slate-200/40`
+              : "bg-slate-50 text-slate-600 border-slate-200/40";
+
             return (
               <div
                 key={trip.id}
                 data-trip-id={trip.id}
                 onClick={() => loadTripToForm(trip)}
-                className={`car-strip-item ${cardBg} rounded-2xl p-4 pl-5 border hover:shadow-md transition group relative flex flex-col lg:flex-row gap-6 items-start lg:items-center cursor-pointer ${isHighlighted ? "border-amber-500 ring-2 ring-amber-500/20 shadow-[0_10px_25px_rgba(245,158,11,0.08)] scale-[1.01]" : "border-slate-200/50"}`}
+                className={`car-strip-item bg-white rounded-2xl p-4.5 border hover:shadow-[0_8px_30px_rgba(15,23,42,0.04)] hover:border-slate-350 transition-all duration-200 group relative flex flex-col xl:flex-row gap-5 items-start xl:items-center cursor-pointer ${isHighlighted ? "border-amber-500 ring-2 ring-amber-500/25 shadow-[0_10px_25px_rgba(245,158,11,0.06)] scale-[1.002]" : "border-slate-200/60"}`}
                 draggable={true}
                 onDragStart={(e) => {
                   e.dataTransfer.setData("tripId", trip.id);
@@ -3952,78 +3310,38 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                   e.stopPropagation();
                 }}
               >
-                <div
-                  className={`absolute left-0 top-0 bottom-0 w-1.5 ${trip.stripColor || "bg-slate-200"} rounded-l-2xl`}
-                />
-
-                <div className="flex flex-col gap-1 min-w-[200px]">
-                  <div className="flex items-center gap-3 mb-1">
-                    <span className="text-lg font-black text-slate-900 tracking-tight">
+                {/* Main Accent Block: Plate & Direction */}
+                <div className="flex flex-col gap-2 min-w-[200px] shrink-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-bold text-slate-900 tracking-tight font-sans">
                       {trip.carNumber}
                     </span>
-                    <span className="bg-slate-100 text-slate-600 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md font-mono">
-                      {trip.direction}
+                    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${getDirectionBadgeClass(trip.direction || "")}`}>
+                      {trip.direction || "—"}
                     </span>
                   </div>
-
-                  {/* Notebook status badge */}
-                  {(() => {
-                    const status = getCarNotebookStatus(trip.carNumber);
-                    if (status === "base") {
-                      return (
-                        <div className="flex mb-1">
-                          <span className="bg-emerald-100 border border-emerald-200 text-emerald-800 text-[9px] font-black uppercase px-2 py-0.5 rounded-lg leading-none font-mono">
-                            на базе
-                          </span>
-                        </div>
-                      );
-                    }
-                    if (status === "trip") {
-                      return (
-                        <div className="flex mb-1">
-                          <span className="bg-blue-100 border border-blue-200 text-blue-800 text-[9px] font-black uppercase px-2 py-0.5 rounded-lg leading-none font-mono">
-                            в рейсе
-                          </span>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
-
-                  <div className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-widest">
-                    Диспетчер:{" "}
-                    <span className="text-slate-600">
-                      {trip.dispatcher || trip.logist || "—"}
-                    </span>
+                  
+                  {/* Meta layer: Dispatcher & Actions */}
+                  <div className="flex flex-col gap-1 mt-0.5 text-xs text-slate-500">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] text-slate-400 font-sans">Диспетчер:</span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${dispBadgeStyle}`}>
+                        {formatToTitleCase(dispatcherName)}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Notebook note preview */}
-                  {(() => {
-                    const noteText = getCarNotebookNote(trip.carNumber);
-                    if (noteText && noteText.trim()) {
-                      return (
-                        <div className="mt-2 p-2 bg-amber-50/80 border border-amber-200/50 rounded-xl text-[10px] font-bold text-amber-900 leading-relaxed font-sans max-w-[220px] shadow-[0_1px_2px_rgba(0,0,0,0.02)] flex items-start gap-1.5">
-                          <BookOpen size={10} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                          <span className="whitespace-pre-line break-words">
-                            {noteText}
-                          </span>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
-
-                  <div className="flex items-center gap-1.5 mt-2 opacity-100 lg:opacity-0 group-hover:opacity-100 transition">
+                  <div className="flex items-center gap-1.5 mt-1 opacity-100 xl:opacity-0 group-hover:opacity-100 transition-all duration-150">
                     {!archived && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           finishTripToArchive(trip);
                         }}
-                        className="p-1.5 text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 rounded-lg transition"
+                        className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md transition"
                         title="В архив"
                       >
-                        <Archive className="w-3.5 h-3.5" />
+                        <Archive className="w-3.5 h-3.5 stroke-[1.8]" />
                       </button>
                     )}
                     {user.role === "root_admin" && (
@@ -4032,63 +3350,69 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                           e.stopPropagation();
                           deleteTrip(trip.id);
                         }}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 rounded-lg transition"
+                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition"
+                        title="Удалить"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3.5 h-3.5 stroke-[1.8]" />
                       </button>
                     )}
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-1.5 min-w-[140px] text-[11px] font-bold text-slate-500 font-mono">
-                  <div className="flex justify-between gap-4">
-                    <span>ст.</span>{" "}
-                    <span className="text-slate-800">
+                {/* Meta block: Dates */}
+                <div className="flex flex-col gap-1 min-w-[140px] shrink-0 text-xs text-slate-500 font-sans">
+                  <div className="flex justify-between gap-4 items-center">
+                    <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wider">Старт</span>
+                    <span className="text-slate-800 font-semibold font-mono">
                       {trip.dateStart
                         ? new Date(trip.dateStart).toLocaleDateString("ru-RU")
-                        : "-"}
+                        : "—"}
                     </span>
                   </div>
-                  <div className="flex justify-between gap-4">
-                    <span>фн.</span>{" "}
-                    <span className="text-slate-800">
+                  <div className="flex justify-between gap-4 items-center">
+                    <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wider">Финиш</span>
+                    <span className="text-slate-800 font-semibold font-mono">
                       {trip.dateEnd
                         ? new Date(trip.dateEnd).toLocaleDateString("ru-RU")
-                        : "-"}
+                        : "—"}
                     </span>
                   </div>
                   {trip.currentMonth && archived && (
-                    <div className="flex justify-between gap-4 text-blue-500">
-                      <span>архив</span> <span>{trip.currentMonth}</span>
+                    <div className="mt-1">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-600 border border-blue-100">
+                        Архив: {trip.currentMonth}
+                      </span>
                     </div>
                   )}
                 </div>
 
-                <div className="flex-1 w-full bg-slate-50/50 rounded-2xl p-4 border border-slate-100 min-w-[220px]">
-                  <div className="text-sm font-black text-slate-900 mb-3">
-                    {routeTitle}
+                {/* Itinerary Section: Full & Readable */}
+                <div className="flex-1 w-full bg-slate-50/20 rounded-xl p-3 border border-slate-200/40 min-w-[220px]">
+                  <div className="text-xs font-semibold text-slate-800 mb-2 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="tracking-tight text-slate-800 font-semibold">{routeTitle}</span>
                   </div>
                   {trip.legs && trip.legs.length > 0 ? (
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-1.5 pl-1 border-l-2 border-slate-200/30 ml-1.5">
                       {trip.legs.map((leg, i) => {
                         const isActive = trip.activeLegIndex === i;
                         return (
                           <div
                             key={i}
-                            className={`flex items-center gap-2 text-[11px] font-bold font-mono p-1.5 -ml-1.5 rounded-lg ${isActive ? "bg-blue-500/10 text-blue-800" : "text-slate-500"}`}
+                            className={`flex items-center gap-2 text-xs p-1 -ml-2 rounded-md ${isActive ? "bg-slate-900/5 text-slate-900 font-medium" : "text-slate-500"}`}
                           >
                             <div
-                              className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" : "bg-slate-300"}`}
+                              className={`w-2 h-2 rounded-full border flex-shrink-0 -ml-[10px] ${isActive ? "bg-slate-900 border-white shadow-xs scale-110" : "bg-slate-200 border-white"}`}
                             />
                             <span className="truncate">
                               {leg.from || "?"} ➔ {leg.to || "?"}
                             </span>
                             {leg.ferry > 0 ? (
                               <span
-                                className="text-blue-400"
+                                className="text-blue-500 text-[9px] font-medium bg-blue-50/50 px-1 py-0.5 rounded border border-blue-100"
                                 title={`Ферри: €${leg.ferry}`}
                               >
-                                ⛴
+                                ⛴ Ferry
                               </span>
                             ) : null}
                           </div>
@@ -4096,180 +3420,98 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       })}
                     </div>
                   ) : (
-                    <div className="text-[10px] font-bold text-slate-400 font-mono">
-                      Не задан
+                    <div className="text-[10px] text-slate-400 italic">
+                      Маршрут не задан
                     </div>
                   )}
                 </div>
 
-                <div className="flex flex-wrap lg:flex-nowrap items-center gap-4 sm:gap-6 xl:gap-8 w-full lg:w-auto justify-between lg:justify-end border-t lg:border-t-0 border-slate-100 pt-3 lg:pt-0">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 font-mono">
-                      Пробег
-                    </span>
-                    <span className="text-[13px] font-black text-slate-800 font-mono whitespace-nowrap">
-                      {Math.round(
-                        trip.factKm || trip.totalKm || 0,
-                      ).toLocaleString("ru-RU")}{" "}
-                      км
+                {/* Aligned Grid for Metrics & Finances - aligned EXACTLY with table headers */}
+                <div className="grid grid-cols-3 xl:flex xl:items-center gap-4 w-full xl:w-[480px] xl:pl-6 justify-between xl:justify-end border-t xl:border-t-0 border-slate-100 pt-3.5 xl:pt-0 shrink-0">
+                  <div className="flex flex-col gap-0.5 w-20 xl:text-right">
+                    <span className="text-[10px] font-medium text-slate-400">Км</span>
+                    <span className="text-xs font-semibold text-slate-700 font-mono tabular-nums whitespace-nowrap">
+                      {Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU")}
                     </span>
                   </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 font-mono">
-                      Фрахт
-                    </span>
-                    <span className="text-[13px] font-black text-slate-800 font-mono whitespace-nowrap">
-                      {Math.round(trip.totalFreight || 0).toLocaleString(
-                        "ru-RU",
-                      )}{" "}
-                      €
+                  <div className="flex flex-col gap-0.5 w-20 xl:text-right">
+                    <span className="text-[10px] font-medium text-slate-400">Фрахт</span>
+                    <span className="text-xs font-semibold text-slate-700 font-mono tabular-nums whitespace-nowrap">
+                      {Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}
                     </span>
                   </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[9px] uppercase tracking-widest font-black text-rose-500/70 font-mono">
-                      Расходы
-                    </span>
-                    <span className="text-[13px] font-black text-rose-600 font-mono whitespace-nowrap">
-                      {Math.round(trip.totalExpenses || 0).toLocaleString(
-                        "ru-RU",
-                      )}{" "}
-                      €
+                  <div className="flex flex-col gap-0.5 w-20 xl:text-right">
+                    <span className="text-[10px] font-medium text-slate-400">Расходы</span>
+                    <span className="text-xs font-semibold text-rose-600/90 font-mono tabular-nums whitespace-nowrap">
+                      {Math.round(trip.totalExpenses !== undefined ? trip.totalExpenses : (trip.totalFreight - (trip.profit || 0))).toLocaleString("ru-RU")}
                     </span>
                   </div>
-
-                  <div className="flex items-center gap-4 border-l-0 lg:border-l border-slate-200 pl-0 lg:pl-4 xl:pl-6 w-full sm:w-auto justify-between sm:justify-end">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest font-mono text-left lg:text-right mb-0.5">
-                        Прибыль
-                      </span>
-                      <span
-                        className={`text-xl font-black tracking-tighter leading-none whitespace-nowrap ${trip.profitFact < 0 ? "text-rose-500" : "text-slate-900"}`}
-                      >
-                        {Math.round(trip.profitFact || 0).toLocaleString(
-                          "ru-RU",
-                        )}{" "}
-                        <span className="text-sm font-mono text-slate-400">
-                          €
-                        </span>
-                      </span>
-                    </div>
-                    <div className="flex flex-col border-l border-slate-100 pl-4">
-                      <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 font-mono text-right mb-0.5">
-                        Дни
-                      </span>
-                      <span className="text-sm font-black font-mono text-slate-600 text-right">
-                        {trip.days || "-"}
-                      </span>
-                    </div>
-                    <div className="flex flex-col border-l border-slate-100 pl-4">
-                      <span className="text-[9px] uppercase tracking-widest font-black text-slate-400 font-mono text-right mb-0.5">
-                        В день
-                      </span>
-                      <span
-                        className={`text-sm font-black font-mono text-right whitespace-nowrap ${Math.round((trip.profitFact || 0) / (trip.days || 1)) < 0 ? "text-rose-500" : "text-green-600"}`}
-                      >
-                        {Math.round(
-                          (trip.profitFact || 0) / (trip.days || 1),
-                        ).toLocaleString("ru-RU")}{" "}
-                        €
-                      </span>
-                    </div>
+                  <div className="flex flex-col gap-0.5 w-24 xl:text-right">
+                    <span className="text-[10px] font-medium text-slate-400">Прибыль</span>
+                    <span className={`text-sm font-bold font-mono tabular-nums whitespace-nowrap ${ (trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                      {Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 w-12 text-right">
+                    <span className="text-[10px] font-medium text-slate-400">Дни</span>
+                    <span className="text-xs font-semibold font-mono text-slate-600 tabular-nums">
+                      {trip.days || "—"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 w-20 text-right">
+                    <span className="text-[10px] font-medium text-slate-400">В день</span>
+                    <span className={`text-xs font-semibold font-mono tabular-nums ${Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)) < 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                      {Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)).toLocaleString("ru-RU")}
+                    </span>
                   </div>
                 </div>
               </div>
             );
-          }}
-        />
+          })}
 
-        {/* Сводка (Summary Box) */}
-        <div className="mt-4 grid grid-cols-2 lg:grid-cols-5 gap-3">
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col items-center">
-            <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest font-mono mb-1">
-              Общая прибыль
-            </span>
-            <span
-              className={`text-xl font-black ${sumProfit >= 0 ? "text-emerald-600" : "text-rose-500"}`}
-            >
-              {Math.round(sumProfit).toLocaleString("ru-RU")} €
-            </span>
-          </div>
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col items-center">
-            <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest font-mono mb-1">
-              Маржинальность
-            </span>
-            <span className="text-xl font-black text-slate-800">
-              {sumFreight > 0 ? Math.round((sumProfit / sumFreight) * 100) : 0}{" "}
-              %
-            </span>
-          </div>
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col items-center">
-            <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest font-mono mb-1">
-              Прибыль/день
-            </span>
-            <span className="text-xl font-black text-slate-800">
-              {sumDays > 0
-                ? Math.round(sumProfit / sumDays).toLocaleString("ru-RU")
-                : 0}{" "}
-              €
-            </span>
-          </div>
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col items-center">
-            <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest font-mono mb-1">
-              Пробег
-            </span>
-            <span className="text-xl font-black text-slate-800">
-              {Math.round(sumKm).toLocaleString("ru-RU")} км
-            </span>
-          </div>
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col items-center">
-            <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest font-mono mb-1">
-              Качество списка
-            </span>
-            <span className="text-xl font-black text-slate-800">
-              {list.length > 0
-                ? Math.round((profitableCount / list.length) * 100)
-                : 0}{" "}
-              %
-            </span>
-            <span className="text-[8px] uppercase font-bold text-slate-400 font-mono mt-0.5">
-              В ПЛЮС: {profitableCount}/{list.length}
-            </span>
-          </div>
+          {list.length === 0 && (
+            <div className="text-sm text-slate-400 font-medium py-12 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200/50">
+              Список планирования пуст
+            </div>
+          )}
         </div>
+
+        {/* KPI Summary Dashboard Panel - BELOW for Active */}
+        {!archived && renderKpiSummary(true)}
       </div>
     );
   };
 
   const renderHistory = () => {
     return (
-      <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
-        <h2 className="text-sm font-black uppercase text-slate-800 tracking-wider mb-6 flex items-center gap-2">
+      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
+        <h2 className="text-sm font-semibold text-slate-800 tracking-tight mb-6 flex items-center gap-2">
           <History className="w-5 h-5 text-blue-500" /> История изменений
         </h2>
-        <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+        <div className="space-y-2.5 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
           {[...logs]
             .sort(
               (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
             )
             .map((log, idx) => (
               <div
-                key={`${log.id || "log"}_${idx}`}
-                className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4"
+                key={`${log.id || 'log'}_${idx}`}
+                className="p-3.5 bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors"
               >
-                <div className="flex flex-col">
-                  <span className="text-xs font-black text-slate-900 mb-0.5">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs font-semibold text-slate-800">
                     {log.actionType}
                   </span>
-                  <span className="text-[10px] text-slate-500 font-mono">
+                  <span className="text-[11px] text-slate-500 leading-relaxed font-sans">
                     {log.details}
                   </span>
                 </div>
-                <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono">
+                <div className="flex items-center gap-4 text-[10px] text-slate-400 font-sans">
                   <div className="flex flex-col text-right">
-                    <span>{log.user}</span>
-                    <span>{log.role}</span>
+                    <span className="font-semibold text-slate-600">{log.user}</span>
+                    <span className="text-[9px] text-slate-400 uppercase tracking-wider font-mono">{log.role}</span>
                   </div>
-                  <div className="text-right whitespace-nowrap">
+                  <div className="text-right whitespace-nowrap font-mono text-slate-400">
                     {new Date(log.date).toLocaleString("ru-RU", {
                       year: "numeric",
                       month: "2-digit",
@@ -4282,7 +3524,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               </div>
             ))}
           {logs.length === 0 && (
-            <div className="text-sm text-slate-400 font-bold py-8 text-center bg-slate-50 rounded-2xl">
+            <div className="text-xs text-slate-400 font-medium py-10 text-center bg-slate-50/50 border border-dashed border-slate-200 rounded-2xl font-mono">
               История пуста
             </div>
           )}
@@ -4292,84 +3534,106 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   };
 
   return (
-    <div className="w-full space-y-4">
-      <div className="bg-white rounded-[2rem] p-5 sm:p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-4">
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-          {/* ... Header ... */}
+    <div className="w-full space-y-6">
+      <div className="bg-white rounded-[2rem] p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-5">
+        
+        {/* Page Header Area */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
           <div>
-            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
-              <TrendingUp className="w-6 h-6 text-blue-500" /> План Дохода
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">
+              Модуль План Firebase
+            </span>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+              <TrendingUp className="w-7 h-7 text-slate-800" /> План дохода
             </h1>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-200 overflow-x-auto max-w-full custom-scrollbar">
-              <button
-                onClick={() => {
-                  resetForm();
-                  setIsModalOpen(true);
-                }}
-                className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition flex items-center gap-2 bg-slate-900 text-white hover:bg-slate-800 shadow-sm border border-slate-800`}
-              >
-                <Plus className="w-4 h-4" /> Новый План
-              </button>
+          {/* Navigation Tabs segment */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50 overflow-x-auto max-w-full custom-scrollbar items-center">
               <button
                 onClick={() => setActiveTab("active")}
-                className={`ml-1 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition flex items-center gap-2 ${activeTab === "active" ? "bg-white text-slate-950 shadow-sm border border-slate-200/50" : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"}`}
+                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${activeTab === "active" ? "bg-white text-slate-900 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/30"}`}
               >
-                <Calculator className="w-4 h-4" /> Активные
+                <Calculator className="w-3.5 h-3.5 text-slate-400" /> Активные
               </button>
               <button
                 onClick={() => setActiveTab("archive")}
-                className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition flex items-center gap-2 ${activeTab === "archive" ? "bg-white text-slate-950 shadow-sm border border-slate-200/50" : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"}`}
+                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${activeTab === "archive" ? "bg-white text-slate-900 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/30"}`}
               >
-                <Archive className="w-4 h-4" /> Архив
+                <Archive className="w-3.5 h-3.5 text-slate-400" /> Архив
               </button>
               <button
                 type="button"
                 onClick={toggleNotebook}
-                className={`ml-1 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition flex items-center gap-2 ${isNotebookOpen ? "bg-amber-100 text-amber-900 shadow-sm border border-amber-200/50" : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"}`}
+                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 border ${isNotebookOpen ? "bg-amber-50 text-amber-900 border-amber-200/30 shadow-xs" : "text-slate-500 border-transparent hover:text-slate-900 hover:bg-slate-200/30"}`}
               >
-                <BookOpen className="w-4 h-4 text-amber-600" /> Блокнот
+                <BookOpen className="w-3.5 h-3.5 text-amber-500" /> Блокнот
               </button>
               <button
                 onClick={() => setActiveTab("history")}
-                className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition flex items-center gap-2 hidden md:flex ${activeTab === "history" ? "bg-white text-slate-950 shadow-sm border border-slate-200/50" : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"}`}
+                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 border hidden md:flex ${activeTab === "history" ? "bg-white text-slate-900 shadow-xs border border-slate-200/40" : "text-slate-500 border-transparent hover:text-slate-900 hover:bg-slate-200/30"}`}
               >
-                <History className="w-4 h-4" /> История
+                <History className="w-3.5 h-3.5 text-slate-400" /> История
               </button>
             </div>
+
+            <button
+              onClick={() => {
+                resetForm();
+                setIsModalOpen(true);
+              }}
+              className="px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 bg-slate-900 text-white hover:bg-slate-800 shadow-sm border border-slate-800"
+            >
+              <Plus className="w-4 h-4 shrink-0" /> Новый план
+            </button>
           </div>
         </div>
 
-        <div className={activeTab === "active" ? "space-y-4" : "hidden"}>
+        {/* Filter Groups Segment */}
+        <div className={activeTab === "active" ? "block" : "hidden"}>
           {activeDispatchers.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 border-t border-slate-100 pt-4 overflow-x-auto custom-scrollbar pb-2">
-                {activeDispatchers.map((d) => (
-                  <button
-                    key={d}
-                    draggable={d !== "Все диспетчеры"}
-                    onDragStart={(e) => {
-                      if (d === "Все диспетчеры") return;
-                      e.dataTransfer.setData("dispatcher", d);
-                    }}
-                    onClick={() => setActiveDispatcherTab(d)}
-                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition flex items-center gap-1.5 whitespace-nowrap min-w-max ${getDispatcherActiveTabStyle(d)}`}
-                  >
-                    {d}
-                  </button>
-                ))}
+            <div className="flex flex-col gap-3 pb-1">
+              
+              {/* Dispatchers Row */}
+              <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-1">
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest shrink-0 mr-1.5">
+                  Диспетчеры:
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {activeDispatchers.map((d) => (
+                    <button
+                      key={d}
+                      draggable={d !== "Все диспетчеры"}
+                      onDragStart={(e) => {
+                        if (d === "Все диспетчеры") return;
+                        e.dataTransfer.setData("dispatcher", d);
+                      }}
+                      onClick={() => setActiveDispatcherTab(d)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-all duration-150 flex items-center gap-1 whitespace-nowrap border ${getDispatcherActiveTabStyle(d)}`}
+                    >
+                      {d === "All" || d === "Все диспетчеры" ? "Все диспетчеры" : formatToTitleCase(d)}
+                    </button>
+                  ))}
+                </div>
               </div>
 
+              {/* Directions Row */}
               {Object.keys(directions).length > 0 && (
-                <div className="flex items-center gap-2 border-t border-slate-100 pt-3 overflow-x-auto custom-scrollbar pb-2">
-                  <div className="flex gap-2">
+                <div className="flex items-center gap-1.5 border-t border-slate-100/70 pt-2.5 overflow-x-auto custom-scrollbar pb-1">
+                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest shrink-0 mr-1.5">
+                    Направления:
+                  </span>
+                  <div className="flex items-center gap-1.5">
                     {["All", ...Object.keys(directions)].map((dir) => (
                       <button
                         key={dir}
                         onClick={() => setActiveDirectionTab(dir)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition ${activeDirectionTab === dir ? "bg-amber-100 text-amber-900 border-b-2 border-amber-500" : "bg-slate-50 text-slate-500 hover:bg-slate-100"}`}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-all duration-150 border ${
+                          activeDirectionTab === dir
+                            ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                            : "bg-slate-50 text-slate-500 border-slate-200/50 hover:bg-slate-100 hover:text-slate-800"
+                        }`}
                       >
                         {dir === "All" ? "Все направления" : dir}
                       </button>
@@ -4382,8 +3646,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         </div>
 
         <div className={activeTab === "archive" ? "" : "hidden"}>
-          <div className="flex items-center gap-2 border-t border-slate-100 pt-4 overflow-x-auto custom-scrollbar pb-2">
-            <div className="flex gap-2">
+          <div className="flex items-center gap-1.5 border-t border-slate-100 pt-3 overflow-x-auto custom-scrollbar pb-1">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest shrink-0 mr-1.5">
+              Месяцы архива:
+            </span>
+            <div className="flex gap-1.5">
               {archiveTripsMonths.map((month) => (
                 <button
                   key={month}
@@ -4401,7 +3668,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       );
                     }
                   }}
-                  className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition whitespace-nowrap min-w-max ${archiveMonth === month ? "bg-blue-100 text-blue-900 border-b-2 border-blue-500" : "bg-slate-50 text-slate-500 hover:bg-slate-100"}`}
+                  className={`px-3 py-1 rounded-full text-xs font-medium border transition whitespace-nowrap min-w-max ${
+                    archiveMonth === month
+                      ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                      : "bg-slate-50 text-slate-500 border-slate-200/50 hover:bg-slate-100 hover:text-slate-800"
+                  }`}
                 >
                   📅 {month}
                 </button>
@@ -4411,64 +3682,62 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-6">
         {(activeTab === "active" || activeTab === "archive") && (
-          <div className="bg-white border border-slate-200 shadow-xs rounded-2xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 gap-y-4">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <Search className="w-4 h-4 text-slate-400 ml-1 shrink-0" />
+          <div className="bg-slate-50/50 border border-slate-200 rounded-2xl p-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-[0_1px_2px_rgba(0,0,0,0.01)]">
+            <div className="flex items-center gap-3 flex-1 min-w-0 bg-white border border-slate-200/60 rounded-xl px-3 py-1.5">
+              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <input
                 type="text"
-                placeholder="Быстрый поиск автомобиля по номеру в таблице планирования..."
+                placeholder="Быстрый поиск автомобиля по номеру в таблице..."
                 value={searchCarQuery}
                 onChange={(e) => setSearchCarQuery(e.target.value)}
-                className="w-full bg-transparent text-xs font-bold uppercase tracking-wide text-slate-800 outline-none placeholder:text-slate-400 placeholder:normal-case"
+                className="w-full bg-transparent text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400"
               />
               {searchCarQuery && (
                 <button
                   onClick={() => setSearchCarQuery("")}
-                  className="text-xs hover:bg-slate-100 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 transition"
+                  className="text-xs hover:bg-slate-100 p-1 rounded-lg text-slate-400 hover:text-slate-700 transition"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-3 h-3" />
                 </button>
               )}
             </div>
 
-            <div className="flex items-center gap-2 pl-0 md:pl-4 border-t md:border-t-0 md:border-l border-slate-200 pt-3 md:pt-0 shrink-0">
-              <span className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-wider">
-                Масштаб таблицы:
-              </span>
-              <button
-                onClick={() => {
-                  const newScale = Math.max(50, tableScale - 10);
-                  setTableScale(newScale);
-                  localStorage.setItem("pd_table_scale", String(newScale));
-                }}
-                className="p-1 px-2.5 bg-slate-100 hover:bg-slate-200 text-xs font-black rounded-lg text-slate-600 transition cursor-pointer select-none"
-                title="Уменьшить масштаб таблицы"
-              >
-                -
-              </button>
-              <span className="text-[11px] font-black font-mono text-slate-750 min-w-[36px] text-center select-none">
-                {tableScale}%
-              </span>
-              <button
-                onClick={() => {
-                  const newScale = Math.min(150, tableScale + 10);
-                  setTableScale(newScale);
-                  localStorage.setItem("pd_table_scale", String(newScale));
-                }}
-                className="p-1 px-2 bg-slate-100 hover:bg-slate-200 text-xs font-black rounded-lg text-slate-600 transition cursor-pointer select-none"
-                title="Увеличить масштаб таблицы"
-              >
-                +
-              </button>
+            <div className="flex items-center gap-2 px-2 shrink-0 self-end md:self-auto">
+              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Масштаб:</span>
+              <div className="flex items-center bg-white border border-slate-200/60 rounded-lg p-0.5 gap-1 shadow-2xs">
+                <button 
+                  onClick={() => {
+                    const newScale = Math.max(50, tableScale - 10);
+                    setTableScale(newScale);
+                    localStorage.setItem("pd_table_scale", String(newScale));
+                  }}
+                  className="w-6 h-6 flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-600 rounded text-xs font-bold transition select-none cursor-pointer"
+                  title="Уменьшить масштаб таблицы"
+                >
+                  <Minus className="w-3 h-3" />
+                </button>
+                <span className="text-[11px] font-bold font-mono text-slate-750 min-w-[32px] text-center select-none">{tableScale}%</span>
+                <button 
+                  onClick={() => {
+                    const newScale = Math.min(150, tableScale + 10);
+                    setTableScale(newScale);
+                    localStorage.setItem("pd_table_scale", String(newScale));
+                  }}
+                  className="w-6 h-6 flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-600 rounded text-xs font-bold transition select-none cursor-pointer"
+                  title="Увеличить масштаб таблицы"
+                >
+                  <Plus className="w-3 h-3" />
+                </button>
+              </div>
               {tableScale !== 100 && (
-                <button
+                <button 
                   onClick={() => {
                     setTableScale(100);
                     localStorage.setItem("pd_table_scale", "100");
                   }}
-                  className="text-[9px] uppercase font-black text-blue-500 hover:underline pl-1.5 transition cursor-pointer"
+                  className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 hover:underline pl-1 transition cursor-pointer"
                   title="Сбросить к 100%"
                 >
                   Сбросить
@@ -4491,334 +3760,17 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       {renderNotebookWidget()}
       {renderCurrentFormModal()}
 
-      {mapModalOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col pt-1">
-            <div className="px-6 py-5 border-b border-slate-100 flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-blue-50 text-blue-600 p-2 rounded-xl">
-                    <MapPin className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-black text-slate-800 tracking-tight">
-                      Построение маршрута по карте
-                    </h3>
-                    <div className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-widest">
-                      Проверка расстояния с авто-калькуляцией
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setMapModalOpen(false)}
-                  className="w-10 h-10 rounded-full bg-slate-50 text-slate-500 hover:bg-slate-100 flex items-center justify-center transition"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100"></div>
-
-              {/* Intermediate Waypoints */}
-              <div className="bg-slate-50/50 p-4 rounded-2xl border border-dashed border-slate-200 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-wider">
-                    Промежуточные точки{" "}
-                    {mapWaypoints.length > 0 ? `(${mapWaypoints.length})` : ""}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setMapWaypoints([...mapWaypoints, ""])}
-                    className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 transition cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Добавить точку</span>
-                  </button>
-                </div>
-
-                {mapWaypoints.length > 0 && (
-                  <div className="space-y-2 mt-1">
-                    {mapWaypoints.map((wp, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center gap-2 animate-fade-in"
-                      >
-                        <span className="text-[9px] font-bold text-slate-400 font-mono min-w-[15px]">
-                          {index + 1}.
-                        </span>
-                        <input
-                          type="text"
-                          value={wp}
-                          onChange={(e) => {
-                            const newWps = [...mapWaypoints];
-                            newWps[index] = e.target.value;
-                            setMapWaypoints(newWps);
-                          }}
-                          placeholder="Введите населённый пункт..."
-                          className="flex-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] font-bold text-slate-700 outline-none focus:border-blue-500 transition"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newWps = mapWaypoints.filter(
-                              (_, idx) => idx !== index,
-                            );
-                            setMapWaypoints(newWps);
-                          }}
-                          className="p-1 text-[#70FC8E] bg-slate-900 border border-slate-700/50 hover:bg-slate-800 transition rounded-lg hover:text-rose-50 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-100">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[9px] font-black uppercase tracking-wider text-slate-400 font-mono">
-                    Пункт отправления (Откуда)
-                  </label>
-                  <input
-                    type="text"
-                    value={mapOrigin}
-                    onChange={(e) => setMapOrigin(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 transition"
-                    placeholder="Введите город отправления..."
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[9px] font-black uppercase tracking-wider text-slate-400 font-mono">
-                    Пункт назначения (Куда)
-                  </label>
-                  <input
-                    type="text"
-                    value={mapDestination}
-                    onChange={(e) => setMapDestination(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 transition"
-                    placeholder="Введите город назначения..."
-                  />
-                </div>
-              </div>
-
-              <div className="mt-2 bg-slate-50/50 p-3 rounded-2xl border border-dashed border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 items-center">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={mapAvoidTolls}
-                    onChange={(e) => setMapAvoidTolls(e.target.checked)}
-                    className="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight font-mono">
-                    Без платных
-                  </span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={mapAvoidHighways}
-                    onChange={(e) => setMapAvoidHighways(e.target.checked)}
-                    className="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-[10px] font-black text-slate-600 uppercase tracking-tight font-mono">
-                    Без шоссе
-                  </span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={mapAvoidFerries}
-                    onChange={(e) => setMapAvoidFerries(e.target.checked)}
-                    className="w-3.5 h-3.5 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-[10px] font Black text-slate-600 uppercase tracking-tight font-mono">
-                    Без паромов
-                  </span>
-                </label>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[8px] font-black uppercase text-slate-400 font-mono">
-                    Тип авто
-                  </span>
-                  <span className="bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1 text-[10px] font-bold text-slate-700">
-                    Грузовой
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-2 bg-slate-50/50 p-3 rounded-2xl border border-dashed border-slate-200 flex flex-col sm:flex-row gap-3 items-stretch justify-between">
-                <div className="flex-1 flex flex-col gap-1">
-                  <span className="text-[8px] font-black uppercase text-slate-400 font-mono">
-                    Избегать ключевых слов (трассы, города, напр: M1, Польша)
-                  </span>
-                  <input
-                    type="text"
-                    placeholder="Введите слова через запятую..."
-                    value={mapAvoidKeywords}
-                    onChange={(e) => setMapAvoidKeywords(e.target.value)}
-                    className="bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] font-bold text-slate-700 outline-none focus:border-blue-500 w-full"
-                  />
-                </div>
-
-                {mapAvoidedStatus.attempted && (
-                  <div className="flex items-center min-w-[200px] justify-end">
-                    {mapAvoidedStatus.avoidedSuccessfully ? (
-                      <div className="bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl px-2.5 py-1 text-[10px] font-bold flex items-center gap-1.5 shadow-sm">
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Взят маршрут в обход</span>
-                      </div>
-                    ) : mapAvoidedStatus.matches.length > 0 ? (
-                      <div className="bg-amber-50 text-amber-700 border border-amber-200 rounded-xl px-2.5 py-1 text-[10px] font-bold flex items-center gap-1.5 shadow-sm">
-                        <X className="w-3.5 h-3.5 text-amber-600" />
-                        <span>
-                          Используется: {mapAvoidedStatus.matches.join(", ")}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="bg-blue-50 text-blue-700 border border-blue-200 rounded-xl px-2.5 py-1 text-[10px] font-bold flex items-center gap-1.5 shadow-sm">
-                        <Check className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Маршрут чист</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="h-[400px] w-full bg-slate-100 relative">
-              {!(
-                settings?.googleMapsApiKey ||
-                API_KEY ||
-                (window as any).GOOGLE_MAPS_PLATFORM_KEY
-              ) ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-slate-50 text-center border-t border-b border-slate-100">
-                  <div className="bg-amber-50 text-amber-600 p-3 rounded-2xl mb-3 border border-amber-100 animate-pulse">
-                    <MapPin className="w-6 h-6" />
-                  </div>
-                  <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-2">
-                    Необходим API Ключ Google Maps
-                  </h4>
-                  <p className="text-xs text-slate-500 max-w-md leading-relaxed mb-4 font-medium">
-                    Чтобы строить маршруты напрямую и рассчитывать километраж,
-                    пожалуйста, добавьте ваш API ключ Google Maps Platform.
-                  </p>
-                  <div className="bg-white rounded-2xl border border-slate-200/80 p-4 text-left text-[11px] text-slate-600 max-w-lg space-y-2.5 shadow-sm leading-relaxed">
-                    <div>
-                      <strong>Шаг 1:</strong>{" "}
-                      <a
-                        href="https://console.cloud.google.com/google/maps-apis/start?utm_campaign=gmp-code-assist-ais"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 font-bold hover:underline"
-                      >
-                        Получить API Ключ Google Cloud
-                      </a>{" "}
-                      и активировать <strong>Maps JavaScript API</strong> и{" "}
-                      <strong>Routes API</strong>.
-                    </div>
-                    <div>
-                      <strong>Шаг 2:</strong> Перейдите в{" "}
-                      <strong>Settings</strong> (значок шестерёнки ⚙️ в верхнем
-                      правом углу панели AI Studio) ➔ <strong>Secrets</strong> ➔
-                      добавьте секрет с именем{" "}
-                      <code>GOOGLE_MAPS_PLATFORM_KEY</code> и вставьте туда ваш
-                      API ключ.
-                    </div>
-                    <div className="text-slate-400 font-bold uppercase text-[9px] font-mono border-t border-slate-100 pt-2 flex items-center gap-1.5">
-                      <span>● автоматическая сборка</span>
-                      <span>● перезагрузка не требуется</span>
-                    </div>
-                  </div>
-                </div>
-              ) : mapOrigin && mapDestination ? (
-                <APIProvider
-                  apiKey={settings?.googleMapsApiKey || API_KEY}
-                  version="weekly"
-                >
-                  <Map
-                    defaultCenter={{ lat: 53.9006, lng: 27.559 }}
-                    defaultZoom={5}
-                    mapId="ROUTE_MAP"
-                    internalUsageAttributionIds={[
-                      "gmp_mcp_codeassist_v1_aistudio",
-                    ]}
-                    style={{ width: "100%", height: "100%" }}
-                    gestureHandling={"greedy"}
-                    disableDefaultUI={true}
-                  >
-                    <RouteDisplay
-                      origin={mapOrigin}
-                      destination={mapDestination}
-                      onDistance={setMapKmResult}
-                      avoidTolls={mapAvoidTolls}
-                      avoidKeywords={mapAvoidKeywords}
-                      onRouteStatus={setMapAvoidedStatus}
-                      avoidHighways={mapAvoidHighways}
-                      avoidFerries={mapAvoidFerries}
-                      vehicleType={mapVehicleType}
-                      waypoints={mapWaypoints}
-                    />
-                  </Map>
-                </APIProvider>
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-slate-400 font-bold text-xs uppercase tracking-wider">
-                  Введите пункты отправления и назначения для прокладки маршрута
-                </div>
-              )}
-            </div>
-
-            <div className="p-6 bg-slate-50 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-              <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono">
-                    Расстояние КМ
-                  </span>
-                  <input
-                    type="number"
-                    value={mapKmResult || ""}
-                    onChange={(e) => setMapKmResult(Number(e.target.value))}
-                    className="w-32 bg-white border border-slate-200 rounded-xl px-4 py-2 font-black text-blue-600 text-lg outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <label className="flex items-center gap-2.5 cursor-pointer select-none bg-blue-50/45 hover:bg-blue-50/80 px-4 py-2.5 rounded-xl border border-blue-100/55 transition mt-4 md:mt-0">
-                  <input
-                    type="checkbox"
-                    checked={saveToDirectoryChecked}
-                    onChange={(e) =>
-                      setSaveToDirectoryChecked(e.target.checked)
-                    }
-                    className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                  />
-                  <div className="flex flex-col">
-                    <span className="text-xs font-black text-slate-700">
-                      Сохранить также в справочник
-                    </span>
-                    <span className="text-[9px] text-slate-400 font-bold uppercase font-mono tracking-wider">
-                      Добавить в базу расстояний
-                    </span>
-                  </div>
-                </label>
-              </div>
-
-              <div className="flex gap-2 justify-end">
-                <button
-                  onClick={() => setMapModalOpen(false)}
-                  className="px-6 py-3 rounded-xl font-black text-xs uppercase text-slate-500 hover:bg-slate-200 transition"
-                >
-                  Отмена
-                </button>
-                <button
-                  onClick={applyMapRoute}
-                  className="px-6 py-3 rounded-xl font-black text-xs uppercase bg-blue-600 text-white shadow-sm shadow-blue-500/30 hover:bg-blue-700 transition flex gap-2 items-center justify-center"
-                >
-                  <Check className="w-4 h-4" /> Внести в плечо
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <MapRouteModal
+        isOpen={mapModalOpen}
+        onClose={handleCloseMapModal}
+        legIndex={mapLegIndex !== null ? mapLegIndex : 0}
+        leg={mapLeg}
+        presets={distances}
+        onUpdateLegRoute={handleUpdateLegRoute}
+        saveToDirectoryChecked={saveToDirectoryChecked}
+        setSaveToDirectoryChecked={setSaveToDirectoryChecked}
+        onApply={handleApplyMapRoute}
+      />
     </div>
   );
 }

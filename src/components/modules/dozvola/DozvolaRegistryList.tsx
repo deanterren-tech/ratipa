@@ -1,5 +1,5 @@
 import { useDialog } from "../../DialogProvider";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { UserProfile } from "../../../types";
 import { useFirebase, database } from "../../../firebase";
 import { ref, onValue, set, push, update, remove } from "firebase/database";
@@ -30,6 +30,271 @@ interface DozvolaRegistryListProps {
   user: UserProfile;
 }
 
+const DozvolaRow = React.memo(({
+  item,
+  isChecked,
+  onCheckboxChange,
+  showTypeColumn,
+  onCommentChange,
+  onCommentFocus,
+  onCommentBlur,
+  onCarChange,
+  onCarFocus,
+  onCarBlur,
+  onToggleCopy,
+  onUpdateStatus,
+  onEdit,
+  onDelete,
+  canWrite,
+  isRootAdmin
+}: {
+  item: any;
+  isChecked: boolean;
+  onCheckboxChange: (checked: boolean) => void;
+  showTypeColumn: boolean;
+  onCommentChange: (val: string) => void;
+  onCommentFocus: (val: string) => void;
+  onCommentBlur: (val: string) => void;
+  onCarChange: (val: string) => void;
+  onCarFocus: (val: string) => void;
+  onCarBlur: (val: string) => void;
+  onToggleCopy: (isSubmitted: boolean) => void;
+  onUpdateStatus: (status: string) => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  canWrite: boolean;
+  isRootAdmin: boolean;
+}) => {
+  return (
+    <tr
+      className={`hover:bg-slate-50/40 border-b border-slate-100 last:border-0 transition ${
+        item.isCopy &&
+        item.status !== "office_return" &&
+        item.status !== "used" &&
+        item.status !== "expired"
+          ? "bg-amber-50/30"
+          : ""
+      }`}
+    >
+      <td className="p-4 pl-6">
+        <input
+          type="checkbox"
+          className="w-4.5 h-4.5 rounded-lg border-slate-200/60 text-[#3765F6] focus:ring-[#3765F6] cursor-pointer accent-[#3765F6] transition"
+          checked={isChecked}
+          onChange={(e) => onCheckboxChange(e.target.checked)}
+        />
+      </td>
+      {showTypeColumn && (
+        <td className="p-4">
+          <span className="font-bold text-[#3765F6] bg-blue-50/60 border border-blue-100/30 px-2.5 py-1 rounded-xl text-[11px]">
+            {item.type}
+          </span>
+        </td>
+      )}
+      <td className="p-4">
+        <span className="font-bold text-slate-950 font-mono text-[13px] block mb-0.5">
+          {item.number || item.permitNumber}
+        </span>
+        <input
+          type="text"
+          value={item.comment || item.comments || ""}
+          className="w-full bg-transparent border-none text-[10px] text-slate-400 italic focus:outline-none focus:ring-1 focus:ring-slate-100 rounded px-1 -ml-1"
+          placeholder="📝 Примечание..."
+          onChange={(e) => onCommentChange(e.target.value)}
+          onFocus={(e) => onCommentFocus(e.target.value)}
+          onBlur={(e) => onCommentBlur(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.currentTarget.blur();
+            }
+          }}
+        />
+      </td>
+      <td className="p-4 text-xs font-semibold text-slate-500 font-mono">
+        {item.issueDate
+          ? new Date(item.issueDate).toLocaleDateString("ru-RU")
+          : "—"}
+      </td>
+      <td className="p-4">
+        {item.status === "office" && (
+          <span className="bg-emerald-50 text-emerald-600 border border-emerald-100/50 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">
+            В офисе
+          </span>
+        )}
+        {item.status === "hand" && (
+          <span className="bg-blue-50 text-blue-600 border border-blue-100/50 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">
+            В рейсе
+          </span>
+        )}
+        {item.status === "office_return" && (
+          <span className="bg-amber-50 text-amber-600 border border-amber-100/50 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">
+            Сдан в офис
+          </span>
+        )}
+        {item.status === "used" && (
+          <span className="bg-[#fef3c7]/60 text-[#b45309] border border-amber-200/50 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">
+            Сдан в ТИ
+          </span>
+        )}
+        {item.status === "expired" && (
+          <span className="bg-rose-50 text-rose-600 border border-rose-100/50 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">
+            Аннулирован
+          </span>
+        )}
+        {item.status === "available" && (
+          <span className="bg-emerald-50 text-emerald-600 border border-emerald-100/50 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">
+            В наличии
+          </span>
+        )}
+      </td>
+      <td className="p-4">
+        <input
+          type="text"
+          className="w-[120px] px-3 py-2 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#3765F6] focus:bg-white transition"
+          value={item.car || item.assignedVehicle || ""}
+          onChange={(e) => onCarChange(e.target.value)}
+          onFocus={(e) => onCarFocus(e.target.value)}
+          onBlur={(e) => onCarBlur(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.currentTarget.blur();
+            }
+          }}
+          list="fleet-cars-dl"
+        />
+      </td>
+      <td className="p-4">
+        {item.type === "CHN 2" || item.type === "CHN 3" ? (
+          <div className="flex flex-col gap-1">
+            {item.isCopy ? (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  onClick={() => onToggleCopy(true)}
+                  className="bg-purple-50 text-purple-600 border border-purple-100/50 font-semibold text-[10px] uppercase px-2 py-0.5 rounded-lg cursor-pointer hover:bg-purple-100 transition"
+                >
+                  📋 Сдана
+                </button>
+                {(() => {
+                  if (
+                    item.status === "used" ||
+                    item.status === "expired"
+                  )
+                    return null;
+                  const baseDateStr =
+                    item.copySubmittedAt ||
+                    item.issueDate ||
+                    new Date().toISOString().split("T")[0];
+                  const baseDate = new Date(baseDateStr);
+                  const targetDate = new Date(
+                    baseDate.getTime() + 30 * 24 * 60 * 60 * 1000,
+                  );
+                  targetDate.setHours(0, 0, 0, 0);
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const diffTime =
+                    targetDate.getTime() - today.getTime();
+                  const daysLeft = Math.ceil(
+                    diffTime / (1000 * 60 * 60 * 24),
+                  );
+
+                  if (daysLeft < 0) {
+                    return (
+                      <span className="text-rose-600 bg-rose-50 border border-rose-100/55 text-[9px] font-semibold uppercase px-2 py-0.5 rounded-lg font-mono animate-pulse">
+                        🔥 Просрочено {Math.abs(daysLeft)} дн.!
+                      </span>
+                    );
+                  } else if (daysLeft === 0) {
+                    return (
+                      <span className="text-amber-600 bg-amber-50 border border-amber-200/55 text-[9px] font-semibold uppercase px-2 py-0.5 rounded-lg font-mono animate-bounce">
+                        ⚠️ Крайний день!
+                      </span>
+                    );
+                  } else if (daysLeft <= 10) {
+                    return (
+                      <span className="text-amber-500 bg-amber-50 border border-amber-100/55 text-[9px] font-semibold uppercase px-2 py-0.5 rounded-lg font-mono">
+                        ⌛ {daysLeft} дней
+                      </span>
+                    );
+                  } else {
+                    return (
+                      <span className="text-purple-600 bg-purple-50 border border-purple-100/55 text-[9px] font-semibold uppercase px-2 py-0.5 rounded-lg font-mono">
+                        ⌛ {daysLeft} дн.
+                      </span>
+                    );
+                  }
+                })()}
+              </div>
+            ) : (
+              <button
+                onClick={() => onToggleCopy(false)}
+                className="bg-slate-100 text-slate-500 font-semibold text-[10px] uppercase px-2.5 py-1 rounded-lg cursor-pointer hover:bg-slate-200 transition w-max"
+              >
+                ❌ Нет копии
+              </button>
+            )}
+          </div>
+        ) : (
+          <span className="text-slate-300 font-medium text-[11px]">
+            —
+          </span>
+        )}
+      </td>
+      <td className="p-4 whitespace-nowrap">
+        {item.isCopy && item.copySubmittedAt ? (
+          <div className="font-mono text-xs text-slate-500 font-semibold">
+            {new Date(item.copySubmittedAt).toLocaleDateString(
+              "ru-RU",
+            )}
+          </div>
+        ) : (
+          <span className="text-slate-300 font-medium text-[11px]">
+            —
+          </span>
+        )}
+      </td>
+      <td className="p-4">
+        <select
+          className="w-[120px] px-3 py-2 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#3765F6] transition cursor-pointer"
+          onChange={(e) => {
+            if (e.target.value)
+              onUpdateStatus(e.target.value);
+            e.target.value = ""; // reset after selection
+          }}
+        >
+          <option value="">Действие...</option>
+          <option value="office">В офис</option>
+          <option value="hand">Выдать в рейс</option>
+          <option value="office_return">Сдан в офис</option>
+          <option value="used">Сдан в ТИ</option>
+          <option value="expired">Аннулировать</option>
+        </select>
+      </td>
+      <td className="p-4 pr-6 text-right">
+        <div className="flex items-center justify-end gap-1.5">
+          {canWrite && (
+            <button
+              onClick={onEdit}
+              className="w-8 h-8 flex items-center justify-center text-[#3765F6] hover:bg-blue-50 rounded-xl transition cursor-pointer"
+              title="Редактировать параметры бланка"
+            >
+              <Edit className="h-4 w-4" />
+            </button>
+          )}
+          {(isRootAdmin || canWrite) && (
+            <button
+              onClick={onDelete}
+              className="w-8 h-8 flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+              title="Удалить"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+});
+
 export default function DozvolaRegistryList({
   user,
 }: DozvolaRegistryListProps) {
@@ -53,7 +318,16 @@ export default function DozvolaRegistryList({
   >({});
 
   const [currentSelectedTab, setCurrentSelectedTab] = useState("all");
+  const [searchInputValue, setSearchInputValue] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInputValue);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInputValue]);
+
   const [selectedCountryFilter, setSelectedCountryFilter] = useState("all");
 
   const [isCreatorOpen, setIsCreatorOpen] = useState(false);
@@ -207,7 +481,7 @@ export default function DozvolaRegistryList({
           type,
           number: permitNumber.trim().toUpperCase(),
           status: editStatus,
-          car: (isDynamicLoc || isLocation(editCar)) ? editCar : editCar.toUpperCase(),
+          car: editStatus === "office" ? "Минск офис" : (isDynamicLoc || isLocation(editCar)) ? editCar : editCar.toUpperCase(),
           comment: comments,
           isCopy: editIsCopy,
           copySubmittedAt: editIsCopy
@@ -347,12 +621,16 @@ export default function DozvolaRegistryList({
     if (!newStatus) return;
     const old = dozvolsData[id];
     if (useFirebase && old) {
-      update(ref(database, `dozvolsRegistryV4/${id}`), { status: newStatus });
+      const updates: any = { status: newStatus };
+      if (newStatus === "office") {
+        updates.car = "Минск офис";
+      }
+      update(ref(database, `dozvolsRegistryV4/${id}`), updates);
       logAction(
         old.type,
         old.number,
         "Изменен статус",
-        `Статус: [${getStatusLabel(old.status)}] ➔ [${getStatusLabel(newStatus)}]`,
+        `Статус: [${getStatusLabel(old.status)}] ➔ [${getStatusLabel(newStatus)}]${newStatus === "office" ? " (Локация: Минск офис)" : ""}`,
       );
     }
   };
@@ -365,11 +643,14 @@ export default function DozvolaRegistryList({
         const old = dozvolsData[id];
         if (old) {
           updates[`dozvolsRegistryV4/${id}/status`] = newStatus;
+          if (newStatus === "office") {
+            updates[`dozvolsRegistryV4/${id}/car`] = "Минск офис";
+          }
           logAction(
             old.type,
             old.number || old.permitNumber,
             "Массовое изменение статуса",
-            `Статус: [${getStatusLabel(old.status)}] ➔ [${getStatusLabel(newStatus)}]`,
+            `Статус: [${getStatusLabel(old.status)}] ➔ [${getStatusLabel(newStatus)}]${newStatus === "office" ? " (Локация: Минск офис)" : ""}`,
           );
         }
       });
@@ -490,94 +771,114 @@ export default function DozvolaRegistryList({
     }
   };
 
-  let rawItems = Object.values(dozvolsData) as any[];
-  if (
-    currentSelectedTab !== "all" &&
-    currentSelectedTab !== "archive" &&
-    currentSelectedTab !== "office_returns"
-  ) {
-    rawItems = rawItems.filter((i) => i.type === currentSelectedTab);
-  }
+  const { rawItems, total, office, hand, officeReturnCount, usedCount, expiredCount, copies } = useMemo(() => {
+    let raw = Object.entries(dozvolsData).map(([key, value]: [string, any]) => ({
+      id: key,
+      ...value
+    })) as any[];
+    if (
+      currentSelectedTab !== "all" &&
+      currentSelectedTab !== "archive" &&
+      currentSelectedTab !== "office_returns"
+    ) {
+      raw = raw.filter((i) => i.type === currentSelectedTab);
+    }
 
-  const total = rawItems.length;
-  const office = rawItems.filter(
-    (i) => i.status === "office" || i.status === "available",
-  ).length;
-  const hand = rawItems.filter(
-    (i) => i.status === "hand" || i.status === "office_return",
-  ).length;
-  const officeReturnCount = rawItems.filter(
-    (i) => i.status === "office_return",
-  ).length;
-  const usedCount = rawItems.filter(
-    (i) => i.status === "used",
-  ).length;
-  const expiredCount = rawItems.filter(
-    (i) => i.status === "expired",
-  ).length;
-  const copies = rawItems.filter(
-    (i) =>
-      i.isCopy === true &&
-      i.status !== "office_return" &&
-      i.status !== "used" &&
-      i.status !== "expired",
-  ).length;
-
-  let items = rawItems;
-  if (currentSelectedTab === "archive") {
-    items = items.filter((i) => i.status === "used" || i.status === "expired");
-  } else if (currentSelectedTab === "office_returns") {
-    items = items.filter((i) => i.status === "office_return");
-  } else {
-    items = items.filter(
+    const totalVal = raw.length;
+    const officeVal = raw.filter(
+      (i) => i.status === "office" || i.status === "available",
+    ).length;
+    const handVal = raw.filter(
+      (i) => i.status === "hand" || i.status === "office_return",
+    ).length;
+    const officeReturnCountVal = raw.filter(
+      (i) => i.status === "office_return",
+    ).length;
+    const usedCountVal = raw.filter(
+      (i) => i.status === "used",
+    ).length;
+    const expiredCountVal = raw.filter(
+      (i) => i.status === "expired",
+    ).length;
+    const copiesVal = raw.filter(
       (i) =>
+        i.isCopy === true &&
+        i.status !== "office_return" &&
         i.status !== "used" &&
-        i.status !== "expired" &&
-        i.status !== "office_return",
-    );
-  }
+        i.status !== "expired",
+    ).length;
 
-  if (selectedCountryFilter !== "all") {
-    // Actually the logic from HTML filters by status filter, not country directly, but let's keep status filter.
-    if (selectedCountryFilter === "copy_yes")
-      items = items.filter(
+    return {
+      rawItems: raw,
+      total: totalVal,
+      office: officeVal,
+      hand: handVal,
+      officeReturnCount: officeReturnCountVal,
+      usedCount: usedCountVal,
+      expiredCount: expiredCountVal,
+      copies: copiesVal
+    };
+  }, [dozvolsData, currentSelectedTab]);
+
+  const items = useMemo(() => {
+    let list = rawItems;
+    if (currentSelectedTab === "archive") {
+      list = list.filter((i) => i.status === "used" || i.status === "expired");
+    } else if (currentSelectedTab === "office_returns") {
+      list = list.filter((i) => i.status === "office_return");
+    } else {
+      list = list.filter(
         (i) =>
-          i.isCopy === true &&
-          i.status !== "office_return" &&
           i.status !== "used" &&
-          i.status !== "expired",
+          i.status !== "expired" &&
+          i.status !== "office_return",
       );
-    else if (selectedCountryFilter === "copy_no")
-      items = items.filter(
+    }
+
+    if (selectedCountryFilter !== "all") {
+      if (selectedCountryFilter === "copy_yes")
+        list = list.filter(
+          (i) =>
+            i.isCopy === true &&
+            i.status !== "office_return" &&
+            i.status !== "used" &&
+            i.status !== "expired",
+        );
+      else if (selectedCountryFilter === "copy_no")
+        list = list.filter(
+          (i) =>
+            i.isCopy === false ||
+            i.status === "office_return" ||
+            i.status === "used" ||
+            i.status === "expired",
+        );
+      else list = list.filter((i) => i.status === selectedCountryFilter);
+    }
+
+    if (searchQuery) {
+      const s = searchQuery.toLowerCase();
+      list = list.filter(
         (i) =>
-          i.isCopy === false ||
-          i.status === "office_return" ||
-          i.status === "used" ||
-          i.status === "expired",
+          (i.number || i.permitNumber || "").toLowerCase().includes(s) ||
+          (i.car || i.assignedVehicle || "").toLowerCase().includes(s) ||
+          (i.comment || i.comments || "").toLowerCase().includes(s) ||
+          (i.type || "").toLowerCase().includes(s),
       );
-    else items = items.filter((i) => i.status === selectedCountryFilter);
-  }
+    }
 
-  if (searchQuery) {
-    const s = searchQuery.toLowerCase();
-    items = items.filter(
-      (i) =>
-        (i.number || i.permitNumber || "").toLowerCase().includes(s) ||
-        (i.car || i.assignedVehicle || "").toLowerCase().includes(s) ||
-        (i.comment || i.comments || "").toLowerCase().includes(s) ||
-        (i.type || "").toLowerCase().includes(s),
-    );
-  }
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      let valA = a[currentSortField] || "";
+      let valB = b[currentSortField] || "";
+      if (typeof valA === "string") valA = valA.toUpperCase();
+      if (typeof valB === "string") valB = valB.toUpperCase();
+      if (valA < valB) return currentSortOrder === "asc" ? -1 : 1;
+      if (valA > valB) return currentSortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
 
-  items.sort((a, b) => {
-    let valA = a[currentSortField] || "";
-    let valB = b[currentSortField] || "";
-    if (typeof valA === "string") valA = valA.toUpperCase();
-    if (typeof valB === "string") valB = valB.toUpperCase();
-    if (valA < valB) return currentSortOrder === "asc" ? -1 : 1;
-    if (valA > valB) return currentSortOrder === "asc" ? 1 : -1;
-    return 0;
-  });
+    return sorted;
+  }, [rawItems, currentSelectedTab, selectedCountryFilter, searchQuery, currentSortField, currentSortOrder]);
 
   const showTypeColumn =
     currentSelectedTab === "all" ||
@@ -628,18 +929,18 @@ export default function DozvolaRegistryList({
           }}
         />
 
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col md:flex-row items-center justify-between gap-6">
           <div>
-            <h1 className="text-2xl lg:text-3xl font-black text-slate-900 uppercase tracking-tight">
-              Дозвола
-            </h1>
+            <h2 className="text-sm font-bold text-slate-800">
+              Реестр дозволов
+            </h2>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {user.permissions.dozvola === "write" && (
               <button
                 onClick={() => setIsBatchCreatorOpen(true)}
-                className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-black px-5 py-3 rounded-2xl transition cursor-pointer shadow-sm uppercase tracking-tight"
+                className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-4 py-2.5 rounded-xl transition cursor-pointer"
               >
                 Массовый ввод
               </button>
@@ -647,24 +948,24 @@ export default function DozvolaRegistryList({
             {user.permissions.dozvola === "write" && (
               <button
                 onClick={() => setIsCreatorOpen(true)}
-                className="flex items-center gap-2 bg-slate-950 hover:bg-slate-800 text-white text-xs font-black px-5 py-3 rounded-2xl transition cursor-pointer shadow-xs uppercase tracking-tight"
+                className="flex items-center gap-1.5 bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition cursor-pointer shadow-sm"
               >
-                <Plus className="h-4 w-4 text-[#70FC8E]" />
+                <Plus className="h-4 w-4" />
                 Зарегистрировать
               </button>
             )}
           </div>
         </div>
 
-        <div className="flex justify-between items-end mt-4 flex-wrap gap-2 bg-slate-50 rounded-t-3xl border border-slate-200/50 border-b-0 pt-2 px-2">
+        <div className="flex justify-between items-end mt-4 flex-wrap gap-2 bg-slate-50/30 rounded-t-3xl border border-slate-200/40 border-b-0 pt-2 px-2">
           <div className="flex items-end gap-1 overflow-x-auto custom-scrollbar flex-1 pb-1">
             <button
               onClick={() => setCurrentSelectedTab("all")}
               className={
-                "px-4 py-3 text-[13px] font-black rounded-t-2xl transition whitespace-nowrap cursor-pointer " +
+                "px-4 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer " +
                 (currentSelectedTab === "all"
-                  ? "bg-white text-slate-900 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
-                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-800")
+                  ? "bg-white text-slate-850 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
+                  : "text-slate-500 hover:bg-slate-100/50 hover:text-slate-700")
               }
             >
               🌐 Все виды
@@ -677,10 +978,10 @@ export default function DozvolaRegistryList({
                   key={id}
                   onClick={() => setCurrentSelectedTab(t.name)}
                   className={
-                    "px-4 py-3 text-[13px] font-black rounded-t-2xl transition whitespace-nowrap cursor-pointer " +
+                    "px-4 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer " +
                     (currentSelectedTab === t.name
-                      ? "bg-white text-slate-900 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
-                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-800")
+                      ? "bg-white text-slate-850 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
+                      : "text-slate-500 hover:bg-slate-100/50 hover:text-slate-700")
                   }
                 >
                   {t.name}
@@ -690,10 +991,10 @@ export default function DozvolaRegistryList({
             <button
               onClick={() => setCurrentSelectedTab("archive")}
               className={
-                "px-4 py-3 text-[13px] font-black rounded-t-2xl transition whitespace-nowrap cursor-pointer text-slate-400 " +
+                "px-4 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer text-slate-400 " +
                 (currentSelectedTab === "archive"
-                  ? "bg-white !text-slate-900 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
-                  : "hover:bg-slate-100 hover:!text-slate-800")
+                  ? "bg-white !text-slate-850 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
+                  : "hover:bg-slate-100/50 hover:!text-slate-650")
               }
             >
               📦 Архив / Инспекция
@@ -701,10 +1002,10 @@ export default function DozvolaRegistryList({
             <button
               onClick={() => setCurrentSelectedTab("office_returns")}
               className={
-                "px-4 py-3 text-[13px] font-black rounded-t-2xl transition whitespace-nowrap cursor-pointer text-amber-500 " +
+                "px-4 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer text-amber-600 " +
                 (currentSelectedTab === "office_returns"
-                  ? "bg-white !text-slate-900 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
-                  : "hover:bg-slate-100 hover:!text-slate-800")
+                  ? "bg-white !text-slate-850 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
+                  : "hover:bg-slate-100/50 hover:!text-slate-750")
               }
             >
               🟡 Сданы в офис
@@ -712,16 +1013,16 @@ export default function DozvolaRegistryList({
           </div>
         </div>
 
-        <div className="bg-white rounded-b-[2rem] rounded-tr-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden -mt-[1px] relative z-0">
-          <div className="p-5 bg-white flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="bg-white/80 backdrop-blur-xl rounded-b-3xl rounded-tr-3xl border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden -mt-[1px] relative z-0">
+          <div className="p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="relative w-full flex-1">
-              <Search className="h-4 w-4 text-slate-400 absolute left-4 top-3" />
+              <Search className="h-4 w-4 text-slate-400 absolute left-4 top-3.5" />
               <input
                 type="text"
-                placeholder="🔍 Быстрый поиск по бланку, машине или комментарию..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                placeholder="Быстрый поиск по бланку, машине или комментарию..."
+                value={searchInputValue}
+                onChange={(e) => setSearchInputValue(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-850 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
               />
             </div>
 
@@ -735,7 +1036,7 @@ export default function DozvolaRegistryList({
                       onChange={(e) => {
                         if (e.target.value) handleBulkStatusChange(e.target.value);
                       }}
-                      className="w-full px-3 py-2.5 bg-amber-100 border border-amber-200 text-amber-800 rounded-xl text-xs font-black uppercase tracking-tight focus:outline-none transition cursor-pointer"
+                      className="w-full px-3.5 py-2.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl text-xs font-semibold uppercase tracking-wider focus:outline-none transition cursor-pointer"
                     >
                       <option value="">Действие ({selectedItems.size} шт)</option>
                       <option value="office">В офис</option>
@@ -751,7 +1052,7 @@ export default function DozvolaRegistryList({
                 <select
                   value={selectedCountryFilter}
                   onChange={(e) => setSelectedCountryFilter(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                  className="w-full px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition cursor-pointer"
                 >
                   <option value="all">Все статусы</option>
                   <option value="office">В офисе</option>
@@ -765,22 +1066,16 @@ export default function DozvolaRegistryList({
           </div>
 
           {/* Swipe Help Badge for Mobile */}
-          <div className="block lg:hidden text-[10px] font-black text-slate-500 bg-slate-100 border border-slate-200 rounded-xl px-4 py-2.5 mb-3 text-center uppercase tracking-wider select-none">
-            <span className="inline-block text-blue-500 mr-1.5 font-sans">
-              ↔
-            </span>{" "}
-            Таблица прокручивается вправо для просмотра деталей (Локация авто,
-            Копии, Статусы)
-          </div>
+          
 
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
-                <tr className="bg-slate-50/60 border-y border-slate-200/55 text-[10px] uppercase font-black text-slate-400 tracking-wider">
+                <tr className="bg-slate-50/50 border-y border-slate-200/50 text-[10px] uppercase font-semibold text-slate-400 tracking-wider">
                   <th className="p-4 pl-6 w-10">
                     <input
                       type="checkbox"
-                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      className="w-4.5 h-4.5 rounded-lg border-slate-200/60 text-[#3765F6] focus:ring-[#3765F6] cursor-pointer accent-[#3765F6] transition"
                       checked={
                         items.length > 0 &&
                         items.every((i) => selectedItems.has(i.id))
@@ -798,7 +1093,7 @@ export default function DozvolaRegistryList({
                   </th>
                   {showTypeColumn && (
                     <th
-                      className="p-4 cursor-pointer hover:bg-slate-100 hover:text-slate-800 transition"
+                      className="p-4 cursor-pointer hover:bg-slate-100/50 transition"
                       onClick={() => {
                         setCurrentSortField("type");
                         setCurrentSortOrder(
@@ -810,7 +1105,7 @@ export default function DozvolaRegistryList({
                     </th>
                   )}
                   <th
-                    className="p-4 cursor-pointer hover:bg-slate-100 hover:text-slate-800 transition"
+                    className="p-4 cursor-pointer hover:bg-slate-100/50 transition"
                     onClick={() => {
                       setCurrentSortField("number");
                       setCurrentSortOrder(
@@ -821,7 +1116,7 @@ export default function DozvolaRegistryList({
                     Номер дозвола
                   </th>
                   <th
-                    className="p-4 cursor-pointer hover:bg-slate-100 hover:text-slate-800 transition"
+                    className="p-4 cursor-pointer hover:bg-slate-100/50 transition"
                     onClick={() => {
                       setCurrentSortField("issueDate");
                       setCurrentSortOrder(
@@ -832,7 +1127,7 @@ export default function DozvolaRegistryList({
                     Дата выдачи
                   </th>
                   <th
-                    className="p-4 cursor-pointer hover:bg-slate-100 hover:text-slate-800 transition"
+                    className="p-4 cursor-pointer hover:bg-slate-100/50 transition"
                     onClick={() => {
                       setCurrentSortField("status");
                       setCurrentSortOrder(
@@ -843,7 +1138,7 @@ export default function DozvolaRegistryList({
                     Статус оригинала
                   </th>
                   <th
-                    className="p-4 cursor-pointer hover:bg-slate-100 hover:text-slate-800 transition"
+                    className="p-4 cursor-pointer hover:bg-slate-100/50 transition"
                     onClick={() => {
                       setCurrentSortField("car");
                       setCurrentSortOrder(
@@ -855,7 +1150,7 @@ export default function DozvolaRegistryList({
                   </th>
                   <th className="p-4">Сдан по копии?</th>
                   <th
-                    className="p-4 cursor-pointer hover:bg-slate-100 hover:text-slate-800 transition"
+                    className="p-4 cursor-pointer hover:bg-slate-100/50 transition"
                     onClick={() => {
                       setCurrentSortField("copySubmittedAt");
                       setCurrentSortOrder(
@@ -871,262 +1166,45 @@ export default function DozvolaRegistryList({
               </thead>
               <tbody className="divide-y divide-slate-100 text-[11px] font-semibold">
                 {items.map((item) => (
-                  <tr
+                  <DozvolaRow
                     key={item.id}
-                    className={`hover:bg-slate-50/40 transition ${
-                      item.isCopy &&
-                      item.status !== "office_return" &&
-                      item.status !== "used" &&
-                      item.status !== "expired"
-                        ? "bg-[#fff7cc]/40"
-                        : ""
-                    }`}
-                  >
-                    <td className="p-4 pl-6">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                        checked={selectedItems.has(item.id)}
-                        onChange={(e) => {
-                          const newSet = new Set(selectedItems);
-                          if (e.target.checked) newSet.add(item.id);
-                          else newSet.delete(item.id);
-                          setSelectedItems(newSet);
-                        }}
-                      />
-                    </td>
-                    {showTypeColumn && (
-                      <td className="p-4">
-                        <span className="font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                          {item.type}
-                        </span>
-                      </td>
-                    )}
-                    <td className="p-4">
-                      <span className="font-black text-slate-900 font-mono text-[13px] block mb-1">
-                        {item.number || item.permitNumber}
-                      </span>
-                      <input
-                        type="text"
-                        value={item.comment || item.comments || ""}
-                        className="w-full bg-transparent border-none text-[10px] text-slate-500 italic focus:outline-none focus:ring-1 focus:ring-slate-200 rounded px-1 -ml-1"
-                        placeholder="📝 Примечание..."
-                        onChange={(e) =>
-                          updateDozvolCommentInline(item.id, e.target.value)
-                        }
-                        onFocus={(e) =>
-                          handleCommentFocus(item.id, e.target.value)
-                        }
-                        onBlur={(e) =>
-                          handleCommentBlur(item.id, e.target.value)
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.currentTarget.blur();
-                          }
-                        }}
-                      />
-                    </td>
-                    <td className="p-4 font-medium text-slate-600">
-                      {item.issueDate
-                        ? new Date(item.issueDate).toLocaleDateString("ru-RU")
-                        : "—"}
-                    </td>
-                    <td className="p-4">
-                      {item.status === "office" && (
-                        <span className="bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">
-                          В офисе
-                        </span>
-                      )}
-                      {item.status === "hand" && (
-                        <span className="bg-blue-50 text-blue-600 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">
-                          В рейсе
-                        </span>
-                      )}
-                      {item.status === "office_return" && (
-                        <span className="bg-amber-50 text-amber-600 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">
-                          Сдан в офис
-                        </span>
-                      )}
-                      {item.status === "used" && (
-                        <span className="bg-[#fef3c7] text-[#b45309] px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">
-                          Сдан в ТИ
-                        </span>
-                      )}
-                      {item.status === "expired" && (
-                        <span className="bg-rose-50 text-rose-600 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">
-                          Аннулирован
-                        </span>
-                      )}
-                      {item.status === "available" && (
-                        <span className="bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">
-                          В наличии
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-4">
-                      <input
-                        type="text"
-                        className="w-[120px] p-1.5 bg-slate-50 border border-slate-200 rounded text-xs font-black focus:outline-none focus:border-slate-400 focus:bg-white"
-                        value={item.car || item.assignedVehicle || ""}
-                        onChange={(e) =>
-                          handleInlineCarChangeOnly(item.id, e.target.value)
-                        }
-                        onFocus={(e) => handleCarFocus(item.id, e.target.value)}
-                        onBlur={(e) => handleCarBlur(item.id, e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.currentTarget.blur();
-                          }
-                        }}
-                        list="fleet-cars-dl"
-                      />
-                    </td>
-                    <td className="p-4">
-                      {item.type === "CHN 2" || item.type === "CHN 3" ? (
-                        <div className="flex flex-col gap-1">
-                          {item.isCopy ? (
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <button
-                                onClick={() =>
-                                  toggleDozvolCopyInline(item.id, true)
-                                }
-                                className="bg-purple-100 text-purple-700 font-black text-[10px] uppercase px-2 py-0.5 rounded-full cursor-pointer hover:bg-purple-200 transition"
-                              >
-                                📋 Сдана
-                              </button>
-                              {(() => {
-                                if (
-                                  item.status === "used" ||
-                                  item.status === "expired"
-                                )
-                                  return null;
-                                const baseDateStr =
-                                  item.copySubmittedAt ||
-                                  item.issueDate ||
-                                  new Date().toISOString().split("T")[0];
-                                const baseDate = new Date(baseDateStr);
-                                const targetDate = new Date(
-                                  baseDate.getTime() + 30 * 24 * 60 * 60 * 1000,
-                                );
-                                targetDate.setHours(0, 0, 0, 0);
-                                const today = new Date();
-                                today.setHours(0, 0, 0, 0);
-                                const diffTime =
-                                  targetDate.getTime() - today.getTime();
-                                const daysLeft = Math.ceil(
-                                  diffTime / (1000 * 60 * 60 * 24),
-                                );
-
-                                if (daysLeft < 0) {
-                                  return (
-                                    <span className="text-rose-600 bg-rose-50 border border-rose-100 text-[9px] font-black uppercase px-2 py-0.5 rounded font-mono animate-pulse">
-                                      🔥 Просрочено {Math.abs(daysLeft)} дн.!
-                                    </span>
-                                  );
-                                } else if (daysLeft === 0) {
-                                  return (
-                                    <span className="text-amber-600 bg-amber-50 border border-amber-200 text-[9px] font-black uppercase px-2 py-0.5 rounded font-mono animate-bounce">
-                                      ⚠️ Крайний день!
-                                    </span>
-                                  );
-                                } else if (daysLeft <= 10) {
-                                  return (
-                                    <span className="text-amber-500 bg-amber-50 border border-amber-100 text-[9px] font-black uppercase px-2 py-0.5 rounded font-mono">
-                                      ⌛ {daysLeft} дней
-                                    </span>
-                                  );
-                                } else {
-                                  return (
-                                    <span className="text-purple-600 bg-purple-50 border border-purple-150 text-[9px] font-bold uppercase px-2 py-0.5 rounded font-mono">
-                                      ⌛ {daysLeft} дн.
-                                    </span>
-                                  );
-                                }
-                              })()}
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() =>
-                                toggleDozvolCopyInline(item.id, false)
-                              }
-                              className="bg-slate-100 text-slate-500 font-bold text-[10px] uppercase px-2.5 py-1 rounded-full cursor-pointer hover:bg-slate-200 transition w-max"
-                            >
-                              ❌ Нет копии
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-slate-300 font-medium text-[11px]">
-                          —
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-4 whitespace-nowrap">
-                      {item.isCopy && item.copySubmittedAt ? (
-                        <div className="font-mono text-[11px] text-slate-700 font-bold">
-                          {new Date(item.copySubmittedAt).toLocaleDateString(
-                            "ru-RU",
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-slate-300 font-medium text-[11px]">
-                          —
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-4">
-                      <select
-                        className="w-[120px] p-1.5 bg-slate-50 border border-slate-200 rounded text-[11px] font-bold focus:outline-none cursor-pointer"
-                        onChange={(e) => {
-                          if (e.target.value)
-                            updateDozvolStatusInline(item.id, e.target.value);
-                          e.target.value = ""; // reset after selection
-                        }}
-                      >
-                        <option value="">Действие...</option>
-                        <option value="office">В офис</option>
-                        <option value="hand">Выдать в рейс</option>
-                        <option value="office_return">Сдан в офис</option>
-                        <option value="used">Сдан в ТИ</option>
-                        <option value="expired">Аннулировать</option>
-                      </select>
-                    </td>
-                    <td className="p-4 pr-6 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {user.permissions.dozvola === "write" && (
-                          <button
-                            onClick={() => {
-                              setEditingItem(item);
-                              setIsCreatorOpen(true);
-                            }}
-                            className="w-7 h-7 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
-                            title="Редактировать параметры бланка"
-                          >
-                            <Edit className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                        {(user.role === "root_admin" ||
-                          user.permissions?.dozvola === "write") && (
-                          <button
-                            onClick={() => handleDeletePermit(item.id)}
-                            className="w-7 h-7 flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                            title="Удалить"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
+                    item={item}
+                    isChecked={selectedItems.has(item.id)}
+                    onCheckboxChange={(checked) => {
+                      const newSet = new Set(selectedItems);
+                      if (checked) newSet.add(item.id);
+                      else newSet.delete(item.id);
+                      setSelectedItems(newSet);
+                    }}
+                    showTypeColumn={showTypeColumn}
+                    onCommentChange={(val) => updateDozvolCommentInline(item.id, val)}
+                    onCommentFocus={(val) => handleCommentFocus(item.id, val)}
+                    onCommentBlur={(val) => handleCommentBlur(item.id, val)}
+                    onCarChange={(val) => handleInlineCarChangeOnly(item.id, val)}
+                    onCarFocus={(val) => handleCarFocus(item.id, val)}
+                    onCarBlur={(val) => handleCarBlur(item.id, val)}
+                    onToggleCopy={(isSubmitted) => toggleDozvolCopyInline(item.id, isSubmitted)}
+                    onUpdateStatus={(status) => updateDozvolStatusInline(item.id, status)}
+                    onEdit={() => {
+                      setEditingItem(item);
+                      setIsCreatorOpen(true);
+                    }}
+                    onDelete={() => handleDeletePermit(item.id)}
+                    canWrite={user.permissions.dozvola === "write"}
+                    isRootAdmin={user.role === "root_admin" || user.permissions?.dozvola === "write"}
+                  />
                 ))}
                 {!items.length && (
                   <tr key="empty-row">
                     <td
-                      colSpan={showTypeColumn ? 9 : 8}
-                      className="text-center p-16 text-slate-400 font-black text-xs uppercase tracking-wider font-mono bg-slate-50/30"
+                      colSpan={showTypeColumn ? 11 : 10}
+                      className="text-center p-12 text-slate-400 bg-slate-50/10"
                     >
-                      Бланков не найдено.
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <span className="text-3xl">📂</span>
+                        <p className="text-xs uppercase font-black text-slate-500 tracking-tight">Нет данных</p>
+                        <p className="text-[11px] text-slate-400 font-normal normal-case">Не найдено ни одного бланка дозвола по выбранным критериям</p>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -1160,16 +1238,16 @@ export default function DozvolaRegistryList({
       </div>
 
       {isCreatorOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-md flex justify-center items-center p-4">
-          <div className="bg-white rounded-[2.2rem] max-w-md w-full shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-slate-200/60 overflow-hidden">
-            <div className="p-6 border-b border-slate-200/55 flex items-center justify-between select-none">
+        <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-md flex justify-center items-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200/50 overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between select-none">
               <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+                <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest block">
                   {editingItem ? "Edit Permit" : "Permit Form"}
                 </span>
-                <h2 className="text-base font-black text-slate-900 uppercase tracking-tight">
+                <h2 className="text-sm font-bold text-slate-850">
                   {editingItem
-                    ? "Редактирование бланка дозвола"
+                    ? "Редактирование бланка"
                     : "Ручной ввод бланка"}
                 </h2>
               </div>
@@ -1178,20 +1256,20 @@ export default function DozvolaRegistryList({
                   setEditingItem(null);
                   setIsCreatorOpen(false);
                 }}
-                className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 text-xs font-black flex items-center justify-center cursor-pointer transition"
+                className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 text-xs font-semibold flex items-center justify-center cursor-pointer transition"
               >
                 ✕
               </button>
             </div>
-            <form onSubmit={handleCreatePermit} className="p-6 space-y-5">
+            <form onSubmit={handleCreatePermit} className="p-6 space-y-4">
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
                   Вид дозвола
                 </label>
                 <select
                   value={type}
                   onChange={(e) => setType(e.target.value)}
-                  className="block w-full mt-1.5 px-3 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                 >
                   {customTypesOrder.map((id) => {
                     const t = customTypes[id];
@@ -1206,7 +1284,7 @@ export default function DozvolaRegistryList({
               </div>
 
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
                   Номер бланка
                 </label>
                 <input
@@ -1215,32 +1293,38 @@ export default function DozvolaRegistryList({
                   placeholder="TR A 55432"
                   value={permitNumber}
                   onChange={(e) => setPermitNumber(e.target.value)}
-                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-black text-slate-800 placeholder:text-slate-350 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-450 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
                   Сопутствующий комментарий
                 </label>
                 <textarea
                   placeholder="Добавьте примечание к бланку..."
                   value={comments}
                   onChange={(e) => setComments(e.target.value)}
-                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs h-16 resize-none focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold h-16 resize-none focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                 />
               </div>
 
               {editingItem && (
                 <>
                   <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+                    <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
                       Статус бланка
                     </label>
                     <select
                       value={editStatus}
-                      onChange={(e) => setEditStatus(e.target.value)}
-                      className="block w-full mt-1.5 px-3 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditStatus(val);
+                        if (val === 'office') {
+                          setEditCar('Минск офис');
+                        }
+                      }}
+                      className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                     >
                       <option value="office">В офисе</option>
                       <option value="hand">В рейсе</option>
@@ -1252,7 +1336,7 @@ export default function DozvolaRegistryList({
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+                    <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
                       Автомобиль / Локация
                     </label>
                     <input
@@ -1261,26 +1345,26 @@ export default function DozvolaRegistryList({
                       value={editCar}
                       onChange={(e) => setEditCar(e.target.value)}
                       list="fleet-cars-dl"
-                      className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-black text-slate-800 placeholder:text-slate-350 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                      className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-450 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+                    <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
                       Дата выдачи
                     </label>
                     <input
                       type="date"
                       value={editIssueDate}
                       onChange={(e) => setEditIssueDate(e.target.value)}
-                      className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                      className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                     />
                   </div>
 
                   {(type === "CHN 2" || type === "CHN 3") && (
-                    <div className="bg-purple-50/50 border border-purple-100/50 p-4 rounded-2xl space-y-3.5">
+                    <div className="bg-purple-50/20 border border-purple-100/40 p-4 rounded-2xl space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black text-purple-950 uppercase tracking-widest font-mono">
+                        <span className="text-[10px] font-semibold text-purple-950 uppercase tracking-wider">
                           Сдана копия (CHN 2/3)?
                         </span>
                         <input
@@ -1300,7 +1384,7 @@ export default function DozvolaRegistryList({
 
                       {editIsCopy && (
                         <div>
-                          <label className="text-[10px] font-black text-purple-700 uppercase tracking-widest block font-mono">
+                          <label className="text-[10px] font-semibold text-purple-700 uppercase tracking-wider block">
                             Дата сдачи копии
                           </label>
                           <input
@@ -1309,7 +1393,7 @@ export default function DozvolaRegistryList({
                             onChange={(e) =>
                               setEditCopySubmittedAt(e.target.value)
                             }
-                            className="block w-full mt-1.5 px-3 py-2 bg-white border border-purple-200 rounded-xl text-xs font-black text-purple-950 focus:outline-none focus:border-purple-450 transition"
+                            className="block w-full mt-1.5 px-3 py-2 bg-white border border-purple-100 rounded-xl text-xs font-semibold text-purple-950 focus:outline-none focus:border-purple-400 transition"
                           />
                         </div>
                       )}
@@ -1318,20 +1402,20 @@ export default function DozvolaRegistryList({
                 </>
               )}
 
-              <div className="pt-3 border-t border-slate-200/55 flex justify-end gap-2.5">
+              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => {
                     setEditingItem(null);
                     setIsCreatorOpen(false);
                   }}
-                  className="px-4 py-2.5 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-extrabold text-slate-700 transition cursor-pointer"
+                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-semibold text-slate-600 bg-white transition cursor-pointer"
                 >
                   Отмена
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-slate-950 hover:bg-slate-800 text-[#70FC8E] font-black rounded-xl text-xs uppercase tracking-wide cursor-pointer transition shadow-sm"
+                  className="px-5 py-2 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold rounded-xl text-xs transition shadow-sm cursor-pointer"
                 >
                   Сохранить
                 </button>
@@ -1342,33 +1426,33 @@ export default function DozvolaRegistryList({
       )}
 
       {isBatchCreatorOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-md flex justify-center items-center p-4">
-          <div className="bg-white rounded-[2.2rem] max-w-md w-full shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-slate-200/60 overflow-hidden">
-            <div className="p-6 border-b border-slate-200/55 flex items-center justify-between select-none">
+        <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-md flex justify-center items-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200/50 overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between select-none">
               <div>
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+                <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest block">
                   Bulk Upload
                 </span>
-                <h2 className="text-base font-black text-slate-900 uppercase tracking-tight">
+                <h2 className="text-sm font-bold text-slate-850">
                   Массовый ввод дозволов
                 </h2>
               </div>
               <button
                 onClick={() => setIsBatchCreatorOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 text-xs font-black flex items-center justify-center cursor-pointer transition"
+                className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 text-xs font-semibold flex items-center justify-center cursor-pointer transition"
               >
                 ✕
               </button>
             </div>
-            <form onSubmit={handleBatchCreate} className="p-6 space-y-5">
+            <form onSubmit={handleBatchCreate} className="p-6 space-y-4">
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
                   Вид дозвола
                 </label>
                 <select
                   value={type}
                   onChange={(e) => setType(e.target.value)}
-                  className="block w-full mt-1.5 px-3 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-black text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                 >
                   {customTypesOrder.map((id) => {
                     const t = customTypes[id];
@@ -1383,7 +1467,7 @@ export default function DozvolaRegistryList({
               </div>
 
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block font-mono">
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block leading-normal">
                   Список серийных номеров (каждый с новой строки или через
                   запятую)
                 </label>
@@ -1392,21 +1476,21 @@ export default function DozvolaRegistryList({
                   placeholder="PL-001&#10;PL-002&#10;PL-003"
                   value={batchText}
                   onChange={(e) => setBatchText(e.target.value)}
-                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs h-32 resize-none focus:outline-none focus:bg-white focus:border-slate-300 transition font-mono"
+                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs h-32 resize-none focus:outline-none focus:bg-white focus:border-[#3765F6] transition font-mono font-semibold"
                 />
               </div>
 
-              <div className="pt-3 border-t border-slate-200/55 flex justify-end gap-2.5">
+              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setIsBatchCreatorOpen(false)}
-                  className="px-4 py-2.5 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-extrabold text-slate-700 transition cursor-pointer"
+                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-semibold text-slate-600 bg-white transition cursor-pointer"
                 >
                   Отмена
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-slate-950 hover:bg-slate-800 text-[#70FC8E] font-black rounded-xl text-xs uppercase tracking-wide cursor-pointer transition shadow-sm"
+                  className="px-5 py-2 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold rounded-xl text-xs transition shadow-sm cursor-pointer"
                 >
                   Загрузить
                 </button>
