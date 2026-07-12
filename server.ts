@@ -152,6 +152,15 @@ function offlineParseDozvolaText(text: string): any[] {
     if (type.includes("КЗ")) type = "KZ3";
     if (type.includes("ГРУЗ")) type = "GE";
     if (type.includes("КИТ")) type = "CHN 2";
+    if (type === "CHN2") type = "CHN 2";
+    if (type === "CHN3") type = "CHN 3";
+    if (type === "TRA") type = "TR A";
+    if (type === "TRB") type = "TR B";
+    if (type === "TRC") type = "TR C";
+    if (type === "UZ2") type = "UZ 2";
+    if (type === "UZ3") type = "UZ 3";
+    if (type === "UZ4") type = "UZ 4";
+    if (type === "AM3") type = "AM3";
 
     // Permit number
     const numMatch = line.match(/\b\d{3,8}\b/);
@@ -166,9 +175,14 @@ function offlineParseDozvolaText(text: string): any[] {
     } else if (russiaPlate) {
       car = russiaPlate[0].toUpperCase().replace(/\s+/g, "");
     } else {
-      const anyPlate = line.match(/[A-ZА-Я0-9-]{4,10}/i);
+      const anyPlate = line.match(/\b([A-ZА-Я0-9-]{4,12})\b/i);
       if (anyPlate) {
-        car = anyPlate[0].toUpperCase();
+        const candidate = anyPlate[0].toUpperCase();
+        const hasLetter = /[A-ZА-Я]/i.test(candidate);
+        const hasDigit = /\d/.test(candidate);
+        if (hasLetter && hasDigit && candidate !== number && candidate !== type) {
+          car = candidate;
+        }
       }
     }
 
@@ -198,6 +212,7 @@ function offlineParseDozvolaText(text: string): any[] {
     if (numMatch) comment = comment.replace(numMatch[0], "");
     if (belarusPlate) comment = comment.replace(belarusPlate[0], "");
     else if (russiaPlate) comment = comment.replace(russiaPlate[0], "");
+    if (car) comment = comment.replace(new RegExp(car, "gi"), "");
     comment = comment.replace(/(офис|office|руки|выдан|в пути|hand|возврат|return|сдан|used|проср|expired|копия|скан|copy|фото|photo)/gi, "").trim();
     comment = comment.replace(/[,;.\s-]+/g, " ").trim();
 
@@ -206,23 +221,12 @@ function offlineParseDozvolaText(text: string): any[] {
       number,
       car,
       status,
-      comment: comment || "Офлайн-разбор (Резерв)",
+      comment: comment || "",
       isCopy,
       _isOfflineFallback: true
     });
   }
 
-  if (results.length === 0) {
-    results.push({
-      type: "RUS",
-      number: "",
-      car: "",
-      status: "office",
-      comment: "Не удалось автоматически извлечь данные (Резерв)",
-      isCopy: false,
-      _isOfflineFallback: true
-    });
-  }
   return results;
 }
 
@@ -420,8 +424,421 @@ function offlineParseAnalysisText(text: string): any[] {
   return results;
 }
 
-function offlineParseDriverData(text: string): any {
-  console.log("[Offline Fallback Parser] Parsing driver data");
+function normalizePlate(plate: string): string {
+  if (!plate) return "";
+  return plate.trim().toUpperCase().replace(/[\s-]/g, "");
+}
+
+const KNOWN_TRACTORS = [
+  "VOLVO", "SCANIA", "MAN", "MERCEDES", "DAF", "IVECO", "RENAULT", "KAMAZ", "MAZ",
+  "ВОЛЬВО", "СКАНИЯ", "МАН", "МЕРСЕДЕС", "ДАФ", "ИВЕКО", "РЕНО", "КАМАЗ", "МАЗ"
+];
+
+const KNOWN_TRAILERS = [
+  "SCHMITZ", "KRONE", "KOEGEL", "KÖGEL", "WIELTON", "KOGEL", "SHMITZ", "SAMRO", "CHEREAU", "FRUEHAUF", "LAMBERET",
+  "ШМИЦ", "КРОНА", "КЁГЕЛЬ", "КОГЕЛЬ", "ВЕЛЬТОН", "ВИЛТОН", "ШМИДТ"
+];
+
+const NOISE_WORDS = [
+  "ТЯГАЧ", "ПРИЦЕП", "ПОЛУПРИЦЕП", "ВОДИТЕЛЬ", "НОМЕР", "ГОСНОМЕР", "ТЕЛ", "ТЕЛЕФОН", "ДИСПЕТЧЕР", "DRIVER", "TRAILER", "TRACTOR", "ПАСПОРТ", "ВЫДАН", "ЛИЧНЫЙ", "BAZA", "П/П"
+];
+
+const TRACTOR_BRAND_MAP: Record<string, string> = {
+  "VOLVO": "VOLVO", "ВОЛЬВО": "VOLVO",
+  "SCANIA": "SCANIA", "СКАНИЯ": "SCANIA",
+  "MAN": "MAN", "МАН": "MAN",
+  "MERCEDES": "MERCEDES", "МЕРСЕДЕС": "MERCEDES",
+  "DAF": "DAF", "ДАФ": "DAF",
+  "IVECO": "IVECO", "ИВЕКО": "IVECO",
+  "RENAULT": "RENAULT", "РЕНО": "RENAULT",
+  "KAMAZ": "KAMAZ", "КАМАЗ": "KAMAZ",
+  "MAZ": "MAZ", "МАЗ": "MAZ"
+};
+
+const TRAILER_BRAND_MAP: Record<string, string> = {
+  "SCHMITZ": "SCHMITZ", "SHMITZ": "SCHMITZ", "ШМИЦ": "SCHMITZ", "ШМИДТ": "SCHMITZ",
+  "KRONE": "KRONE", "КРОНА": "KRONE",
+  "KOEGEL": "KOEGEL", "KÖGEL": "KOEGEL", "KOGEL": "KOEGEL", "КЁГЕЛЬ": "KOEGEL", "КОГЕЛЬ": "KOEGEL",
+  "WIELTON": "WIELTON", "ВЕЛЬТОН": "WIELTON", "ВИЛТОН": "WIELTON",
+  "SAMRO": "SAMRO", "CHEREAU": "CHEREAU", "FRUEHAUF": "FRUEHAUF", "LAMBERET": "LAMBERET"
+};
+
+interface ExtractedPlate {
+  text: string;
+  index: number;
+  normalized: string;
+}
+
+function extractPlates(text: string): ExtractedPlate[] {
+  const specificPatterns = [
+    /\b\d{4}\s*[A-ZА-ЯЁ]{1,2}\s*-?\s*\d\b/gi,
+    /\b[A-ZА-ЯЁ]{1,2}\s*\d{4}\s*-?\s*\d\b/gi,
+    /\b[A-ZА-ЯЁ]\s*\d{3}\s*[A-ZА-ЯЁ]{2}\s*\d{2,3}\b/gi,
+    /\b[A-ZА-ЯЁ]{2,3}\s*\d{4,5}\b/gi
+  ];
+
+  const found: ExtractedPlate[] = [];
+
+  for (const pattern of specificPatterns) {
+    let match;
+    pattern.lastIndex = 0;
+    while ((match = pattern.exec(text)) !== null) {
+      const val = match[0];
+      const norm = val.toUpperCase().replace(/\s+/g, "");
+      found.push({
+        text: val,
+        index: match.index,
+        normalized: norm
+      });
+    }
+  }
+
+  const wordPattern = /\b[A-ZА-ЯЁ0-9-]{4,15}\b/gi;
+  let wordMatch;
+  wordPattern.lastIndex = 0;
+  while ((wordMatch = wordPattern.exec(text)) !== null) {
+    const val = wordMatch[0];
+    const norm = val.toUpperCase().replace(/\s+/g, "");
+    
+    const hasLetter = /[A-ZА-ЯЁ]/i.test(norm);
+    const hasDigit = /[0-9]/.test(norm);
+    if (hasLetter && hasDigit) {
+      if (!/^\d{2}[.-]\d{2}[.-]\d{4}$/.test(norm) && !/^\d{4}[.-]\d{2}[.-]\d{2}$/.test(norm)) {
+        const cleanVal = norm.replace(/[^A-Z0-9]/g, "");
+        const isPassport = /^[A-Z]{2}\d{7}$/i.test(cleanVal) || /^\d{10}$/.test(cleanVal);
+        const isPhone = cleanVal.length >= 10 && /^\d+$/.test(cleanVal);
+        
+        if (!isPassport && !isPhone) {
+          found.push({
+            text: val,
+            index: wordMatch.index,
+            normalized: norm
+          });
+        }
+      }
+    }
+  }
+
+  // Sort by length descending to select the most specific/longest matches first
+  found.sort((a, b) => b.text.length - a.text.length);
+
+  const uniqueMatches: ExtractedPlate[] = [];
+  const seenNormalized = new Set<string>();
+  
+  for (const item of found) {
+    const itemStart = item.index;
+    const itemEnd = item.index + item.text.length;
+    
+    const hasOverlap = uniqueMatches.some(selected => {
+      const selStart = selected.index;
+      const selEnd = selected.index + selected.text.length;
+      return (itemStart < selEnd && itemEnd > selStart);
+    });
+    
+    if (!hasOverlap && !seenNormalized.has(item.normalized)) {
+      uniqueMatches.push(item);
+      seenNormalized.add(item.normalized);
+    }
+  }
+
+  // Sort back by index to preserve order
+  uniqueMatches.sort((a, b) => a.index - b.index);
+  return uniqueMatches;
+}
+
+function parseVehiclePlates(text: string): { tractor: ExtractedPlate | null; trailer: ExtractedPlate | null } {
+  const plates = extractPlates(text);
+  
+  let tractor: ExtractedPlate | null = null;
+  let trailer: ExtractedPlate | null = null;
+  
+  if (plates.length === 1) {
+    tractor = plates[0];
+  } else if (plates.length >= 2) {
+    const lowerText = text.toLowerCase();
+    const trailerKeywords = ["прицеп", "trailer", "полуприцеп", "п/п", "полу-прицеп"];
+    
+    let trailerKeywordIdx = -1;
+    for (const kw of trailerKeywords) {
+      const idx = lowerText.indexOf(kw);
+      if (idx !== -1) {
+        trailerKeywordIdx = idx;
+        break;
+      }
+    }
+    
+    if (trailerKeywordIdx !== -1) {
+      const afterKeyword = plates.filter(p => p.index > trailerKeywordIdx);
+      const beforeKeyword = plates.filter(p => p.index <= trailerKeywordIdx);
+      
+      if (afterKeyword.length > 0) {
+        trailer = afterKeyword[0];
+        if (beforeKeyword.length > 0) {
+          tractor = beforeKeyword[0];
+        } else {
+          const otherPlates = plates.filter(p => p !== trailer);
+          if (otherPlates.length > 0) {
+            tractor = otherPlates[0];
+          }
+        }
+      } else {
+        tractor = plates[0];
+        trailer = plates[1];
+      }
+    } else {
+      tractor = plates[0];
+      trailer = plates[1];
+    }
+  }
+  
+  return { tractor, trailer };
+}
+
+function findBrandNearPlate(plate: ExtractedPlate | null, fullText: string, isTrailer: boolean): string {
+  if (!plate) return "";
+  const idx = plate.index;
+  const plateLen = plate.text.length;
+
+  const beforeContext = fullText.substring(Math.max(0, idx - 35), idx);
+  const afterContext = fullText.substring(idx + plateLen, Math.min(fullText.length, idx + plateLen + 25));
+
+  const getWords = (s: string) => {
+    return s
+      .replace(/[\/,.:;?!"()]/g, " ")
+      .split(/\s+/)
+      .map(w => w.trim())
+      .filter(w => w.length >= 2);
+  };
+
+  const beforeWords = getWords(beforeContext);
+  const afterWords = getWords(afterContext);
+
+  const dict = isTrailer ? KNOWN_TRAILERS : KNOWN_TRACTORS;
+  const brandMap = isTrailer ? TRAILER_BRAND_MAP : TRACTOR_BRAND_MAP;
+
+  for (let i = beforeWords.length - 1; i >= 0; i--) {
+    const w = beforeWords[i].toUpperCase();
+    if (dict.includes(w)) {
+      return brandMap[w] || w;
+    }
+  }
+
+  for (let i = 0; i < afterWords.length; i++) {
+    const w = afterWords[i].toUpperCase();
+    if (dict.includes(w)) {
+      return brandMap[w] || w;
+    }
+  }
+
+  const secondaryDict = isTrailer ? KNOWN_TRACTORS : KNOWN_TRAILERS;
+  const secondaryBrandMap = isTrailer ? TRACTOR_BRAND_MAP : TRAILER_BRAND_MAP;
+  for (let i = beforeWords.length - 1; i >= 0; i--) {
+    const w = beforeWords[i].toUpperCase();
+    if (secondaryDict.includes(w)) {
+      return secondaryBrandMap[w] || w;
+    }
+  }
+  for (let i = 0; i < afterWords.length; i++) {
+    const w = afterWords[i].toUpperCase();
+    if (secondaryDict.includes(w)) {
+      return secondaryBrandMap[w] || w;
+    }
+  }
+
+  const isNoiseWord = (w: string) => {
+    const norm = w.toLowerCase();
+    if (NOISE_WORDS.map(n => n.toLowerCase()).includes(norm)) return true;
+    if (w.includes(".")) return true;
+    if (/^[А-ЯЁ][а-яё]+$/.test(w)) {
+      if (/(ов|ев|ин|ын|их|ых|ко|ук|юк|ич|ка|ий|ый)$/i.test(norm)) {
+        return true;
+      }
+    }
+    if (/^\d+$/.test(w)) return true;
+    return false;
+  };
+
+  for (let i = beforeWords.length - 1; i >= 0; i--) {
+    const w = beforeWords[i];
+    if (!isNoiseWord(w)) {
+      return w.toUpperCase();
+    }
+  }
+
+  for (let i = 0; i < afterWords.length; i++) {
+    const w = afterWords[i];
+    if (!isNoiseWord(w)) {
+      return w.toUpperCase();
+    }
+  }
+
+  return "";
+}
+
+function extractDriverShortName(text: string): string {
+  // 1. Match "Иванов И.И." or "Иванов И.  И."
+  const matchA = text.match(/(?:^|[^А-ЯЁа-яё])([А-ЯЁ][а-яё]+)\s+([А-ЯЁ])\s*\.\s*([А-ЯЁ])\s*\./);
+  if (matchA) {
+    return `${matchA[1]} ${matchA[2]}.${matchA[3]}.`;
+  }
+
+  // 2. Match "И.И. Иванов"
+  const matchB = text.match(/(?:^|[^А-ЯЁа-яё])([А-ЯЁ])\s*\.\s*([А-ЯЁ])\s*\.\s+([А-ЯЁ][а-яё]+)/);
+  if (matchB) {
+    return `${matchB[3]} ${matchB[1]}.${matchB[2]}.`;
+  }
+
+  // 3. Match "Иванов И."
+  const matchC = text.match(/(?:^|[^А-ЯЁа-яё])([А-ЯЁ][а-яё]+)\s+([А-ЯЁ])\s*\./);
+  if (matchC) {
+    return `${matchC[1]} ${matchC[2]}.`;
+  }
+
+  // 4. Match "И. Иванов"
+  const matchD = text.match(/(?:^|[^А-ЯЁа-яё])([А-ЯЁ])\s*\.\s+([А-ЯЁ][а-яё]+)/);
+  if (matchD) {
+    return `${matchD[2]} ${matchD[1]}.`;
+  }
+
+  // 5. Match "Иванов И И" (without dots)
+  const matchE = text.match(/(?:^|[^А-ЯЁа-яё])([А-ЯЁ][а-яё]+)\s+([А-ЯЁ])\s+([А-ЯЁ])(?![а-яё])/);
+  if (matchE) {
+    const p1 = matchE[1].toUpperCase();
+    if (!KNOWN_TRACTORS.includes(p1) && !KNOWN_TRAILERS.includes(p1) && !NOISE_WORDS.includes(p1)) {
+      return `${matchE[1]} ${matchE[2]}.${matchE[3]}.`;
+    }
+  }
+
+  // 6. Match "И И Иванов" (without dots)
+  const matchF = text.match(/(?:^|[^А-ЯЁа-яё])([А-ЯЁ])\s+([А-ЯЁ])\s+([А-ЯЁ][а-яё]+)/);
+  if (matchF) {
+    const p3 = matchF[3].toUpperCase();
+    if (!KNOWN_TRACTORS.includes(p3) && !KNOWN_TRAILERS.includes(p3) && !NOISE_WORDS.includes(p3)) {
+      return `${matchF[3]} ${matchF[1]}.${matchF[2]}.`;
+    }
+  }
+
+  const words = text.split(/[^А-ЯЁа-яё]+/);
+  for (let i = 0; i < words.length - 1; i++) {
+    const w1 = words[i];
+    const w2 = words[i + 1];
+    const w3 = words[i + 2] || "";
+    
+    const isCapitalized = (w: string) => /^[А-ЯЁ][а-яё]+$/.test(w);
+    const isBrandOrNoise = (w: string) => {
+      const u = w.toUpperCase();
+      return KNOWN_TRACTORS.includes(u) || KNOWN_TRAILERS.includes(u) || NOISE_WORDS.includes(u);
+    };
+
+    if (isCapitalized(w1) && isCapitalized(w2) && !isBrandOrNoise(w1) && !isBrandOrNoise(w2)) {
+      if (w3 && isCapitalized(w3) && !isBrandOrNoise(w3)) {
+        const init1 = w2.charAt(0).toUpperCase();
+        const init2 = w3.charAt(0).toUpperCase();
+        return `${w1} ${init1}.${init2}.`;
+      } else {
+        const init1 = w2.charAt(0).toUpperCase();
+        return `${w1} ${init1}.`;
+      }
+    }
+  }
+
+  return "";
+}
+
+function extractDriverNameLat(text: string): string {
+  const matches = text.match(/\b([A-Z]{3,})\s+([A-Z]{3,})\b/g) || [];
+  for (const m of matches) {
+    const parts = m.split(/\s+/);
+    const p1 = parts[0].toUpperCase();
+    const p2 = parts[1].toUpperCase();
+    if (!KNOWN_TRACTORS.includes(p1) && !KNOWN_TRAILERS.includes(p1) && !KNOWN_TRACTORS.includes(p2) && !KNOWN_TRAILERS.includes(p2)) {
+      return m.toUpperCase();
+    }
+  }
+  const matchesCamel = text.match(/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\b/g) || [];
+  for (const m of matchesCamel) {
+    const parts = m.split(/\s+/);
+    const p1 = parts[0].toUpperCase();
+    const p2 = parts[1].toUpperCase();
+    if (!KNOWN_TRACTORS.includes(p1) && !KNOWN_TRAILERS.includes(p1) && !KNOWN_TRACTORS.includes(p2) && !KNOWN_TRAILERS.includes(p2)) {
+      return m.toUpperCase();
+    }
+  }
+  return "";
+}
+
+function extractDispatcher(text: string): string {
+  const match = text.match(/(?:диспетчер|дисп|disp|dispatcher)\s*[:.-]?\s*([А-ЯЁa-zа-яё]+)/i);
+  if (match) {
+    const name = match[1].trim();
+    return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+  }
+  
+  const knownDispatchers = ["Юрий", "Алексей", "Татьяна", "Мария", "Анна", "Ольга", "Дмитрий", "Екатерина", "Сергей"];
+  for (const d of knownDispatchers) {
+    const regex = new RegExp(`\\b${d}\\b`, "i");
+    if (regex.test(text)) {
+      const driverNameRu = extractDriverShortName(text);
+      if (!driverNameRu.toLowerCase().includes(d.toLowerCase())) {
+        return d;
+      }
+    }
+  }
+  return "";
+}
+
+// STUCTURED PARSER EXPORTS AS REQUESTED IN TASK REQUIREMENTS
+function parseVehicleText(inputText: string): {
+  tractorPlate: string;
+  trailerPlate: string;
+  tractorBrand: string;
+  trailerBrand: string;
+} {
+  const { tractor, trailer } = parseVehiclePlates(inputText);
+  const tractorPlate = tractor ? tractor.normalized : "";
+  const trailerPlate = trailer ? trailer.normalized : "";
+  const tractorBrand = tractor ? findBrandNearPlate(tractor, inputText, false) : "";
+  const trailerBrand = trailer ? findBrandNearPlate(trailer, inputText, true) : "";
+  return { tractorPlate, trailerPlate, tractorBrand, trailerBrand };
+}
+
+function parseDriverText(inputText: string): {
+  driverShortNameRu: string;
+} {
+  return { driverShortNameRu: extractDriverShortName(inputText) };
+}
+
+function parseVehicleData(text: string): {
+  vehicleNumbers: string;
+  brandModel: string;
+  trailerMake: string;
+} {
+  const parsed = parseVehicleText(text);
+  const vehicleNumbers = parsed.tractorPlate ? (parsed.trailerPlate ? `${parsed.tractorPlate} / ${parsed.trailerPlate}` : parsed.tractorPlate) : "";
+  return {
+    vehicleNumbers,
+    brandModel: parsed.tractorBrand,
+    trailerMake: parsed.trailerBrand
+  };
+}
+
+function parseDriverData(text: string): {
+  driverNameRu: string;
+  driverNameLat: string;
+  birthDate: string;
+  passportNumber: string;
+  personalId: string;
+  passportStart: string;
+  passportEnd: string;
+  passportIssuedBy: string;
+  phones: { number: string; isPrimary: boolean }[];
+  dispatcher: string;
+} {
+  const parsed = parseDriverText(text);
+  const driverNameRu = parsed.driverShortNameRu;
+  const driverNameLat = extractDriverNameLat(text);
+  const dispatcher = extractDispatcher(text);
+  
   const dates = text.match(/\b\d{2}\.\d{2}\.\d{4}\b/g) || [];
   let birthDate = "";
   let passportStart = "";
@@ -436,43 +853,44 @@ function offlineParseDriverData(text: string): any {
     if (sortedDates.length > 1) passportStart = sortedDates[1] || "";
     if (sortedDates.length > 2) passportEnd = sortedDates[2] || "";
   }
-
-  const phoneMatch = text.match(/\+?\d{1,3}[\s-]?\(?\d{2,3}\)?[\s-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}/);
-  const phone = phoneMatch ? phoneMatch[0] : "";
-
+  
+  const phoneMatches = text.match(/\+?\d{1,4}[\s-]?\(?\d{2,4}\)?[\s-]?\d{3,4}[\s-]?\d{2}[\s-]?\d{2}/g) || [];
+  const phones = phoneMatches.map((num, idx) => ({
+    number: num.trim(),
+    isPrimary: idx === 0
+  }));
+  
   const passportMatch = text.match(/\b([A-Z]{2}\s?\d{7}|\d{4}\s?\d{6})\b/i);
-  const passportNumber = passportMatch ? passportMatch[1].toUpperCase() : "";
-
+  const passportNumber = passportMatch ? passportMatch[1].toUpperCase().replace(/\s+/g, "") : "";
+  
   const personalIdMatch = text.match(/\b\d{7}[A-Z]\d{3}[A-Z]{2}\d\b/i);
-  const personalId = personalIdMatch ? personalIdMatch[0].toUpperCase() : "";
-
-  const belarusPlate = text.match(/([A-Z]{2}\s?\d{4}-\d|\d{4}\s?[A-Z]{2}-\d)/i);
-  const vehicleNumbers = belarusPlate ? belarusPlate[0].toUpperCase().replace(/\s+/g, "") : "";
-
-  const brandMatch = text.match(/\b(Volvo|Scania|MAN|Mercedes|DAF|Iveco|Renault|Kam|MAZ|Вольво|Скания|Ман|Мерседес|Даф|Ивеко|Рено|Камаз|МАЗ)\b/i);
-  const brands = brandMatch ? brandMatch[0].toUpperCase() : "VOLVO";
-
-  const nameMatch = text.match(/([А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+\s+[А-ЯЁ][а-яё]+)/);
-  const driverName = nameMatch ? nameMatch[0] : "Офлайн-Водитель (Резерв)";
-
+  const personalId = personalIdMatch ? personalIdMatch[0].toUpperCase().replace(/\s+/g, "") : "";
+  
   const issuedMatch = text.match(/(?:выдан|issued by)\s+([^,.\n]+)/i);
-  const passportIssuedBy = issuedMatch ? issuedMatch[1].trim() : "МВД РБ";
-
-  const dispMatch = text.match(/\b(Юрий|Алексей|Татьяна|Мария|Анна|Ольга|Дмитрий|Екатерина|Сергей)\b/i);
-  const dispatcher = dispMatch ? dispMatch[0] : "";
-
+  const passportIssuedBy = issuedMatch ? issuedMatch[1].trim() : "";
+  
   return {
-    vehicleNumbers,
-    brands,
-    driverName,
+    driverNameRu,
+    driverNameLat,
     birthDate,
     passportNumber,
     personalId,
     passportStart,
     passportEnd,
     passportIssuedBy,
-    phone,
-    dispatcher,
+    phones,
+    dispatcher
+  };
+}
+
+function offlineParseDriverData(text: string): any {
+  console.log("[Offline Parser] Running improved driver data parser");
+  const vehicleData = parseVehicleData(text);
+  const driverData = parseDriverData(text);
+  
+  return {
+    ...vehicleData,
+    ...driverData,
     _isOfflineFallback: true
   };
 }
@@ -600,6 +1018,50 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+
+  // API Route for proxying Agent API calls safely hiding the key
+  app.post("/api/internal/agent-proxy", async (req, res) => {
+    const { path, method = "POST", body } = req.body;
+    if (!path) {
+      return res.status(400).json({ error: "Missing path" });
+    }
+    
+    // Hardcoded remote URL as requested
+    const baseUrl = "https://ratipa-portal.vercel.app";
+    const url = `${baseUrl}${path}`;
+    const apiKey = process.env.AGENT_API_KEY || "";
+    
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "x-agent-key": apiKey
+        },
+        body: method === "GET" ? undefined : JSON.stringify(body || {})
+      });
+      
+      const data = await response.json().catch(() => null);
+      
+      if (!response.ok) {
+        return res.status(response.status).json(data || { error: response.statusText });
+      }
+      
+      return res.json(data);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // API Route for getting the masked agent key
+  app.get("/api/internal/agent-key", async (req, res) => {
+    const key = process.env.AGENT_API_KEY || "";
+    if (!key) {
+      return res.json({ masked: "Ключ не установлен", exists: false });
+    }
+    const masked = `••••••••••••${key.slice(-4)}`;
+    return res.json({ masked, exists: true });
+  });
 
   // API Route for proxying NBRB exchange rates to avoid CORS issues
   app.get("/api/nbrb-rates", async (req, res) => {
@@ -1044,7 +1506,7 @@ If you cannot find some data, leave it as an empty string. Only return valid JSO
     },
   );
 
-  // API Route for parsing driver and vehicle data text
+  // API Route for parsing driver and vehicle data text (Strictly Offline)
   app.post("/api/parse-driver-data", async (req, res) => {
     const { text } = req.body;
     if (!text || text.trim().length === 0) {
@@ -1052,126 +1514,29 @@ If you cannot find some data, leave it as an empty string. Only return valid JSO
     }
 
     try {
-      const promptText = `
-You are a helpful logistics data extractor.
-Analyze the following unstructured text description of a vehicle and its driver.
-Extract the fields exactly into the JSON object matching this schema:
-
-{
-  "vehicleNumbers": "The vehicle state number / trailer state number, e.g., 'AE 6052-7 / A 2453 Е-7'",
-  "brands": "The vehicle brand / trailer brand, e.g., 'Volvo / KOEGEL' or 'Scania / Schmitz'",
-  "driverName": "The driver's full name (usually in Cyrillic, with Latin in parentheses), e.g., 'Устинов Олег Леонидович (USTSINAU ALEH)'",
-  "birthDate": "Birth date in format DD.MM.YYYY",
-  "passportNumber": "Passport number, e.g., 'МР 5065058'",
-  "personalId": "Passport personal identification number, e.g., '3080273A018PB6'",
-  "passportStart": "Passport issue date in format DD.MM.YYYY",
-  "passportEnd": "Passport expiration date in format DD.MM.YYYY",
-  "passportIssuedBy": "Entity that issued the passport, e.g., 'Фрунзенским РУВД г. Минска'",
-  "phone": "Driver's phone number, e.g., '+375 29 538-96-00'",
-  "dispatcher": "First name of the dispatcher if mentioned, e.g. 'Юрий', 'Алексей', 'Татьяна', or keep empty if not specified"
-}
-
-Ensure all dates are converted or kept in the DD.MM.YYYY format.
-If you cannot find a certain field, set its value to "".
-Only return valid JSON inside a codeblock or raw. Do not return markdown except if needed, but preferably raw JSON.
-
-Unstructured Text:
-${text}
-`;
-
-      const textResult = await generateGeminiContentWithFallback(
-        promptText,
-        "You are a precise data extractor. You must only return valid JSON matching the schema.",
-        "gemini-2.5-flash"
-      );
-
-      let jsonStr = textResult || "";
-      const jsonMatch =
-        jsonStr.match(/```json\s*([\s\S]*?)\s*```/) ||
-        jsonStr.match(/([\{\[][\s\S]*[\}\]])/);
-      let parsed = {};
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[1]);
-      } else {
-        parsed = JSON.parse(jsonStr);
-      }
-
+      console.log("[Parser] Running strictly offline driver data parser");
+      const parsed = offlineParseDriverData(text);
       res.json({ results: parsed });
     } catch (e: any) {
-      console.warn("Gemini parsing failed, using offline fallback parser:", e.message || e);
-      try {
-        const parsed = offlineParseDriverData(text);
-        res.json({ results: parsed });
-      } catch (fallbackError: any) {
-        handleGeminiError(e, res, "Parse driver data API error");
-      }
+      console.error("Offline parsing failed in parse-driver-data:", e);
+      res.status(500).json({ error: e.message || "Failed to parse driver data" });
     }
   });
 
-  // API Route for text parsing as well (if you want to keep the old text assistant with AI)
+  // API Route for text parsing as well (Strictly Offline)
   app.post("/api/parse-dozvola-text", async (req, res) => {
-    const { text, knownFleetCars } = req.body;
+    const { text } = req.body;
     if (!text) {
       return res.status(400).json({ error: "No text provided" });
     }
 
     try {
-      const promptText = `
-You are an expert logistics AI assistant.
-Your task is to parse unstructured text about transport permit (dozvol/дозвол) movements and extract structured data.
-You will be given the raw text.
-
-Extract a JSON array of objects, where each object represents an action on a specific permit.
-Each object should have the following fields:
-- "type": The permit type (e.g. "RUS", "TR A", "TR B", "UZ 2", "UZ 3", "UZ 4", "GE", "AM3", "KZ3", "CHN 2", "CHN 3"). Attempt to normalize it.
-- "number": The permit serial number (usually 3 to 8 digits).
-- "car": The truck license plate or number it is assigned to or taken from (e.g. "AB1234-7" or "9271").
-- "status": The action's resulting status. MUST be one of:
-   - "office" (received in office)
-   - "hand" (given to driver / in transit)
-   - "office_return" (returned to office)
-   - "used" (submitted to transport inspection)
-   - "expired" (cancelled, mistake, discarded)
-- "comment": Any remaining notes or comments from the text.
-- "isCopy": Boolean. True if the text mentions a copy/scan/photo (especially for CHN types).
-
-Return ONLY a valid JSON array. Do not return markdown blocks.
-
-Text:
-"${text}"
-`;
-
-      const textResult = await generateGeminiContentWithFallback(
-        promptText,
-        "You are a helpful logistics data extractor. Return only a JSON array.",
-        "gemini-2.5-flash"
-      );
-
-      let jsonStr = textResult || "[]";
-      const jsonMatch =
-        jsonStr.match(/```json\s*([\s\S]*?)\s*```/) ||
-        jsonStr.match(/([\{\[][\s\S]*[\}\]])/);
-      let parsed = [];
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[1]);
-      } else {
-        parsed = JSON.parse(jsonStr);
-      }
-
-      // Ensure it's an array
-      if (!Array.isArray(parsed)) {
-        parsed = [parsed];
-      }
-
+      console.log("[Parser] Running strictly offline dozvola text parser");
+      const parsed = offlineParseDozvolaText(text);
       res.json({ results: parsed });
     } catch (e: any) {
-      console.warn("Gemini parsing failed, using offline fallback parser:", e.message || e);
-      try {
-        const parsed = offlineParseDozvolaText(text);
-        res.json({ results: parsed });
-      } catch (fallbackError: any) {
-        handleGeminiError(e, res, "Failed to parse dozvola text");
-      }
+      console.error("Offline parsing failed in parse-dozvola-text:", e);
+      res.status(500).json({ error: e.message || "Failed to parse dozvola text" });
     }
   });
 
@@ -1183,54 +1548,11 @@ Text:
     }
 
     try {
-      const promptText = `
-You are an intelligent logistics data extraction assistant for calculating transport revenue (калькуляция).
-Extract structured data about the route legs and total travel time from the user's text.
-Text: "${text}"
-
-Rules for extraction:
-1. Identify all segments of the route (legs). For each leg, identify the "from" city, "to" city, the freight amount, currency, and empty run (доезд км) if specified.
-2. The user might write "Минск - Москва 120 тыс рос руб" -> from: Минск, to: Москва, amount: 120000, currency: RUB.
-3. If they say "едем 6 дней" -> total_days: 6.
-4. Currencies must be one of: EUR, USD, RUB, BYN, CNY. Guess the correct one (e.g. "рос руб" or "рублей" often means RUB, "евро" or "€" is EUR, "долларов" is USD).
-5. If the user specifies an amount with "тыс" or "к", multiply it by 1000 (e.g. 120 тыс = 120000).
-
-Return a JSON object with this structure:
-{
-  "legs": [
-    { "from": "Минск", "to": "Москва", "amount": 120000, "currency": "RUB", "emptyRun": 0 }
-  ],
-  "total_days": 6 // or null if not mentioned
-}
-Do not return Markdown. Return raw JSON object only.
-`;
-
-      const textResult = await generateGeminiContentWithFallback(
-        promptText,
-        "You are a helpful logistics data extractor. Return only a JSON object.",
-        "gemini-2.5-flash"
-      );
-
-      let jsonStr = textResult || "{}";
-      const jsonMatch =
-        jsonStr.match(/```json\s*([\s\S]*?)\s*```/) ||
-        jsonStr.match(/([\{\[][\s\S]*[\}\]])/);
-      let parsed = { legs: [], total_days: null };
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[1]);
-      } else {
-        parsed = JSON.parse(jsonStr);
-      }
-
+      const parsed = offlineParseDohodText(text);
       res.json(parsed);
     } catch (e: any) {
-      console.warn("Gemini parsing failed, using offline fallback parser in dohod:", e.message || e);
-      try {
-        const parsed = offlineParseDohodText(text);
-        res.json(parsed);
-      } catch (fallbackError: any) {
-        handleGeminiError(e, res, "Failed to process text in dohod");
-      }
+      console.error("Offline parsing failed in parse-dohod-text:", e);
+      res.status(500).json({ error: e.message || "Failed to parse dohod text" });
     }
   });
 
@@ -1242,51 +1564,11 @@ Do not return Markdown. Return raw JSON object only.
     }
 
     try {
-      const promptText = `
-You are an intelligent logistics data extraction assistant for calculating transport revenue planning.
-Extract structured data about the route legs from the user's text.
-Text: "${text}"
-
-Rules for extraction:
-1. Identify all segments of the route (legs). For each leg, identify the "from" city, "to" city, the freight rate, the km distance, empty run distance (доезд км), the ferry cost, and the coefficient.
-2. Example: "Минск - Москва ставка 1200 евро, 750 км, паром 100" -> from: Минск, to: Москва, rate: 1200, km: 750, ferry: 100.
-3. If any field is missing, set it to 0.
-
-Return a JSON object with this structure:
-{
-  "legs": [
-    { "from": "Минск", "to": "Москва", "rate": 1200, "km": 750, "emptyRunKm": 0, "ferry": 100, "coeff": 0 }
-  ]
-}
-Do not return Markdown. Return raw JSON object only.
-`;
-
-      const textResult = await generateGeminiContentWithFallback(
-        promptText,
-        "You are a helpful logistics data extractor. Return only a JSON object.",
-        "gemini-2.5-flash"
-      );
-
-      let jsonStr = textResult || "{}";
-      const jsonMatch =
-        jsonStr.match(/```json\s*([\s\S]*?)\s*```/) ||
-        jsonStr.match(/([\{\[][\s\S]*[\}\]])/);
-      let parsed = { legs: [] };
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[1]);
-      } else {
-        parsed = JSON.parse(jsonStr);
-      }
-
+      const parsed = offlineParsePlanDohodText(text);
       res.json(parsed);
     } catch (e: any) {
-      console.warn("Gemini parsing failed, using offline fallback parser in plandohod:", e.message || e);
-      try {
-        const parsed = offlineParsePlanDohodText(text);
-        res.json(parsed);
-      } catch (fallbackError: any) {
-        handleGeminiError(e, res, "Failed to process text in plandohod");
-      }
+      console.error("Offline parsing failed in parse-plandohod-text:", e);
+      res.status(500).json({ error: e.message || "Failed to parse plandohod text" });
     }
   });
 
@@ -1347,75 +1629,13 @@ Do not return Markdown. Return raw JSON array only.
   });
 
   app.post("/api/parse-couple-data", async (req, res) => {
-    const { text, image } = req.body;
+    const { text } = req.body;
     try {
-      const promptText = `
-You are an AI assistant that extracts tractor-trailer (сцепка) details for a ferry booking order from raw text messages or document screenshots.
-Please parse the provided text or image carefully and extract these fields. Return a single valid JSON object containing these exact fields:
-
-- stateNumber: String (the tractor and trailer state plate numbers, e.g. "AX1587-7/A1063E-7". Always combine tractor number and trailer number with a slash if both are present)
-- model: String (the brand/model of the truck, e.g. "VOLVO", "SCANIA", "MAN", "MERCEDES")
-- vehicleType: String (the trailer type, e.g. "Тент 90м3", "Рефрижератор", "Сцепка 120м3")
-- dimensions: String (trailer dimensions, e.g. "13.6м x 2.45м x 2.7м")
-- weight: String (cargo/vehicle weight, e.g. "15т" or "22т")
-- driver1: String (Full name and passport details of Driver 1 if found)
-- driver2: String (Full name and passport details of Driver 2 if found)
-
-Do not include any Markdown wrappers (like \`\`\`json), explanations, or notes. Output ONLY the raw valid JSON.
-`;
-
-      const contents: any[] = [promptText];
-      if (text) {
-        contents.push(`Input Text:\n${text}`);
-      }
-
-      if (image) {
-        // Extract base64 and mimeType
-        const match = image.match(/^data:(image\/[a-zA-Z0-9.-]+);base64,(.+)$/);
-        if (match) {
-          const mimeType = match[1];
-          const data = match[2];
-          contents.push({
-            inlineData: {
-              mimeType,
-              data
-            }
-          });
-        } else {
-          contents.push({
-            inlineData: {
-              mimeType: "image/png",
-              data: image
-            }
-          });
-        }
-      }
-
-      const textResult = await generateGeminiContentWithFallback(
-        contents,
-        "You are a precise logistics data extractor. Return only a JSON object.",
-        "gemini-2.5-flash"
-      );
-
-      let jsonStr = textResult || "{}";
-      const jsonMatch =
-        jsonStr.match(/```json\s*([\s\S]*?)\s*```/) ||
-        jsonStr.match(/([\{\[][\s\S]*[\}\]])/);
-      let parsed = {};
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[1]);
-      } else {
-        parsed = JSON.parse(jsonStr.trim());
-      }
+      const parsed = offlineParseCoupleData(text || "");
       res.json(parsed);
     } catch (error: any) {
-      console.warn("Gemini parsing failed, using offline fallback parser in couple data:", error.message || error);
-      try {
-        const parsed = offlineParseCoupleData(text || "");
-        res.json(parsed);
-      } catch (fallbackError: any) {
-        handleGeminiError(error, res, "Parse couple data API error");
-      }
+      console.error("Offline parsing failed in parse-couple-data:", error);
+      res.status(500).json({ error: error.message || "Failed to parse couple data" });
     }
   });
 
