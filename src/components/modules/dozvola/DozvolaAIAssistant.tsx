@@ -179,9 +179,20 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                         let candidate = carMatches.find(digits => !numberCandidates.includes(digits));
                         if (candidate) {
                             const fullCarFromFleet = Object.keys(knownFleetCars).find(car => car.includes(candidate));
-                            foundCar = fullCarFromFleet ? fullCarFromFleet : candidate;
+                            foundCar = fullCarFromFleet ? fullCarFromFleet : "";
                         }
                     }
+                }
+            }
+
+            // Post-validation on foundCar
+            if (foundCar) {
+                const cleanedCar = foundCar.trim().toUpperCase();
+                const hasLetter = /[A-ZА-Я]/i.test(cleanedCar);
+                const hasDigit = /\d/.test(cleanedCar);
+                const isPureNumeric = /^\d+$/.test(cleanedCar.replace(/[^0-9]/g, ''));
+                if (!hasLetter || !hasDigit || isPureNumeric || numberCandidates.includes(cleanedCar)) {
+                    foundCar = "";
                 }
             }
 
@@ -288,6 +299,17 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                             finalCar = existingDozvol.car || "";
                         }
 
+                        // Validate finalCar - should not be purely numeric or same as permit number
+                        if (finalCar) {
+                            const cleanedCar = finalCar.trim().toUpperCase();
+                            const hasLetter = /[A-ZА-Я]/i.test(cleanedCar);
+                            const hasDigit = /\d/.test(cleanedCar);
+                            const isPureNumeric = /^\d+$/.test(cleanedCar.replace(/[^0-9]/g, ''));
+                            if (!hasLetter || !hasDigit || isPureNumeric || cleanedCar === String(item.number).toUpperCase()) {
+                                finalCar = "";
+                            }
+                        }
+
                         // Attempt to match the parsed car to our known fleet if it's not exact
                         if (finalCar) {
                             const digits = finalCar.replace(/\D/g, '');
@@ -376,18 +398,18 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                 let diffs = [];
                 if(old.car !== item.car) diffs.push(`Автомобиль: [${old.car||'—'}] ➔ [${item.car||'—'}]`);
                 if(old.status !== item.status) diffs.push(`Статус: [${getStatusLabel(old.status)}] ➔ [${getStatusLabel(item.status)}]`);
-                let logMsg = diffs.length > 0 ? diffs.join(' | ') : "Обновление параметров через ИИ";
+                let logMsg = diffs.length > 0 ? diffs.join(' | ') : "Обновление параметров через парсер";
                 
                 if (useFirebase) {
                     update(ref(database, `dozvolsRegistryV4/${item.id}`), { type: item.type, number: item.number, status: item.status, isCopy: item.isCopy, car: item.car, comment: item.comment || "" });
-                    logAction(item.type, item.number, "Обновление через ИИ-помощник", logMsg);
+                    logAction(item.type, item.number, "Обновление через парсер", logMsg);
                 }
             } else {
                 if (useFirebase) {
                     const newKey = push(ref(database, 'dozvolsRegistryV4')).key;
                     if (newKey) {
                         set(ref(database, 'dozvolsRegistryV4/' + newKey), { id: newKey, type: item.type, number: item.number, issueDate: new Date().toISOString().split('T')[0], status: item.status, isCopy: item.isCopy, car: item.car, comment: item.comment || "" });
-                        logAction(item.type, item.number, "Внесение через ИИ-помощник", `Статус: ${getStatusLabel(item.status)}`);
+                        logAction(item.type, item.number, "Внесение через парсер", `Статус: ${getStatusLabel(item.status)}`);
                     }
                 }
             }
@@ -397,14 +419,15 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
     };
 
     return (
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col gap-4 relative overflow-hidden">
+        <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col gap-4 relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
                 <Sparkles className="w-24 h-24 text-blue-500" />
             </div>
             
             <div className="flex justify-between items-center z-10">
-                <h3 className="text-sm font-black uppercase text-slate-800 tracking-tight flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-blue-500" /> ИИ-Помощник (разбор номеров)
+                <h3 className="text-sm font-bold text-slate-800 tracking-tight flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-[#3765F6]" />
+                    <span>ИИ помощник (разбор номеров)</span>
                 </h3>
             </div>
             
@@ -413,7 +436,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                     value={rawText}
                     onChange={(e) => setRawText(e.target.value)}
                     placeholder="Вставьте сюда текст. Система разберет строки вида:&#10;• бланк RUS 130520 выдан в рейс на AB 9271-7 комментарий: отправлен к Виждан&#10;• CHN 2, 4175, 3467, 3133 копии сданы"
-                    className="w-full h-24 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:bg-white focus:border-blue-300 resize-none font-mono leading-relaxed"
+                    className="w-full h-24 p-3.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-medium focus:outline-none focus:bg-white focus:border-[#3765F6] resize-none font-mono leading-relaxed transition"
                 />
             </div>
             
@@ -421,38 +444,38 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                 <button 
                     onClick={handleProcess}
                     disabled={isParsing}
-                    className="bg-slate-950 hover:bg-slate-800 disabled:opacity-70 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wide transition shadow-sm cursor-pointer flex items-center gap-2"
+                    className="bg-[#3765F6] hover:bg-[#2555E5] disabled:opacity-70 text-white px-5 py-2.5 rounded-xl text-xs font-semibold transition shadow-xs cursor-pointer flex items-center gap-2"
                 >
-                    {isParsing ? <><Loader2 className="w-4 h-4 animate-spin" /> Обработка ИИ...</> : "Распознать текст ⚡"}
+                    {isParsing ? <><Loader2 className="w-4 h-4 animate-spin" /> Обработка...</> : "Распознать текст ⚡"}
                 </button>
             </div>
 
             {tempBatchItems.length > 0 && (
-                <div className="mt-4 pt-4 border-t-2 border-dashed border-slate-200/80 z-10">
-                    <div className="text-[13px] font-black text-emerald-700 mb-3 flex justify-between items-center">
-                        <span>📋 ПОДТВЕРЖДЕНИЕ ОПЕРАЦИЙ:</span>
+                <div className="mt-4 pt-4 border-t border-dashed border-slate-200/80 z-10">
+                    <div className="text-xs font-bold text-slate-600 mb-3 flex justify-between items-center">
+                        <span>Подтверждение операций:</span>
                         <button 
                             onClick={() => setTempBatchItems([])}
-                            className="bg-rose-50 text-rose-500 hover:bg-rose-100 px-3 py-1.5 rounded-lg text-[10px] uppercase cursor-pointer"
+                            className="bg-rose-50 text-rose-600 hover:bg-rose-100 px-3 py-1.5 rounded-lg text-[10px] font-semibold cursor-pointer transition"
                         >
-                            Сбросить ✕
+                            Сбросить
                         </button>
                     </div>
                     
-                    <div className="overflow-x-auto bg-white rounded-xl border border-slate-200/50 p-1.5 shadow-sm">
+                    <div className="overflow-x-auto bg-white/60 rounded-xl border border-slate-200/50 p-1.5 shadow-xs">
                         <table className="w-full text-left border-collapse min-w-[700px]">
-                            <thead className="bg-slate-50">
+                            <thead className="bg-slate-50/70">
                                 <tr>
-                                    <th className="p-2 text-[10px] uppercase font-black text-slate-400">Действие ИИ</th>
-                                    <th className="p-2 text-[10px] uppercase font-black text-slate-400">Вид дозвола</th>
-                                    <th className="p-2 text-[10px] uppercase font-black text-slate-400">Номер бланка</th>
-                                    <th className="p-2 text-[10px] uppercase font-black text-slate-400">Статус</th>
-                                    <th className="p-2 text-[10px] uppercase font-black text-slate-400">Привязка к авто</th>
-                                    <th className="p-2 text-[10px] uppercase font-black text-slate-400">Комментарий</th>
+                                    <th className="p-2 text-[10px] font-bold text-slate-400">Действие парсера</th>
+                                    <th className="p-2 text-[10px] font-bold text-slate-400">Вид дозвола</th>
+                                    <th className="p-2 text-[10px] font-bold text-slate-400">Номер бланка</th>
+                                    <th className="p-2 text-[10px] font-bold text-slate-400">Статус</th>
+                                    <th className="p-2 text-[10px] font-bold text-slate-400">Привязка к авто</th>
+                                    <th className="p-2 text-[10px] font-bold text-slate-400">Комментарий</th>
                                     <th className="p-2 w-8"></th>
                                 </tr>
                             </thead>
-                            <tbody className="text-xs font-semibold">
+                            <tbody className="text-xs font-medium">
                                 {tempBatchItems.map((item, index) => {
                                     const allTypes = [...new Set([...Object.values(customTypes).map((t:any) => t.name), item.type])];
                                     
@@ -472,17 +495,17 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                                                 comment: item.comment,
                                                                 isCopy: item.isCopy
                                                             })}
-                                                            className="text-white bg-blue-600 hover:bg-blue-700 px-2 py-1.5 rounded-[6px] text-[10px] font-black uppercase tracking-wider cursor-pointer shadow-xs transition"
+                                                            className="text-white bg-[#3765F6] hover:bg-[#2555E5] px-2 py-1.5 rounded-lg text-[10px] font-semibold cursor-pointer shadow-xs transition"
                                                             title="Открыть подробное окно редактирования"
                                                         >
-                                                            Редактировать 📝
+                                                            Редактировать
                                                         </button>
                                                     )}
                                                 </div>
                                             </td>
                                             <td className="p-2">
                                                 <select 
-                                                    className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-[11px] focus:outline-none"
+                                                    className="w-full p-1.5 bg-slate-50/50 border border-slate-200/80 rounded-lg text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                                                     value={item.type}
                                                     onChange={(e) => {
                                                         const newArr = [...tempBatchItems];
@@ -495,7 +518,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                             </td>
                                             <td className="p-2">
                                                 <input 
-                                                    className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-[11px] focus:outline-none"
+                                                    className="w-full p-1.5 bg-slate-50/50 border border-slate-200/80 rounded-lg text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                                                     value={item.number}
                                                     onChange={e => {
                                                         const newArr = [...tempBatchItems];
@@ -506,7 +529,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                             </td>
                                             <td className="p-2">
                                                 <select 
-                                                    className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-[11px] focus:outline-none"
+                                                    className="w-full p-1.5 bg-slate-50/50 border border-slate-200/80 rounded-lg text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                                                     value={item.status}
                                                     onChange={(e) => {
                                                         const newArr = [...tempBatchItems];
@@ -517,13 +540,13 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                                     <option value="office">В офисе</option>
                                                     <option value="hand">В рейсе</option>
                                                     <option value="office_return">Сдан в офис</option>
-                                                    <option value="used">Сдан в транспортную инспекцию</option>
+                                                    <option value="used">Сдан в ИТ</option>
                                                     <option value="expired">Аннулирован</option>
                                                 </select>
                                             </td>
                                             <td className="p-2">
                                                 <input 
-                                                    className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-[11px] focus:outline-none"
+                                                    className="w-full p-1.5 bg-slate-50/50 border border-slate-200/80 rounded-lg text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                                                     value={item.car}
                                                     onChange={e => {
                                                         const newArr = [...tempBatchItems];
@@ -534,7 +557,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                             </td>
                                             <td className="p-2">
                                                 <input 
-                                                    className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-[11px] focus:outline-none"
+                                                    className="w-full p-1.5 bg-slate-50/50 border border-slate-200/80 rounded-lg text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                                                     value={item.comment || ''}
                                                     onChange={e => {
                                                         const newArr = [...tempBatchItems];
@@ -550,9 +573,9 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                                         newArr.splice(index, 1);
                                                         setTempBatchItems(newArr);
                                                     }}
-                                                    className="p-1 rounded hover:bg-rose-50 text-rose-500 cursor-pointer"
+                                                    className="p-1 rounded hover:bg-rose-50 text-rose-500 cursor-pointer transition"
                                                 >
-                                                    <X className="w-3 h-3" />
+                                                    <X className="w-3.5 h-3.5" />
                                                 </button>
                                             </td>
                                         </tr>
@@ -565,7 +588,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                     <div className="flex justify-end mt-4">
                         <button 
                             onClick={saveAllPreviewedDozvols}
-                            className="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-xs font-black tracking-wide shadow-sm cursor-pointer"
+                            className="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-xs font-semibold tracking-wide shadow-xs cursor-pointer transition"
                         >
                             Применить изменения и внести бланки ➔
                         </button>

@@ -46,6 +46,10 @@ import PlanDohodDispatchersSettingsBlock from './PlanDohodDispatchersSettingsBlo
 import AdminPushNotificationsBlock from './AdminPushNotificationsBlock';
 import AdminFirebaseConfigBlock from './AdminFirebaseConfigBlock';
 import AdminMapboxLimitsBlock from './AdminMapboxLimitsBlock';
+import AdminAgentBlock from './AdminAgentBlock';
+import MenuDesignerBlock from './MenuDesignerBlock';
+import AdminAuditLogsBlock from './AdminAuditLogsBlock';
+import AdminWelcomePhrasesBlock from './AdminWelcomePhrasesBlock';
 import { pdService } from '../../firebase/planDohodService';
 
 interface AdminModuleProps {
@@ -63,6 +67,10 @@ export default function AdminModule({ user }: AdminModuleProps) {
   const [userListCount, setUserListCount] = useState(0);
   const [dispatchersCount, setDispatchersCount] = useState(0);
   const [notificationsCount, setNotificationsCount] = useState(0);
+  const [customPhrasesText, setCustomPhrasesText] = useState('');
+  useEffect(() => {
+    if (settings?.customPhrases) setCustomPhrasesText(settings.customPhrases.join('\n'));
+  }, [settings?.customPhrases]);
 
   // Fetch data
   useEffect(() => {
@@ -131,7 +139,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
   // Lock non-admins completely
   if (user.role !== 'root_admin' && user.role !== 'admin') {
     return (
-      <div className="bg-white rounded-[2rem] p-8 shadow-[0_8px_30px_rgba(0,0,0,0.01)] border border-slate-200/50 text-center flex flex-col justify-center items-center py-24 select-none">
+      <div className="bg-white/60 backdrop-blur-xl rounded-[2rem] p-8 shadow-sm border border-white/40 text-center flex flex-col justify-center items-center py-24 select-none">
         <Lock className="h-12 w-12 text-slate-400 mb-4" style={{ strokeWidth: 1.5 }} />
         <span className="text-sm font-black text-slate-900 uppercase font-mono tracking-wider">Доступ заблокирован</span>
         <p className="text-xs text-slate-500 max-w-xs mt-2 font-medium">
@@ -141,69 +149,95 @@ export default function AdminModule({ user }: AdminModuleProps) {
     );
   }
 
-  const [activeTab, setActiveTab] = useState<'users' | 'planning' | 'income' | 'system' | 'push'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'planning' | 'income' | 'navigation' | 'system' | 'welcome' | 'push' | 'agent'>('users');
 
   const tabsList = [
     { id: 'users', label: 'Пользователи и Сессии', icon: Users, count: userListCount },
     { id: 'planning', label: 'Планирование', icon: Compass, count: (settings?.currentPlanningTabs?.length || 0) + (settings?.planZagruzokTabs?.length || 0) },
     { id: 'income', label: 'План Дохода', icon: TrendingUp, count: dispatchersCount },
-    { id: 'system', label: 'Система и Конструктор', icon: Settings, count: settings?.menuStructure?.length || 10 },
+    { id: 'navigation', label: 'Конструктор меню', icon: FolderPlus, count: settings?.menuStructure?.length || 10 },
+    { id: 'welcome', label: 'Бегущая строка', icon: Sparkles, count: settings?.customPhrases?.length || 0 },
+    { id: 'system', label: 'Система и Настройки', icon: Settings, count: 0 },
     { id: 'push', label: 'Push Уведомления', icon: Bell, count: notificationsCount },
+    { id: 'agent', label: 'Агент (API)', icon: Sparkles, count: 0 },
   ] as const;
 
   return (
-    <div className="w-full space-y-6 font-sans">
-      
-      {/* HEADER BAR */}
-      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] select-none">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-2.5">
-              <ShieldAlert className="w-5.5 h-5.5 text-slate-900" style={{ fill: '#c3fb12' }} />
-              <span>Панель Администратора</span>
-            </h1>
-            <p className="text-xs text-slate-400 font-bold uppercase tracking-wider font-mono mt-1">
-              Управление правами доступа, структурой интерфейса, ротацией логов и пуш-рассылками RATIPA
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-[10px] bg-slate-100 text-slate-500 font-bold px-3 py-1.5 rounded-full font-mono uppercase border border-slate-200">
-            <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
-            <span>{user.role === 'root_admin' ? 'Root Доступ' : 'Администратор'}</span>
-          </div>
-        </div>
+    <div className="w-full space-y-6 font-sans relative">
 
-        {/* MODERN SCROLLABLE TAB NAVIGATOR */}
-        <div className="mt-6 flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/60 max-w-max">
-          {tabsList.map((t) => {
-            const IconComp = t.icon;
-            const isActive = activeTab === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-tight transition duration-155 select-none cursor-pointer ${
-                  isActive 
-                    ? 'bg-slate-950 text-white shadow-sm font-extrabold' 
-                    : 'text-slate-505 hover:text-slate-900 hover:bg-white/50'
-                }`}
-              >
-                <IconComp className={`w-3.5 h-3.5 ${isActive ? 'text-[#c3fb12]' : 'text-slate-400'}`} />
-                <span>{t.label}</span>
-                {t.count > 0 && (
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-mono font-black ${
-                    isActive ? 'bg-[#c3fb12]/20 text-[#c3fb12]' : 'bg-slate-200 text-slate-600'
-                  }`}>
-                    {t.count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+      {/* BACKGROUND ELEMENTS */}
+      <div className="fixed inset-0 bg-[#f4f5f6] -z-20" />
+      <div className="fixed inset-0 tech-grid opacity-[0.08] pointer-events-none -z-10" />
+      <div className="fixed inset-0 overflow-hidden pointer-events-none select-none -z-10">
+        <div className="absolute -top-32 -left-32 w-[650px] h-[650px] rounded-full bg-[#3765F6]/10 blur-[130px] md:blur-[170px]" />
+        <div className="absolute -bottom-32 right-[10%] w-[700px] h-[550px] rounded-full bg-[#3765F6]/10 blur-[130px] md:blur-[170px]" />
+        <div className="absolute top-[40%] left-[20%] w-[500px] h-[400px] rounded-full bg-[#3765F6]/10 blur-[130px] md:blur-[140px]" />
       </div>
 
-      <div className="w-full mt-6">
-        <div className="space-y-6">
+      
+      {/* UNIFIED GLASS PANEL */}
+      <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] border border-white/45 shadow-sm overflow-hidden flex flex-col min-h-[85vh] relative">
+        {/* INNER GLOWS FOR THE PANEL */}
+        <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-white/60 to-transparent pointer-events-none" />
+        
+        {/* HEADER BAR */}
+        <div className="p-6 lg:p-8 border-b border-white/40 bg-white/10 backdrop-blur-md select-none z-10 shrink-0">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-1.5 bg-[#3765F6]/5 border border-[#3765F6]/10 text-[#3765F6] font-mono text-[9px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full mb-2">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                </span>
+                <span>Ratipa Control Center</span>
+              </div>
+              <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-[#3765F6]" />
+                <span>Панель администратора</span>
+              </h1>
+              <p className="text-xs text-slate-500 font-medium mt-1 max-w-2xl leading-relaxed">
+                Конфигурация прав доступа сотрудников, структуры навигационного меню, параметров планирования и пуш-рассылок Ratipa
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 text-[10px] bg-white/60 border border-white/50 shadow-xs text-slate-700 font-bold px-3.5 py-1.5 rounded-xl font-mono uppercase tracking-wider">
+              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+              <span>{user.role === 'root_admin' ? 'Root доступ' : 'Администратор'}</span>
+            </div>
+          </div>
+
+          {/* PREMIUM SCROLLABLE TAB NAVIGATOR */}
+          <div className="mt-6 flex flex-wrap gap-1 p-1 bg-white/30 backdrop-blur-md shadow-inner rounded-2xl border border-white/40 max-w-max">
+            {tabsList.map((t) => {
+              const IconComp = t.icon;
+              const isActive = activeTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setActiveTab(t.id)}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold tracking-tight transition-all duration-200 select-none cursor-pointer active:scale-95 ${
+                    isActive 
+                      ? 'bg-[#3765F6] text-white shadow-xs border border-[#3765F6]/10 scale-[1.01]' 
+                      : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
+                  }`}
+                >
+                  <IconComp className={`w-3.5 h-3.5 transition-transform duration-150 ${isActive ? 'text-white scale-110' : 'text-slate-400'}`} />
+                  <span>{t.label}</span>
+                  {t.count > 0 && (
+                    <span className={`text-[8.5px] px-1.5 py-0.5 rounded-full font-mono font-bold leading-none transition-colors ${
+                      isActive ? 'bg-white/20 text-white font-bold' : 'bg-slate-900/5 text-slate-500 border border-white/30 font-bold'
+                    }`}>
+                      {t.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* CONTENT AREA */}
+        <div className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar relative z-0">
+          <div className="space-y-6 max-w-7xl mx-auto">
           <div className={activeTab === 'users' ? 'space-y-6' : 'hidden'}>
             <UserManagementBlock user={user} />
             <AdminOnlinePresenceBlock user={user} />
@@ -218,23 +252,65 @@ export default function AdminModule({ user }: AdminModuleProps) {
             <PlanDohodDispatchersSettingsBlock user={user} />
           </div>
 
+          <div className={activeTab === 'navigation' ? 'space-y-6' : 'hidden'}>
+            <MenuDesignerBlock settings={settings} onSave={saveSettings} />
+          </div>
+
           <div className={activeTab === 'system' ? 'space-y-6' : 'hidden'}>
             <AdminFirebaseConfigBlock />
             <AdminMapboxLimitsBlock settings={settings} user={user} />
 
-            <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6 w-full">
-              <div className="border-b border-slate-100 pb-3">
-                <span className="bg-[#c3fb12] text-slate-950 font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-wider">
-                  Tab & Menu Manager
-                </span>
-                <h2 className="text-sm font-black uppercase tracking-tight text-slate-900 mt-1 flex items-center gap-1.5">
-                  <FolderPlus className="h-4 w-4 text-slate-900" />
-                    Конструктор меню и вкладок
+            {/* Read-Only Dynamic Menu Overview */}
+            <div className="bg-white/40 backdrop-blur-md rounded-[1.8rem] p-6 lg:p-8 border border-white/45 shadow-xs space-y-6 w-full">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/40 pb-5">
+                <div>
+                  <span className="bg-[#3765F6]/10 text-[#3765F6] border border-[#3765F6]/10 font-mono text-[9px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full mb-1.5 inline-block">
+                    Current Navigation Map
+                  </span>
+                  <h2 className="text-sm font-bold tracking-tight text-slate-900 flex items-center gap-1.5">
+                    <Folder className="h-4.5 w-4.5 text-[#3765F6]" />
+                    Активная навигация Ratipa
                   </h2>
-                  <p className="text-[10px] text-slate-500 font-medium">
-                    Управление группами, выпадающими списками и порядком отображения разделов.
-                  </p>
                 </div>
+                <button
+                  onClick={() => setActiveTab('navigation')}
+                  className="bg-[#3765F6] hover:bg-[#2555E5] active:scale-[0.98] text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all shadow-xs border border-[#3765F6]/10 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  Перейти в конструктор
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5">
+                {(settings?.menuStructure || [
+                  { id: 'g_home', label: 'Главная', isDropdown: false, singleModuleKey: 'dashboard' },
+                  { id: 'g_planning', label: 'Планирование', isDropdown: true, subtabKeys: ['planDohod', 'planZagruzok', 'currentPlanning'] },
+                  { id: 'g_calc', label: 'Калькуляция', isDropdown: false, singleModuleKey: 'dohod' },
+                  { id: 'g_salary', label: 'Зарплата', isDropdown: false, singleModuleKey: 'salary' },
+                  { id: 'g_baza', label: 'Учет выезда', isDropdown: false, singleModuleKey: 'baza' },
+                  { id: 'g_dozvola', label: 'Дозволы', isDropdown: false, singleModuleKey: 'dozvola' },
+                  { id: 'g_docs', label: 'Документы', isDropdown: false, singleModuleKey: 'documents' },
+                  { id: 'g_disp', label: 'Диспозиция', isDropdown: false, singleModuleKey: 'disposition' },
+                  { id: 'g_settings', label: 'Справочники', isDropdown: false, singleModuleKey: 'settings' },
+                  { id: 'g_admin', label: 'Админ', isDropdown: false, singleModuleKey: 'admin' }
+                ]).map((group) => (
+                  <div key={group.id} className="p-4 bg-white/50 backdrop-blur-sm rounded-[1.25rem] border border-white/50 shadow-xs flex items-center gap-3">
+                    <div className={`p-2.5 rounded-xl text-xs shrink-0 ${group.isDropdown ? 'bg-[#3765F6]/10 text-[#3765F6]' : 'bg-slate-900/5 text-slate-700'}`}>
+                      {group.isDropdown ? <Folder size={14} /> : <Link2 size={14} />}
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[11px] font-black text-slate-800 block truncate leading-tight">{group.label}</span>
+                      <span className="text-[8.5px] font-mono font-bold uppercase tracking-widest text-slate-400">
+                        {group.isDropdown ? `Группа (${group.subtabKeys?.length || 0} вкл.)` : 'Прямая ссылка'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Old Constructor Block Placeholder (To be replaced) */}
+            <div className="hidden">
 
                 {/* Main Constructor Area */}
                 {(() => {
@@ -515,18 +591,18 @@ export default function AdminModule({ user }: AdminModuleProps) {
                                 className={`p-4 rounded-2xl border transition-all duration-300 ${
                                   group.isDropdown 
                                     ? 'bg-gradient-to-br from-lime-50/40 to-white border-lime-200/60 shadow-[0_4px_20px_rgba(132,204,22,0.02)]' 
-                                    : 'bg-white border-slate-200/60 shadow-[0_4px_16px_rgba(0,0,0,0.01)]'
+                                    : 'bg-white/60 backdrop-blur-md border-white/40 shadow-[0_4px_16px_rgba(0,0,0,0.01)]'
                                 }`}
                               >
                                 {/* Card Header Area */}
-                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-dashed border-slate-100">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-dashed border-white/40">
                                   {/* Left: Drag Grip, Rename, Icon */}
                                   <div className="flex items-center gap-2.5 flex-1 min-w-0">
                                     <div className="text-slate-300 hover:text-slate-400 cursor-grab shrink-0">
                                       <GripVertical size={14} />
                                     </div>
                                     
-                                    <div className={`p-1.5 rounded-lg shrink-0 ${group.isDropdown ? 'bg-lime-100 text-lime-700' : 'bg-slate-100 text-slate-700'}`}>
+                                    <div className={`p-1.5 rounded-lg shrink-0 ${group.isDropdown ? 'bg-lime-100 text-lime-700' : 'bg-white/50 backdrop-blur-md shadow-inner text-slate-700'}`}>
                                       {group.isDropdown ? <Folder size={14} /> : <Link2 size={14} />}
                                     </div>
 
@@ -535,7 +611,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                                         type="text"
                                         value={group.label}
                                         onChange={(e) => renameGroup(group.id, e.target.value)}
-                                        className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-slate-900 font-extrabold text-slate-800 text-xs px-1 py-0.5 outline-none transition"
+                                        className="w-full bg-transparent border-b border-transparent hover:border-white/40 focus:border-[#3765F6] text-[#3765F6] font-extrabold text-slate-800 text-xs px-1 py-0.5 outline-none transition"
                                         placeholder="Название вкладки"
                                       />
                                     </div>
@@ -543,12 +619,12 @@ export default function AdminModule({ user }: AdminModuleProps) {
 
                                   {/* Center: Mode Segmented Toggle */}
                                   <div className="flex items-center gap-3 shrink-0">
-                                    <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200/40">
+                                    <div className="flex bg-white/40 backdrop-blur-md shadow-inner p-0.5 rounded-xl border border-white/40">
                                       <button
                                         onClick={() => { if (!group.isDropdown) toggleGroupType(group.id); }}
                                         className={`px-3 py-1 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
                                           group.isDropdown
-                                            ? 'bg-white text-lime-700 shadow-xs'
+                                            ? 'bg-white/60 backdrop-blur-md text-lime-700 shadow-xs'
                                             : 'text-slate-500 hover:text-slate-800'
                                         }`}
                                       >
@@ -558,7 +634,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                                         onClick={() => { if (group.isDropdown) toggleGroupType(group.id); }}
                                         className={`px-3 py-1 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
                                           !group.isDropdown
-                                            ? 'bg-white text-slate-900 shadow-xs'
+                                            ? 'bg-white/60 backdrop-blur-md text-slate-900 shadow-xs'
                                             : 'text-slate-500 hover:text-slate-800'
                                         }`}
                                       >
@@ -567,11 +643,11 @@ export default function AdminModule({ user }: AdminModuleProps) {
                                     </div>
 
                                     {/* Right: Actions */}
-                                    <div className="flex items-center gap-1 border-l border-slate-200/60 pl-3">
+                                    <div className="flex items-center gap-1 border-l border-white/40 pl-3">
                                       <button 
                                         onClick={() => moveGroup(idx, 'up')} 
                                         disabled={idx === 0} 
-                                        className="p-1 hover:bg-slate-50 border border-slate-200/30 transition rounded-lg text-slate-400 disabled:opacity-30 cursor-pointer"
+                                        className="p-1 hover:bg-white/50 backdrop-blur-md border border-white/50 shadow-inner/30 transition rounded-lg text-slate-400 disabled:opacity-30 cursor-pointer"
                                         title="Вверх"
                                       >
                                         <ArrowUp size={13}/>
@@ -579,7 +655,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                                       <button 
                                         onClick={() => moveGroup(idx, 'down')} 
                                         disabled={idx === currentStructure.length - 1} 
-                                        className="p-1 hover:bg-slate-50 border border-slate-200/30 transition rounded-lg text-slate-400 disabled:opacity-30 cursor-pointer"
+                                        className="p-1 hover:bg-white/50 backdrop-blur-md border border-white/50 shadow-inner/30 transition rounded-lg text-slate-400 disabled:opacity-30 cursor-pointer"
                                         title="Вниз"
                                       >
                                         <ArrowDown size={13}/>
@@ -603,7 +679,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                                         Подвкладки в этой группе:
                                       </span>
 
-                                      <div className="flex flex-wrap gap-2 items-center bg-slate-50/50 p-2.5 rounded-2xl border border-slate-200/40">
+                                      <div className="flex flex-wrap gap-2 items-center bg-white/30 backdrop-blur-sm p-2.5 rounded-2xl border border-white/40">
                                         {(!group.subtabKeys || group.subtabKeys.length === 0) ? (
                                           <span className="text-[10px] text-slate-400 font-medium italic py-1 pl-1">
                                             Нет подвкладок. Выберите страницу справа или добавьте ниже.
@@ -614,9 +690,9 @@ export default function AdminModule({ user }: AdminModuleProps) {
                                             return (
                                               <div 
                                                 key={subKey} 
-                                                className="flex items-center gap-1.5 bg-white border border-slate-200 hover:border-slate-300 pl-2 pr-1.5 py-1 rounded-xl text-xs shadow-xs transition shrink-0"
+                                                className="flex items-center gap-1.5 bg-white/50 backdrop-blur-md border border-white/50 shadow-inner hover:border-white/40 pl-2 pr-1.5 py-1 rounded-xl text-xs shadow-xs transition shrink-0"
                                               >
-                                                <span className="p-0.5 rounded bg-slate-50 shrink-0">
+                                                <span className="p-0.5 rounded bg-white/40 backdrop-blur-sm shrink-0">
                                                   {getModuleIcon(subKey)}
                                                 </span>
                                                 <input
@@ -626,11 +702,11 @@ export default function AdminModule({ user }: AdminModuleProps) {
                                                   className="w-24 bg-transparent border-0 font-extrabold text-slate-700 focus:ring-0 focus:outline-none text-[11px] px-0.5"
                                                   title="Кликните для переименования подвкладки"
                                                 />
-                                                <div className="flex items-center gap-0.5 border-l border-slate-100 pl-1.5">
+                                                <div className="flex items-center gap-0.5 border-l border-white/40 pl-1.5">
                                                   <button 
                                                     onClick={() => moveSubtab(group.id, subIdx, 'up')} 
                                                     disabled={subIdx === 0} 
-                                                    className="p-0.5 hover:bg-slate-100 text-slate-400 disabled:opacity-20 rounded"
+                                                    className="p-0.5 hover:bg-white/50 text-slate-400 disabled:opacity-20 rounded"
                                                     title="Влево"
                                                   >
                                                     <ChevronLeft size={11} />
@@ -638,7 +714,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                                                   <button 
                                                     onClick={() => moveSubtab(group.id, subIdx, 'down')} 
                                                     disabled={subIdx === (group.subtabKeys || []).length - 1} 
-                                                    className="p-0.5 hover:bg-slate-100 text-slate-400 disabled:opacity-20 rounded"
+                                                    className="p-0.5 hover:bg-white/50 text-slate-400 disabled:opacity-20 rounded"
                                                     title="Вправо"
                                                   >
                                                     <ChevronRight size={11} />
@@ -675,19 +751,19 @@ export default function AdminModule({ user }: AdminModuleProps) {
                                       </div>
                                     </div>
                                   ) : (
-                                    <div className="flex flex-wrap items-center gap-3 bg-slate-50/50 p-2.5 rounded-2xl border border-slate-200/40">
+                                    <div className="flex flex-wrap items-center gap-3 bg-white/30 backdrop-blur-sm p-2.5 rounded-2xl border border-white/40">
                                       <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">
                                         Направление ссылки:
                                       </span>
                                       
                                       <div className="flex items-center gap-2">
-                                        <div className="p-1 rounded bg-white border border-slate-100 shrink-0">
+                                        <div className="p-1 rounded bg-white/60 backdrop-blur-md border border-white/40 shrink-0">
                                           {getModuleIcon(group.singleModuleKey || 'dashboard')}
                                         </div>
                                         <select
                                           value={group.singleModuleKey || 'dashboard'}
                                           onChange={(e) => setStandaloneKey(group.id, e.target.value)}
-                                          className="bg-white border border-slate-200 rounded-xl px-3 py-1 text-xs font-bold text-slate-700 outline-none cursor-pointer hover:bg-slate-50"
+                                          className="bg-white/50 backdrop-blur-md border border-white/50 shadow-inner rounded-xl px-3 py-1 text-xs font-bold text-slate-700 outline-none cursor-pointer hover:bg-white/40"
                                         >
                                           {AVAILABLE_MODULES.map(m => (
                                             <option key={m.key} value={m.key}>{m.label}</option>
@@ -709,7 +785,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                           Панель управления
                         </span>
 
-                        <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/60 space-y-4">
+                        <div className="p-5 rounded-2xl bg-white/50 backdrop-blur-md border border-white/50 shadow-inner/60 space-y-4">
                           <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                             <Sparkles size={13} className="text-yellow-500" />
                             Быстрое добавление
@@ -725,7 +801,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                             </button>
                             <button
                               onClick={() => addStandaloneLink('dashboard')}
-                              className="flex items-center justify-center gap-2 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-black uppercase tracking-widest transition shadow-sm hover:shadow cursor-pointer"
+                              className="flex items-center justify-center gap-2 py-3 bg-[#3765F6] hover:bg-[#2555E5] text-white shadow-sm rounded-xl text-xs font-black uppercase tracking-widest transition shadow-sm hover:shadow cursor-pointer"
                             >
                               <Plus size={14} />
                               Создать Ссылку
@@ -733,7 +809,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                             
                             <button
                               onClick={restoreDefaultMenu}
-                              className="flex items-center justify-center gap-2 py-2.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-wider transition cursor-pointer"
+                              className="flex items-center justify-center gap-2 py-2.5 bg-white/60 backdrop-blur-md hover:bg-white/50 border border-white/40 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-wider transition cursor-pointer"
                               title="Полностью восстановить исходную структуру"
                             >
                               <RotateCcw size={12} className="text-slate-500" />
@@ -743,7 +819,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                         </div>
 
                         {/* Usage map of pages */}
-                        <div className="p-5 rounded-2xl bg-white border border-slate-200/60 space-y-3">
+                        <div className="p-5 rounded-2xl bg-white/50 backdrop-blur-md border border-white/50 shadow-inner/60 space-y-3">
                           <div>
                             <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
                               Доступность страниц
@@ -757,7 +833,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                             {AVAILABLE_MODULES.map(module => {
                               const util = getModuleUtilization(module.key);
                               return (
-                                <div key={module.key} className="p-2 bg-slate-50/50 rounded-xl border border-slate-200/30 flex items-center justify-between gap-2">
+                                <div key={module.key} className="p-2 bg-white/30 backdrop-blur-sm rounded-xl border border-white/40 flex items-center justify-between gap-2">
                                   <div className="flex items-center gap-2 min-w-0">
                                     <div className="p-1 rounded bg-white">
                                       {getModuleIcon(module.key)}
@@ -767,7 +843,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
 
                                   <div className="shrink-0 flex items-center gap-1.5">
                                     {util.state === 'unused' ? (
-                                      <span className="text-[8px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                                      <span className="text-[8px] bg-white/50 backdrop-blur-md shadow-inner text-slate-600 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
                                         Скрыт
                                       </span>
                                     ) : util.state === 'standalone' ? (
@@ -791,7 +867,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                                           }
                                           e.target.value = '';
                                         }}
-                                        className="text-[10px] font-black bg-white border border-slate-200 hover:border-slate-300 rounded-lg px-1.5 py-0.5 outline-none text-slate-600 cursor-pointer"
+                                        className="text-[10px] font-black bg-white/50 backdrop-blur-md border border-white/50 shadow-inner hover:border-white/40 rounded-lg px-1.5 py-0.5 outline-none text-slate-600 cursor-pointer"
                                         defaultValue=""
                                       >
                                         <option value="" disabled>+</option>
@@ -812,123 +888,30 @@ export default function AdminModule({ user }: AdminModuleProps) {
                     </div>
                   );
                 })()}
-        </div>
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
-              <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
-                <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 border-b border-slate-100 pb-3 mb-5">
-                   Фразы для анимированного текста (по 1 в строке)
-                </h2>
-                <textarea
-                  className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-slate-400 font-mono mb-4"
-                  rows={5}
-                  value={settings?.customPhrases?.join('\n') || ''}
-                  onChange={(e) => {
-                    if(!settings) return;
-                    saveSettings({...settings, customPhrases: e.target.value.split('\n')});
-                  }}
-                />
-                
-                <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">
-                  Видимость (роли):
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { id: 'root_admin', label: 'Root Admin' },
-                    { id: 'admin', label: 'Администратор' },
-                    { id: 'manager', label: 'Менеджер' },
-                    { id: 'accountant', label: 'Бухгалтер' },
-                    { id: 'dispatcher', label: 'Диспетчер' },
-                    { id: 'mechanic', label: 'Механик' },
-                    { id: 'viewer', label: 'Наблюдатель' },
-                    { id: 'logist', label: 'Логист' },
-                  ].map(role => {
-                    const isChecked = !settings?.customPhrasesRoles || settings.customPhrasesRoles.length === 0 || settings.customPhrasesRoles.includes(role.id);
-                    return (
-                      <label key={role.id} className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-slate-100 transition">
-                        <input 
-                          type="checkbox"
-                          className="rounded text-[#c3fb12] focus:ring-[#c3fb12] w-3.5 h-3.5 border-slate-300"
-                          checked={isChecked}
-                          onChange={(e) => {
-                            if(!settings) return;
-                            let current = settings.customPhrasesRoles || [];
-                            // If it's empty, it means "all". If they uncheck one, we must initialize it with all EXCEPT the unchecked one.
-                            if (!settings.customPhrasesRoles || settings.customPhrasesRoles.length === 0) {
-                               current = ['root_admin', 'admin', 'manager', 'accountant', 'dispatcher', 'mechanic', 'viewer', 'logist'];
-                            }
-                            
-                            if (e.target.checked) {
-                              if (!current.includes(role.id)) {
-                                saveSettings({...settings, customPhrasesRoles: [...current, role.id]});
-                              }
-                            } else {
-                              saveSettings({...settings, customPhrasesRoles: current.filter(r => r !== role.id)});
-                            }
-                          }}
-                        />
-                        <span className="text-[10px] font-bold text-slate-600">{role.label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-                <p className="text-[9px] text-slate-400 mt-2">
-                  Если выбраны все или ничего не выбрано — текст видят все.
-                </p>
-              </div>
+            </div>
 
-              <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col h-[500px]">
-                <h2 className="text-xs font-black uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5 mb-3 border-b border-slate-100 pb-3.5">
-                  <Activity className="h-4.5 w-4.5 text-slate-400" />
-                  Сквозной Аудит Действий
-                </h2>
-      
-                <div className="relative mb-4 shrink-0">
-                  <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-3.5" />
-                  <input
-                    type="text"
-                    placeholder="Фильтр по оператору, деталям..."
-                    value={searchLogs}
-                    onChange={(e) => setSearchLogs(e.target.value)}
-                    className="w-full pl-10 pr-3 py-3 bg-slate-50 border border-slate-200 hover:border-slate-350 focus:border-slate-400 focus:bg-white transition duration-150 rounded-xl text-xs font-bold"
-                  />
-                </div>
-      
-                <div className="flex-1 min-h-0">
-                  {filteredLogs.length > 0 ? (
-                    <Virtuoso
-                      data={filteredLogs}
-                      className="h-full custom-scrollbar pr-1"
-                      itemContent={(idx, log) => (
-                        <div className="text-xs border-l-3 border-[#c3fb12] bg-slate-50/50 hover:bg-slate-50 p-3.5 rounded-r-2xl transition duration-100 mb-4">
-                          <div className="flex justify-between font-black text-slate-550 mb-1.5 font-mono text-[9px] uppercase tracking-wider">
-                            <span className="text-slate-900">{log.user} ({log.role})</span>
-                            <span className="text-slate-400">{new Date(log.date).toLocaleString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</span>
-                          </div>
-                          <p className="text-slate-800 font-bold leading-normal">{log.details}</p>
-                          <div className="text-[9px] text-[#c3fb12] font-mono tracking-normal bg-slate-950 p-1.5 rounded-lg mt-2 flex items-center justify-between">
-                            <span>MODULE: {log.module}</span>
-                            <span className="text-slate-400 text-[8px]">ACTION: {log.actionType}</span>
-                          </div>
-                        </div>
-                      )}
-                    />
-                  ) : (
-                    <div className="text-center py-16 text-slate-400 text-xs font-mono font-black uppercase tracking-widest bg-slate-50 rounded-2xl border border-slate-250/20">
-                      Логов не обнаружено.
-                    </div>
-                  )}
-                </div>
-              </div>
+            <div className="mt-6">
+              {/* Redesigned Audit Logs Block */}
+              <AdminAuditLogsBlock logs={logs} />
             </div>
           </div>
 
+          <div className={activeTab === 'welcome' ? 'space-y-6' : 'hidden'}>
+            <AdminWelcomePhrasesBlock settings={settings} onSave={saveSettings} />
+          </div>
+
           <div className={activeTab === 'push' ? 'space-y-6' : 'hidden'}>
-            <AdminPushNotificationsBlock user={user} />
+            <AdminPushNotificationsBlock user={user} settings={settings} onSave={saveSettings} />
+          </div>
+
+          <div className={activeTab === 'agent' ? 'space-y-6' : 'hidden'}>
+            <AdminAgentBlock user={user} />
           </div>
 
         </div>
       </div>
 
     </div>
+      </div>
   );
 }

@@ -477,53 +477,53 @@ export default function LossDeclarationEditor() {
   };
 
   return (
-    <div className="flex flex-col h-full min-h-[850px] bg-slate-100 rounded-xl overflow-hidden border border-slate-200">
+    <div className="flex flex-col h-full bg-transparent">
       
       {/* STEP NAVIGATION HEADER */}
-      <div className="flex border-b border-slate-200 bg-white shadow-sm z-10">
+      <div className="flex p-1.5 bg-slate-100/85 backdrop-blur-md rounded-2xl border border-slate-200/40 mb-5 gap-1.5 font-sans">
         <button 
           onClick={() => setActiveTab('step1')}
-          className={`flex-1 py-3 px-4 text-center font-bold text-sm border-b-2 transition-all flex items-center justify-center gap-2 ${activeTab === 'step1' ? 'border-blue-600 text-blue-600 bg-blue-50/20' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+          className={`flex-1 py-2.5 px-4 rounded-xl text-center font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer ${activeTab === 'step1' ? 'bg-[#3765F6] text-white shadow-xs' : 'text-slate-600 hover:bg-white/50'}`}
         >
-          <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs">1</span>
+          <span className={`flex items-center justify-center w-5 h-5 rounded-lg text-[10px] font-bold ${activeTab === 'step1' ? 'bg-white/20 text-white' : 'bg-slate-250 text-slate-700'}`}>1</span>
           Этап 1: Декларация об утере
         </button>
         <button 
           onClick={() => setActiveTab('step2')}
-          className={`flex-1 py-3 px-4 text-center font-bold text-sm border-b-2 transition-all flex items-center justify-center gap-2 ${activeTab === 'step2' ? 'border-blue-600 text-blue-600 bg-blue-50/20' : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
+          className={`flex-1 py-2.5 px-4 rounded-xl text-center font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer ${activeTab === 'step2' ? 'bg-[#3765F6] text-white shadow-xs' : 'text-slate-600 hover:bg-white/50'}`}
         >
-          <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 text-xs">2</span>
+          <span className={`flex items-center justify-center w-5 h-5 rounded-lg text-[10px] font-bold ${activeTab === 'step2' ? 'bg-white/20 text-white' : 'bg-slate-250 text-slate-700'}`}>2</span>
           Этап 2: Сопроводительное письмо об изъятии
         </button>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden gap-5">
         {/* LEFT PANEL - FORMS */}
-        <div className="w-1/3 min-w-[320px] max-w-[420px] bg-white border-r border-slate-200 flex flex-col h-full">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-            <h3 className="font-bold text-slate-800">
+        <div className="w-1/3 min-w-[320px] max-w-[420px] bg-white/70 backdrop-blur-xl border border-slate-200/40 rounded-2xl flex flex-col h-full shadow-xs">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 rounded-t-2xl">
+            <h3 className="font-bold text-slate-800 text-xs font-sans">
               {activeTab === 'step1' ? 'Поля декларации' : 'Параметры письма'}
             </h3>
             <div className="flex gap-2">
-              <button onClick={saveTemplate} title="Сохранить шаблон" className="p-2 bg-slate-200 hover:bg-slate-300 rounded text-slate-700 flex items-center gap-1 text-xs font-bold transition">
-                <Save size={16} /> Сохр.
+              <button onClick={saveTemplate} title="Сохранить шаблон" className="p-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 flex items-center gap-1 text-[11px] font-bold transition border border-slate-200 cursor-pointer">
+                <Save size={14} /> Сохр.
               </button>
-              <button onClick={handlePrint} title="Печать" className="p-2 bg-blue-600 hover:bg-blue-700 rounded text-white flex items-center gap-1 text-xs font-bold transition">
-                <Printer size={16} /> Печать
+              <button onClick={handlePrint} title="Печать" className="p-2 bg-[#3765F6] hover:bg-[#2555E5] rounded-xl text-white flex items-center gap-1 text-[11px] font-bold transition cursor-pointer">
+                <Printer size={14} /> Печать
               </button>
             </div>
           </div>
 
           {activeTab === 'step1' ? (
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div className="mb-6 pb-4 border-b border-slate-100">
+              <div className="mb-4 pb-4 border-b border-slate-100">
                 <button 
                   onClick={addCheckmark}
-                  className="w-full flex items-center justify-center gap-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 py-2 rounded-lg font-bold transition"
+                  className="w-full flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 py-2.5 rounded-xl font-bold text-xs transition border border-emerald-200/50 cursor-pointer"
                 >
-                  <Plus size={18} /> Добавить галочку
+                  <Plus size={16} /> Добавить галочку
                 </button>
-                <p className="text-[10px] text-slate-500 text-center mt-2">
+                <p className="text-[10px] text-slate-400 text-center mt-2 font-sans">
                   Галочка появится на документе. Перетащите её в нужный чекбокс.
                 </p>
               </div>
@@ -532,8 +532,8 @@ export default function LossDeclarationEditor() {
                 const isPlaceField = key === 'place' || key === 'disPlaceDate';
 
                 return (
-                  <div key={key} className="flex flex-col gap-1">
-                    <label className="text-xs font-bold text-slate-600">{fieldLabels[key]}</label>
+                  <div key={key} className="flex flex-col gap-1.5 font-sans">
+                    <label className="text-[11px] font-semibold text-slate-600 font-sans">{fieldLabels[key]}</label>
                     
                     {isPlaceField ? (
                       <div className="flex flex-col gap-2">
@@ -544,17 +544,17 @@ export default function LossDeclarationEditor() {
                             handleInputChange(key as string, e.target.value);
                             setPlaceSearchQuery(e.target.value);
                           }}
-                          className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                          className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:border-[#3765F6] focus:bg-white outline-none transition"
                         />
                         {/* Suggestions dropdown */}
                         {placeSearchQuery && (
-                          <div className="max-h-32 overflow-y-auto bg-slate-50 border border-slate-200 rounded-lg p-1 text-xs">
+                          <div className="max-h-32 overflow-y-auto bg-white border border-slate-200/60 rounded-xl p-1.5 text-xs shadow-xs">
                             {savedPlaces
                               .filter(p => p.toLowerCase().includes(placeSearchQuery.toLowerCase()))
                               .map((p, i) => (
                                 <div 
                                   key={i} 
-                                  className="cursor-pointer p-2 hover:bg-slate-200 rounded"
+                                  className="cursor-pointer p-2 hover:bg-slate-50 rounded-lg font-semibold"
                                   onClick={() => {
                                     handleInputChange(key, p);
                                     setPlaceSearchQuery('');
@@ -567,7 +567,7 @@ export default function LossDeclarationEditor() {
                         )}
                         <button 
                           onClick={() => handleSaveNewPlace(formValues[key])}
-                          className="text-[10px] bg-slate-100 hover:bg-slate-200 py-1 rounded text-slate-700 font-medium"
+                          className="text-[10px] bg-slate-100 hover:bg-slate-200 py-1.5 rounded-lg text-slate-700 font-bold border border-slate-200 cursor-pointer"
                         >
                           Сохранить это место
                         </button>
@@ -577,14 +577,14 @@ export default function LossDeclarationEditor() {
                         value={formValues[key]}
                         onChange={(e) => handleInputChange(key as string, e.target.value)}
                         rows={2}
-                        className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:border-[#3765F6] focus:bg-white outline-none transition resize-none"
                       />
                     ) : (
                       <input
                         type="text"
                         value={formValues[key]}
                         onChange={(e) => handleInputChange(key as string, e.target.value)}
-                        className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:border-[#3765F6] focus:bg-white outline-none transition"
                       />
                     )}
                   </div>
@@ -592,45 +592,45 @@ export default function LossDeclarationEditor() {
               })}
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg text-xs text-blue-800 leading-relaxed">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 font-sans">
+              <div className="bg-blue-50/80 border border-blue-150/40 p-3.5 rounded-xl text-[11px] text-blue-800 leading-relaxed font-medium">
                 <strong>Режим сопроводительного письма</strong><br />
                 В соответствии с требованиями, изменять можно только <strong>номер книжки МДП</strong>, <strong>дату</strong> и <strong>номер исходящего</strong>. Остальные данные остаются неизменными и соответствуют официальному бланку 1 в 1.
               </div>
 
               {/* Исходящий номер и дата */}
               <div className="grid grid-cols-2 gap-2">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-slate-600">Исходящий №</label>
+                <div className="flex flex-col gap-1.5 font-sans">
+                  <label className="text-[11px] font-semibold text-slate-600 font-sans">Исходящий №</label>
                   <input
                     type="text"
                     value={letterValues.docNum}
                     onChange={(e) => setLetterValues(prev => ({ ...prev, docNum: e.target.value }))}
-                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium"
+                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:border-[#3765F6] focus:bg-white outline-none transition"
                   />
                 </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-slate-600">Дата исх.</label>
+                <div className="flex flex-col gap-1.5 font-sans">
+                  <label className="text-[11px] font-semibold text-slate-600 font-sans">Дата исх.</label>
                   <input
                     type="text"
                     value={letterValues.docDate}
                     onChange={(e) => setLetterValues(prev => ({ ...prev, docDate: e.target.value }))}
-                    className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium"
+                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:border-[#3765F6] focus:bg-white outline-none transition"
                   />
                 </div>
               </div>
 
               {/* Номер книжки МДП */}
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-slate-600">Номер книжки (книжек) МДП</label>
+              <div className="flex flex-col gap-1.5 font-sans">
+                <label className="text-[11px] font-semibold text-slate-600 font-sans">Номер книжки (книжек) МДП</label>
                 <input
                   type="text"
                   value={formValues.carnet}
                   onChange={(e) => handleInputChange('carnet', e.target.value)}
-                  className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium"
+                  className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:border-[#3765F6] focus:bg-white outline-none transition"
                   placeholder="Например, SX87832639"
                 />
-                <p className="text-[10px] text-slate-500 leading-normal mt-1">
+                <p className="text-[10px] text-slate-400 leading-normal mt-1 font-sans">
                   Синхронизировано с Этапом 1. Если ввести несколько номеров через запятую или пробел, письмо автоматически переключится в режим множественного числа ("книжки МДП... были изъяты...").
                 </p>
               </div>
@@ -640,7 +640,7 @@ export default function LossDeclarationEditor() {
 
         {/* RIGHT PANEL - CANVAS */}
         <div 
-          className="flex-1 bg-slate-300 overflow-auto p-4 flex items-start justify-center"
+          className="flex-1 bg-slate-50/40 backdrop-blur-md border border-slate-200/30 rounded-2xl p-6 overflow-auto flex items-start justify-center shadow-xs max-h-[850px]"
           onClick={() => setSelectedItemId(null)}
         >
           {activeTab === 'step1' ? (
@@ -650,7 +650,7 @@ export default function LossDeclarationEditor() {
               className="relative bg-white shadow-xl flex-shrink-0"
               style={{ width: '794px', height: '1123px', margin: '0 auto' }} // A4 standard at 96 DPI
             >
-              {/* Background template with 50% opacity in preview */}
+              {/* Background template with 100% opacity in preview */}
               <img 
                 src={lostDeclImg} 
                 referrerPolicy="no-referrer"

@@ -96,3 +96,24 @@ html, body {
 .print-preview-paper .main-table-preview > tbody > tr > td {
   padding: 10.5px 8px !important;
 }
+
+/* Keyboard navigation styles matching Ratipa aesthetic */
+.is-active {
+  background-color: rgba(112, 252, 142, 0.08) !important; /* soft primary neon-mint tint */
+  box-shadow: inset 4px 0 0 0 #3765F6, 0 4px 12px rgba(55, 101, 246, 0.05) !important;
+  transition: all 0.15s ease-in-out;
+}
+.is-active td {
+  font-weight: 700 !important;
+  color: #1e293b !important;
+}
+.is-active span, .is-active div {
+  border-color: #3765F6 !important;
+}
+
+/* Accessible focus outline */
+input:focus, select:focus, textarea:focus, button:focus {
+  outline: 2px solid #3765F6 !important;
+  outline-offset: 1px !important;
+}
+

@@ -1,7 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserProfile, AppSettings } from '../../types';
 import { dbService } from '../../firebase';
-import { ZoomIn, ZoomOut, Maximize2, Minimize2, RefreshCw } from 'lucide-react';
+import { getEmbeddableSheetUrl } from '../../utils/embed';
+import { 
+  ZoomIn, 
+  ZoomOut, 
+  Maximize2, 
+  Minimize2, 
+  RefreshCw, 
+  ExternalLink,
+  LayoutTemplate
+} from 'lucide-react';
 
 interface CurrentPlanningModuleProps {
   user: UserProfile;
@@ -13,28 +22,7 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [refreshKeys, setRefreshKeys] = useState<Record<string, number>>({});
 
-  const [frameHeight, setFrameHeight] = useState(() => {
-    const saved = localStorage.getItem('ratipa_height_currentPlanning');
-    return saved ? parseInt(saved, 10) : 600;
-  });
-
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    localStorage.setItem('ratipa_height_currentPlanning', frameHeight.toString());
-  }, [frameHeight]);
-
-  useEffect(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-    };
-    el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => {
-      el.removeEventListener('wheel', handleWheel);
-    };
-  }, [activeTabId]);
 
   const [zoomLevel, setZoomLevel] = useState(() => {
     const saved = localStorage.getItem('ratipa_zoom_currentPlanning');
@@ -54,7 +42,6 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
 
   useEffect(() => {
     if (tabs.length > 0 && !activeTabId) {
-       // Also check permissions
        const allowedTabs = tabs.filter(t => user.role === 'root_admin' || user.role === 'admin' || (user.permissions && user.permissions[`currentPlanning_${t.id}`] !== 'none'));
        if (allowedTabs.length > 0) {
          setActiveTabId(allowedTabs[0].id);
@@ -82,62 +69,103 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
   }
 
   const activeTab = allowedTabs.find(t => t.id === activeTabId) || allowedTabs[0];
+  const embedUrl = activeTab?.sheetUrl ? getEmbeddableSheetUrl(activeTab.sheetUrl) : "";
 
   return (
     <div className={`w-full flex flex-col space-y-2 font-sans ${isFocusMode ? 'fixed inset-0 z-50 bg-slate-900/10 backdrop-blur-md p-2 lg:p-4' : 'h-full'}`}>
       
       {/* Header & Tabs */}
-      <div className="bg-white rounded-2xl p-2 px-3 border border-slate-200/60 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-3">
-        <div className="flex overflow-x-auto custom-scrollbar gap-1.5 w-full sm:w-auto">
+      <div className="bg-white/70 backdrop-blur-xl rounded-2xl p-4 border border-slate-200/40 shadow-xs flex flex-col gap-3 select-none">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0">
+              <LayoutTemplate className="h-4.5 w-4.5 text-orange-600" />
+            </div>
+            <div>
+              <h1 className="text-base sm:text-lg font-bold text-slate-950 font-sans tracking-tight">
+                Текущее планирование
+              </h1>
+              <p className="text-[11px] text-slate-500 font-medium hidden sm:block font-sans">
+                Расписание, мониторинг и управление текущими рейсами
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-start sm:justify-end">
+            <div className="flex bg-slate-150/45 border border-slate-200/40 p-0.5 rounded-xl items-center select-none shadow-3xs">
+              <button 
+                onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))} 
+                className="p-1.5 hover:bg-white text-slate-500 hover:text-slate-800 rounded-lg transition-all active:scale-90 cursor-pointer"
+                title="Уменьшить масштаб"
+              >
+                <ZoomOut className="w-3.5 h-3.5"/>
+              </button>
+              <span className="text-[10px] font-bold w-10 text-center font-mono text-slate-600 select-none">{Math.round(zoomLevel * 100)}%</span>
+              <button 
+                onClick={() => setZoomLevel(z => Math.min(2, z + 0.1))} 
+                className="p-1.5 hover:bg-white text-slate-500 hover:text-slate-800 rounded-lg transition-all active:scale-90 cursor-pointer"
+                title="Увеличить масштаб"
+              >
+                <ZoomIn className="w-3.5 h-3.5"/>
+              </button>
+            </div>
+
+            <button
+              onClick={handleRefresh}
+              className="flex items-center justify-center bg-white/60 hover:bg-slate-50 text-slate-600 hover:text-slate-800 w-8.5 h-8.5 rounded-xl border border-slate-200/50 hover:border-slate-300 shadow-3xs transition-all active:scale-90 cursor-pointer"
+              title="Обновить таблицу"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </button>
+  
+            <a
+              href={embedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center bg-white/60 hover:bg-slate-50 text-slate-600 hover:text-slate-800 w-8.5 h-8.5 rounded-xl border border-slate-200/50 hover:border-slate-300 shadow-3xs transition-all active:scale-90 cursor-pointer"
+              title="Открыть в новой вкладке"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+  
+            <button
+              onClick={() => setIsFocusMode(!isFocusMode)}
+              className={`flex items-center justify-center w-8.5 h-8.5 rounded-xl border shadow-3xs transition-all active:scale-90 cursor-pointer ${
+                isFocusMode 
+                  ? 'bg-orange-600 border-orange-600 text-white shadow-sm hover:bg-orange-700' 
+                  : 'bg-white/60 border-slate-200/50 hover:border-slate-300 text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+              }`}
+              title={isFocusMode ? "Выйти из полноэкранного режима" : "Развернуть на весь экран"}
+            >
+              {isFocusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
           {allowedTabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTabId(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-[9px] sm:text-xs font-black uppercase tracking-wider transition whitespace-nowrap outline-none ${
+              className={`px-4 py-1.5 text-[11px] font-bold tracking-tight rounded-lg transition-all duration-150 cursor-pointer whitespace-nowrap border ${
                 activeTabId === tab.id 
-                  ? 'bg-blue-100 text-blue-900 shadow-sm'
-                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                  ? 'bg-white text-slate-900 shadow-xs border-slate-200' 
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-white/60 border-transparent'
               }`}
             >
               {tab.name}
             </button>
           ))}
         </div>
-        
-        {/* Controls */}
-        <div className="flex items-center gap-2 shrink-0">
-          <button 
-            onClick={handleRefresh}
-            className="flex items-center justify-center w-8 h-8 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200/50 transition cursor-pointer"
-            title="Обновить"
-          >
-             <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-          </button>
-          <div className="flex bg-slate-100 p-0.5 rounded-lg items-center">
-             <button onClick={() => setZoomLevel(z => Math.max(0.5, z - 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600 cursor-pointer"><ZoomOut className="w-3.5 h-3.5"/></button>
-             <span className="text-[9px] font-black w-8 text-center font-mono text-slate-700">{Math.round(zoomLevel * 100)}%</span>
-             <button onClick={() => setZoomLevel(z => Math.min(2, z + 0.1))} className="p-1 hover:bg-white rounded transition text-slate-600 cursor-pointer"><ZoomIn className="w-3.5 h-3.5"/></button>
-          </div>
-          <button
-            onClick={() => setIsFocusMode(!isFocusMode)}
-            className={`flex items-center gap-1.5 text-[10px] font-black px-2.5 py-1.5 rounded-lg border transition cursor-pointer uppercase tracking-tight ${
-              isFocusMode 
-                ? 'bg-blue-500 border-blue-500 text-white shadow-sm' 
-                : 'bg-white border-slate-250 text-slate-705 lg:hover:bg-slate-50'
-            }`}
-          >
-            {isFocusMode ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-            <span className="hidden sm:inline">{isFocusMode ? 'Свернуть' : 'Экран'}</span>
-          </button>
-        </div>
       </div>
 
       {/* Frame */}
       <div 
          ref={scrollContainerRef}
-         className={`relative bg-slate-100 rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex-1 flex flex-col min-h-0 ${isFocusMode ? '' : 'h-[880px]'}`}
+         className={`relative bg-white/65 backdrop-blur-md rounded-2xl border border-slate-200/40 shadow-xs overflow-hidden flex-1 flex flex-col min-h-0 ${isFocusMode ? '' : 'h-[880px]'}`}
       >
-         {allowedTabs.some(t => t.sheetUrl) ? (
+         {activeTab && activeTab.sheetUrl ? (
             <div style={{
                 width: `${100 / zoomLevel}%`,
                 height: `${100 / zoomLevel}%`,
@@ -146,24 +174,19 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
               }} 
               className="absolute top-0 left-0"
             >
-               {allowedTabs.map(tab => tab.sheetUrl ? (
-                 <iframe 
-                   key={`${tab.id}-${refreshKeys[tab.id] || 0}`}
-                   src={tab.sheetUrl}
-                   className="w-full h-full border-none"
-                   style={{ display: activeTabId === tab.id ? 'block' : 'none' }}
-                   title={`google-sheet-${tab.id}`}
-                 />
-               ) : null)}
+              <iframe 
+                key={`${activeTab.id}-${refreshKeys[activeTab.id] || 0}`}
+                src={embedUrl}
+                className="w-full h-full border-none"
+                title={`google-sheet-${activeTab.id}`}
+              />
             </div>
-         ) : null}
-
-         {activeTab && !activeTab.sheetUrl && (
-           <div className="absolute inset-0 bg-white rounded-3xl flex items-center justify-center border border-slate-200/60 p-10">
-              <div className="text-center font-mono font-black uppercase tracking-widest text-slate-400 text-xs">
-                 Ссылка на Google Таблицу не указана.
-              </div>
-           </div>
+         ) : (
+            <div className="absolute inset-0 bg-white rounded-3xl flex items-center justify-center border border-slate-200/60 p-10">
+               <div className="text-center font-mono font-black uppercase tracking-widest text-slate-400 text-xs">
+                  Ссылка на Google Таблицу не указана.
+               </div>
+            </div>
          )}
       </div>
     </div>
