@@ -65,9 +65,11 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   const [vehicleDriverLegacy, setVehicleDriverLegacy] = useState<any[]>([]);
   const [archiveLegacy, setArchiveLegacy] = useState<any[]>([]);
   const bazaVehicles = useMemo(() => {
-      // vehicleFleet is the single source of truth (center of data).
-      // baza/baza_cars are legacy mirrors kept only for backward-compat reads.
-      const all = [...fleetVehicles, ...vehicleDriverLegacy, ...archiveLegacy, ...bazaLegacy, ...bazaCarsLegacy];
+      // Учёт выезда = РУЧНОЙ журнал. Берём ТОЛЬКО реально ручные ветки
+      // (baza + baza_cars + archive). НЕ центр (vehicleFleet) и НЕ vehicle_driver_data
+      // (это зеркало центра). Центр используется только для авто-распознавания
+      // при вводе госномера, не для показа списка.
+      const all = [...archiveLegacy, ...bazaLegacy, ...bazaCarsLegacy];
       // Deduplicate by carNumber
       const unique: any[] = [];
       const seen = new Set<string>();
@@ -79,7 +81,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
           }
       });
       return unique;
-  }, [bazaLegacy, bazaCarsLegacy, vehicleDriverLegacy, archiveLegacy]);
+  }, [bazaLegacy, bazaCarsLegacy, archiveLegacy]);
 
   const [globalHistory, setGlobalHistory] = useState<any[]>([]);
   const [knownFleet, setKnownFleet] = useState<string[]>([]);
@@ -344,18 +346,11 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
     const val = e.target.value;
     const updates: any = { [field]: val };
     
-    // Auto-fill driver when car number changes and driver is not yet set
+    // Учёт выезда = ручной ввод. Автоматически из базы НИЧЕГО не подцепляется
+    // при наборе текста. Машина выбирается вручную через CouplingPicker (выпадающий
+    // список базы) — это сознательный выбор, не авто-подстановка.
     if (field === 'carNumber') {
       updates[field] = val.toUpperCase();
-      const normPlate = updates[field].replace(/[^А-ЯA-Z0-9]/g, '');
-      const masterCar = fleetVehicles.find(c => (c.carNumber || c.vehicleNumbers || '').replace(/[^А-ЯA-Z0-9]/g, '') === normPlate);
-      
-      if (masterCar && masterCar.driverId) {
-        const mappedDriver = drivers.find(d => d.id === masterCar.driverId);
-        if (mappedDriver && !formData.driverName) {
-          updates.driverName = mappedDriver.shortNameRu || formatDriverShortName(mappedDriver);
-        }
-      }
     }
     setFormData({...formData, ...updates});
   };
@@ -572,10 +567,13 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
           const db = getDatabase(getApp());
           const sourceList = [...cars, ...archiveCars];
           const targetCar = sourceList.find(c => c.id === id);
-          // Only remove from vehicleFleet (center of data). Never touch vehicle_driver_data
-          // (passport/driver records must survive deletion from Учёт выезда).
-          const rootBranch = "vehicleFleet";
+          // Remove from whichever branch the record actually lives in.
+          // Учёт выезда journal = 'baza'; center mirror may also exist in 'vehicleFleet'.
+          // Remove from both (remove() is safe if the node is absent).
+          const rootBranch = targetCar?.isLegacyBaza ? "baza" : "vehicleFleet";
           remove(ref(db, `${rootBranch}/${id}`));
+          remove(ref(db, `baza/${id}`));
+          remove(ref(db, `vehicleFleet/${id}`));
           
           const timestampStr = new Date().toLocaleDateString("ru-RU") + " " + new Date().toLocaleTimeString("ru-RU", {hour: '2-digit', minute:'2-digit'});
           push(ref(db, `global_history`), {
