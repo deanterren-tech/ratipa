@@ -24,6 +24,7 @@ import { useDialog } from '../DialogProvider';
 import { useToast } from '../ToastProvider';
 import { formatDriverShortName } from '../../utils/driverSync';
 import { applySharedCarToBazaRecord, applySharedDriverToBazaRecord, normalizePlate } from '../../utils/bazaSync';
+import CouplingPicker from '../common/CouplingPicker';
 
 interface BazaModuleProps {
   user: UserProfile;
@@ -823,7 +824,22 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     Добавить новый автомобиль
                  </h2>
                  <form onSubmit={handleAddNewCar}>
-                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    {/* Quick coupling picker — pulls a coupling (tractor+trailer+driver) from the shared center */}
+                    <div className="mb-4">
+                      <label className="text-xs font-semibold text-slate-600 block font-sans mb-1">Быстрый выбор из общей базы</label>
+                      <CouplingPicker
+                        onSelect={(rec) => {
+                          if (!rec) return;
+                          const updates: Record<string, string> = {
+                            carNumber: (rec.carNumber || rec.vehicleNumbers || '').toUpperCase(),
+                          };
+                          const drv = rec.driverNameRu || rec.driverName || rec.driverShortNameRu || '';
+                          if (drv) updates.driverName = drv;
+                          setFormData((f) => ({ ...f, ...updates }));
+                        }}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                          <div className="space-y-1">
                             <label className="text-xs font-semibold text-slate-600 block font-sans">Госномер авто *</label>
                             <input 
