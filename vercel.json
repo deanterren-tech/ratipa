@@ -5,7 +5,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/agent/**/*.ts": {
-      "runtime": "@vercel/node@22.x"
+      "runtime": "now-node@22.10.1"
     }
   }
 }
