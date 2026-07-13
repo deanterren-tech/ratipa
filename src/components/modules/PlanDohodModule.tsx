@@ -15,6 +15,7 @@ import {
 import { calculateTripFinances } from "../../utils/financeCalculators";
 import { dbService } from "../../firebase";
 import { pdService } from "../../firebase/planDohodService";
+import CouplingPicker from "../common/CouplingPicker";
 import {
   Plus,
   Trash2,
@@ -1924,13 +1925,18 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                       <div>
                         <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Автомобиль</label>
+                        <CouplingPicker
+                          onSelect={(rec) => {
+                            if (rec) handleCarNumberChange((rec.carNumber || rec.vehicleNumbers || '').toUpperCase());
+                          }}
+                        />
                         <input
                           type="text"
                           list="saved-cars-list"
                           placeholder="АХ 1234-7"
                           value={carNumber}
                           onChange={(e) => handleCarNumberChange(e.target.value)}
-                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium uppercase outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                          className="w-full mt-2 bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium uppercase outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
                         />
                         <datalist id="saved-cars-list">
                           {savedCars.map((c) => (

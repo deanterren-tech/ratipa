@@ -920,6 +920,68 @@ const sharedGetVehicleDriverData = createSharedSubscription<any[]>(
   }
 );
 
+// ---- Directories service: unified reference data (brands, dispatchers, rate groups,
+// status types, directions). Uses shared subscriptions for high-performance caching so
+// weak devices don't re-fetch on every module mount. ----
+function createDirSub<T>(path: string) {
+  return createSharedSubscription<T>(
+    (onData, onError) => {
+      if (!useFirebase) {
+        onData([] as any);
+        return () => {};
+      }
+      return onValue(ref(database, path), (snap) => {
+        const val = snap.val();
+        if (!val) { onData([] as any); return; }
+        const list = Object.keys(val).map((k) => ({ ...val[k], id: val[k].id || k }));
+        onData(list as any);
+      }, () => onError && onError(null));
+    },
+    (onData) => onData([] as any)
+  );
+}
+
+const sharedDirVehicleBrands = createDirSub<any[]>("directories/vehicleBrands");
+const sharedDirTrailerBrands = createDirSub<any[]>("directories/trailerBrands");
+const sharedDirDispatchers = createDirSub<any[]>("directories/dispatchers");
+const sharedDirRateGroups = createDirSub<any[]>("directories/rateGroups");
+const sharedDirStatusTypes = createDirSub<any[]>("directories/statusTypes");
+const sharedDirDirections = createDirSub<any[]>("directories/directions");
+
+export const directoryService = {
+  isOnline: () => useFirebase,
+
+  getVehicleBrands: (cb: (d: any[]) => void) => sharedDirVehicleBrands(cb),
+  getTrailerBrands: (cb: (d: any[]) => void) => sharedDirTrailerBrands(cb),
+  getDispatchers: (cb: (d: any[]) => void) => sharedDirDispatchers(cb),
+  getRateGroups: (cb: (d: any[]) => void) => sharedDirRateGroups(cb),
+  getStatusTypes: (cb: (d: any[]) => void) => sharedDirStatusTypes(cb),
+  getDirections: (cb: (d: any[]) => void) => sharedDirDirections(cb),
+
+  saveDirItem: (collection: string, item: any, user = "system", role = "admin") => {
+    if (useFirebase) {
+      const id = item.id || item.key || Date.now().toString();
+      set(ref(database, `directories/${collection}/${id}`), { ...item, id });
+    } else {
+      const local = getLocalStorageData<any[]>(`ratipa_dir_${collection}`, []);
+      const idx = local.findIndex((x) => (x.id || x.key) === (item.id || item.key));
+      if (idx >= 0) local[idx] = item; else local.push(item);
+      setLocalStorageData(`ratipa_dir_${collection}`, local);
+    }
+    dbService.logAction(user, role, "Сохранение справочника", "Directories", item.id, `Справочник ${collection}: ${item.name || item.label || item.id}`);
+  },
+
+  deleteDirItem: (collection: string, id: string, user = "system", role = "admin") => {
+    if (useFirebase) {
+      remove(ref(database, `directories/${collection}/${id}`));
+    } else {
+      const local = getLocalStorageData<any[]>(`ratipa_dir_${collection}`, []);
+      setLocalStorageData(`ratipa_dir_${collection}`, local.filter((x) => (x.id || x.key) !== id));
+    }
+    dbService.logAction(user, role, "Удаление из справочника", "Directories", id, `Справочник ${collection}: ${id}`);
+  },
+};
+
 // Database Services mapping with robust localized fallbacks and error handling helpers
 export const dbService = {
   // Test/Connectivity state
