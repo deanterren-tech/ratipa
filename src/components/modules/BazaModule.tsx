@@ -64,7 +64,9 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   const [vehicleDriverLegacy, setVehicleDriverLegacy] = useState<any[]>([]);
   const [archiveLegacy, setArchiveLegacy] = useState<any[]>([]);
   const bazaVehicles = useMemo(() => {
-      const all = [...bazaLegacy, ...bazaCarsLegacy, ...vehicleDriverLegacy, ...archiveLegacy];
+      // vehicleFleet is the single source of truth (center of data).
+      // baza/baza_cars are legacy mirrors kept only for backward-compat reads.
+      const all = [...fleetVehicles, ...vehicleDriverLegacy, ...archiveLegacy, ...bazaLegacy, ...bazaCarsLegacy];
       // Deduplicate by carNumber
       const unique: any[] = [];
       const seen = new Set<string>();
@@ -416,10 +418,11 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
       }
     }
 
-    const newRef = push(ref(db, 'baza'));
+    // Write to vehicleFleet (center of data) — no duplicate in baza.
+    const newRef = push(ref(db, 'vehicleFleet'));
     const normPlate = cNum.replace(/[^А-ЯA-Z0-9]/g, '');
     const masterCar = fleetVehicles.find(c => (c.carNumber || c.vehicleNumbers || '').replace(/[^А-ЯA-Z0-9]/g, '') === normPlate);
-    const carId = masterCar ? masterCar.id : null;
+    const carId = masterCar ? masterCar.id : newRef.key;
 
     const carData = {
       carId: carId,
@@ -568,7 +571,9 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
           const db = getDatabase(getApp());
           const sourceList = [...cars, ...archiveCars];
           const targetCar = sourceList.find(c => c.id === id);
-          const rootBranch = targetCar?.sourcePath || (targetCar?.isLegacyBaza ? "baza" : "vehicleFleet");
+          // Only remove from vehicleFleet (center of data). Never touch vehicle_driver_data
+          // (passport/driver records must survive deletion from Учёт выезда).
+          const rootBranch = "vehicleFleet";
           remove(ref(db, `${rootBranch}/${id}`));
           
           const timestampStr = new Date().toLocaleDateString("ru-RU") + " " + new Date().toLocaleTimeString("ru-RU", {hour: '2-digit', minute:'2-digit'});
