@@ -565,26 +565,15 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     };
   }, []);
 
-  // Set up global hotkeys
+  // Set up global hotkeys (chat removed per request — ESC now only closes modals via useKeyboardShortcuts)
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // Esc key: Close chat if open
-      if (e.key === 'Escape') {
-        if (isChatOpen) {
-          setIsChatOpen(false);
-        }
-      }
-      
-      // Alt + C : Toggle chat
-      if (e.altKey && (e.key === 'c' || e.key === 'с' || e.key === 'C')) {
-        e.preventDefault();
-        setIsChatOpen(prev => !prev);
-      }
+      // Alt + C previously toggled chat — removed.
     };
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [isChatOpen]);
+  }, []);
 
   // Track unread messages
   useEffect(() => {
