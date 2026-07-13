@@ -39,6 +39,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   const [statusTypes, setStatusTypes] = useState<any[]>([]);
 
   const [search, setSearch] = useState('');
+  const [activeDisp, setActiveDisp] = useState<string>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<CouplingRow | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
@@ -91,11 +92,13 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase().replace(/\s+/g, '');
-    if (!q) return couplings;
-    return couplings.filter((c) =>
-      [c.carNumber, c.trailerNumber, c.driverName, driverName(c.driverId), dispName(c.dispatcher)]
-        .join(' ').toLowerCase().replace(/\s+/g, '').includes(q));
-  }, [search, couplings, drivers, dispatchers]);
+    return couplings.filter((c) => {
+      if (activeDisp !== 'all' && c.dispatcher !== activeDisp) return false;
+      if (!q) return true;
+      return [c.carNumber, c.trailerNumber, c.driverName, driverName(c.driverId), dispName(c.dispatcher)]
+        .join(' ').toLowerCase().replace(/\s+/g, '').includes(q);
+    });
+  }, [search, couplings, drivers, dispatchers, activeDisp]);
 
   const openAdd = () => {
     setEditing(null);
@@ -163,6 +166,25 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
             <Plus className="w-4 h-4" /> Добавить сцепку
           </button>
         )}
+        </div>
+
+      {/* TABS: All + per-dispatcher */}
+      <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/60 max-w-max">
+        <button onClick={() => setActiveDisp('all')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${activeDisp === 'all' ? 'bg-[#3765F6] text-white shadow' : 'text-slate-600 hover:bg-white'}`}>
+          Все ({couplings.length})
+        </button>
+        {dispatchers.map((d) => {
+          const cnt = couplings.filter((c) => c.dispatcher === (d.id || d.key)).length;
+          const isActive = activeDisp === (d.id || d.key);
+          return (
+            <button key={d.id || d.key} onClick={() => setActiveDisp(d.id || d.key)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${isActive ? 'bg-[#3765F6] text-white shadow' : 'text-slate-600 hover:bg-white'}`}>
+              {d.name}
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-mono ${isActive ? 'bg-white/20' : 'bg-slate-200'}`}>{cnt}</span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="flex items-center gap-3">
@@ -196,7 +218,12 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
                 <td className="px-4 py-2.5 font-black text-slate-900">{c.carNumber}</td>
                 <td className="px-4 py-2.5 text-slate-600">{c.trailerNumber || '—'}</td>
                 <td className="px-4 py-2.5 text-slate-500">{[c.brand, c.trailerBrand].filter(Boolean).join(' / ') || '—'}</td>
-                <td className="px-4 py-2.5">{c.driverName || driverName(c.driverId) || '—'}</td>
+                <td className="px-4 py-2.5">
+                  <button onClick={(e) => { e.stopPropagation(); setViewCard({ type: 'driver', driverId: c.driverId || '', driverName: c.driverName || driverName(c.driverId) }); }}
+                    className="text-left text-[#3765F6] hover:underline font-medium">
+                    {c.driverName || driverName(c.driverId) || '—'}
+                  </button>
+                </td>
                 <td className="px-4 py-2.5">{dispName(c.dispatcher)}</td>
                 <td className="px-4 py-2.5 text-slate-500">{rateName(c.rateGroupId)}</td>
                 <td className="px-4 py-2.5">
