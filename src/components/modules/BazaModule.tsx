@@ -88,14 +88,11 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   const [driversMap, setDriversMap] = useState<Record<string, string>>({});
 
   const allVehicles = useMemo(() => {
-    const bazaIds = new Set(bazaVehicles.map(v => normalizePlate(v.carNumber)));
-    const fleetOnly = fleetVehicles.filter(v => !bazaIds.has(normalizePlate(v.carNumber))).map(v => ({
-      ...v,
-      isLegacyBaza: false,
-      status: v.status || 'base'
-    }));
-    return [...bazaVehicles, ...fleetOnly];
-  }, [bazaVehicles, fleetVehicles]);
+    // Учёт выезда = РУЧНОЙ журнал. Показываем ТОЛЬКО записи, созданные вручную
+    // (ветка baza + legacy baza_cars). Центр (vehicleFleet) НЕ подтягивается
+    // автоматически — машины выбираются через CouplingPicker и создают запись в baza.
+    return [...bazaVehicles];
+  }, [bazaVehicles]);
 
   const cars = useMemo(() => {
     const active = allVehicles.filter(v => v.status !== 'archive');
@@ -419,14 +416,17 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
       }
     }
 
-    // Write to vehicleFleet (center of data) — no duplicate in baza.
-    const newRef = push(ref(db, 'vehicleFleet'));
+    // Write to 'baza' (manual Учёт выезда journal). Center (vehicleFleet) is NOT
+    // modified — it's the reference base, selected via CouplingPicker. If the car was
+    // picked from the center, keep its center id as couplingId for traceability.
+    const newRef = push(ref(db, 'baza'));
     const normPlate = cNum.replace(/[^А-ЯA-Z0-9]/g, '');
     const masterCar = fleetVehicles.find(c => (c.carNumber || c.vehicleNumbers || '').replace(/[^А-ЯA-Z0-9]/g, '') === normPlate);
-    const carId = masterCar ? masterCar.id : newRef.key;
+    const couplingId = masterCar ? masterCar.id : null;
 
     const carData = {
-      carId: carId,
+      carId: newRef.key,
+      couplingId: couplingId,
       ...formData,
       carNumber: cNum,
       driverName: driverShortNameRu || trimmedDriver,
