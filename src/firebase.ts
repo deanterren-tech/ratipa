@@ -3028,6 +3028,26 @@ export const dbService = {
     return sharedGetVehicleStatuses(callback);
   },
 
+  bulkUpdateCouplings: (ids: string[], patch: Record<string, any>): Promise<void> => {
+    if (useFirebase) {
+      const updates: Record<string, any> = {};
+      for (const id of ids) {
+        for (const [k, v] of Object.entries(patch)) {
+          updates[`vehicleFleet/${id}/${k}`] = v;
+        }
+      }
+      return update(ref(database), updates).catch((err) => console.warn("bulkUpdateCouplings failed:", err));
+    } else {
+      // localStorage fallback: update each local record
+      const all = getLocalStorageData<any[]>("ratipa_vehicle_fleet", []);
+      const set2 = new Set(ids);
+      const updated = all.map((c) => (set2.has(c.id) ? { ...c, ...patch } : c));
+      setLocalStorageData("ratipa_vehicle_fleet", updated);
+      window.dispatchEvent(new Event("ratipa_vehicle_fleet_changed"));
+      return Promise.resolve();
+    }
+  },
+
   setVehicleStatus: (id: string, status: 'base' | 'trip') => {
     if (useFirebase) {
       set(ref(database, `vehicle_statuses/${id}`), status).catch((err) =>
