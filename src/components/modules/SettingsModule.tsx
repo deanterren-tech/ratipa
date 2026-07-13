@@ -4,7 +4,7 @@ import { UserProfile, AppSettings, FerryTemplate, DistancePreset, CurrencyPreset
 import { dbService, database, onValue } from '../../firebase';
 import { pdService } from '../../firebase/planDohodService';
 import { ref, set, push, remove, update } from 'firebase/database';
-import { CouplingDirectoryEditor } from './CouplingDirectoryEditor';
+import CouplingDirectoryEditor from './CouplingDirectoryEditor';
 import { 
   Settings, 
   Plus, 
