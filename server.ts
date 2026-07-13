@@ -4,6 +4,7 @@ import multer from "multer";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 import fs from "fs";
+import agentHandler from "./api/agent";
 
 // Initialize Gemini safely
 let ai: GoogleGenAI | null = null;
@@ -1637,6 +1638,11 @@ Do not return Markdown. Return raw JSON array only.
       console.error("Offline parsing failed in parse-couple-data:", error);
       res.status(500).json({ error: error.message || "Failed to parse couple data" });
     }
+  });
+
+  // Agent API (previously Vercel serverless function, now mounted in Express)
+  app.all("/api/agent", (req, res) => {
+    return agentHandler(req, res);
   });
 
   // Vite middleware for development
