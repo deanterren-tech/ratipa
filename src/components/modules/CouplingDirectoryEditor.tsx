@@ -146,6 +146,13 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
     }
   };
 
+  const stats = useMemo(() => {
+    const total = couplings.length;
+    const base = couplings.filter(c => (c.status || 'base') === 'base').length;
+    const trip = couplings.filter(c => (c.status || 'base') === 'trip').length;
+    return { total, base, trip };
+  }, [couplings]);
+
   return (
     <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-xl shadow-slate-900/5 flex flex-col space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-5 border-b border-slate-200/60">
@@ -159,6 +166,21 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
           <p className="text-[11px] text-slate-400 font-medium mt-1">
             Единая база: тягач, прицеп, марка, водитель, диспетчер и тариф. Связана со всеми модулями.
           </p>
+          <div className="flex flex-wrap gap-2 mt-3">
+            <div className="flex items-center gap-2 bg-slate-900 text-white rounded-xl px-3 py-1.5">
+              <Truck className="w-3.5 h-3.5 text-slate-300" />
+              <span className="text-[10px] font-semibold text-slate-300">Всего</span>
+              <span className="text-sm font-black font-mono">{stats.total}</span>
+            </div>
+            <div className="flex items-center gap-2 bg-emerald-500 text-white rounded-xl px-3 py-1.5">
+              <span className="text-[10px] font-semibold">На базе</span>
+              <span className="text-sm font-black font-mono">{stats.base}</span>
+            </div>
+            <div className="flex items-center gap-2 bg-amber-500 text-white rounded-xl px-3 py-1.5">
+              <span className="text-[10px] font-semibold">В рейсе</span>
+              <span className="text-sm font-black font-mono">{stats.trip}</span>
+            </div>
+          </div>
         </div>
         {isWritePermitted && (
           <button onClick={openAdd}
