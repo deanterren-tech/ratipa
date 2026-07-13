@@ -2,10 +2,5 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "functions": {
-    "api/agent/**/*.ts": {
-      "runtime": "now-node@22.10.1"
-    }
-  }
+  "outputDirectory": "dist"
 }
