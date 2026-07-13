@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useDialog } from '../DialogProvider';
 import { useToast } from '../ToastProvider';
 import { dbService, directoryService } from '../../firebase';
@@ -140,7 +141,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   };
 
   return (
-    <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-xl shadow-slate-900/5 flex flex-col relative space-y-6">
+    <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-xl shadow-slate-900/5 flex flex-col space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-5 border-b border-slate-200/60">
         <div>
           <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
@@ -221,9 +222,10 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
         </table>
       </div>
 
-      {/* MODAL */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" onClick={() => setModalOpen(false)}>
+      {/* MODAL — rendered via portal to document.body so it centers on the screen,
+          not inside the scrolled settings block */}
+      {modalOpen && createPortal(
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" onClick={() => setModalOpen(false)}>
           <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
@@ -257,7 +259,8 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
               <button onClick={handleSave} className="px-4 py-2 text-xs font-bold text-white bg-[#3765F6] hover:bg-[#2a4fd0] rounded-xl shadow-sm">Сохранить</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
