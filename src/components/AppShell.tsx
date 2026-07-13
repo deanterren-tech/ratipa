@@ -43,7 +43,8 @@ import {
   WifiOff,
   DollarSign,
   RefreshCw,
-  Sliders
+  Sliders,
+  BookOpen
 } from 'lucide-react';
 
 interface NotificationItem {
