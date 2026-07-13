@@ -5,7 +5,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/agent/**/*.ts": {
-      "runtime": "now-node@22.10.0",
+      "runtime": "now-node@22.10.1",
       "includeFiles": "api/**"
     }
   }
