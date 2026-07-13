@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useDialog } from '../DialogProvider';
 import { useToast } from '../ToastProvider';
 import { dbService, directoryService } from '../../firebase';
 import { Truck, Plus, Trash2, Pencil, Search, Link2, User, X } from 'lucide-react';
 import { UserProfile } from '../../types';
+import CouplingCard from './CouplingCard';
+import DriverCard from './DriverCard';
 
 interface CouplingDirectoryEditorProps {
   user: UserProfile;
@@ -39,6 +42,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<CouplingRow | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
+  const [viewCard, setViewCard] = useState<{ type: 'coupling' | 'driver'; carNumber?: string; driverId?: string; driverName?: string } | null>(null);
 
   useEffect(() => {
     const u1 = dbService.getVehicleDriverData((list: any[]) => {
@@ -140,7 +144,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   };
 
   return (
-    <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-xl shadow-slate-900/5 flex flex-col relative space-y-6">
+    <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-xl shadow-slate-900/5 flex flex-col space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-5 border-b border-slate-200/60">
         <div>
           <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
@@ -187,7 +191,8 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
           </thead>
           <tbody className="divide-y divide-slate-100/80 text-xs text-slate-700 font-mono">
             {filtered.map((c) => (
-              <tr key={c.id} className="hover:bg-slate-50/60">
+              <tr key={c.id} onClick={() => setViewCard({ type: 'coupling', carNumber: c.carNumber })}
+                  className="hover:bg-slate-50/60 cursor-pointer">
                 <td className="px-4 py-2.5 font-black text-slate-900">{c.carNumber}</td>
                 <td className="px-4 py-2.5 text-slate-600">{c.trailerNumber || '—'}</td>
                 <td className="px-4 py-2.5 text-slate-500">{[c.brand, c.trailerBrand].filter(Boolean).join(' / ') || '—'}</td>
@@ -203,10 +208,10 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
                 {isWritePermitted && (
                   <td className="px-4 py-2.5 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => openEdit(c)} className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600">
+                      <button onClick={(e) => { e.stopPropagation(); openEdit(c); }} className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => handleDelete(c)} className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-500">
+                      <button onClick={(e) => { e.stopPropagation(); handleDelete(c); }} className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-500">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -221,9 +226,10 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
         </table>
       </div>
 
-      {/* MODAL */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" onClick={() => setModalOpen(false)}>
+      {/* MODAL — rendered via portal to document.body so it centers on the screen,
+          not inside the scrolled settings block */}
+      {modalOpen && createPortal(
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" onClick={() => setModalOpen(false)}>
           <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
@@ -257,7 +263,27 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
               <button onClick={handleSave} className="px-4 py-2 text-xs font-bold text-white bg-[#3765F6] hover:bg-[#2a4fd0] rounded-xl shadow-sm">Сохранить</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Soft-link cards */}
+      {viewCard?.type === 'coupling' && viewCard.carNumber && createPortal(
+        <CouplingCard
+          carNumber={viewCard.carNumber}
+          onClose={() => setViewCard(null)}
+          onOpenDriver={(driverId, driverName) => setViewCard({ type: 'driver', driverId, driverName })}
+        />,
+        document.body
+      )}
+      {viewCard?.type === 'driver' && createPortal(
+        <DriverCard
+          driverId={viewCard.driverId || ''}
+          driverName={viewCard.driverName || ''}
+          onClose={() => setViewCard(null)}
+          onOpenCoupling={(carNumber) => setViewCard({ type: 'coupling', carNumber })}
+        />,
+        document.body
       )}
     </div>
   );
