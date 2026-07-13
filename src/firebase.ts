@@ -1719,6 +1719,46 @@ export const dbService = {
     return sharedGetVehicleDriverData(callback);
   },
 
+  // Soft-link readers for CouplingCard / DriverCard (read only, no hard binding)
+  getBazaRecords: (callback: (data: any[]) => void) => {
+    if (useFirebase) {
+      return onValue(ref(database, "baza"), (snap) => {
+        const val = snap.val();
+        if (!val) { callback([]); return; }
+        const list = Object.keys(val).map((k) => ({ ...val[k], id: k }));
+        callback(list);
+      });
+    }
+    callback(getLocalStorageData<any[]>("ratipa_baza", []));
+    return () => {};
+  },
+
+  getPlanDohod: (callback: (data: any[]) => void) => {
+    if (useFirebase) {
+      return onValue(ref(database, "planDohod"), (snap) => {
+        const val = snap.val();
+        if (!val) { callback([]); return; }
+        const list = Object.keys(val).map((k) => ({ ...val[k], id: k }));
+        callback(list);
+      });
+    }
+    callback([]);
+    return () => {};
+  },
+
+  getDriverSalaryLogs: (driverId: string, callback: (logs: any[]) => void) => {
+    if (useFirebase && driverId) {
+      return onValue(ref(database, `salaryHistory/flat/${driverId}`), (snap) => {
+        const val = snap.val();
+        if (!val) { callback([]); return; }
+        const list = Array.isArray(val) ? val : Object.keys(val).map((k) => ({ ...val[k], id: k }));
+        callback(list);
+      });
+    }
+    callback([]);
+    return () => {};
+  },
+
   getVehicleBrands: (callback: (brands: string[]) => void) => {
     if (useFirebase) {
       let b1: string[] = [];
