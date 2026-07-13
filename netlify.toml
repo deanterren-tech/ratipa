@@ -6,6 +6,14 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+# Route API to Netlify Function (must come BEFORE the SPA catch-all)
+[[redirects]]
+  from = "/api/agent"
+  to = "/.netlify/functions/agent"
+  status = 200
+  force = true
+
+# SPA fallback for client-side routing
 [[redirects]]
   from = "/*"
   to = "/index.html"
