@@ -99,13 +99,14 @@ async function handleGetVehicle(req: any, res: any) {
   const { plate } = req.query;
   if (!plate) return sendError(res, 400, "missing_fields", "plate query parameter is required");
   try {
-    const bazacars = await readData("bazacars");
+    const bazacars = await readData("vehicleFleet");
     if (!bazacars) return sendError(res, 404, "not_found", "No vehicles found in database");
     const normalizedPlate = plate.toString().toLowerCase().replace(/\s+/g, "");
     let foundVehicle: any = null;
     for (const key in bazacars) {
       const v = bazacars[key];
-      if (v.carNumber && v.carNumber.toLowerCase().replace(/\s+/g, "") === normalizedPlate) {
+      const vPlate = (v.carNumber || v.vehicleNumbers || "").toLowerCase().replace(/\s+/g, "");
+      if (vPlate === normalizedPlate) {
         foundVehicle = { id: key, ...v };
         break;
       }
@@ -113,13 +114,13 @@ async function handleGetVehicle(req: any, res: any) {
     if (!foundVehicle) return sendError(res, 404, "not_found", `Vehicle with plate ${plate} not found`);
     const data = {
       id: foundVehicle.id,
-      plate: foundVehicle.carNumber,
-      trailer: foundVehicle.trailerNumber || "",
-      brand: foundVehicle.brand || "",
-      driver: foundVehicle.driverName,
+      plate: foundVehicle.carNumber || foundVehicle.vehicleNumbers,
+      trailer: foundVehicle.trailerNumber || foundVehicle.trailerMake || "",
+      brand: foundVehicle.brand || foundVehicle.brandModel || "",
+      driver: foundVehicle.driverName || foundVehicle.driverShortNameRu,
       status: foundVehicle.status,
       currentLocation: foundVehicle.location || "",
-      direction: foundVehicle.direction || "",
+      direction: foundVehicle.direction || foundVehicle.dispatcher || "",
     };
     await logAction("getVehicle", { plate });
     return sendSuccess(res, data);
@@ -130,18 +131,18 @@ async function handleGetVehicle(req: any, res: any) {
 
 async function handleGetVehicleFleet(req: any, res: any) {
   try {
-    const bazacars = await readData("bazacars");
+    const bazacars = await readData("vehicleFleet");
     const fleet: any[] = [];
     if (bazacars) {
       for (const key in bazacars) {
         const v = bazacars[key];
         fleet.push({
           id: key,
-          plate: v.carNumber || "",
-          driver: v.driverName || "",
+          plate: v.carNumber || v.vehicleNumbers || "",
+          driver: v.driverName || v.driverShortNameRu || "",
           status: v.status || "",
           currentLocation: v.location || "",
-          direction: v.direction || "",
+          direction: v.direction || v.dispatcher || "",
         });
       }
     }
