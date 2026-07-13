@@ -28,6 +28,7 @@ import {
 import { dbService } from '../../firebase';
 import { UserProfile, AppSettings, PhoneNumber, Driver, CarRateGroup } from '../../types';
 import { formatDriverShortName } from '../../utils/driverSync';
+import CouplingPicker from '../common/CouplingPicker';
 
 interface VehicleDriverDataModuleProps {
   user: UserProfile;
@@ -1372,12 +1373,10 @@ ${brandsText ? `Марки: ${brandsText}\n` : ''}Водитель: ${driverName
                   <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">
                     Гос. номера Тягач / Полуприцеп <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={vehicleNumbers}
-                    onChange={e => setVehicleNumbers(e.target.value)}
-                    placeholder="AE 6052-7 / A 2453 Е-7"
-                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                  <CouplingPicker
+                    onSelect={(rec) => {
+                      if (rec) setVehicleNumbers((rec.carNumber || rec.vehicleNumbers || '').toUpperCase());
+                    }}
                   />
                 </div>
 
