@@ -424,6 +424,49 @@ export interface CarRateGroup {
   comment?: string;
 }
 
+// ---- Directories (unified reference data for the whole app) ----
+export interface DirectoryBrand {
+  key: string;
+  name: string;
+}
+export interface DirectoryDispatcher {
+  id: string;
+  name: string;
+  color?: string;
+}
+export interface DirectoryRateGroup {
+  id: string;
+  name: string;
+  rate: number;
+  perDiemRate?: number | null;
+  comment?: string;
+}
+export interface DirectoryStatusType {
+  id: string;
+  label: string;
+  color?: string;
+  category?: "park" | "trip" | "archive";
+}
+export interface DirectoryDirection {
+  id: string;
+  label: string;
+}
+
+export interface CouplingRecord {
+  id: string;
+  carNumber: string;          // tractor (gos-number)
+  trailerNumber?: string;     // trailer (gos-number) — the "coupling"
+  brand?: string;             // key -> directories/vehicleBrands
+  trailerBrand?: string;      // key -> directories/trailerBrands
+  driverId?: string;          // -> driversPool
+  driverName?: string;        // denormalized for display
+  dispatcher?: string;        // -> directories/dispatchers (id or name)
+  rateGroupId?: string;       // -> directories/rateGroups
+  status?: string;            // key -> directories/statusTypes
+  statusSince?: string;
+  comment?: string;
+}
+
 export interface DirectionPreset {
   id: string;
   name: string;
