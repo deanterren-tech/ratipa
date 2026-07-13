@@ -94,7 +94,6 @@ const SettingsModule = lazy(() => import('./modules/SettingsModule'));
 const AdminModule = lazy(() => import('./modules/AdminModule'));
 const DocumentsModule = lazy(() => import('./modules/DocumentsModule'));
 const VehicleDriverDataModule = lazy(() => import('./modules/VehicleDriverDataModule'));
-const DirectoriesModule = lazy(() => import('./modules/DirectoriesModule'));
 const AnalysisModule = lazy(() => import('./modules/AnalysisModule'));
 
 const groupIconMap: Record<string, React.ComponentType<any>> = {
@@ -653,7 +652,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'currentPlanning', label: 'Текущее планирование', icon: Calendar, permissionKey: 'currentPlanning' },
     { key: 'baza', label: 'Учет выезда', icon: Truck, permissionKey: 'baza' },
     { key: 'vehicleDriverData', label: 'Авто и Водители', icon: FileText, permissionKey: 'vehicleDriverData' },
-    { key: 'directories', label: 'Справочники (база)', icon: BookOpen, permissionKey: 'directories' },
     { key: 'analysis', label: 'Анализ', icon: TrendingUp, permissionKey: 'analysis' },
     { key: 'dozvola', label: 'Учет Дозволов', icon: FileText, permissionKey: 'dozvola' },
     { key: 'documents', label: 'Документы', icon: Files, permissionKey: 'documents' },
@@ -684,7 +682,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       }
       
       // Default fallback (dispatcher or others)
-      const defaultReads = ['planDohod', 'planZagruzok', 'baza', 'vehicleDriverData', 'directories', 'dozvola', 'disposition'];
+      const defaultReads = ['planDohod', 'planZagruzok', 'baza', 'vehicleDriverData', 'dozvola', 'disposition'];
       const defaultWrites = ['dohod', 'salary', 'documents'];
       return defaultWrites.includes(mod.permissionKey) || defaultReads.includes(mod.permissionKey);
     });
@@ -843,8 +841,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         return <BazaModule user={user} />;
       case 'vehicleDriverData':
         return <VehicleDriverDataModule user={user} />;
-      case 'directories':
-        return <DirectoriesModule user={user} />;
       case 'dozvola':
         return <DozvolaModule user={user} />;
       case 'documents':
