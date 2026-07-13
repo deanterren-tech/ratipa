@@ -8,14 +8,16 @@ interface CouplingPickerProps {
   onSelect: (rec: any) => void;
   placeholder?: string;
   excludeIds?: string[];
+  mode?: 'coupling' | 'driver';  // 'coupling' (default): search by car/trailer; 'driver': search by driver name
 }
 
 /**
  * Reusable coupling (tractor+trailer) picker.
  * Reads from the single source of truth (vehicleFleet via dbService.getVehicleDriverData).
  * On select, returns the full coupling record so callers can auto-fill driver, brand, etc.
+ * mode="driver" focuses search/display on the driver (still returns the full coupling record).
  */
-export default function CouplingPicker({ value, onSelect, placeholder = 'Поиск сцепки (тягач / прицеп / водитель)...', excludeIds = [] }: CouplingPickerProps) {
+export default function CouplingPicker({ value, onSelect, placeholder, excludeIds = [], mode = 'coupling' }: CouplingPickerProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [all, setAll] = useState<any[]>([]);
@@ -48,16 +50,18 @@ export default function CouplingPicker({ value, onSelect, placeholder = 'Пои�
       .filter((c) => !excludeIds.includes(c.id))
       .filter((c) => {
         if (!q) return true;
-        const hay = [
-          c.carNumber || c.vehicleNumbers || '',
-          c.trailerNumber || c.trailerMake || '',
-          c.driverNameRu || c.driverName || c.driverShortNameRu || '',
-          c.brandModel || c.brands || '',
-        ].join(' ').toLowerCase().replace(/\s+/g, '');
+        const hay = mode === 'driver'
+          ? [c.driverNameRu || c.driverName || c.driverShortNameRu || ''].join(' ').toLowerCase().replace(/\s+/g, '')
+          : [
+              c.carNumber || c.vehicleNumbers || '',
+              c.trailerNumber || c.trailerMake || '',
+              c.driverNameRu || c.driverName || c.driverShortNameRu || '',
+              c.brandModel || c.brands || '',
+            ].join(' ').toLowerCase().replace(/\s+/g, '');
         return hay.includes(q);
       })
       .slice(0, 12);
-  }, [query, all, excludeIds]);
+  }, [query, all, excludeIds, mode]);
 
   const handlePick = (rec: any) => {
     setSelected(rec);
@@ -66,19 +70,33 @@ export default function CouplingPicker({ value, onSelect, placeholder = 'Пои�
     onSelect(rec);
   };
 
+  const ph = placeholder
+    || (mode === 'driver' ? 'Поиск водителя (по базе сцепок)...' : 'Поиск сцепки (тягач / прицеп / водитель)...');
+
+  const displayLabel = (rec: any) => {
+    if (mode === 'driver') {
+      return formatDriverShortName(rec.driverNameRu || rec.driverName || '') || 'нет водителя';
+    }
+    return (rec.carNumber || rec.vehicleNumbers) + (rec.trailerNumber ? ` + ${rec.trailerNumber}` : '');
+  };
+  const displaySub = (rec: any) => {
+    if (mode === 'driver') {
+      const car = (rec.carNumber || rec.vehicleNumbers) + (rec.trailerNumber ? ` + ${rec.trailerNumber}` : '');
+      return [car, rec.brandModel].filter(Boolean).join(' · ');
+    }
+    return [
+      formatDriverShortName(rec.driverNameRu || rec.driverName || '') || 'нет водителя',
+      rec.brandModel,
+    ].filter(Boolean).join(' · ');
+  };
+
   return (
     <div className="relative" ref={boxRef}>
       {selected && !open ? (
         <div className="flex items-center justify-between gap-2 bg-[#3765F6]/5 border border-[#3765F6]/20 rounded-xl px-3 py-2">
           <div className="min-w-0">
-            <div className="text-xs font-bold text-[#3765F6] font-mono truncate">
-              {selected.carNumber || selected.vehicleNumbers}
-              {selected.trailerNumber ? ` + ${selected.trailerNumber}` : ''}
-            </div>
-            <div className="text-[10px] text-slate-500 truncate">
-              {formatDriverShortName(selected.driverNameRu || selected.driverName || '') || 'нет водителя'}
-              {selected.brandModel ? ` · ${selected.brandModel}` : ''}
-            </div>
+            <div className="text-xs font-bold text-[#3765F6] font-mono truncate">{displayLabel(selected)}</div>
+            <div className="text-[10px] text-slate-500 truncate">{displaySub(selected)}</div>
           </div>
           <button onClick={() => { setSelected(null); onSelect(null); }} className="text-slate-400 hover:text-rose-500 p-1">
             <X className="w-4 h-4" />
@@ -91,7 +109,7 @@ export default function CouplingPicker({ value, onSelect, placeholder = 'Пои�
             value={query}
             onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
             onFocus={() => setOpen(true)}
-            placeholder={placeholder}
+            placeholder={ph}
             className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-slate-200 outline-none focus:border-[#3765F6] bg-white"
           />
           {open && (
@@ -105,16 +123,11 @@ export default function CouplingPicker({ value, onSelect, placeholder = 'Пои�
                   onClick={() => handlePick(rec)}
                   className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 text-left border-b border-slate-50 last:border-0"
                 >
-                  <Truck className="w-4 h-4 text-[#3765F6] shrink-0" />
+                  <User className="w-4 h-4 text-[#3765F6] shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <div className="text-xs font-bold text-slate-800 font-mono truncate">
-                      {rec.carNumber || rec.vehicleNumbers}
-                      {rec.trailerNumber ? ` + ${rec.trailerNumber}` : ''}
-                    </div>
+                    <div className="text-xs font-bold text-slate-800 font-mono truncate">{displayLabel(rec)}</div>
                     <div className="text-[10px] text-slate-500 truncate flex items-center gap-1">
-                      <User className="w-3 h-3" />
-                      {formatDriverShortName(rec.driverNameRu || rec.driverName || '') || 'нет водителя'}
-                      {rec.brandModel ? ` · ${rec.brandModel}` : ''}
+                      {displaySub(rec)}
                     </div>
                   </div>
                 </button>
