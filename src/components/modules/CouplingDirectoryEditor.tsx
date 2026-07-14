@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useDialog } from '../DialogProvider';
 import { useToast } from '../ToastProvider';
 import { dbService, directoryService } from '../../firebase';
-import { Truck, Plus, Trash2, Pencil, Search, Link2, User, X } from 'lucide-react';
+import { Truck, Plus, Trash2, Pencil, Search, Link2, User, X, Check, Layers, Tag, Users } from 'lucide-react';
 import { UserProfile } from '../../types';
 import CouplingCard from './CouplingCard';
 import DriverCard from './DriverCard';
@@ -26,6 +26,12 @@ interface CouplingRow {
   status?: string;
 }
 
+// dispatcher color palette (stable per dispatcher)
+const DISP_COLORS: Record<string, string> = {
+  виталий: '#3765F6', матвей: '#8b5cf6', сергей: '#f59e0b', юрий: '#10b981',
+};
+const dispColor = (key?: string) => DISP_COLORS[(key || '').toLowerCase()] || '#64748b';
+
 export default function CouplingDirectoryEditor({ user, isWritePermitted }: CouplingDirectoryEditorProps) {
   const { showConfirm } = useDialog();
   const { toast } = useToast();
@@ -44,6 +50,11 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   const [editing, setEditing] = useState<CouplingRow | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [viewCard, setViewCard] = useState<{ type: 'coupling' | 'driver'; carNumber?: string; driverId?: string; driverName?: string } | null>(null);
+
+  // multi-select
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkField, setBulkField] = useState<'rateGroupId' | 'dispatcher' | null>(null);
 
   useEffect(() => {
     const u1 = dbService.getVehicleDriverData((list: any[]) => {
@@ -143,7 +154,43 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
     if (await showConfirm(`Удалить сцепку ${c.carNumber}${c.trailerNumber ? ' + ' + c.trailerNumber : ''}?`)) {
       dbService.deleteVehicleDriverRecord(c.id, user.name, user.role);
       toast('Сцепка удалена', 'success');
+      setSelected((s) => { const n = new Set(s); n.delete(c.id); return n; });
     }
+  };
+
+  // ---- multi-select helpers ----
+  const toggle = (id: string) => setSelected((s) => {
+    const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n;
+  });
+  const allVisibleSelected = filtered.length > 0 && filtered.every((c) => selected.has(c.id));
+  const toggleAll = () => setSelected((s) => {
+    const n = new Set(s);
+    if (allVisibleSelected) filtered.forEach((c) => n.delete(c.id));
+    else filtered.forEach((c) => n.add(c.id));
+    return n;
+  });
+
+  const applyBulk = async () => {
+    if (!bulkField || !bulkValue) return;
+    const ids = Array.from(selected);
+    await dbService.bulkUpdateCouplings(ids, { [bulkField]: bulkValue });
+    toast(`Обновлено ${ids.length} сцепок`, 'success');
+    setBulkOpen(false); setBulkField(null); setBulkValue(''); setSelected(new Set());
+  };
+  const [bulkValue, setBulkValue] = useState('');
+
+  const stats = useMemo(() => {
+    const total = couplings.length;
+    const base = couplings.filter(c => (c.status || 'base') === 'base').length;
+    const trip = couplings.filter(c => (c.status || 'base') === 'trip').length;
+    return { total, base, trip };
+  }, [couplings]);
+
+  // initials for driver avatar
+  const initials = (name?: string) => {
+    if (!name) return '—';
+    const p = name.trim().split(/\s+/);
+    return ((p[0]?.[0] || '') + (p[1]?.[0] || '')).toUpperCase();
   };
 
   return (
@@ -159,6 +206,21 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
           <p className="text-[11px] text-slate-400 font-medium mt-1">
             Единая база: тягач, прицеп, марка, водитель, диспетчер и тариф. Связана со всеми модулями.
           </p>
+          <div className="flex flex-wrap gap-2 mt-3">
+            <div className="flex items-center gap-2 bg-slate-900 text-white rounded-xl px-3 py-1.5">
+              <Truck className="w-3.5 h-3.5 text-slate-300" />
+              <span className="text-[10px] font-semibold text-slate-300">Всего</span>
+              <span className="text-sm font-black font-mono">{stats.total}</span>
+            </div>
+            <div className="flex items-center gap-2 bg-emerald-500 text-white rounded-xl px-3 py-1.5">
+              <span className="text-[10px] font-semibold">На базе</span>
+              <span className="text-sm font-black font-mono">{stats.base}</span>
+            </div>
+            <div className="flex items-center gap-2 bg-amber-500 text-white rounded-xl px-3 py-1.5">
+              <span className="text-[10px] font-semibold">В рейсе</span>
+              <span className="text-sm font-black font-mono">{stats.trip}</span>
+            </div>
+          </div>
         </div>
         {isWritePermitted && (
           <button onClick={openAdd}
@@ -168,7 +230,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
         )}
         </div>
 
-      {/* TABS: All + per-dispatcher */}
+      {/* TABS */}
       <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/60 max-w-max">
         <button onClick={() => setActiveDisp('all')}
           className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${activeDisp === 'all' ? 'bg-[#3765F6] text-white shadow' : 'text-slate-600 hover:bg-white'}`}>
@@ -177,6 +239,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
         {dispatchers.map((d) => {
           const cnt = couplings.filter((c) => c.dispatcher === (d.id || d.key)).length;
           const isActive = activeDisp === (d.id || d.key);
+          const col = dispColor(d.id || d.key);
           return (
             <button key={d.id || d.key} onClick={() => setActiveDisp(d.id || d.key)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${isActive ? 'bg-[#3765F6] text-white shadow' : 'text-slate-600 hover:bg-white'}`}>
@@ -187,22 +250,60 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
         })}
       </div>
 
-      <div className="flex items-center gap-3">
+      {/* SEARCH + multi-select bar */}
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 max-w-xs">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Поиск по тягачу / прицепу / водителю..."
             className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-[#3765F6] font-mono" />
         </div>
-        <span className="text-[10px] font-black uppercase text-slate-500 font-mono">Всего: {couplings.length}</span>
+        {isWritePermitted && (
+          <button onClick={toggleAll}
+            className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition ${allVisibleSelected ? 'bg-[#3765F6] text-white border-[#3765F6]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
+            <Check className="w-4 h-4" /> Выбрать все (видимые)
+          </button>
+        )}
+        {selected.size > 0 && (
+          <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-[#3765F6]/10 text-[#3765F6] text-xs font-bold">
+            <Layers className="w-4 h-4" /> Выбрано: {selected.size}
+          </div>
+        )}
       </div>
+
+      {/* BULK ACTION PANEL */}
+      {isWritePermitted && selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl bg-[#3765F6]/5 border border-[#3765F6]/20">
+          <span className="text-xs font-bold text-slate-700">Массово для {selected.size}:</span>
+          <button onClick={() => { setBulkField('rateGroupId'); setBulkValue(''); setBulkOpen(true); }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50">
+            <Tag className="w-3.5 h-3.5" /> Применить ставку
+          </button>
+          <button onClick={() => { setBulkField('dispatcher'); setBulkValue(''); setBulkOpen(true); }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50">
+            <Users className="w-3.5 h-3.5" /> Назначить диспетчера
+          </button>
+          <button onClick={async () => {
+            if (await showConfirm(`Удалить ${selected.size} сцепок?`)) {
+              for (const id of Array.from(selected)) dbService.deleteVehicleDriverRecord(id, user.name, user.role);
+              toast(`Удалено ${selected.size} сцепок`, 'success');
+              setSelected(new Set());
+            }
+          }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-600 hover:bg-rose-100">
+            <Trash2 className="w-3.5 h-3.5" /> Удалить
+          </button>
+          <button onClick={() => setSelected(new Set())}
+            className="ml-auto px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-100">Сбросить</button>
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200/60 bg-white/40">
         <table className="w-full text-left border-collapse">
           <thead className="bg-slate-50/95">
             <tr className="text-[9px] font-black uppercase text-slate-500 font-mono border-b border-slate-200/80">
-              <th className="px-4 py-3 whitespace-nowrap">Тягач</th>
-              <th className="px-4 py-3 whitespace-nowrap">Прицеп</th>
+              {isWritePermitted && <th className="px-2 py-3 w-[36px]"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} className="accent-[#3765F6]" /></th>}
+              <th className="px-4 py-3 whitespace-nowrap">Сцепка (Тягач / Прицеп)</th>
               <th className="px-4 py-3 whitespace-nowrap">Марка</th>
               <th className="px-4 py-3 whitespace-nowrap">Водитель</th>
               <th className="px-4 py-3 whitespace-nowrap">Диспетчер</th>
@@ -212,19 +313,36 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100/80 text-xs text-slate-700 font-mono">
-            {filtered.map((c) => (
-              <tr key={c.id} onClick={() => setViewCard({ type: 'coupling', carNumber: c.carNumber })}
-                  className="hover:bg-slate-50/60 cursor-pointer">
-                <td className="px-4 py-2.5 font-black text-slate-900">{c.carNumber}</td>
-                <td className="px-4 py-2.5 text-slate-600">{c.trailerNumber || '—'}</td>
+            {filtered.map((c) => {
+              const isSel = selected.has(c.id);
+              const col = dispColor(c.dispatcher);
+              return (
+              <tr key={c.id} onClick={() => isWritePermitted ? toggle(c.id) : setViewCard({ type: 'coupling', carNumber: c.carNumber })}
+                  className={`hover:bg-slate-50/60 cursor-pointer transition ${isSel ? 'bg-[#3765F6]/10' : ''}`}>
+                {isWritePermitted && (
+                  <td className="px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
+                    <input type="checkbox" checked={isSel} onChange={() => toggle(c.id)} className="accent-[#3765F6]" />
+                  </td>
+                )}
+                <td className="px-4 py-2.5 font-mono">
+                  <span className="font-black text-slate-900">{c.carNumber}</span>
+                  {c.trailerNumber && <span className="text-slate-400"> / {c.trailerNumber}</span>}
+                </td>
                 <td className="px-4 py-2.5 text-slate-500">{[c.brand, c.trailerBrand].filter(Boolean).join(' / ') || '—'}</td>
                 <td className="px-4 py-2.5">
                   <button onClick={(e) => { e.stopPropagation(); setViewCard({ type: 'driver', driverId: c.driverId || '', driverName: c.driverName || driverName(c.driverId) }); }}
-                    className="text-left text-[#3765F6] hover:underline font-medium">
+                    className="inline-flex items-center gap-1.5 text-left hover:underline font-medium text-slate-700">
+                    <span className="w-5 h-5 rounded-full bg-[#3765F6]/15 text-[#3765F6] flex items-center justify-center text-[9px] font-black">
+                      {initials(c.driverName || driverName(c.driverId))}
+                    </span>
                     {c.driverName || driverName(c.driverId) || '—'}
                   </button>
                 </td>
-                <td className="px-4 py-2.5">{dispName(c.dispatcher)}</td>
+                <td className="px-4 py-2.5">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold text-white" style={{ background: col }}>
+                    {dispName(c.dispatcher)}
+                  </span>
+                </td>
                 <td className="px-4 py-2.5 text-slate-500">{rateName(c.rateGroupId)}</td>
                 <td className="px-4 py-2.5">
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold"
@@ -245,16 +363,16 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
                   </td>
                 )}
               </tr>
-            ))}
+              );
+            })}
             {filtered.length === 0 && (
-              <tr><td colSpan={isWritePermitted ? 8 : 7} className="px-4 py-8 text-center text-xs text-slate-400">Пусто</td></tr>
+              <tr><td colSpan={isWritePermitted ? 9 : 8} className="px-4 py-8 text-center text-xs text-slate-400">Пусто</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {/* MODAL — rendered via portal to document.body so it centers on the screen,
-          not inside the scrolled settings block */}
+      {/* MODAL add/edit */}
       {modalOpen && createPortal(
         <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" onClick={() => setModalOpen(false)}>
           <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
@@ -288,6 +406,34 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
             <div className="flex items-center justify-end gap-2 mt-5">
               <button onClick={() => setModalOpen(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl">Отмена</button>
               <button onClick={handleSave} className="px-4 py-2 text-xs font-bold text-white bg-[#3765F6] hover:bg-[#2a4fd0] rounded-xl shadow-sm">Сохранить</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* BULK modal */}
+      {bulkOpen && createPortal(
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" onClick={() => setBulkOpen(false)}>
+          <div className="w-full max-w-sm bg-white rounded-3xl border border-slate-200 shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Layers className="w-4 h-4 text-[#3765F6]" />
+                {bulkField === 'rateGroupId' ? 'Применить ставку' : 'Назначить диспетчера'} ({selected.size})
+              </h3>
+              <button onClick={() => setBulkOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+            {bulkField === 'rateGroupId' ? (
+              <SelectField label="Группа ставок" value={bulkValue} onChange={setBulkValue}
+                options={rateGroups.map((g) => ({ v: g.id || g.key, l: `${g.name} (€${g.rate}/км)` }))} />
+            ) : (
+              <SelectField label="Диспетчер" value={bulkValue} onChange={setBulkValue}
+                options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
+            )}
+            <div className="flex items-center justify-end gap-2 mt-5">
+              <button onClick={() => setBulkOpen(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl">Отмена</button>
+              <button onClick={applyBulk} disabled={!bulkValue}
+                className="px-4 py-2 text-xs font-bold text-white bg-[#3765F6] hover:bg-[#2a4fd0] rounded-xl shadow-sm disabled:opacity-40">Применить</button>
             </div>
           </div>
         </div>,
