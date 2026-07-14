@@ -28,6 +28,7 @@ import {
 import { dbService } from '../../firebase';
 import { UserProfile, AppSettings, PhoneNumber, Driver, CarRateGroup } from '../../types';
 import { formatDriverShortName } from '../../utils/driverSync';
+import CouplingPicker from '../common/CouplingPicker';
 
 interface VehicleDriverDataModuleProps {
   user: UserProfile;
@@ -248,6 +249,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   
   const [records, setRecords] = useState<VehicleDriverRecord[]>([]);
   const [fleetVehicles, setFleetVehicles] = useState<any[]>([]);
+  const [centralFleet, setCentralFleet] = useState<any[]>([]); // central fleet ONLY for brand autofill
   const [carRateGroups, setCarRateGroups] = useState<CarRateGroup[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [systemUsers, setSystemUsers] = useState<UserProfile[]>([]);
@@ -272,6 +274,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   
   // Form fields state
   const [vehicleNumbers, setVehicleNumbers] = useState('');
+  const [couplingId, setCouplingId] = useState<string | null>(null); // soft-link to central fleet
   const [brandsRu, setBrandsRu] = useState('');
   const [brandsLat, setBrandsLat] = useState('');
   const [formBrandModel, setFormBrandModel] = useState('');
@@ -311,11 +314,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   const [currentVerification, setCurrentVerification] = useState<VehicleDriverRecord | null>(null);
 
   useEffect(() => {
-    // Fetch live vehicles data
-    const unsubData = dbService.getVehicleDriverData((list) => {
+    // Fetch ONLY this module's own blocks (independent of central fleet)
+    const unsubData = dbService.getVehicleDriverBlocks((list) => {
       setRecords(list);
-      setFleetVehicles(list); // Combined: records and fleetVehicles are identical, eliminating duplicate listeners!
+      setFleetVehicles([]); // decouple: do not mix central fleet into this module
     });
+    // Central fleet ONLY for brand autofill (soft link, not shown as list)
+    const unsubCentral = dbService.getVehicleDriverData((list) => setCentralFleet(list));
 
     // Fetch rate groups
     const unsubCarRateGroups = dbService.getCarRateGroups ? dbService.getCarRateGroups(setCarRateGroups) : () => {};
@@ -358,15 +363,15 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     };
   }, []);
 
-  // Self-heal/populate unique brand suggestions from existing local data records
+  // Self-heal/populate unique brand suggestions from central fleet (autofill only)
   useEffect(() => {
-    if (fleetVehicles && fleetVehicles.length > 0) {
-      const vBrands = fleetVehicles.map(v => v.brandModel || v.brands || '').filter(Boolean);
-      const tBrands = fleetVehicles.map(v => v.trailerMake || '').filter(Boolean);
+    if (centralFleet && centralFleet.length > 0) {
+      const vBrands = centralFleet.map(v => v.brand || v.brandModel || v.brands || '').filter(Boolean);
+      const tBrands = centralFleet.map(v => v.trailerBrand || v.trailerMake || '').filter(Boolean);
       setExistingVehicleBrands(prev => Array.from(new Set([...prev, ...vBrands])));
       setExistingTrailerBrands(prev => Array.from(new Set([...prev, ...tBrands])));
     }
-  }, [fleetVehicles]);
+  }, [centralFleet]);
 
   // Autocomplete brand model and trailer make when license plates change
   useEffect(() => {
@@ -626,7 +631,8 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       passportIssuedBy: passportIssuedBy.trim(),
       phones: cleanedPhones,
       dispatcher: dispatcher.trim(),
-      lastPassportVerificationYear: existingRec?.lastPassportVerificationYear || 0
+      lastPassportVerificationYear: existingRec?.lastPassportVerificationYear || 0,
+      couplingId: couplingId || existingRec?.couplingId || null
     };
 
     setIsSaving(true);
@@ -838,14 +844,14 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     const parts = rec.vehicleNumbers.split('/');
     const truckNumber = parts[0].trim().toUpperCase().replace(/\s+/g, '');
     
-    // Find matching vehicle in central fleetVehicles list
-    const matched = fleetVehicles.find(v => {
+    // Find matching vehicle in central fleet (soft link, brand autofill)
+    const matched = centralFleet.find(v => {
       const vNum = (v.carNumber || v.vehicleNumbers || '').trim().toUpperCase().replace(/\s+/g, '');
       return vNum && (vNum === truckNumber || truckNumber.includes(vNum) || vNum.includes(truckNumber));
     });
     
-    const resolvedModel = matched?.brandModel || directModel || '';
-    const resolvedTrailer = matched?.trailerMake || directTrailer || '';
+    const resolvedModel = matched?.brand || matched?.brandModel || directModel || '';
+    const resolvedTrailer = matched?.trailerBrand || matched?.trailerMake || directTrailer || '';
 
     return {
       brandModel: resolvedModel,
@@ -1372,12 +1378,17 @@ ${brandsText ? `Марки: ${brandsText}\n` : ''}Водитель: ${driverName
                   <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">
                     Гос. номера Тягач / Полуприцеп <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={vehicleNumbers}
-                    onChange={e => setVehicleNumbers(e.target.value)}
-                    placeholder="AE 6052-7 / A 2453 Е-7"
-                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                  <CouplingPicker
+                    onSelect={(rec) => {
+                      if (rec) {
+                        setVehicleNumbers((rec.carNumber || rec.vehicleNumbers || '').toUpperCase());
+                        setCouplingId(rec.id || null);
+                        // Autofill brands from central fleet (soft link)
+                        if (rec.brand && !formBrandModel) setFormBrandModel(rec.brand);
+                        if (rec.trailerBrand && !formTrailerMake) setFormTrailerMake(rec.trailerBrand);
+                        if (rec.driverName && !driverNameRu) setDriverNameRu(rec.driverName);
+                      }
+                    }}
                   />
                 </div>
 
@@ -1437,6 +1448,13 @@ ${brandsText ? `Марки: ${brandsText}\n` : ''}Водитель: ${driverName
                     onChange={e => setDriverNameRu(e.target.value)}
                     placeholder="Устинов Олег Леонидович"
                     className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                  />
+                  <CouplingPicker
+                    mode="driver"
+                    value={couplingId || undefined}
+                    onSelect={(rec) => {
+                      if (rec?.driverName && !driverNameRu) setDriverNameRu(rec.driverName);
+                    }}
                   />
                 </div>
                 <div className="space-y-1">
