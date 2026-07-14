@@ -11,6 +11,7 @@ import { normalizePlate, findCarByPlate, getDriverById, getDriverIdForCar } from
 import { formatDriverShortName } from '../../utils/driverSync';
 import { CarConflictModal } from '../common/CarConflictModal';
 import { CarConflict, detectCarDataConflict } from '../../utils/carConflictHandler';
+import CouplingPicker from '../common/CouplingPicker';
 
 interface SalaryModuleProps {
   user: UserProfile;
@@ -735,11 +736,11 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Номер авто</label>
-                                        <input type="text" list="salary-cars-list" value={carNumber} onChange={e => handleCarNumberChange(e.target.value)} placeholder="Номер..." className="w-full bg-white/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:bg-white transition uppercase shadow-inner" />
-                                        <datalist id="salary-cars-list">
-                                            {carsPool.flatMap((g, i) => (g.vehicles || []).map((v, j) => <option key={`pool-${i}-${j}-${v}`} value={v}>Ставка: {g.rate} € ({g.name})</option>))}
-                                            {knownFleet.filter(k => !carsPool.some(g => (g.vehicles || []).map(x => x.toUpperCase()).includes(k.toUpperCase()))).map(k => <option key={`known-${k}`} value={k}>Автомобиль без тарифа</option>)}
-                                        </datalist>
+                                        <CouplingPicker
+                                          onSelect={(rec) => {
+                                            if (rec) handleCarNumberChange((rec.carNumber || rec.vehicleNumbers || '').toUpperCase());
+                                          }}
+                                        />
 
                                         {autofillStatus.type !== 'none' && autofillStatus.message && (
                                           <div className={`text-[10px] font-semibold mt-1 px-2.5 py-1 rounded-lg border ${
@@ -822,7 +823,16 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <div className="flex flex-col gap-1.5 sm:col-span-1">
                                         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">ФИО Водителя</label>
-                                        <input list="salary-drivers-dl" type="text" value={driverName} onChange={e => handleDriverNameChange(e.target.value)} placeholder="Иванов И.И." className="w-full bg-white/50 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:bg-white transition shadow-inner" />
+                                        <CouplingPicker
+                                          mode="driver"
+                                          value={driverId || undefined}
+                                          onSelect={(rec) => {
+                                            if (!rec) { handleDriverNameChange(''); return; }
+                                            const drv = rec.driverNameRu || rec.driverName || rec.driverShortNameRu || '';
+                                            handleDriverNameChange(drv);
+                                            if (rec.driverId) setDriverId(rec.driverId);
+                                          }}
+                                        />
                                     </div>
                                     <div className="flex flex-col gap-1.5 sm:col-span-2">
                                         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Комментарий к выплате</label>
