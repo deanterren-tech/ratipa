@@ -32,6 +32,7 @@ import {
   Search
 } from 'lucide-react';
 import * as pdfjsLib from "pdfjs-dist";
+import CouplingPicker from '../common/CouplingPicker';
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 interface Props {
@@ -41,12 +42,14 @@ interface FerryCouple {
   id: string;
   stateNumber: string;
   model: string;
+  modelRu?: string;
   vehicleType: string;
   dimensions: string;
   weight: string;
   driver1: string;
   driver2?: string;
   dispatcher?: string;
+  couplingId?: string | null;
 }
 const DEFAULT_COUPLES: FerryCouple[] = [
   {
@@ -135,6 +138,7 @@ export default function DocumentsModule({ user }: Props) {
   
   // Ferry Couple form state for adding/editing 1-block machine configuration
   const [coupleStateNumber, setCoupleStateNumber] = useState('');
+  const [coupleCouplingId, setCoupleCouplingId] = useState<string | null>(null); // soft-link to central fleet
   const [coupleModel, setCoupleModel] = useState('');
   const [coupleVehicleType, setCoupleVehicleType] = useState('Тенты 90м3');
   const [coupleDimensions, setCoupleDimensions] = useState('13,6м х 2,45м х 2,7м');
@@ -375,16 +379,30 @@ export default function DocumentsModule({ user }: Props) {
     const coupleData = {
       stateNumber: coupleStateNumber.trim(),
       model: coupleModel.trim(),
+      modelRu: coupleModel.trim(),
       vehicleType: coupleVehicleType.trim(),
       dimensions: coupleDimensions.trim(),
       weight: coupleWeight.trim(),
       driver1: coupleDriver1.trim(),
       driver2: coupleDriver2.trim(),
-      dispatcher: coupleDispatcher.trim()
+      dispatcher: coupleDispatcher.trim(),
+      couplingId: coupleCouplingId || null
     };
     const id = editCoupleId || 'couple_' + Date.now();
     set(ref(database, `ferryCouples/${id}`), coupleData)
       .then(() => {
+        // Sync new params into central fleet (second source, additive — does not remove old data)
+        if (coupleCouplingId) {
+          const sync: any = {};
+          if (coupleModel.trim()) sync.brand = coupleModel.trim().toUpperCase();
+          if (coupleModel.trim()) sync.modelRu = coupleModel.trim();
+          if (coupleVehicleType.trim()) sync.vehicleType = coupleVehicleType.trim();
+          if (coupleDimensions.trim()) sync.dimensions = coupleDimensions.trim();
+          if (coupleWeight.trim()) sync.weight = coupleWeight.trim();
+          if (Object.keys(sync).length) {
+            update(ref(database, `vehicleFleet/${coupleCouplingId}`), sync).catch(() => {});
+          }
+        }
         dbService.logAction(user.name, user.role, "Документы паром", "Documents", id, editCoupleId ? `Обновил сцепку ${coupleStateNumber}` : `Добавил новую сцепку ${coupleStateNumber}`);
         setSelectedCoupleId(id);
         setShowCoupleEditor(false);
@@ -1399,6 +1417,23 @@ export default function DocumentsModule({ user }: Props) {
                       onChange={e => setCoupleStateNumber(e.target.value)}
                       className="w-full bg-slate-50/50 border border-slate-200 text-xs font-medium px-3.5 py-2 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition"
                     />
+                    <div className="mt-1.5">
+                      <CouplingPicker
+                        onSelect={(rec) => {
+                          if (rec) {
+                            if (!coupleStateNumber.trim()) setCoupleStateNumber((rec.carNumber || rec.vehicleNumbers || '').toUpperCase());
+                            setCoupleCouplingId(rec.id || null);
+                            // Autofill from central fleet (second source, non-destructive)
+                            const centralModel = rec.brand || rec.trailerBrand || '';
+                            if (centralModel && !coupleModel.trim()) setCoupleModel(centralModel);
+                            if (rec.vehicleType && !coupleVehicleType.trim()) setCoupleVehicleType(rec.vehicleType);
+                            if (rec.dimensions && !coupleDimensions.trim()) setCoupleDimensions(rec.dimensions);
+                            if (rec.weight && !coupleWeight.trim()) setCoupleWeight(rec.weight);
+                            if (rec.driverName && !coupleDriver1.trim()) setCoupleDriver1(rec.driverName);
+                          }
+                        }}
+                      />
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
