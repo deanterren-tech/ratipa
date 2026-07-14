@@ -6,6 +6,7 @@ import { ref, onValue, set, push, update, remove } from "firebase/database";
 import { Trash2, Search, Plus, Edit, X } from "lucide-react";
 import DozvolaWidgets from "./DozvolaWidgets";
 import DozvolaAIAssistant from "./DozvolaAIAssistant";
+import CouplingPicker from "../common/CouplingPicker";
 
 const standardLocations = [
   "Офис Минск",
@@ -1339,13 +1340,12 @@ export default function DozvolaRegistryList({
                     <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
                       Автомобиль / Локация
                     </label>
-                    <input
-                      type="text"
-                      placeholder="Например, AB 9271-7"
-                      value={editCar}
-                      onChange={(e) => setEditCar(e.target.value)}
-                      list="fleet-cars-dl"
-                      className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-450 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                    <CouplingPicker
+                      mode="combined"
+                      locations={[...standardLocations, ...Object.values(locationsDB || {}).map((l: any) => l.name).filter(Boolean)]}
+                      onSelect={(rec) => {
+                        if (rec) setEditCar((rec.carNumber || rec.vehicleNumbers || rec)?.toUpperCase?.() || String(rec));
+                      }}
                     />
                   </div>
 
