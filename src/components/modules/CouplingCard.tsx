@@ -49,9 +49,9 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
             </div>
             <div>
               <div className="text-lg font-black text-slate-900 font-mono">{carNumber}</div>
-              <div className="text-[11px] text-slate-400">
-                {center?.brand ? `${center.brand}` : ''} {center?.year ? `· ${center.year} г.` : ''}
-                {center?.trailerNumber ? ` · прицеп ${center.trailerNumber}` : ''}
+              <div className="text-[11px] text-slate-400 font-mono">
+                {center?.trailerNumber ? `${center.trailerNumber}` : '—'}
+                {center?.brand ? ` · ${center.brand}` : ''}{center?.year ? ` · ${center.year} г.` : ''}
               </div>
             </div>
           </div>
