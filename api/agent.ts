@@ -116,11 +116,13 @@ async function handleGetVehicle(req: any, res: any) {
       id: foundVehicle.id,
       plate: foundVehicle.carNumber || foundVehicle.vehicleNumbers,
       trailer: foundVehicle.trailerNumber || foundVehicle.trailerMake || "",
+      trailerBrand: foundVehicle.trailerBrand || foundVehicle.trailerMake || "",
       brand: foundVehicle.brand || foundVehicle.brandModel || "",
       driver: foundVehicle.driverName || foundVehicle.driverShortNameRu,
+      dispatcher: foundVehicle.dispatcher || "",
       status: foundVehicle.status,
       currentLocation: foundVehicle.location || "",
-      direction: foundVehicle.direction || foundVehicle.dispatcher || "",
+      direction: foundVehicle.direction || "",
     };
     await logAction("getVehicle", { plate });
     return sendSuccess(res, data);
@@ -139,10 +141,14 @@ async function handleGetVehicleFleet(req: any, res: any) {
         fleet.push({
           id: key,
           plate: v.carNumber || v.vehicleNumbers || "",
+          trailer: v.trailerNumber || v.trailerMake || "",
+          trailerBrand: v.trailerBrand || v.trailerMake || "",
+          brand: v.brand || v.brandModel || "",
           driver: v.driverName || v.driverShortNameRu || "",
+          dispatcher: v.dispatcher || "",
           status: v.status || "",
           currentLocation: v.location || "",
-          direction: v.direction || v.dispatcher || "",
+          direction: v.direction || "",
         });
       }
     }
