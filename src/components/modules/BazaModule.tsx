@@ -433,6 +433,11 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
     };
     set(newRef, carData).then(() => {
        logHistory(newRef.key as string, "baza", "Запись создана", "", `Госномер: ${cNum}`, cNum);
+       // Auto-status: car now appears in Учёт выезда → it's on base.
+       if (couplingId) {
+         dbService.setVehicleStatus(couplingId, 'base');
+         set(ref(db, `vehicleFleet/${couplingId}/status`), 'base').catch(() => {});
+       }
        setFormData({ carNumber: '', driverName: '', dateArrival: '', dateLoading: '', dateRepairStart: '', dateRepairEnd: '', dateDeparture: '', comment: '' });
     });
   };
@@ -567,14 +572,22 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
           const db = getDatabase(getApp());
           const sourceList = [...cars, ...archiveCars];
           const targetCar = sourceList.find(c => c.id === id);
-          // Remove from whichever branch the record actually lives in.
-          // Учёт выезда journal = 'baza'; center mirror may also exist in 'vehicleFleet'.
-          // Remove from both (remove() is safe if the node is absent).
-          const rootBranch = targetCar?.isLegacyBaza ? "baza" : "vehicleFleet";
-          remove(ref(db, `${rootBranch}/${id}`));
+          // Remove from baza journal ONLY. The reference base (vehicleFleet) must NOT
+          // be modified — it's the single source of truth, edited only via CouplingDirectoryEditor.
           remove(ref(db, `baza/${id}`));
-          remove(ref(db, `vehicleFleet/${id}`));
-          
+
+          // Auto-status: if this car is no longer in Учёт выезда → it's in trip.
+          const cid = targetCar?.couplingId
+            || (fleetVehicles.find(c => (c.carNumber || c.vehicleNumbers || '').replace(/[^А-ЯA-Z0-9]/g, '') === (carNumber || '').replace(/[^А-ЯA-Z0-9]/g, '')) || {}).id;
+          if (cid) {
+            // check if any other baza record still references this car
+            const stillInBaza = cars.some(c => c.id !== id && (c.couplingId === cid || (c.carNumber || '').replace(/[^А-ЯA-Z0-9]/g, '') === (carNumber || '').replace(/[^А-ЯA-Z0-9]/g, '')));
+            if (!stillInBaza) {
+              dbService.setVehicleStatus(cid, 'trip');
+              set(ref(db, `vehicleFleet/${cid}/status`), 'trip').catch(() => {});
+            }
+          }
+
           const timestampStr = new Date().toLocaleDateString("ru-RU") + " " + new Date().toLocaleTimeString("ru-RU", {hour: '2-digit', minute:'2-digit'});
           push(ref(db, `global_history`), {
               date: timestampStr,
@@ -840,26 +853,15 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                          <div className="space-y-1">
                             <label className="text-xs font-semibold text-slate-600 block font-sans">Госномер авто *</label>
-                            <input 
-                              list="known-fleet-dl" 
-                              required 
-                              disabled={!canEditField('carNumber')} 
-                              value={formData.carNumber} 
-                              onChange={e => handleFormChange(e, 'carNumber')} 
-                              className="w-full bg-white/60 hover:bg-white/90 border border-slate-200/60 rounded-xl px-3 py-2 text-xs font-bold uppercase disabled:opacity-50 outline-none focus:border-[#3765F6] focus:bg-white transition-all duration-150" 
-                              placeholder="АВ 1234-5" 
-                            />
+                            <div className="text-xs font-bold uppercase py-2 px-1 text-slate-800">
+                              {formData.carNumber || <span className="text-slate-400 font-normal">выберите сцепку выше</span>}
+                            </div>
                          </div>
                          <div className="space-y-1">
                             <label className="text-xs font-semibold text-slate-600 block font-sans">ФИО Водителя</label>
-                            <input 
-                              disabled={!canEditField('driverName')} 
-                              list="baza-drivers-dl" 
-                              value={formData.driverName} 
-                              onChange={e => handleFormChange(e, 'driverName')} 
-                              className="w-full bg-white/60 hover:bg-white/90 border border-slate-200/60 rounded-xl px-3 py-2 text-xs font-semibold disabled:opacity-50 outline-none focus:border-[#3765F6] focus:bg-white transition-all duration-150" 
-                              placeholder="Опционально" 
-                            />
+                            <div className="text-xs font-semibold py-2 px-1 text-slate-800">
+                              {formData.driverName || <span className="text-slate-400 font-normal">—</span>}
+                            </div>
                          </div>
                          <div className="space-y-1">
                             <label className="text-xs font-semibold text-slate-600 block font-sans">Прибыл на базу</label>
