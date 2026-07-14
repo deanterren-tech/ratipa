@@ -1,4 +1,4 @@
-import { initializeApp, getApps } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import {
   getDatabase,
@@ -1715,6 +1715,18 @@ export const dbService = {
   },
 
   // VEHICLE DRIVER DATA
+  getVehicleDriverBlocks: (callback: (data: any[]) => void) => {
+    const db = getDatabase(getApp());
+    if (useFirebase) {
+      return onValue(ref(db, 'vehicle_driver_data'), (snap) => {
+        const val = snap.val() || {};
+        callback(Object.keys(val).map((k) => ({ id: k, ...val[k] })));
+      });
+    } else {
+      callback(getLocalStorageData<any[]>('ratipa_vehicle_driver_data', []));
+      return () => {};
+    }
+  },
   getVehicleDriverData: (callback: (data: any[]) => void) => {
     return sharedGetVehicleDriverData(callback);
   },
@@ -1821,6 +1833,7 @@ export const dbService = {
     const trailer = rec.trailerMake || "";
     const disp = rec.dispatcher || rec.dispatcherName || "";
     const phoneNum = rec.phone || rec.driverPhone || "";
+    const couplingId = rec.couplingId || null;
     const normalized = {
       ...rec,
       carNumber: carNum,
@@ -1837,11 +1850,21 @@ export const dbService = {
     let mainPromise: Promise<void>;
     
     if (useFirebase) {
-      mainPromise = set(ref(database, `vehicleFleet/${rec.id}`), normalized)
+      // Write block to module's own registry (independent of central fleet)
+      mainPromise = set(ref(database, `vehicle_driver_data/${rec.id}`), normalized)
         .then(() => {
+          // Sync brand/trailer ONLY to central fleet (soft link) if coupled
+          if (couplingId) {
+            const sync: any = {};
+            if (brand) sync.brand = brand;
+            if (trailer) sync.trailerBrand = trailer;
+            if (Object.keys(sync).length) {
+              update(ref(database, `vehicleFleet/${couplingId}`), sync).catch(() => {});
+            }
+          }
           // Save brand to master-nodes under brands / vehicleBrands / trailerBrands
           if (brand) {
-            const brandKey = brand.trim().toUpperCase().replace(/[^A-Z0-9_\-]/g, '_');
+            const brandKey = brand.trim().toUpperCase().replace(/[^A-Z0-9_\\-]/g, '_');
             if (brandKey) {
               set(ref(database, `brands/vehicleBrands/${brandKey}`), brand.trim()).catch(() => {});
               set(ref(database, `vehicleBrands/${brandKey}`), brand.trim()).catch(() => {});
@@ -1849,7 +1872,7 @@ export const dbService = {
             }
           }
           if (trailer) {
-            const trailerKey = trailer.trim().toUpperCase().replace(/[^A-Z0-9_\-]/g, '_');
+            const trailerKey = trailer.trim().toUpperCase().replace(/[^A-Z0-9_\\-]/g, '_');
             if (trailerKey) {
               set(ref(database, `brands/trailerBrands/${trailerKey}`), trailer.trim()).catch(() => {});
               set(ref(database, `trailerBrands/${trailerKey}`), trailer.trim()).catch(() => {});
@@ -1857,11 +1880,11 @@ export const dbService = {
           }
         });
     } else {
-      const local = getLocalStorageData<any[]>("ratipa_vehicle_fleet", []);
+      const local = getLocalStorageData<any[]>("ratipa_vehicle_driver_data", []);
       const idx = local.findIndex((x) => x.id === rec.id);
       if (idx >= 0) local[idx] = normalized;
       else local.push(normalized);
-      setLocalStorageData("ratipa_vehicle_fleet", local);
+      setLocalStorageData("ratipa_vehicle_driver_data", local);
       mainPromise = Promise.resolve();
     }
     
@@ -1879,16 +1902,13 @@ export const dbService = {
 
   deleteVehicleDriverRecord: (id: string, user: string, role: string) => {
     if (useFirebase) {
-      remove(ref(database, `vehicleFleet/${id}`)).catch((err) =>
-        console.warn(err),
-      );
       remove(ref(database, `vehicle_driver_data/${id}`)).catch((err) =>
         console.warn(err),
       );
     } else {
-      const local = getLocalStorageData<any[]>("ratipa_vehicle_fleet", []);
+      const local = getLocalStorageData<any[]>("ratipa_vehicle_driver_data", []);
       const filtered = local.filter((x) => x.id !== id);
-      setLocalStorageData("ratipa_vehicle_fleet", filtered);
+      setLocalStorageData("ratipa_vehicle_driver_data", filtered);
     }
     dbService.logAction(
       user,
@@ -3026,6 +3046,26 @@ export const dbService = {
 
   getVehicleStatuses: (callback: (data: Record<string, 'base' | 'trip'>) => void) => {
     return sharedGetVehicleStatuses(callback);
+  },
+
+  bulkUpdateCouplings: (ids: string[], patch: Record<string, any>): Promise<void> => {
+    if (useFirebase) {
+      const updates: Record<string, any> = {};
+      for (const id of ids) {
+        for (const [k, v] of Object.entries(patch)) {
+          updates[`vehicleFleet/${id}/${k}`] = v;
+        }
+      }
+      return update(ref(database), updates).catch((err) => console.warn("bulkUpdateCouplings failed:", err));
+    } else {
+      // localStorage fallback: update each local record
+      const all = getLocalStorageData<any[]>("ratipa_vehicle_fleet", []);
+      const set2 = new Set(ids);
+      const updated = all.map((c) => (set2.has(c.id) ? { ...c, ...patch } : c));
+      setLocalStorageData("ratipa_vehicle_fleet", updated);
+      window.dispatchEvent(new Event("ratipa_vehicle_fleet_changed"));
+      return Promise.resolve();
+    }
   },
 
   setVehicleStatus: (id: string, status: 'base' | 'trip') => {
