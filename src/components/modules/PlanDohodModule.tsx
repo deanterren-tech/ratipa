@@ -1050,8 +1050,6 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     undefined,
   );
   const [plReferenceCurrency, setPlReferenceCurrency] = useState("EUR");
-  const [plAiInput, setPlAiInput] = useState("");
-  const [plAiFeedback, setPlAiFeedback] = useState("");
 
   const getDispatcherColor = (disp: string) => {
     const colorKey = dispatchersColors[disp];
@@ -1346,108 +1344,12 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setModalTab("main");
   };
 
-  const [aiRouteInput, setAiRouteInput] = useState<string>("");
-  const [aiRouteFeedback, setAiRouteFeedback] = useState<string>("");
-  const [isAiProcessing, setIsAiProcessing] = useState(false);
 
   const parseSmartNumber = (val: string | undefined): number => {
     if (!val) return 0;
     return parseFloat(val.replace(/\s/g, "").replace(",", ".")) || 0;
   };
 
-  const processAiRoute = () => {
-    setIsAiProcessing(true);
-    const raw = aiRouteInput.trim();
-    if (!raw) {
-      setAiRouteFeedback("Вставьте текст маршрута...");
-      setIsAiProcessing(false);
-      return;
-    }
-
-    const chunks = raw
-      .split(/\n|;/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const parsedRows = chunks
-      .map((line) => {
-        let from = "";
-        let to = "";
-        const routePatterns = [
-          /(?:из|от)\s+([а-яёa-z\s.-]+?)\s+(?:в|на|до|—|->|→|-)\s+([а-яёa-z\s.-]+)/i,
-          /^([а-яёa-z\s.-]+?)\s*(?:—|->|→|-)\s*([а-яёa-z\s.-]+)/i,
-          /^([а-яёa-z\s.-]+?)\s+(?:в|на|до)\s+([а-яёa-z\s.-]+)/i,
-        ];
-        for (const pattern of routePatterns) {
-          const match = line.match(pattern);
-          if (match) {
-            from = match[1]
-              .replace(
-                /\b(ставка|фрахт|цена|паром|переправа|коэф|коэффициент|км|евро|eur|usd|долл|руб).*/i,
-                "",
-              )
-              .replace(/[,:;]+$/g, "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .replace(/^./, (ch) => ch.toUpperCase());
-            to = match[2]
-              .replace(
-                /\b(ставка|фрахт|цена|паром|переправа|коэф|коэффициент|км|евро|eur|usd|долл|руб).*/i,
-                "",
-              )
-              .replace(/[,:;]+$/g, "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .replace(/^./, (ch) => ch.toUpperCase());
-            break;
-          }
-        }
-        const rateMatch = line.match(
-          /(?:ставка|фрахт|цена)?\D*?(\d[\d\s.,]*)\s*(?:€|евро|eur)\b/i,
-        );
-        const kmMatch = line.match(/(\d[\d\s.,]*)\s*(?:км|km)\b/i);
-        const ferryMatch = line.match(/(?:паром|переправа)\D*?(\d[\d\s.,]*)/i);
-        const coeffMatch = line.match(
-          /(?:коэф|коэффициент)\D*?(\d+(?:[.,]\d+)?)/i,
-        );
-
-        return {
-          from,
-          to,
-          km: kmMatch ? parseSmartNumber(kmMatch[1]) : 0,
-          rate: rateMatch ? parseSmartNumber(rateMatch[1]) : 0,
-          ferry: ferryMatch ? parseSmartNumber(ferryMatch[1]) : 0,
-          coeff: coeffMatch
-            ? parseSmartNumber(coeffMatch[1])
-            : directions[direction] || 0,
-          referenceRate: "",
-        };
-      })
-      .filter((r) => r.from !== "" || r.to !== "" || r.km > 0 || r.rate > 0);
-
-    if (parsedRows.length === 0) {
-      setAiRouteFeedback(
-        "Не удалось распознать маршрут. Попробуйте формат: Минск — Стамбул, ставка 4300 евро, 2450 км.",
-      );
-      return;
-    }
-
-    setLegs((prev) => {
-      // If only one blank leg exists, replace it
-      if (
-        prev.length === 1 &&
-        !prev[0].from &&
-        !prev[0].to &&
-        !prev[0].rate &&
-        !prev[0].km
-      ) {
-        return parsedRows;
-      }
-      return [...prev, ...parsedRows];
-    });
-    setAiRouteInput("");
-    setAiRouteFeedback(`Добавлено плеч: ${parsedRows.length}`);
-    setTimeout(() => setAiRouteFeedback(""), 5000);
-  };
 
   const loadTripToForm = useCallback((trip: TripPlan) => {
     setEditingTripId(trip.id);
@@ -1560,27 +1462,6 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     return parsedRows;
   };
 
-  const processPlAiRoute = async () => {
-    if (!plAiInput.trim()) return;
-    setPlAiFeedback("");
-    try {
-      const parsedRows = parseAiRouteClient(
-        plAiInput,
-        Object.keys(directions)[0] || "",
-        directions,
-      );
-      if (parsedRows.length === 0) {
-        setPlAiFeedback("Не удалось распознать маршрут.");
-        return;
-      }
-      setPlLegs(parsedRows);
-      setPlAiInput("");
-      setPlAiFeedback(`Успешно распознано ${parsedRows.length} плечей`);
-      setTimeout(() => setPlAiFeedback(""), 3000);
-    } catch (err) {
-      setPlAiFeedback("Ошибка распознавания");
-    }
-  };
 
   const calculatePlTotals = () => {
     const fin = calculateTripFinances(plLegs, "", "", Number(plExtraExpense), Number(plFerryCost), 0);
@@ -1943,41 +1824,6 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                     </div>
                   </div>
 
-                  {/* AI Assistant */}
-                  <div className="bg-white/50 backdrop-blur-md rounded-3xl p-6 border border-slate-200/50 flex flex-col">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2 mb-4">
-                      <Bot className="w-4 h-4 text-slate-400"/>
-                      AI-Ассистент маршрута
-                    </h3>
-                    <p className="text-[11px] text-slate-400 mb-3">Вставьте текст (например: Минск — Стамбул, 4300 евро, 2450 км, паром 300)</p>
-                    <div className="flex gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200/85 focus-within:bg-white focus-within:border-slate-400 focus-within:ring-1 focus-within:ring-slate-400 transition-all h-11 items-center">
-                      <input 
-                        value={aiRouteInput}
-                        onChange={(e) => setAiRouteInput(e.target.value)}
-                        placeholder="Вставить текст для автоматического распознавания..."
-                        onKeyDown={(e) => {
-                          if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                            e.preventDefault();
-                            processAiRoute();
-                          }
-                        }}
-                        className="flex-1 bg-transparent px-3 text-xs font-medium outline-none placeholder-slate-400"
-                      />
-                      <button 
-                        type="button"
-                        onClick={processAiRoute}
-                        disabled={isAiProcessing}
-                        className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition ${isAiProcessing ? "bg-slate-300 text-slate-500" : "bg-slate-900 text-white hover:bg-slate-800"}`}
-                      >
-                        {isAiProcessing ? "..." : "Распознать"}
-                      </button>
-                    </div>
-                    {aiRouteFeedback && (
-                      <span className="text-xs font-medium text-blue-600 mt-2 block">
-                        {aiRouteFeedback}
-                      </span>
-                    )}
-                  </div>
                 </div>
 
                 {/* Плечи маршрута */}
@@ -2687,39 +2533,6 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                     </button>
                   </div>
 
-                  <div className="p-4 bg-purple-50/40 border border-purple-100/60 rounded-2xl flex flex-col gap-3">
-                    <div className="flex items-center gap-2">
-                      <Bot className="w-4 h-4 text-purple-600" />
-                      <h4 className="text-[11px] font-semibold uppercase tracking-wider text-purple-900 font-sans">
-                        AI-Ассистент Маршрута
-                      </h4>
-                    </div>
-                    <div className="flex gap-2">
-                      <textarea
-                        value={plAiInput}
-                        onChange={(e) => setPlAiInput(e.target.value)}
-                        placeholder="Вставить текст груза из чата..."
-                        className="flex-1 bg-white border border-purple-100 text-slate-800 rounded-xl px-3.5 py-2 text-xs font-medium outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400 transition-all min-h-[44px] resize-y placeholder:text-slate-400 font-sans"
-                        onKeyDown={(e) => {
-                          if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                            e.preventDefault();
-                            processPlAiRoute();
-                          }
-                        }}
-                      />
-                      <button
-                        onClick={processPlAiRoute}
-                        className="px-4 bg-purple-600 text-white hover:bg-purple-700 rounded-xl text-xs font-semibold tracking-wide transition flex flex-col items-center justify-center gap-1 min-w-[100px] border border-purple-600 cursor-pointer shadow-sm shadow-purple-600/10"
-                      >
-                        AI Parse
-                      </button>
-                    </div>
-                    {plAiFeedback && (
-                      <div className="text-[11px] font-semibold text-emerald-600 mt-0.5">
-                        {plAiFeedback}
-                      </div>
-                    )}
-                  </div>
 
                   <div className="hidden lg:block overflow-x-auto pb-2">
                     <table className="w-full text-left border-collapse min-w-[600px]">

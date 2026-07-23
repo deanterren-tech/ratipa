@@ -318,9 +318,6 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   const [rate, setRate] = useState('');
   
   // AI assistant state
-  const [aiText, setAiText] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState('');
 
   // Save / CRUD feedback states
   const [saveError, setSaveError] = useState('');
@@ -589,8 +586,6 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     setPassportIssuedBy('');
     setPhones([{ id: "phone_1", number: '', isPrimary: true }]);
     setDispatcher('');
-    setAiText('');
-    setAiError('');
     setSaveError('');
     setIsSaving(false);
     setModalOpen(true);
@@ -625,8 +620,6 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     setTrailerNumber((rec as any).trailerNumber || '');
     setDriverPhone((rec as any).driverPhone || '');
     setRate((rec as any).rate != null ? String((rec as any).rate) : '');
-    setAiText('');
-    setAiError('');
     setSaveError('');
     setIsSaving(false);
     setModalOpen(true);
@@ -709,185 +702,6 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     }
   };
 
-  const handleAiParse = async () => {
-    if (!aiText.trim()) {
-      setAiError('Введите текст для распознавания');
-      return;
-    }
-
-    setAiLoading(true);
-    setAiError('');
-
-    try {
-      const res = await fetch('/api/parse-driver-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: aiText })
-      });
-
-      if (!res.ok) {
-        let serverError = 'Ошибка связи с сервером парсинга';
-        try {
-          const errData = await res.json();
-          if (errData && errData.error) {
-            serverError = errData.error;
-          }
-        } catch (_) {}
-        throw new Error(serverError);
-      }
-
-      const data = await res.json();
-      if (data.results) {
-        const r = data.results;
-        const warnings: string[] = [];
-
-        // 1. Vehicle Numbers & Trailer Plates Validation
-        if (r.vehicleNumbers) {
-          const parts = r.vehicleNumbers.split('/');
-          const validParts = parts
-            .map((p: string) => p.trim())
-            .filter((p: string) => {
-              const cleaned = p.toUpperCase().replace(/\s+/g, '');
-              const isValid = /^[A-Z0-9А-ЯЁ-]{4,15}$/i.test(cleaned);
-              return isValid;
-            });
-
-          if (validParts.length > 0) {
-            setVehicleNumbers(validParts.join(' / '));
-            if (validParts.length < parts.length) {
-              warnings.push('Некоторые некорректные госномера были отфильтрованы.');
-            }
-          } else {
-            setVehicleNumbers('');
-            warnings.push('Не найден валидный формат госномера авто/прицепа.');
-          }
-        }
-
-        // 2. Russian Name Validation (must be Cyrillic only)
-        const rawDriverNameRu = r.driverNameRu || r.driverName || '';
-        if (rawDriverNameRu) {
-          const trimmed = rawDriverNameRu.trim();
-          if (/^[А-ЯЁа-яё\s.-]+$/i.test(trimmed)) {
-            setDriverNameRu(trimmed);
-          } else {
-            setDriverNameRu('');
-            warnings.push('ФИО на русском должно содержать только кириллицу.');
-          }
-        }
-
-        // 3. Latin Name Validation (must be Latin only)
-        if (r.driverNameLat) {
-          const trimmed = r.driverNameLat.trim();
-          if (/^[A-Z\s.-]+$/i.test(trimmed)) {
-            setDriverNameLat(trimmed);
-          } else {
-            setDriverNameLat('');
-            warnings.push('ФИО на латинице должно содержать только латинские буквы.');
-          }
-        }
-
-        // 4. Phone Numbers Validation & Deduplication
-        const parsedPhones: PhoneNumber[] = [];
-        if (r.phones && Array.isArray(r.phones)) {
-          r.phones.forEach((p: any, idx: number) => {
-            const rawNum = p.number || p.phone || '';
-            const cleanedDigits = rawNum.replace(/[\s().+-]/g, '');
-            if (cleanedDigits.length >= 7 && cleanedDigits.length <= 15 && /^\d+$/.test(cleanedDigits)) {
-              parsedPhones.push({
-                id: `phone_ai_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 4)}`,
-                number: rawNum.trim(),
-                isPrimary: p.isPrimary !== undefined ? p.isPrimary : idx === 0
-              });
-            }
-          });
-        } else if (r.phone) {
-          const rawNum = r.phone;
-          const cleanedDigits = rawNum.replace(/[\s().+-]/g, '');
-          if (cleanedDigits.length >= 7 && cleanedDigits.length <= 15 && /^\d+$/.test(cleanedDigits)) {
-            parsedPhones.push({
-              id: `phone_ai_${Date.now()}`,
-              number: rawNum.trim(),
-              isPrimary: true
-            });
-          }
-        }
-
-        if (parsedPhones.length > 0) {
-          if (!parsedPhones.some(p => p.isPrimary)) {
-            parsedPhones[0].isPrimary = true;
-          }
-          setPhones(parsedPhones);
-        } else {
-          setPhones([{ id: `phone_1`, number: '', isPrimary: true }]);
-          warnings.push('Не удалось распознать корректные телефонные номера.');
-        }
-
-        // 5. Basic dates validation (BirthDate, passport start/end)
-        const dateRegex = /^\d{2}\.\d{2}\.\d{4}$/;
-        if (r.birthDate && dateRegex.test(r.birthDate.trim())) {
-          setBirthDate(r.birthDate.trim());
-        } else if (r.birthDate) {
-          setBirthDate('');
-          warnings.push('Неверный формат даты рождения (ожидается ДД.ММ.ГГГГ).');
-        }
-
-        if (r.passportStart && dateRegex.test(r.passportStart.trim())) {
-          setPassportStart(r.passportStart.trim());
-        } else if (r.passportStart) {
-          setPassportStart('');
-          warnings.push('Неверный формат даты выдачи паспорта (ожидается ДД.ММ.ГГГГ).');
-        }
-
-        if (r.passportEnd && dateRegex.test(r.passportEnd.trim())) {
-          setPassportEnd(r.passportEnd.trim());
-        } else if (r.passportEnd) {
-          setPassportEnd('');
-          warnings.push('Неверный формат срока действия паспорта (ожидается ДД.ММ.ГГГГ).');
-        }
-
-        // 6. Other passport fields (simply assign if non-empty, otherwise clear or keep empty to avoid bad guesses)
-        if (r.passportNumber) {
-          setPassportNumber(r.passportNumber.toUpperCase().replace(/\s+/g, ''));
-        }
-        if (r.personalId) {
-          const pid = r.personalId.toUpperCase().replace(/\s+/g, '');
-          if (pid.length === 14) {
-            setPersonalId(pid);
-          } else {
-            setPersonalId('');
-            warnings.push('Идентификационный номер должен состоять ровно из 14 символов.');
-          }
-        }
-        if (r.passportIssuedBy) setPassportIssuedBy(r.passportIssuedBy);
-        if (r.dispatcher) setDispatcher(r.dispatcher);
-
-        if (r.brandModel) {
-          setFormBrandModel(r.brandModel.toUpperCase().trim());
-        } else {
-          setFormBrandModel('');
-        }
-        if (r.trailerMake) {
-          setFormTrailerMake(r.trailerMake.toUpperCase().trim());
-        } else {
-          setFormTrailerMake('');
-        }
-
-        // Display results or warnings to the user
-        if (warnings.length > 0) {
-          setAiError(`Данные успешно распознаны частично:\n${warnings.join('\n')}`);
-        } else {
-          setAiError('');
-        }
-      } else {
-        setAiError('Не удалось корректно распознать данные. Попробуйте еще раз.');
-      }
-    } catch (err: unknown) {
-      console.error(err);
-      setAiError(err.message || 'Ошибка распознавания');
-    } finally {
-      setAiLoading(false);
-    }
-  };
 
   const resolveBrandsForRecord = (rec: VehicleDriverRecord | { vehicleNumbers: string; brandsRu?: string; brandsLat?: string }) => {
     if (!rec.vehicleNumbers) return { brandModel: '', trailerMake: '' };
@@ -1398,40 +1212,6 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
               </button>
             </div>
 
-            {/* AI Input Assistant block */}
-            <div className="mx-6 my-4 p-4.5 bg-[#3765F6]/5 border border-[#3765F6]/10 rounded-2xl space-y-3 shadow-2xs">
-              <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#3765F6] uppercase tracking-widest font-sans">
-                <Sparkles className="w-4 h-4 text-[#3765F6]" />
-                <span>ИИ ПОМОЩНИК (ПАРСЕР)</span>
-              </div>
-              
-              <div className="text-[10px] text-slate-500 font-medium leading-relaxed font-sans">
-                Вы можете вставить сырой скопированный текст (из мессенджера или файла), и алгоритм автоматически разложит все данные по нужным графам!
-              </div>
-
-              <div className="flex gap-2">
-                <textarea
-                  value={aiText}
-                  onChange={e => setAiText(e.target.value)}
-                  placeholder="Вставьте сюда любой текст с данными..."
-                  className="flex-1 bg-white border border-slate-200/80 rounded-xl px-4 py-2.5 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none focus:border-[#3765F6] focus:ring-1 focus:ring-[#3765F6]/20 transition resize-none h-[58px] font-mono shadow-2xs"
-                />
-                <button
-                  type="button"
-                  onClick={handleAiParse}
-                  disabled={aiLoading}
-                  className="px-4 bg-[#3765F6] hover:bg-[#2555E5] disabled:bg-slate-100 text-white disabled:text-slate-400 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 border border-[#3765F6]/10 shadow-xs shrink-0 cursor-pointer active:scale-95"
-                >
-                  {aiLoading ? 'Анализ...' : 'Распознать данные'}
-                </button>
-              </div>
-
-              {aiError && (
-                <div className="text-rose-600 text-[10px] font-bold font-mono pl-1 whitespace-pre-line leading-relaxed">
-                  ⚠ {aiError}
-                </div>
-              )}
-            </div>
 
             {/* Form Fields */}
             <div className="p-6 overflow-y-auto max-h-[50vh] space-y-4">

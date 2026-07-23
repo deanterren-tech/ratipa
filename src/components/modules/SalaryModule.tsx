@@ -3,7 +3,7 @@ import {UserProfile, SalaryLog, CarRateGroup, AppSettings, Driver, Vehicle} from
 import { dbService, database, onValue } from '../../api'
 import {pdService} from '../../api'
 import { ref } from 'firebase/database'
-import {Wallet, Calculator, Sparkles, Send, Trash2, Edit, Copy} from 'lucide-react'
+import {Wallet, Calculator, Send, Trash2, Edit, Copy} from 'lucide-react'
 import CalendarDaysCalculator from './CalendarDaysCalculator';
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
@@ -17,16 +17,6 @@ interface SalaryModuleProps {
   user: UserProfile;
 }
 
-const salarySteps = [
-    { field: 'carNumber', label: 'Введите **ГОС. НОМЕР** автомобиля:', isNumeric: false },
-    { field: 'ratePerKm', label: 'Укажите **СТАВКУ** за км (€) или оставьте стандартную:', isNumeric: true },
-    { field: 'totalKm', label: 'Какой **ОБЩИЙ ПРОБЕГ** по рейсу (км)?', isNumeric: true },
-    { field: 'tripMark', label: 'Пометка рейса (Напишите: **Турция** или **Китай**):', isSelect: true },
-    { field: 'idleDays', label: 'Сколько дней **ПРОСТОЯ**?', isNumeric: true },
-    { field: 'totalDays', label: 'Сколько **ВСЕГО ДНЕЙ** в рейсе?', isNumeric: true },
-    { field: 'bonus', label: 'Какая **ПРЕМИЯ** за рейс (€)? Если премии нет, введите 0.', isNumeric: true },
-    { field: 'driverName', label: 'Укажите **ФИО** Водителя:', isNumeric: false }
-];
 
 export default function SalaryModule({ user }: SalaryModuleProps) {
   const { showConfirm } = useDialog();
@@ -47,10 +37,6 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const [availableDispatchers, setAvailableDispatchers] = useState<string[]>([]);
   const [isMigrating, setIsMigrating] = useState(false);
 
-  // AI Assistant State
-  const [aiStep, setAiStep] = useState(0);
-  const [aiInput, setAiInput] = useState('');
-  const [aiOutput, setAiOutput] = useState<string>('Готов помочь рассчитать зарплату водителя по шагам.');
 
   // Form State
   const [carNumber, setCarNumber] = useState('');
@@ -451,161 +437,8 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
     dbService.saveSalary(newLog, user.name, user.role);
     clearForm();
-    resetAi();
   };
 
-  const renderAiLabel = (text: string) => {
-      return <span dangerouslySetInnerHTML={{ __html: text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />;
-  };
-
-  const resetAi = () => {
-    setAiStep(0);
-    setAiInput('');
-    setAiOutput('Готов помочь рассчитать зарплату водителя по шагам.');
-  };
-
-  const openEditModal = (log: SalaryLog) => {
-    setEditingSalaryId(log.id);
-    setEditingSalaryData(log);
-  };
-
-  const closeEditModal = () => {
-    setEditingSalaryId(null);
-    setEditingSalaryData({});
-  };
-
-  const copyHistoryToForm = (log: SalaryLog) => {
-    setCarNumber(log.car || '');
-    setRatePerKm(log.rate || 0);
-    setTotalKm(log.km || '');
-    setTripMark(log.mark || 'Турция');
-    setIdleDays(log.idleDays || 0);
-    setTotalDays(log.totalDays || 1);
-    setBonus(log.bonus || 0);
-    setComment(log.comment || '');
-    setDriverName(log.driver || '');
-    setCarId(log.carId || '');
-    setDriverId(log.driverId || '');
-
-    if (log.driverId && log.driver) {
-      setAutofillStatus({
-        type: 'success',
-        message: `Машина и водитель успешно сопоставлены: ${log.driver}`
-      });
-    } else if (log.carId) {
-      setAutofillStatus({
-        type: 'warning',
-        message: 'Для машины не назначен водитель'
-      });
-    } else {
-      setAutofillStatus({ type: 'none', message: '' });
-    }
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const saveEditModal = async () => {
-    if (!editingSalaryId) return;
-    
-    const trimmedDriver = (editingSalaryData.driver || '').trim();
-    if (trimmedDriver && trimmedDriver !== 'НЕ УКАЗАНО') {
-      const exists = drivers.some(d => 
-        String(d.name || '').trim().toLowerCase() === trimmedDriver.toLowerCase() ||
-        (d.shortNameRu && d.shortNameRu.trim().toLowerCase() === trimmedDriver.toLowerCase())
-      );
-      if (!exists) {
-        const confirmAdd = await showConfirm(`Водитель "${trimmedDriver}" отсутствует в справочнике. Занести его в справочник?`);
-        if (confirmAdd) {
-          const parts = trimmedDriver.split(/\s+/);
-          const last = parts[0] || '';
-          const first = parts[1] || '';
-          const middle = parts[2] || '';
-          const computedShort = formatDriverShortName(last, first, middle);
-
-          const newDriver: Driver = {
-            id: "dr_" + Date.now(),
-            name: trimmedDriver,
-            lastNameRu: last,
-            firstNameRu: first,
-            middleNameRu: middle,
-            shortNameRu: computedShort || trimmedDriver,
-          };
-          dbService.saveDriver(newDriver, user.name, user.role);
-          toast(`Водитель "${trimmedDriver}" добавлен в справочник!`, 'success');
-        }
-      }
-    }
-
-    // Recalculate totals
-    const kmMoney = (Number(editingSalaryData.km) || 0) * (editingSalaryData.rate || 0);
-    const idleMoney = (editingSalaryData.idleDays || 0) * currentIdleRate;
-    const daysMoney = (editingSalaryData.totalDays || 1) * currentPerDiem; // Using default for now as fallback
-    const totalSalary = kmMoney + idleMoney + daysMoney + (Number(editingSalaryData.bonus) || 0);
-    const salaryPerDay = totalSalary / Math.max((editingSalaryData.totalDays || 1), 1);
-
-    const updates = {
-      ...editingSalaryData,
-      kmMoney,
-      idleMoney,
-      daysMoney,
-      totalSalary,
-      salaryPerDay
-    };
-    
-    dbService.updateSalary(editingSalaryId, updates, user.name, user.role);
-    closeEditModal();
-  };
-
-  const startAi = () => {
-    setAiStep(1);
-    setAiOutput(salarySteps[0].label);
-  };
-
-  const handleAiSubmit = () => {
-    if (!aiInput.trim()) return;
-    const rawVal = aiInput.trim();
-    
-    if (aiStep > 0 && aiStep <= salarySteps.length) {
-        const step = salarySteps[aiStep - 1];
-        
-        if (step.field === 'carNumber') handleCarNumberChange(rawVal);
-        if (step.field === 'ratePerKm') {
-            const num = parseFloat(rawVal.replace(/[^0-9.]/g, ''));
-            if (!isNaN(num)) setRatePerKm(num);
-        }
-        if (step.field === 'totalKm') {
-            const num = parseFloat(rawVal.replace(/[^0-9.]/g, ''));
-            if (!isNaN(num)) setTotalKm(num);
-        }
-        if (step.field === 'tripMark') {
-            setTripMark(rawVal.toLowerCase().includes('кит') ? 'Китай' : 'Турция');
-        }
-        if (step.field === 'idleDays') {
-            const num = parseFloat(rawVal.replace(/[^0-9.]/g, ''));
-            if (!isNaN(num)) setIdleDays(num);
-        }
-        if (step.field === 'totalDays') {
-            const num = parseFloat(rawVal.replace(/[^0-9.]/g, ''));
-            if (!isNaN(num)) setTotalDays(Math.max(num, 1));
-        }
-        if (step.field === 'bonus') {
-            const num = parseFloat(rawVal.replace(/[^0-9.]/g, ''));
-            if (!isNaN(num)) setBonus(num);
-        }
-        if (step.field === 'driverName') setDriverName(rawVal);
-
-        const nextStep = aiStep + 1;
-        if (nextStep > salarySteps.length) {
-            setAiStep(0);
-            setAiOutput('**Все поля успешно заполнены!** Калькулятор обновил цифры. Нажмите кнопку **«Фиксировать выплату»** справа.');
-        } else {
-            setAiStep(nextStep);
-            setAiOutput(salarySteps[nextStep - 1].label);
-        }
-    }
-    
-    setAiInput('');
-  };
 
   const filteredHistory = logs.filter(rec => {
         const haystack = `${rec.datetime || ''} ${rec.logist || ''} ${rec.driver || ''} ${rec.car || ''} ${rec.mark || ''} ${rec.km || ''} ${rec.rate || ''} ${rec.bonus || ''} ${rec.totalSalary || ''}`.toLowerCase();
@@ -658,60 +491,6 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
         <div className="flex flex-col gap-6">
 
-                {/* AI Assistant Panel */}
-                <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-6 lg:p-8 text-slate-800 border border-slate-200/50 shadow-xl shadow-slate-900/5 relative overflow-hidden flex flex-col h-auto min-h-[200px]">
-                    <div className="absolute top-0 right-0 p-4 opacity-[0.04] pointer-events-none">
-                      <Sparkles className="h-24 w-24 text-[#3765F6]" />
-                    </div>
-                    
-                    <div className="flex justify-between items-start mb-6 z-10 relative">
-                        <div>
-                            <div className="flex items-center gap-2 mb-3">
-                               <div className="px-2.5 py-1 rounded-full bg-[#3765F6]/10 border border-[#3765F6]/25 text-[#3765F6] text-[10px] font-bold uppercase tracking-wider shadow-3xs flex items-center gap-1.5">
-                                 <Sparkles className="h-3 w-3" />
-                                 ИИ ПОМОЩНИК
-                               </div>
-                            </div>
-                            <h3 className="text-xl font-bold text-slate-900 tracking-tight">Пошаговый расчет выплаты</h3>
-                            <p className="text-xs font-medium text-slate-500 mt-1 max-w-xl">Помощник задаст вопросы по рейсу и заполнит форму ниже. Для тарифов используйте вкладку «Настройки».</p>
-                        </div>
-                        {aiStep > 0 && (
-                             <button onClick={resetAi} className="text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-slate-600 transition cursor-pointer">Сброс</button>
-                        )}
-                    </div>
-                    
-                    <div className="flex-1 flex flex-col gap-4 z-10 relative mt-auto">
-                        <div className="bg-white/45 backdrop-blur-xs rounded-2xl p-5 border border-slate-200/40 text-slate-700 text-sm font-medium leading-relaxed shadow-3xs">
-                             {aiStep > 0 && <div className="text-[#3765F6] text-[10px] font-bold uppercase tracking-wider mb-2">Шаг {aiStep} из {salarySteps.length}</div>}
-                             {renderAiLabel(aiOutput)}
-                             {aiStep === 0 && (
-                                 <div className="mt-4">
-                                     <button onClick={startAi} className="bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold px-5 py-2.5 rounded-xl text-xs uppercase tracking-wider shadow-sm hover:shadow-md hover:shadow-blue-500/10 active:scale-95 transition-all duration-150 cursor-pointer">
-                                       Начать расчет рейса
-                                     </button>
-                                 </div>
-                             )}
-                        </div>
-
-                        <div className="flex gap-2">
-                            <input 
-                                type="text" 
-                                value={aiInput} 
-                                onChange={e => setAiInput(e.target.value)} 
-                                placeholder={aiStep > 0 ? "Введите ответ помощнику..." : "Начните расчет..."}
-                                disabled={aiStep === 0}
-                                onKeyDown={e => e.key === 'Enter' && handleAiSubmit()}
-                                className="flex-1 bg-white/45 border border-slate-200/50 text-slate-800 text-xs font-semibold px-4 py-3 rounded-2xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition disabled:opacity-50 placeholder:text-slate-400/80 shadow-inner focus:bg-white" 
-                            />
-                            <button 
-                                onClick={handleAiSubmit} 
-                                disabled={aiStep === 0}
-                                className="bg-[#3765F6] hover:bg-[#2555E5] text-white shadow-sm hover:shadow-md hover:shadow-blue-500/10 font-semibold px-6 rounded-2xl flex items-center justify-center transition active:scale-95 disabled:opacity-50 cursor-pointer">
-                                <Send className="h-4 w-4" />
-                            </button>
-                        </div>
-                    </div>
-                </div>
 
                 {/* Calculator Form */}
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">

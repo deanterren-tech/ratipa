@@ -7,7 +7,6 @@ import {
   Leg,
   FerryTemplate,
   DistancePreset,
-  ChatMessage,
   RouteTemplate,
   DirectionPreset,
   AppSettings,
@@ -903,8 +902,6 @@ export default function DohodModule({ user }: DohodModuleProps) {
   const [ferries, setFerries] = useState<FerryTemplate[]>([]);
   const [distances, setDistances] = useState<DistancePreset[]>([]);
   const [directions, setDirections] = useState<DirectionPreset[]>([]);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState("");
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
 
   // Form State
@@ -1074,7 +1071,6 @@ export default function DohodModule({ user }: DohodModuleProps) {
         setDirections([]);
       }
     });
-    const subChat = dbService.getChatMessages("ai_dispatcher", setChatMessages);
     const subPdSettings = pdService.subscribePlanDohodSettings(setPdSettings);
 
     // Fetch live NBRB rates directly with fallbacks
@@ -1999,117 +1995,6 @@ export default function DohodModule({ user }: DohodModuleProps) {
     return parsedLegs;
   };
 
-  const handleAISend = async () => {
-    const text = chatInput.trim();
-    if (!text) return;
-
-    setChatInput("");
-
-    if (editingMsgId) {
-      dbService.updateChatMessage(editingMsgId, text);
-      setEditingMsgId(null);
-    } else {
-      dbService.sendChatMessage("ai_dispatcher", text, user.name, user.uid);
-    }
-
-    try {
-      const res = await fetch("/api/parse-dohod-text", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-
-      if (!res.ok) {
-        let serverError = "API parsing failed";
-        try {
-          const errData = await res.json();
-          if (errData && errData.error) {
-            serverError = errData.error;
-          }
-        } catch (_) {}
-        throw new Error(serverError);
-      }
-      const data = await res.json();
-
-      if (data && data.legs && data.legs.length > 0) {
-        const parsed = data.legs;
-        const newArray = [...legs];
-        if (newArray.length === 1 && !newArray[0].from && !newArray[0].to)
-          newArray.shift();
-
-        parsed.forEach((r: any) => {
-          const matchedDist = findDistanceInPool(r.from, r.to) || 0;
-
-          let eurRate = r.currency === "EUR" ? r.amount : 0;
-          let infoRate = r.currency !== "EUR" ? r.amount : 0;
-          let infoCurrency = r.currency || "EUR";
-
-          let freightValue = eurRate || 0;
-          if (!freightValue && infoRate && infoCurrency !== "EUR") {
-            const rateX = nbrbRates[infoCurrency]
-              ? nbrbRates[infoCurrency].rate / nbrbRates[infoCurrency].scale
-              : 0;
-            const rateEur = nbrbRates["EUR"] ? nbrbRates["EUR"].rate : 1;
-            freightValue =
-              rateEur > 0 ? Math.round((infoRate * rateX) / rateEur) : 0;
-          }
-
-          newArray.push({
-            from: r.from,
-            to: r.to,
-            dist: matchedDist,
-            freight: freightValue,
-            infoRate: infoRate || 0,
-            infoCurrency: infoCurrency,
-            coeff: getDirCoeff(),
-            ferrySelectValue: "none",
-            ferryCost: 0,
-          });
-        });
-        setLegs(newArray);
-
-        if (data.total_days) {
-          setTripDays(data.total_days);
-        }
-
-        let responseMsg = `Запрос обработан парсером! Добавлено плеч: ${parsed.length}.`;
-        if (data.total_days) {
-          responseMsg += ` Установлено время поездки: ${data.total_days} дн.`;
-        }
-
-        // Детальная расшифровка того, что было найдено
-        const details = parsed
-          .map((p: any) => {
-            let rateStr = "";
-            if (p.amount) rateStr = `${p.amount} ${p.currency}`;
-            return `${p.from} ➔ ${p.to} (${rateStr || "без ставки"})`;
-          })
-          .join(", ");
-
-        dbService.sendChatMessage(
-          "ai_dispatcher",
-          `${responseMsg} (${details})`,
-          "🤖 Робот парсер",
-          "system",
-        );
-      } else {
-        dbService.sendChatMessage(
-          "ai_dispatcher",
-          `Не удалось распознать маршрут через парсер. Пожалуйста, проверьте формат.`,
-          "🤖 Робот парсер",
-          "system",
-        );
-      }
-    } catch (err: unknown) {
-      console.error("AI parse failed:", err);
-      dbService.sendChatMessage(
-        "ai_dispatcher",
-        `Ошибка связи с парсером: ${err?.message || ""}`,
-        "🤖 Робот парсер",
-        "system",
-      );
-    }
-  };
 
   const loadCitiesDatalist = () => {
     const set = new Set<string>();
@@ -2139,60 +2024,6 @@ export default function DohodModule({ user }: DohodModuleProps) {
           </div>
         </div>
 
-        {/* AI Parser Chat Panel */}
-        <div className="bg-white/60 backdrop-blur-md rounded-3xl p-5 text-slate-800 border border-slate-200/50 shadow-sm relative overflow-hidden flex flex-col h-[320px]">
-          <div className="absolute top-0 right-0 p-2 opacity-5 pointer-events-none">
-            <Sparkles className="h-16 w-16 text-slate-400" />
-          </div>
-          <div className="flex items-center gap-2 mb-3">
-            <div className="px-3 py-1 rounded-full bg-blue-50/50 text-[#3765F6] text-[10px] font-bold tracking-wider uppercase border border-blue-100/30">
-              ИИ ПОМОЩНИК МАРШРУТА
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto space-y-3 bg-white/40 backdrop-blur-xs rounded-2xl p-4 mb-4 border border-slate-200/30 custom-scrollbar pr-2 flex flex-col-reverse">
-            <div className="flex flex-col gap-3">
-              {chatMessages.map((msg) => (
-                <div
-                   key={msg.id}
-                  className={`flex flex-col ${msg.userId === user.uid ? "items-end" : "items-start"} animate-fade-in`}
-                >
-                  <span className="text-[10px] font-bold text-slate-400 mb-0.5">
-                    {msg.username}
-                  </span>
-                  <div
-                    className={`px-4 py-2.5 rounded-2xl max-w-[85%] text-sm leading-relaxed whitespace-pre-wrap ${msg.userId === "system" ? "bg-blue-50 text-slate-800 border border-blue-100 text-xs shadow-sm" : msg.userId === user.uid ? "bg-[#3765F6] text-white rounded-br-none" : "bg-white text-slate-700 rounded-bl-none border border-slate-200"}`}
-                  >
-                    {msg.text}
-                  </div>
-                </div>
-              ))}
-              {chatMessages.length === 0 && (
-                <span className="text-xs text-slate-400 flex items-center justify-center font-bold">
-                  История парсера пуста
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="relative flex items-center bg-white border border-slate-200 rounded-2xl p-1 shadow-xs focus-within:border-[#3765F6] focus-within:ring-2 focus-within:ring-blue-100/30 transition">
-            <input
-              type="text"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              placeholder="Пример: Минск — Стамбул 4300..."
-              className="flex-1 bg-transparent text-slate-800 text-sm px-4 py-2.5 outline-none placeholder:text-slate-400"
-              onKeyDown={(e) => e.key === "Enter" && handleAISend()}
-            />
-            <button
-              onClick={handleAISend}
-              className="bg-[#3765F6] hover:bg-[#2555E5] text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 transition shadow-sm cursor-pointer shrink-0"
-            >
-              <span>Распознать</span>
-              <Sparkles className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
 
         {/* Table Container */}
         <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 lg:p-8 border border-slate-200/50 shadow-sm overflow-hidden flex flex-col">
