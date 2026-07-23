@@ -4,20 +4,25 @@ import {useToast} from '../ToastProvider'
 import {directoryService} from '../../api'
 import {BookOpen, Trash2, Save, Plus, Search, Pencil, GripVertical, X} from 'lucide-react'
 import {UserProfile} from '../../types'
+import DriverDirectoryBlock from './directories/DriverDirectoryBlock'
+import CurrencyDirectoryBlock from './directories/CurrencyDirectoryBlock'
+import DistanceDirectoryBlock from './directories/DistanceDirectoryBlock'
+import FerryDirectoryBlock from './directories/FerryDirectoryBlock'
 
 interface DirectoriesModuleProps {
   user: UserProfile;
 }
 
-type DirKey = 'vehicleBrands' | 'trailerBrands' | 'dispatchers' | 'rateGroups' | 'statusTypes' | 'directions';
+type DirKey = 'vehicleBrands' | 'trailerBrands' | 'dispatchers' | 'rateGroups' | 'statusTypes' | 'directions' | 'drivers' | 'currencies' | 'distances' | 'ferries';
 
 interface TabDef {
   key: DirKey;
   label: string;
-  idField: string;
-  nameField: string;
-  fields: { f: string; label: string; ph?: string; type?: string; numeric?: boolean }[];
+  idField?: string;
+  nameField?: string;
+  fields?: { f: string; label: string; ph?: string; type?: string; numeric?: boolean }[];
   searchable?: boolean;
+  block?: React.ComponentType<{ user: UserProfile }>;
 }
 
 const TABS: TabDef[] = [
@@ -48,6 +53,10 @@ const TABS: TabDef[] = [
       { f: 'label', label: 'Название', ph: 'RUS-BY' },
       { f: 'coeff', label: 'Коэффициент', ph: '1.0', numeric: true },
     ], searchable: true },
+  { key: 'drivers', label: 'Водители', block: DriverDirectoryBlock },
+  { key: 'currencies', label: 'Валюты', block: CurrencyDirectoryBlock },
+  { key: 'distances', label: 'Расстояния', block: DistanceDirectoryBlock },
+  { key: 'ferries', label: 'Паромы', block: FerryDirectoryBlock },
 ];
 
 export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
@@ -64,6 +73,11 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
   const tab = useMemo(() => TABS.find((t) => t.key === activeTab)!, [activeTab]);
 
   useEffect(() => {
+    if (tab.block) {
+      setSearch('');
+      setEditing(null);
+      return;
+    }
     const getter = {
       vehicleBrands: directoryService.getVehicleBrands,
       trailerBrands: directoryService.getTrailerBrands,
@@ -87,11 +101,13 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
   }, [items, search, tab]);
 
   const openAdd = () => {
+    if (!tab.fields) return;
     setDraft({});
     setEditing({ __new: true });
   };
 
   const openEdit = (it: any) => {
+    if (!tab.fields) return;
     const d: Record<string, string> = {};
     tab.fields.forEach((f) => { d[f.f] = it[f.f] != null ? String(it[f.f]) : ''; });
     if (tab.idField !== 'key' && it[tab.idField] != null) d[tab.idField] = String(it[tab.idField]);
@@ -100,6 +116,7 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
   };
 
   const handleSave = () => {
+    if (!tab.fields) return;
     const rec: any = { ...draft };
     if (tab.idField !== 'key' && draft[tab.idField]) rec[tab.idField] = draft[tab.idField];
     tab.fields.forEach((f) => {
@@ -245,8 +262,14 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
             ))}
           </div>
         </div>
-        {tab.key === 'dispatchers' && (
-          <p className="text-[10px] text-slate-400 mt-2 text-center">Перетащите запись за значок ☰ чтобы изменить порядок</p>
+        {tab.block ? (
+          <tab.block user={user} />
+        ) : (
+          <>
+            {tab.key === 'dispatchers' && (
+              <p className="text-[10px] text-slate-400 mt-2 text-center">Перетащите запись за значок ☰ чтобы изменить порядок</p>
+            )}
+          </>
         )}
       </div>
 
