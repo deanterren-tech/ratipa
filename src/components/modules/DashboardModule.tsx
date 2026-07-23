@@ -65,7 +65,6 @@ const SUGGESTED_BACKGROUND_ITEMS = [
   { key: 'baza', label: 'База', icon: Truck, color: 'text-emerald-500', top: '76%', left: '8%', delay: 0.8, duration: 15, xDist: 20, yDist: 22 },
   { key: 'dohod', label: 'Калькуляция', icon: Calculator, color: 'text-indigo-500', top: '12%', right: '8%', delay: 3, duration: 18, xDist: -26, yDist: 20 },
   { key: 'documents', label: 'Документы', icon: Files, color: 'text-purple-500', top: '42%', right: '3%', delay: 0.5, duration: 17, xDist: -22, yDist: 18 },
-  { key: 'analysis', label: 'Аналитика', icon: Activity, color: 'text-cyan-500', top: '72%', right: '6%', delay: 2.2, duration: 16, xDist: -24, yDist: 16 },
   { key: 'dozvola', label: 'Дозвола', icon: FileText, color: 'text-teal-500', top: '22%', left: '12%', delay: 4, duration: 18, xDist: 24, yDist: -18 },
   { key: 'settings', label: 'Справочники', icon: Settings, color: 'text-[#606E80]', top: '56%', right: '12%', delay: 1.2, duration: 20, xDist: -22, yDist: -20 }
 ];
@@ -277,7 +276,6 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
     { key: 'dozvola', label: 'Учет Дозволов', icon: FileText, description: 'Управление разрешениями и дозволами', permissionKey: 'dozvola', iconColor: 'bg-teal-500/10 text-teal-400 border border-teal-500/20' },
     { key: 'documents', label: 'Документы', icon: Files, description: 'Архив и реестры документов, накладных и счетов', permissionKey: 'documents', iconColor: 'bg-purple-500/10 text-purple-400 border border-purple-500/20' },
     { key: 'disposition', label: 'Диспозиция', icon: Map, description: 'Геолокация, интерактивная карта и трекинг', permissionKey: 'disposition', iconColor: 'bg-orange-500/10 text-orange-400 border border-orange-500/20' },
-    { key: 'analysis', label: 'Аналитика', icon: Activity, description: 'Статистика, диаграммы и отчеты компании', permissionKey: 'analysis', iconColor: 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' },
     { key: 'settings', label: 'Справочники', icon: Settings, description: 'Управление справочниками системы и параметрами', permissionKey: 'settings', iconColor: 'bg-slate-500/10 text-slate-400 border border-slate-500/20' },
     { key: 'admin', label: 'Администрирование', icon: ShieldAlert, description: 'Настройка прав доступа, логов и системных опций', permissionKey: 'admin', iconColor: 'bg-red-500/10 text-red-400 border border-red-500/20' }
   ];

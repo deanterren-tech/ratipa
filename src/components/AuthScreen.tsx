@@ -111,7 +111,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
               admin: "write",
               dashboard: "write",
               vehicleDriverData: "write",
-              analysis: "write",
+
               currentPlanning: "write",
             };
             dbService.saveUser(userToLogin); // Sync state back to the database
@@ -149,7 +149,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
               admin: "write",
               dashboard: "write",
               vehicleDriverData: "write",
-              analysis: "write",
+
               currentPlanning: "write",
             },
             createdAt: new Date().toISOString(),

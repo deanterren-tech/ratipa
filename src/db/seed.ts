@@ -33,7 +33,7 @@ export const DEFAULT_USERS: UserProfile[] = [
       admin: "write",
       dashboard: "write",
       vehicleDriverData: "write",
-      analysis: "write",
+
       currentPlanning: "write",
     },
     createdAt: new Date().toISOString(),

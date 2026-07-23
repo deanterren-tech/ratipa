@@ -25,7 +25,6 @@ export interface UserPermissions {
   documents?: "none" | "read" | "write";
   settings: "none" | "read" | "write";
   admin: "none" | "read" | "write";
-  analysis?: "none" | "read" | "write";
   dashboard?: "none" | "read" | "write";
   vehicleDriverData?: "none" | "read" | "write";
   currentPlanning?: "none" | "read" | "write";
@@ -654,12 +653,6 @@ export const allModules = [
     label: "Администрирование",
     icon: "ShieldAlert",
     permissionKey: "admin",
-  },
-  {
-    key: "analysis",
-    label: "Анализ",
-    icon: "PieChart",
-    permissionKey: "analysis",
   },
 ];
 

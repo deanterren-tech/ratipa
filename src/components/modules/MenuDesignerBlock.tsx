@@ -25,7 +25,6 @@ const AVAILABLE_MODULES = [
   { key: 'currentPlanning', label: 'Текущее планирование', icon: Map },
   { key: 'baza', label: 'Учет выезда', icon: Truck },
   { key: 'vehicleDriverData', label: 'Авто и Водители', icon: FileText },
-  { key: 'analysis', label: 'Анализ', icon: TrendingUp },
   { key: 'dozvola', label: 'Учет Дозволов', icon: FileText },
   { key: 'documents', label: 'Документы', icon: FileText },
   { key: 'disposition', label: 'Диспозиция', icon: Map },

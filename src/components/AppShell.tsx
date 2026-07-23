@@ -81,7 +81,6 @@ const groupIconMap: Record<string, React.ComponentType<any>> = {
   g_calc: Calculator,
   g_salary: Wallet,
   g_veh_drv: Truck,
-  g_analysis: TrendingUp,
   g_baza: Truck,
   g_dozvola: FileText,
   g_docs: Files,
@@ -635,7 +634,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'currentPlanning', label: 'Текущее планирование', icon: Calendar, permissionKey: 'currentPlanning' },
     { key: 'baza', label: 'Учет выезда', icon: Truck, permissionKey: 'baza' },
     { key: 'vehicleDriverData', label: 'Авто и Водители', icon: FileText, permissionKey: 'vehicleDriverData' },
-    { key: 'analysis', label: 'Анализ', icon: TrendingUp, permissionKey: 'analysis' },
     { key: 'dozvola', label: 'Учет Дозволов', icon: FileText, permissionKey: 'dozvola' },
     { key: 'documents', label: 'Документы', icon: Files, permissionKey: 'documents' },
     { key: 'disposition', label: 'Диспозиция', icon: Map, permissionKey: 'disposition' },
@@ -723,7 +721,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       { id: 'g_calc', label: 'Калькуляция', isDropdown: false, singleModuleKey: 'dohod' },
       { id: 'g_salary', label: 'Зарплата', isDropdown: false, singleModuleKey: 'salary' },
       { id: 'g_veh_drv', label: 'Авто и Водители', isDropdown: false, singleModuleKey: 'vehicleDriverData' },
-      { id: 'g_analysis', label: 'Анализ', isDropdown: false, singleModuleKey: 'analysis' },
       { id: 'g_baza', label: 'Учет выезда', isDropdown: false, singleModuleKey: 'baza' },
       { id: 'g_dozvola', label: 'Дозволы', isDropdown: false, singleModuleKey: 'dozvola' },
       { id: 'g_docs', label: 'Документы', isDropdown: false, singleModuleKey: 'documents' },
@@ -830,7 +827,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         return <DocumentsModule user={user} />;
       case 'disposition':
         return <DispositionModule user={user} />;
-      case 'analysis':
       case 'settings':
         return <SettingsModule user={user} />;
       case 'admin':

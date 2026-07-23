@@ -26,11 +26,11 @@ export default function App() {
       admin: "none",
     };
     if (prof.role === "manager" || prof.role === "admin") {
-      defaultPerms = { ...defaultPerms, dohod: "write", salary: "write", planDohod: "write", planZagruzok: "write", baza: "write", dozvola: "write", disposition: "write", documents: "write", analysis: "write", settings: "write", admin: prof.role === "admin" ? "write" : "none" };
+      defaultPerms = { ...defaultPerms, dohod: "write", salary: "write", planDohod: "write", planZagruzok: "write", baza: "write", dozvola: "write", disposition: "write", documents: "write",settings: "write", admin: prof.role === "admin" ? "write" : "none" };
     } else if (prof.role === "mechanic") {
-      defaultPerms = { ...defaultPerms, dohod: "read", salary: "none", planDohod: "read", planZagruzok: "none", baza: "read", dozvola: "read", disposition: "write", documents: "read", analysis: "none", settings: "none", admin: "none" };
+      defaultPerms = { ...defaultPerms, dohod: "read", salary: "none", planDohod: "read", planZagruzok: "none", baza: "read", dozvola: "read", disposition: "write", documents: "read",settings: "none", admin: "none" };
     } else {
-      defaultPerms = { ...defaultPerms, dohod: "write", salary: "write", planDohod: "read", planZagruzok: "read", baza: "read", dozvola: "read", disposition: "read", documents: "write", analysis: "none", settings: "none", admin: "none" };
+      defaultPerms = { ...defaultPerms, dohod: "write", salary: "write", planDohod: "read", planZagruzok: "read", baza: "read", dozvola: "read", disposition: "read", documents: "write",settings: "none", admin: "none" };
     }
     
     if (!prof.permissions || Object.keys(prof.permissions).length === 0) {
