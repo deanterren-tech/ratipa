@@ -25,7 +25,7 @@ import {
   Truck,
   Users
 } from 'lucide-react';
-import { dbService, database, onValue } from '../../firebase'
+import { dbService, database, onValue } from '../../api'
 import { ref, set, update } from 'firebase/database';
 import {UserProfile, AppSettings, PhoneNumber, Driver, CarRateGroup} from '../../types'
 import {formatDriverShortName} from '../../utils/driverSync'

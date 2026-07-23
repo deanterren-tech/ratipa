@@ -1,6 +1,6 @@
 import React, {useState} from 'react'
 import {UserProfile, AppSettings, Announcement} from '../../types'
-import {dbService} from '../../firebase'
+import {dbService} from '../../api'
 import {Megaphone, Trash2} from 'lucide-react'
 
 interface Props {

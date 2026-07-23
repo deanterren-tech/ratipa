@@ -1,8 +1,8 @@
 import React from 'react';
 import {useState, useEffect} from 'react'
 import {UserProfile, AppSettings, FerryTemplate, DistancePreset, CurrencyPreset, QuickLink, CarRateGroup, Driver} from '../../types'
-import {dbService, database, onValue} from '../../firebase'
-import {pdService} from '../../firebase/planDohodService'
+import {dbService, database, onValue} from '../../api'
+import {pdService} from '../../api'
 import {ref, set, push, remove} from 'firebase/database'
 import CouplingDirectoryEditor from './CouplingDirectoryEditor';
 import { 

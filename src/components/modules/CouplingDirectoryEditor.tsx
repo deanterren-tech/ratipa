@@ -2,7 +2,7 @@ import {useState, useEffect, useMemo} from 'react'
 import {createPortal} from 'react-dom'
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
-import {dbService, directoryService} from '../../firebase'
+import {dbService, directoryService} from '../../api'
 import {Truck, Plus, Trash2, Pencil, Search, Link2, X, Check, Layers, Tag, Users} from 'lucide-react'
 import {UserProfile} from '../../types'
 import CouplingCard from './CouplingCard';

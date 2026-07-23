@@ -1,6 +1,6 @@
 import {useState, useEffect, useRef, useMemo} from 'react'
 import {UserProfile, AppSettings} from '../../types'
-import {dbService} from '../../firebase'
+import {dbService} from '../../api'
 import {getEmbeddableSheetUrl} from '../../utils/embed'
 import { 
   FileSpreadsheet, 

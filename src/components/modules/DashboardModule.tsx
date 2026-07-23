@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, AuditLog, AppSettings, Vehicle, TripPlan, Permit, HighlightData } from '../../types';
-import { dbService } from '../../firebase';
+import { dbService } from '../../api';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Activity, 

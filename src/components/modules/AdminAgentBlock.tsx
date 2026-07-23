@@ -3,7 +3,7 @@ import {useState, useEffect} from 'react'
 import {UserProfile} from '../../types'
 import {useDialog} from '../DialogProvider'
 import { ref, push, update } from 'firebase/database'
-import { database, onValue } from '../../firebase'
+import { database, onValue } from '../../api'
 import { 
   Sparkles, 
   Key, 

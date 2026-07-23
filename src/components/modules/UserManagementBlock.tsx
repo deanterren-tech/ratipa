@@ -4,7 +4,7 @@ import {
   AppSettings,
   DISPATCHER_COLORS_PRESETS,
 } from "../../types";
-import {dbService} from '../../firebase'
+import {dbService} from '../../api'
 import {
   ShieldCheck,
   UserPlus,

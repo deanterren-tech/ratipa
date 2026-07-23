@@ -1,6 +1,6 @@
 import React, {useState, useEffect, useMemo, useRef, Suspense, lazy} from 'react'
 import {UserProfile, AppSettings, ChatMessage} from '../types'
-import {dbService, database, useFirebase, onValue} from '../firebase'
+import {dbService, database, useFirebase, onValue} from '../api'
 import {ref, set, push, update} from 'firebase/database'
 import {motion, AnimatePresence} from 'motion/react'
 import CommandCenter from './CommandCenter';

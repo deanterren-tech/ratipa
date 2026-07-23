@@ -1,7 +1,7 @@
 import {useState, useEffect, useMemo} from 'react'
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
-import {directoryService} from '../../firebase'
+import {directoryService} from '../../api'
 import {BookOpen, Trash2, Save} from 'lucide-react'
 import {UserProfile} from '../../types'
 

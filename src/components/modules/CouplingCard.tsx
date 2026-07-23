@@ -1,5 +1,5 @@
 import {useState, useEffect} from 'react'
-import {dbService} from '../../firebase'
+import {dbService} from '../../api'
 import {Truck, User, Calendar, MapPin, X, ArrowLeft} from 'lucide-react'
 
 interface CouplingCardProps {

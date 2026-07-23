@@ -1,7 +1,7 @@
 import {useDialog} from '../DialogProvider'
 import {useState, useEffect} from 'react'
 import {UserProfile, AppSettings} from '../../types'
-import {dbService} from '../../firebase'
+import {dbService} from '../../api'
 import { 
   ShieldAlert, 
   ArrowUp, 
@@ -48,7 +48,7 @@ import AdminAgentBlock from './AdminAgentBlock';
 import MenuDesignerBlock from './MenuDesignerBlock';
 import AdminAuditLogsBlock from './AdminAuditLogsBlock';
 import AdminWelcomePhrasesBlock from './AdminWelcomePhrasesBlock';
-import {pdService} from '../../firebase/planDohodService'
+import {pdService} from '../../api'
 
 interface AdminModuleProps {
   user: UserProfile;

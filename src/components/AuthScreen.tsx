@@ -1,6 +1,6 @@
 import React, {useState, useEffect, useRef} from 'react'
 import {UserProfile} from '../types'
-import {dbService} from '../firebase'
+import {dbService} from '../api'
 import { 
   Truck, 
   Eye, 

@@ -1,8 +1,8 @@
 import {useDialog} from '../DialogProvider'
 import React, {useState, useEffect, useRef} from 'react'
 import {UserProfile} from '../../types'
-import { dbService, database, onValue } from '../../firebase'
-import {pdService} from '../../firebase/planDohodService'
+import { dbService, database, onValue } from '../../api'
+import {pdService} from '../../api'
 import LossDeclarationEditor from "./LossDeclarationEditor";
 import { ref, set, remove, update } from 'firebase/database'
 import { 

@@ -5,7 +5,7 @@ import DozvolaDocuments from './dozvola/DozvolaDocuments';
 import DozvolaTypesDirectory from './dozvola/DozvolaTypesDirectory';
 import DozvolaHistory from './dozvola/DozvolaHistory';
 import DozvolaLocations from './dozvola/DozvolaLocations';
-import {useFirebase, database, onValue} from '../../firebase'
+import {useFirebase, database, onValue} from '../../api'
 import {ref} from 'firebase/database'
 
 interface DozvolaModuleProps {

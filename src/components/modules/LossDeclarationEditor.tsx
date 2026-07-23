@@ -1,5 +1,5 @@
 import React, {useState, useEffect, useRef} from 'react'
-import { database, onValue } from '../../firebase'
+import { database, onValue } from '../../api'
 import { ref, push } from 'firebase/database'
 import {Save, Plus, Printer} from 'lucide-react'
 

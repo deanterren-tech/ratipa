@@ -1,7 +1,7 @@
 import {useEffect, useState, useRef} from 'react'
 import {Navigation} from 'lucide-react'
 import {AppSettings} from '../types'
-import {dbService} from '../firebase'
+import {dbService} from '../api'
 
 interface BelarusMapProps {
   // For multi-leg maps (Analysis)

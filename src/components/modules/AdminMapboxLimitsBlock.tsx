@@ -1,7 +1,7 @@
 import {useDialog} from '../DialogProvider'
 import {useState} from 'react'
 import {AppSettings, UserProfile} from '../../types'
-import {dbService} from '../../firebase'
+import {dbService} from '../../api'
 import {Map, RefreshCw, AlertCircle, CheckCircle2, Layers, Navigation} from 'lucide-react'
 
 interface AdminMapboxLimitsBlockProps {

@@ -1,6 +1,6 @@
 import {useState, useEffect} from 'react'
 import {UserProfile} from '../../types'
-import {pdService} from '../../firebase/planDohodService'
+import {pdService} from '../../api'
 import {Plus, Trash2, ArrowUp, ArrowDown} from 'lucide-react'
 import {useToast} from '../ToastProvider'
 

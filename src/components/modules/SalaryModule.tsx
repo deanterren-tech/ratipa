@@ -1,7 +1,7 @@
 import {useState, useEffect} from 'react'
 import {UserProfile, SalaryLog, CarRateGroup, AppSettings, Driver, Vehicle} from '../../types'
-import { dbService, database, onValue } from '../../firebase'
-import {pdService} from '../../firebase/planDohodService'
+import { dbService, database, onValue } from '../../api'
+import {pdService} from '../../api'
 import { ref } from 'firebase/database'
 import {Wallet, Calculator, Sparkles, Send, Trash2, Edit, Copy} from 'lucide-react'
 import CalendarDaysCalculator from './CalendarDaysCalculator';

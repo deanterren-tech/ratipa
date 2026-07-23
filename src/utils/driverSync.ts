@@ -1,5 +1,5 @@
 import { ref, get, set, update } from 'firebase/database';
-import { database } from '../firebase';
+import { database } from '../api';
 import { Driver, Vehicle, SalaryLog } from '../types';
 
 /**

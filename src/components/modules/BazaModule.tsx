@@ -1,7 +1,7 @@
 import React, {useState, useEffect, useMemo} from 'react'
 import {UserProfile} from '../../types'
-import {dbService, onValue} from '../../firebase'
-import {pdService} from '../../firebase/planDohodService'
+import {dbService, onValue} from '../../api'
+import {pdService} from '../../api'
 import {getDatabase, ref, set, push, remove, update, query, limitToLast} from 'firebase/database'
 import {getApp} from 'firebase/app'
 import { 

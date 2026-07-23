@@ -13,8 +13,8 @@ import {
   CurrencyPreset,
 } from "../../types";
 import {calculateTripFinances} from '../../utils/financeCalculators'
-import {dbService} from '../../firebase'
-import {pdService} from '../../firebase/planDohodService'
+import {dbService} from '../../api'
+import {pdService} from '../../api'
 import CouplingPicker from "../common/CouplingPicker";
 import {
   Plus,

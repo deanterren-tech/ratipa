@@ -1,7 +1,7 @@
 import {useState, useRef, useEffect, useMemo} from 'react'
 import {createPortal} from 'react-dom'
 import {Search, Truck, X, MapPin} from 'lucide-react'
-import {dbService} from '../../firebase'
+import {dbService} from '../../api'
 import {formatDriverShortName} from '../../utils/driverSync'
 
 interface CouplingPickerProps {

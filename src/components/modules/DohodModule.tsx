@@ -11,8 +11,8 @@ import {
   DirectionPreset,
   AppSettings,
 } from "../../types";
-import {dbService} from '../../firebase'
-import {pdService} from '../../firebase/planDohodService'
+import {dbService} from '../../api'
+import {pdService} from '../../api'
 import {
   Plus,
   Trash2,
