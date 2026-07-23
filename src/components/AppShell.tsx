@@ -286,7 +286,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       const contentType = response.headers.get('content-type') || '';
       
       if (!response.ok || !contentType.includes('application/json')) {
-        console.log('NBRB rates info: fallback loaded.');
         response = await fetch('https://www.nbrb.by/api/exrates/rates?periodicity=0');
       }
       
@@ -312,7 +311,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         throw new Error('Expected data structure');
       }
     } catch (error) {
-      console.log('NBRB rates info: rates initialization completed.');
     } finally {
       setIsRatesLoading(false);
     }
@@ -595,7 +593,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   };
 
   const handleDeleteGlobalMessage = (id: string, e: React.MouseEvent) => {
-    console.log("Delete message", id);
     e.stopPropagation();
     dbService.deleteChatMessage(id);
   };

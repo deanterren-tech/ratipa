@@ -120,7 +120,6 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
           return;
         }
         
-        console.log("Migrating legacy flat salaryHistory to new structured paths...");
         const updates: Record<string, any> = {};
         for (const key of Object.keys(data)) {
           const log = data[key];
@@ -139,7 +138,6 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
         
         if (Object.keys(updates).length > 0) {
           await rtdbUpdate(ref(database), updates);
-          console.log("Legacy salary history migration completed successfully!");
         }
       } catch (err) {
         console.error("Failed to migrate legacy salary history:", err);
@@ -216,7 +214,6 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
       return;
     }
     
-    console.log(`Subscribing to scoped salary path: ${dbPath}`);
     const unsub = onValue(ref(database, dbPath), (snap) => {
       const data = snap.val();
       if (data) {

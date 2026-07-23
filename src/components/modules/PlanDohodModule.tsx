@@ -575,9 +575,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   };
 
   const renderNotebookWidget = () => {
-    console.log("renderNotebookWidget", { isNotebookOpen, nbCoords });
     if (!isNotebookOpen) {
-      console.log("Notebook closed");
       return null;
     }
 

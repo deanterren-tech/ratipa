@@ -246,7 +246,6 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
         try {
             const offlineModeActive = localStorage.getItem('offline_mode') === 'true';
             if (offlineModeActive) {
-                console.log("[Offline Mode] Instantly falling back to local regex parser.");
                 aiFailed = true;
             } else {
                 const response = await fetch("/api/parse-dozvola-text", {

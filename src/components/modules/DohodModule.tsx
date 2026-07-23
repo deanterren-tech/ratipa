@@ -476,7 +476,7 @@ function RouteDisplay({
             console.warn("Proxy routing failed, trying direct Mapbox fallback:", proxyError);
             if (!bypassMapbox) {
               try {
-                const mapboxToken = "REMOVED_MAPBOX_TOKEN";
+                const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN || "";
                 response = await fetch(
                   `https://api.mapbox.com/directions/v5/mapbox/driving/${coordinates}?geometries=geojson&overview=full&steps=true&alternatives=true&access_token=${mapboxToken}`,
                 );

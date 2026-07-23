@@ -494,7 +494,6 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       ...rec,
       lastPassportVerificationYear: currentYear
     };
-    console.log('[PassportVerify] handleVerifySuccess', { id: rec.id, carNumber: rec.carNumber, vehicleNumbers: rec.vehicleNumbers });
     // Persist to writable branch (vehicleFleet) via dbService, which updates verifyFleet source.
     // Also best-effort update to vehicle_driver_data (in case rules allow writes there).
     try {

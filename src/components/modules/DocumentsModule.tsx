@@ -436,7 +436,6 @@ export default function DocumentsModule({ user }: Props) {
   };
   const handleDeleteCouple = async (id: string) => {
     alert("Delete called for: " + id);
-    console.log("Attempting to delete couple with id:", id);
     if (!canWrite) {
       alert("У вас нет прав на удаление записей.");
       return;
@@ -447,11 +446,9 @@ export default function DocumentsModule({ user }: Props) {
     }
     if (!(await showConfirm("Вы уверены, что хотите удалить этот автомобиль (сцепку) из базы?"))) return;
     
-    console.log("Proceeding with remove operation for path:", `ferryCouples/${id}`);
     
     remove(ref(database, `ferryCouples/${id}`))
       .then(() => {
-        console.log("Successfully deleted couple with id:", id);
         dbService.logAction(user.name, user.role, "Документы паром", "Documents", id, `Удалил сцепку`);
         if (selectedCoupleId === id) {
           const remaining = ferryCouples.filter(c => c.id !== id);

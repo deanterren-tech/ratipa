@@ -667,7 +667,6 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 
       // Use the REAL record from the loaded list (more reliable than modalData spread)
       const rec = (cars.find(c => c.id === modalData.id) || modalData) as any;
-      console.log('[Archive] moveCarToArchive', { id: rec.id, sourcePath: rec.sourcePath, carNumber: rec.carNumber });
 
       const archiveCarData = {
           ...rec,
@@ -699,7 +698,6 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   };
 
   const deleteCarRecord = async (id: string, carNumber: string, e: React.MouseEvent) => {
-      console.log("Delete called");
       e.stopPropagation();
       if (currentTab === "archive" && !isRootAdmin) {
           toast("Удаление записей из архива разрешено только администратору!", 'error');
@@ -715,7 +713,6 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
           // Remove from the SAME branch the record lives in (baza / baza_cars / archive / vehicle_driver_data).
           // The reference base (vehicleFleet) must NOT be modified — it's the single source of truth.
           remove(ref(db, `${branch}/${id}`));
-          console.log(`[Delete] removed ${branch}/${id}`);
 
           // Auto-status: if this car is no longer in Учёт выезда → it's in trip.
           const cid = targetCar?.couplingId
