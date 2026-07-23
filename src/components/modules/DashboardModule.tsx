@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, AuditLog, AppSettings, Vehicle, TripPlan, Permit, HighlightData } from '../../types';
 import { dbService } from '../../api';
-import { motion, AnimatePresence } from 'motion/react';
+import {motion, AnimatePresence} from 'motion/react';
+import AnimatedGradient from '../common/AnimatedGradient';
 import { 
   Activity, 
   Users, 
@@ -311,8 +312,8 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
   return (
     <div className="w-full relative min-h-screen flex flex-col justify-between p-6 sm:p-8 md:p-10 select-none text-slate-900 overflow-hidden">
       
-      {/* 1. Base solid background layer - Completely stable, no gaps, matches screen */}
-      <div className="absolute inset-0 bg-slate-50 pointer-events-none z-0" />
+      {/* 1. Animated gradient background layer (фирменный стиль Ratipa, лёгкий CSS) */}
+      <AnimatedGradient className="ratipa-gradient-reduced" />
 
       {/* 2. Technical overlay grid over base */}
       <div className="absolute inset-0 tech-grid opacity-[0.08] pointer-events-none z-0" />
