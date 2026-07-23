@@ -8,3 +8,8 @@ apply_pasted.py
 parse_pasted_plan.py
 .env*
 .DS_Store
+
+# Секреты/окружение
+.env.local
+.env.portal
+.env.*.local
