@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import  { useState } from 'react';
 import { Database } from 'lucide-react';
 import { firebaseConfig as activeConfig, getCustomFirebaseConfig } from '../../firebaseConfig';
 

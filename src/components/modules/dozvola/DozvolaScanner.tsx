@@ -344,4 +344,3 @@ export default function DozvolaScanner({ user, customTypesKeys, customTypesMap }
         </div>
     );
 }
-

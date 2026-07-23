@@ -1,4 +1,4 @@
-import { getDatabase, ref, get, update, push, set } from 'firebase/database';
+import {  ref, get, update, push, set } from 'firebase/database';
 import { database } from '../api';
 
 export function normalizePlate(value: string): string {

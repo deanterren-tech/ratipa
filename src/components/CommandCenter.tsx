@@ -1,7 +1,7 @@
 import {useState, useEffect, useRef} from 'react'
 import {Search, User, Truck, X} from 'lucide-react'
 import {motion, AnimatePresence} from 'motion/react'
-import {database, onValue, dbService} from '../api'
+import {database, dbService} from '../api'
 import {ref} from 'firebase/database'
 import {UserProfile} from '../types'
 import {formatDriverShortName} from '../utils/driverSync'

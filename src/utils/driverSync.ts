@@ -1,6 +1,6 @@
 import { ref, get, set, update } from 'firebase/database';
 import { database } from '../api';
-import { Driver, Vehicle, SalaryLog } from '../types';
+import { Driver, Vehicle } from '../types';
 
 /**
  * Formats a driver's name to a short Russian format "LastName I.O."

@@ -1,5 +1,5 @@
 import {useDialog} from '../DialogProvider'
-import React, {useState, useEffect, useRef} from 'react'
+import React, {useState, useEffect} from 'react'
 import { 
   FileText, 
   Plus, 
@@ -25,8 +25,8 @@ import {
   Truck,
   Users
 } from 'lucide-react';
-import { dbService, database, onValue } from '../../api'
-import { ref, set, update } from 'firebase/database';
+import { dbService, database } from '../../api'
+import { ref, update } from 'firebase/database';
 import {UserProfile, AppSettings, PhoneNumber, Driver, CarRateGroup} from '../../types'
 import {formatDriverShortName} from '../../utils/driverSync'
 import CouplingPicker from '../common/CouplingPicker';

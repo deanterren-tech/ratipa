@@ -1,4 +1,4 @@
-import { LegPlan, TripPlan } from "../types";
+import { LegPlan } from "../types";
 
 export function calculateTripFinances(
   legs: LegPlan[],
