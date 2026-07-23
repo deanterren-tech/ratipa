@@ -704,132 +704,8 @@ const sharedGetCouplings = createSharedSubscription<any[]>(
   (onData) => onData([])
 );
 
-const sharedGetVehicleDriverData = createSharedSubscription<any[]>(
-  (onData, onError) => {
-    // UNIFIED: single source of truth = vehicleFleet (where saveVehicleDriverRecord writes).
-    // Legacy vehicle_driver_data is merged in as a read-only fallback for passport fields.
-    // Build a map of legacy passport records keyed by normalized tractor number.
-    const buildLegacyMap = async (): Promise<Record<string, any>> => {
-      const map: Record<string, any> = {};
-      try {
-        const legacySnap = database ? await firebaseGet(ref(database, "vehicle_driver_data")) : null;
-        const legacyData = legacySnap && legacySnap.exists() ? legacySnap.val() : null;
-        if (legacyData) {
-          Object.keys(legacyData).forEach((lk) => {
-            const lr = legacyData[lk] || {};
-            const lCar = (lr.carNumber || lr.vehicleNumbers || "").trim().toUpperCase()
-              .replace(/\s+/g, "");
-            if (lCar) map[lCar] = lr;
-          });
-        }
-      } catch (e) { /* ignore — legacy is optional */ }
-      return map;
-    };
 
-    const dbRef = ref(database, "vehicleFleet");
-    return onValue(
-      dbRef,
-      async (snapshot) => {
-        const data = snapshot.val();
-        // Legacy merge is optional. Cap it with a timeout so a slow/unreachable
-    // vehicle_driver_data can NEVER block delivery of the vehicleFleet data.
-    const legacyMap = await Promise.race([
-      buildLegacyMap(),
-      new Promise<Record<string, any>>((resolve) => setTimeout(() => resolve({}), 4000)),
-    ]);
-        if (data) {
-          const list = Object.keys(data).map((k) => {
-            const rec = data[k] || {};
-            const rawDisp = rec.dispatcherName || rec.dispatcher || "";
-            const disp = rawDisp ? rawDisp.charAt(0).toUpperCase() + rawDisp.slice(1) : "";
-            const carNum = (rec.carNumber || rec.vehicleNumbers || "").trim().toUpperCase();
-            const trailerNum = (rec.trailerNumber || "").trim().toUpperCase();
-            const coupling = trailerNum ? `${carNum}/${trailerNum}` : carNum;
-            // Merge legacy passport fields if present in vehicle_driver_data under same normalized key.
-            // Legacy is a READ-ONLY FALLBACK: it only fills fields that are empty/missing in the
-            // unified vehicleFleet record (rec). A present-but-empty string in rec must NOT wipe
-            // the legacy value.
-            const legacyRec = (legacyMap && legacyMap[carNum.replace(/\s+/g, "")]) || {};
-            const merged = { ...rec };
-            for (const lk of Object.keys(legacyRec)) {
-              const cur = merged[lk];
-              if (cur === undefined || cur === null || cur === "") {
-                merged[lk] = legacyRec[lk];
-              }
-            }
-            return {
-              id: k,
-              ...merged,
-              carNumber: carNum,
-              vehicleNumbers: carNum,
-              trailerNumber: trailerNum,
-              coupling: coupling,
-              dispatcherName: disp,
-              dispatcher: disp,
-            };
-          });
-          onData(list);
-        } else {
-          onData([]);
-        }
-      },
-      onError
-    );
-  },
-  (onData) => {
-    onData(getLocalStorageData<any[]>("ratipa_vehicle_fleet", []));
-  }
-);
 
-const sharedGetVehicleFleet = createSharedSubscription<any[]>(
-  (onData, onError) => {
-    const q = query(ref(database, "vehicleFleet"), limitToLast(150));
-    return onValue(q, (snapshot) => {
-      const data = snapshot.val() || {};
-      const list = Object.keys(data).map((key) => {
-        const val = data[key];
-        const carNum = (val.carNumber || val.vehicleNumbers || "").trim().toUpperCase();
-        const trailerNum = (val.trailerNumber || "").trim().toUpperCase();
-        const brand = val.brandModel || val.brands || "";
-        const rawDisp = val.dispatcherName || val.dispatcher || "";
-        const disp = rawDisp ? rawDisp.charAt(0).toUpperCase() + rawDisp.slice(1) : "";
-        const phoneNum = val.driverPhone || val.phone || "";
-        const coupling = trailerNum ? `${carNum}/${trailerNum}` : carNum;
-        return {
-          id: key,
-          status: val.status || "base",
-          ...val,
-          carNumber: carNum,
-          vehicleNumbers: carNum,
-          trailerNumber: trailerNum,
-          coupling: coupling,
-          brandModel: brand,
-          brands: brand,
-          dispatcherName: disp,
-          dispatcher: disp,
-          driverPhone: phoneNum,
-          phone: phoneNum,
-        };
-      });
-      onData(list);
-
-    }, onError);
-  },
-  (onData) => {
-    onData(getLocalStorageData<any[]>("ratipa_vehicle_fleet", []));
-  }
-);
-
-const sharedGetVehicles = createSharedSubscription<Vehicle[]>(
-  (onData, onError) => {
-    return sharedGetVehicleFleet((list) => {
-      onData(list);
-    });
-  },
-  (onData) => {
-    onData(getLocalStorageData<Vehicle[]>("ratipa_vehicle_fleet", INITIAL_VEHICLES));
-  }
-);
 
 const sharedGetCarRateGroups = createSharedSubscription<CarRateGroup[]>(
   (onData, onError) => {
@@ -1474,9 +1350,9 @@ export const dbService = {
     );
   },
 
-  // ARCHIVE VEHICLES
+  // ARCHIVE VEHICLES (читает tractors — portal-схема)
   getArchiveVehicles: (callback: (vehicles: Vehicle[]) => void) => {
-    return sharedGetVehicles((list) => {
+    return sharedGetTractors((list) => {
       callback(list.filter((v) => v.status === "archive"));
     });
   },
@@ -1880,12 +1756,9 @@ export const dbService = {
     );
   },
 
-  // VEHICLE DRIVER DATA
-  getVehicleDriverData: (callback: (data: any[]) => void) => {
-    return sharedGetVehicleDriverData(callback);
-  },
+  // VEHICLE FLEET (читает tractors — portal-схема)
   getVehicleFleet: (callback: (data: any[]) => void) => {
-    return sharedGetVehicleFleet(callback);
+    return sharedGetTractors(callback);
   },
   // Soft-link readers for CouplingCard / DriverCard (read only, no hard binding)
   getBazaRecords: (callback: (data: any[]) => void) => {
@@ -2006,22 +1879,19 @@ export const dbService = {
     let mainPromise: Promise<void>;
     
     if (useFirebase) {
-      mainPromise = set(ref(database, `vehicleFleet/${rec.id}`), normalized)
+      mainPromise = set(ref(database, `tractors/${rec.id}`), normalized)
         .then(() => {
-          // Save brand to master-nodes under brands / vehicleBrands / trailerBrands
+          // Save brand to master-nodes under directories/vehicleBrands / trailerBrands
           if (brand) {
-            const brandKey = brand.trim().toUpperCase().replace(/[^A-Z0-9_\-]/g, '_');
+            const brandKey = brand.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_');
             if (brandKey) {
-              set(ref(database, `brands/vehicleBrands/${brandKey}`), brand.trim()).catch(() => {});
-              set(ref(database, `vehicleBrands/${brandKey}`), brand.trim()).catch(() => {});
-              set(ref(database, `brands/${brandKey}`), brand.trim()).catch(() => {});
+              set(ref(database, `directories/vehicleBrands/${brandKey}`), brand.trim()).catch(() => {});
             }
           }
           if (trailer) {
-            const trailerKey = trailer.trim().toUpperCase().replace(/[^A-Z0-9_\-]/g, '_');
+            const trailerKey = trailer.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_');
             if (trailerKey) {
-              set(ref(database, `brands/trailerBrands/${trailerKey}`), trailer.trim()).catch(() => {});
-              set(ref(database, `trailerBrands/${trailerKey}`), trailer.trim()).catch(() => {});
+              set(ref(database, `directories/trailerBrands/${trailerKey}`), trailer.trim()).catch(() => {});
             }
           }
         });
@@ -2898,7 +2768,7 @@ export const dbService = {
     }
     if (useFirebase) {
       return onceValue(
-        ref(database, "driversPool"),
+        ref(database, "drivers"),
         (snapshot) => {
           const data = snapshot.val();
           if (data) {
@@ -2977,7 +2847,7 @@ export const dbService = {
   deleteDriver: (id: string, user: string, role: string) => {
     catalogCache.drivers = null;
     if (useFirebase) {
-      remove(ref(database, `driversPool/${id}`));
+      remove(ref(database, `drivers/${id}`));
     } else {
       const local = getLocalStorageData<Driver[]>("ratipa_drivers", []);
       const filtered = local.filter((x) => x.id !== id);
@@ -3213,7 +3083,9 @@ export const dbService = {
       const updates: Record<string, any> = {};
       for (const id of ids) {
         for (const [k, v] of Object.entries(patch)) {
-          updates[`vehicleFleet/${id}/${k}`] = v;
+          // portal-схема: авто-поля в tractors, связка-поля в couplings (id совпадают)
+          updates[`tractors/${id}/${k}`] = v;
+          updates[`couplings/${id}/${k}`] = v;
         }
       }
       return update(ref(database), updates).catch((err) => console.warn("bulkUpdateCouplings failed:", err));

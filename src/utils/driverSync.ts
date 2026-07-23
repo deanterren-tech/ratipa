@@ -82,7 +82,7 @@ export async function syncDriverShortNameToCar(carId: string, driverId: string, 
     if (drivers) {
       shortName = getDriverShortName(driverId, drivers);
     } else {
-      const drvSnap = await get(ref(database, `driversPool/${driverId}`));
+      const drvSnap = await get(ref(database, `drivers/${driverId}`));
       if (drvSnap.exists()) {
         const drvData = drvSnap.val();
         shortName = drvData.shortNameRu || formatDriverShortName({ ...drvData, id: driverId });

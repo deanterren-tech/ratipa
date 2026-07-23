@@ -3,6 +3,7 @@ import React, {useState, useEffect, useRef} from 'react'
 import {UserProfile} from '../../types'
 import { dbService, database, onValue } from '../../api'
 import {pdService} from '../../api'
+import {getCouplingsFlat} from '../../services/fleetService'
 import LossDeclarationEditor from "./LossDeclarationEditor";
 import { ref, set, remove, update } from 'firebase/database'
 import { 
@@ -189,7 +190,7 @@ export default function DocumentsModule({ user }: Props) {
   // ("Maximum update depth exceeded").
   const lastFerryKeyRef = useRef<string>('');
   useEffect(() => {
-    const unsub = dbService.getVehicleDriverData((list: any[]) => {
+    const unsub = getCouplingsFlat((list: any[]) => {
       const src = list || [];
       const mapped: FerryCouple[] = src.map((rec: any) => {
         const coupling = rec.coupling || rec.vehicleNumbers || rec.carNumber || '';
