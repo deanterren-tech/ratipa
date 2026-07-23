@@ -97,6 +97,28 @@ export const pdService = {
   },
 
 
+  // --- PLAN DOHOD SETTINGS ---
+  subscribePlanDohodSettings: (callback: (settings: any) => void) => {
+    if (!useFirebase) return () => {};
+    return onValue(ref(database, 'plan_dohod_settings'), (snapshot) => {
+      callback(snapshot.val() || { useDistanceLookup: false, distanceLookupMode: 'cities' });
+    });
+  },
+
+  updatePlanDohodSettings: (settings: any) => {
+    if (!useFirebase) return;
+    update(ref(database, 'plan_dohod_settings'), settings);
+  },
+
+  // --- KNOWN DISTANCES (реальные расстояния, не дубль) ---
+  subscribeKnownDistances: (callback: (distances: any[]) => void) => {
+    if (!useFirebase) return () => {};
+    return onValue(ref(database, 'knownDistancesList'), (snapshot) => {
+      const data = snapshot.val();
+      callback(data ? Object.values(data) : []);
+    });
+  },
+
   // --- УДАЛЕНО: дублирующие ветки (dispatchers/dispatchers_order/dispatchers_colors/app_directions/saved_vehicles_list) ---
   // Теперь диспетчеры/направления/авто читаются из единой базы (directoryService / dbService).
 
