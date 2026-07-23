@@ -1432,9 +1432,9 @@ export const dbService = {
     );
   },
 
-  // ACTIVE FLEET / VEHICLES (Baza)
+  // ACTIVE FLEET / VEHICLES (Baza) — читает tractors (portal-схема)
   getVehicles: (callback: (vehicles: Vehicle[]) => void) => {
-    return sharedGetVehicles(callback);
+    return sharedGetTractors(callback);
   },
 
   saveVehicle: (vehicle: Vehicle, user: string, role: string) => {
@@ -1454,7 +1454,7 @@ export const dbService = {
       phone: phoneNum,
     };
     if (useFirebase) {
-      set(ref(database, `vehicleFleet/${vehicle.id}`), normalized).catch((err) => {
+      set(ref(database, `tractors/${vehicle.id}`), normalized).catch((err) => {
         console.warn("Live write vehicle Fleet failed:", err);
       });
     } else {
@@ -2048,10 +2048,10 @@ export const dbService = {
 
   deleteVehicleDriverRecord: (id: string, user: string, role: string) => {
     if (useFirebase) {
-      remove(ref(database, `vehicleFleet/${id}`)).catch((err) =>
+      remove(ref(database, `tractors/${id}`)).catch((err) =>
         console.warn(err),
       );
-      remove(ref(database, `vehicle_driver_data/${id}`)).catch((err) =>
+      remove(ref(database, `couplings/${id}`)).catch((err) =>
         console.warn(err),
       );
     } else {
@@ -2956,7 +2956,7 @@ export const dbService = {
       comment: d.comment || "",
     };
     if (useFirebase) {
-      set(ref(database, `driversPool/${d.id}`), payload);
+      set(ref(database, `drivers/${d.id}`), payload);
     } else {
       const local = getLocalStorageData<Driver[]>("ratipa_drivers", []);
       const idx = local.findIndex((x) => x.id === d.id);
