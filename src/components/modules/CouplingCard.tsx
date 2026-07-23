@@ -1,5 +1,6 @@
 import {useState, useEffect} from 'react'
 import {dbService} from '../../api'
+import {useFleetUnit} from '../../hooks/useFleet'
 import {Truck, User, Calendar, MapPin, X, ArrowLeft} from 'lucide-react'
 
 interface CouplingCardProps {
@@ -9,33 +10,32 @@ interface CouplingCardProps {
 }
 
 export default function CouplingCard({ carNumber, onClose, onOpenDriver }: CouplingCardProps) {
-  const [center, setCenter] = useState<any>(null);
+  // ЕДИНАЯ БАЗА: авто + прицеп + водитель + диспетчер (изменяемая связка).
+  // Подставил carNumber → прицеп/водитель/диспетчер подтягиваются автоматом.
+  const {unit: center, loading} = useFleetUnit(carNumber);
+
   const [bazaRec, setBazaRec] = useState<any>(null);
   const [trips, setTrips] = useState<any[]>([]);
 
+  // baza (Учёт выезда) и planDohod (рейсы) — отдельные ветки, soft-link (не часть сцепки).
   useEffect(() => {
-    // center (soft reference - read only)
-    const u1 = dbService.getVehicleDriverData((list: any[]) => {
-      const found = (list || []).find((c) => (c.carNumber || c.vehicleNumbers || '').replace(/[^А-ЯA-Z0-9]/g, '') === carNumber.replace(/[^А-ЯA-Z0-9]/g, ''));
-      setCenter(found || null);
-    });
-    // baza (Учёт выезда) - is this coupling currently there?
     const u2 = dbService.getBazaRecords((list: any[]) => {
       const found = (list || []).find((c) => (c.carNumber || '').replace(/[^А-ЯA-Z0-9]/g, '') === carNumber.replace(/[^А-ЯA-Z0-9]/g, ''));
       setBazaRec(found || null);
     });
-    // plan dohod trips
     const u3 = dbService.getPlanDohod((list: any[]) => {
       const found = (list || []).filter((t) => (t.carNumber || '').replace(/[^А-ЯA-Z0-9]/g, '') === carNumber.replace(/[^А-ЯA-Z0-9]/g, ''));
       setTrips(found.slice(0, 5));
     });
-    return () => { u1(); u2(); u3(); };
+    return () => { u2(); u3(); };
   }, [carNumber]);
 
   const inBaza = !!bazaRec;
   const bazaStatus = bazaRec?.status || (inBaza ? 'base' : null);
-  const driverId = center?.driverId;
-  const driverName = center?.driverNameRu || center?.driverName || center?.driverShortNameRu || bazaRec?.driverName || '';
+  // Водитель/диспетчер — из единой базы (разрешённые сущности), fallback на denormalized.
+  const driverId = center?.driverId || center?.driver?.id || '';
+  const driverName = center?.driverName || center?.driver?.shortNameRu || center?.driver?.name || bazaRec?.driverName || '';
+  const dispatcherName = center?.dispatcherName || center?.dispatcher?.name || '—';
 
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" onClick={onClose}>
@@ -50,7 +50,7 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
               <div className="text-lg font-black text-slate-900 font-mono">{center?.coupling || carNumber}</div>
               <div className="text-[11px] text-slate-400 font-mono">
                 {center?.trailerNumber ? `${center.trailerNumber}` : '—'}
-                {(center?.brandModel || center?.brandsRu || center?.brand) ? ` · ${center.brandModel || center?.brandsRu || center?.brand}` : ''}
+                {(center?.brandModel || center?.brandsRu || center?.brand) ? ` · ${center.brandModel || center?.brandsRu || center.brand}` : ''}
                 {center?.trailerMake ? ` / ${center.trailerMake}` : ''}
                 {center?.year ? ` · ${center.year} г.` : ''}
               </div>
@@ -76,20 +76,20 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
             </div>
           </div>
 
-          {/* Driver (soft link) */}
+          {/* Driver (из единой базы — разрешённая сущность) */}
           {driverName && (
             <button onClick={() => onOpenDriver(driverId || '', driverName)}
               className="w-full flex items-center gap-3 p-3 rounded-2xl bg-slate-50 hover:bg-blue-50 transition text-left">
               <User className="w-5 h-5 text-[#3765F6]" />
               <div className="flex-1">
-                <div className="text-[10px] font-bold uppercase text-slate-400">Водитель (из базы)</div>
+                <div className="text-[10px] font-bold uppercase text-slate-400">Водитель (из единой базы)</div>
                 <div className="text-sm font-semibold text-slate-800">{driverName}</div>
               </div>
               <ArrowLeft className="w-4 h-4 text-slate-300 rotate-180" />
             </button>
           )}
 
-          {/* Vehicle data (from базы сцепок) */}
+          {/* Vehicle data (from базы сцепок — единая база) */}
           <div>
             <div className="text-[10px] font-bold uppercase text-slate-400 mb-2 flex items-center gap-1">
               <Truck className="w-3.5 h-3.5" /> Данные по авто
@@ -102,6 +102,14 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
               <div className="p-3 rounded-2xl bg-slate-50">
                 <div className="text-[10px] font-bold uppercase text-slate-400">Марка прицепа</div>
                 <div className="text-sm font-semibold text-slate-800">{center?.trailerMake || '—'}</div>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <div className="text-[10px] font-bold uppercase text-slate-400">Прицеп (сцепка)</div>
+                <div className="text-sm font-semibold text-slate-800">{center?.trailerNumber || '—'}</div>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <div className="text-[10px] font-bold uppercase text-slate-400">Диспетчер</div>
+                <div className="text-sm font-semibold text-slate-800">{dispatcherName}</div>
               </div>
               <div className="p-3 rounded-2xl bg-slate-50">
                 <div className="text-[10px] font-bold uppercase text-slate-400">Тип</div>
@@ -122,10 +130,6 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
               <div className="p-3 rounded-2xl bg-slate-50">
                 <div className="text-[10px] font-bold uppercase text-slate-400">Ставка</div>
                 <div className="text-sm font-semibold text-slate-800">{center?.rate != null ? `${center.rate} €` : '—'}</div>
-              </div>
-              <div className="p-3 rounded-2xl bg-slate-50">
-                <div className="text-[10px] font-bold uppercase text-slate-400">Диспетчер</div>
-                <div className="text-sm font-semibold text-slate-800">{center?.dispatcher || '—'}</div>
               </div>
             </div>
           </div>
