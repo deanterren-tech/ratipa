@@ -2,6 +2,7 @@ import {useState, useEffect, useRef} from 'react'
 import {UserProfile, AppSettings} from '../../types'
 import {dbService} from '../../api'
 import {getEmbeddableSheetUrl} from '../../utils/embed'
+import GoogleSheetFrame from '../common/GoogleSheetFrame'
 import { 
   ZoomIn, 
   ZoomOut, 
@@ -174,12 +175,14 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
               }} 
               className="absolute top-0 left-0"
             >
-              <iframe 
-                key={`${activeTab.id}-${refreshKeys[activeTab.id] || 0}`}
-                src={embedUrl}
-                className="w-full h-full border-none"
-                title={`google-sheet-${activeTab.id}`}
-              />
+              <GoogleSheetFrame title={`Таблица: ${activeTab?.label || ''}`} toolbar>
+                <iframe 
+                  key={`${activeTab.id}-${refreshKeys[activeTab.id] || 0}`}
+                  src={embedUrl}
+                  className="w-full h-full border-none"
+                  title={`google-sheet-${activeTab.id}`}
+                />
+              </GoogleSheetFrame>
             </div>
          ) : (
             <div className="absolute inset-0 bg-white rounded-3xl flex items-center justify-center border border-slate-200/60 p-10">

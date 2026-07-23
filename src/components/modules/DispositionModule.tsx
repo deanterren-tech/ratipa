@@ -2,6 +2,7 @@ import React, {useState, useEffect, useRef} from 'react'
 import {UserProfile, AppSettings} from '../../types'
 import {dbService} from '../../api'
 import {getEmbeddableSheetUrl} from '../../utils/embed'
+import GoogleSheetFrame from '../common/GoogleSheetFrame'
 import { 
   Map, 
   Maximize2, 
@@ -529,17 +530,19 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
                position: 'absolute'
             }}>
               {settings && embedUrl && (
-                <iframe
-                  key={iframeKey + '-' + embedUrl}
-                  src={embedUrl}
-                  onLoad={() => setIsIframeLoading(false)}
-                  className="w-full h-full border-0 absolute top-0 left-0"
-                  style={{
-                    pointerEvents: (isGpsDragging || isGpsResizing) ? 'none' : 'auto'
-                  }}
-                  allow="clipboard-write"
-                  title="Диспозиция"
-                />
+                <GoogleSheetFrame title="Диспозиция" toolbar>
+                  <iframe
+                    key={iframeKey + '-' + embedUrl}
+                    src={embedUrl}
+                    onLoad={() => setIsIframeLoading(false)}
+                    className="w-full h-full border-0 absolute top-0 left-0"
+                    style={{
+                      pointerEvents: (isGpsDragging || isGpsResizing) ? 'none' : 'auto'
+                    }}
+                    allow="clipboard-write"
+                    title="Диспозиция"
+                  />
+                </GoogleSheetFrame>
               )}
             </div>
           </div>
