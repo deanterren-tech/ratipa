@@ -2,6 +2,7 @@ import React, {useState, useEffect, useRef, useMemo, useCallback} from 'react'
 import {useToast} from '../ToastProvider'
 import { formatToTitleCase } from '../../utils/format'
 import {TripList} from './TripList'
+import NotebookStatusPills from './NotebookStatusPills'
 import {Virtuoso} from 'react-virtuoso'
 import {
   UserProfile,
@@ -857,41 +858,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                   </div>
 
                   {/* Status Selection Pill Group */}
-                  <div className="flex bg-slate-50 border border-slate-200/50 p-0.5 rounded-lg text-[9px] font-semibold w-full select-none">
-                    <button
-                      type="button"
-                      onClick={() => pdService.saveNotebookStatus(selectedNotebookUser, car, "baza")}
-                      className={`flex-1 py-0.5 text-center rounded-md transition cursor-pointer text-[9px] ${
-                        notebookStatuses[car] === "baza"
-                          ? "bg-emerald-500 text-white shadow-sm font-bold"
-                          : "text-slate-400 hover:text-slate-600"
-                      }`}
-                    >
-                      На базе
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => pdService.saveNotebookStatus(selectedNotebookUser, car, "reis")}
-                      className={`flex-1 py-0.5 text-center rounded-md transition cursor-pointer text-[9px] ${
-                        notebookStatuses[car] === "reis"
-                          ? "bg-sky-500 text-white shadow-sm font-bold"
-                          : "text-slate-400 hover:text-slate-600"
-                      }`}
-                    >
-                      В рейсе
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => pdService.saveNotebookStatus(selectedNotebookUser, car, "none")}
-                      className={`flex-1 py-0.5 text-center rounded-md transition cursor-pointer text-[9px] ${
-                        notebookStatuses[car] === "none" || !notebookStatuses[car]
-                          ? "bg-white text-slate-600 border border-slate-200/40 shadow-sm font-bold"
-                          : "text-slate-400 hover:text-slate-600"
-                      }`}
-                    >
-                      Без статуса
-                    </button>
-                  </div>
+                  <NotebookStatusPills
+                    status={notebookStatuses[car]}
+                    onChange={(s) => pdService.saveNotebookStatus(selectedNotebookUser, car, s)}
+                  />
 
                   <textarea
                     value={valText}
