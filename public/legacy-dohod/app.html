@@ -1,0 +1,252 @@
+<div class="app-container" id="main-app" style="display: block;">
+    <!-- Internal Tabs replacing the old Navbar -->
+    <div class="navbar-wrapper">
+        <div class="nav-menu">
+            <span id="link-routes" class="nav-link active" onclick="switchTab('routes')">План дохода</span>
+            <span id="link-archive" class="nav-link" onclick="switchTab('archive')">Архив по месяцам</span>
+            <span id="link-history" class="nav-link" onclick="switchTab('history')">История действий</span>
+            <span id="link-settings" class="nav-link" onclick="switchTab('settings')">Настройки ⚙️</span>
+        </div>
+    </div>
+
+    <!-- Hidden elements to preserve JS compatibility -->
+    <div style="display: none;">
+        <span id="cloud-connection-indicator"><span id="cloud-status-text"></span></span>
+        <span id="display-user-name"></span>
+    </div>
+
+    <!-- Routes Tab -->
+    <div id="tab-routes" class="tab-content active">
+        <div class="section-box">
+            <h2 class="section-title">Конструктор дохода рейса</h2>
+            <div class="ai-panel">
+                <div>
+                    <div class="ai-panel-title">AI-парсер маршрута</div>
+                    <div class="ai-panel-hint">Вставьте текст из чата: «Минск — Стамбул, ставка 4300 евро, 2450 км, паром 300, коэф 1.1»</div>
+                    <textarea id="route-ai-input" class="input-flat" placeholder="Например: Едем из Минска..."></textarea>
+                </div>
+                <div class="ai-panel-actions">
+                    <button class="btn-green-big" style="margin:0;" onclick="processRouteAIInput()">Распознать и добавить</button>
+                    <div id="route-ai-output" class="ai-output">Enter переводит курсор, Ctrl+Enter сохраняет рейс.</div>
+                </div>
+            </div>
+            
+            <div class="constructor-inputs-grid">
+                <div>
+                    <label>Номер авто</label>
+                    <input type="text" id="main-car-number" list="cars-datalist" class="input-flat" placeholder="АЕ 1234-7">
+                    <datalist id="cars-datalist"></datalist>
+                    <datalist id="route-cities-datalist"></datalist>
+                </div>
+                <div>
+                    <label>Направление</label>
+                    <select id="main-direction-select" class="select-flat" onchange="handleDirectionChange('constructor')"></select>
+                </div>
+                <div><label>Дата выезда</label><input type="date" id="main-date-start" class="input-flat" onchange="calculateConstructor()"></div>
+                <div><label>Дата приезда</label><input type="date" id="main-date-end" class="input-flat" onchange="calculateConstructor()"></div>
+                <div><label>Доп. расходы (€)</label><input type="number" id="main-extra-expense" class="input-flat" placeholder="0" min="0" oninput="calculateConstructor()"></div>
+                <div><label>Примечание к доп.</label><input type="text" id="main-extra-note" class="input-flat" placeholder="Например: стоянка"></div>
+            </div>
+
+            <div class="empty-mileage-hint"><strong>Подсказка:</strong> нулевые/порожние пробеги не вносятся отдельной строкой.</div>
+            
+            <div class="table-responsive">
+                <table class="legs-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 56px; text-align: center;">Тек.</th><th style="width: 190px;">Откуда</th><th style="width: 190px;">Куда</th><th style="width: 130px;">км</th><th style="width: 140px;">Ставка</th><th style="width: 150px;">Справка</th><th style="width: 160px;">Паром</th><th style="width: 114px;">Коэфф.</th><th style="width: 100px;">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="constructor-legs-body"></tbody>
+                </table>
+            </div>
+
+            <div class="dashboard-grid">
+                <div class="dash-card"><div class="dash-label">Дней</div><div class="dash-value" id="res-days">0 дн.</div></div>
+                <div class="dash-card"><div class="dash-label">Пробег</div><div class="dash-value" id="res-km">0 км</div></div>
+                <div class="dash-card"><div class="dash-label">Фрахт</div><div class="dash-value" id="res-freight">0 €</div></div>
+                <div class="dash-card" style="border: 1px dashed #ef4444;"><div class="dash-label" style="color:#ef4444;">Расходы</div><div class="dash-value" id="res-expenses" style="color:#ef4444;">0 €</div></div>
+                <div class="dash-card" style="background:var(--bg-green); color:var(--text-green);"><div class="dash-label" style="color:var(--text-green);">Прибыль</div><div class="dash-value" id="res-profit">0 €</div></div>
+            </div>
+
+            <div id="constructor-formula-explanation" class="formula-box"></div>
+            <div class="sticky-save-panel">
+                <button class="btn-secondary-pill" onclick="copyConstructorTemplate()">Копировать без авто</button>
+                <button class="btn-secondary-pill" onclick="pasteConstructorTemplate()">Вставить копию</button>
+                <button class="btn-green-big" onclick="saveTripToFirebase()">Внести в журнал</button>
+            </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; margin-bottom: -5px; align-items: center;">
+            <button class="btn-secondary-pill" id="toggle-widget-btn" onclick="window.toggleWidgetVisibility(true)">📍 Показать блокнот</button>
+        </div>
+
+        <!-- Layout Notebook -->
+        <div class="split-dashboard-layout" id="split-layout-root">
+            <div class="split-left-widget floating-notebook" id="split-widget-container">
+                <div class="notebook-drag-title" id="notebook-drag-handle">
+                    <h3 style="font-size: 16px; font-weight: 850; margin-bottom: 2px;">Блокнот по авто</h3>
+                </div>
+                <div class="notebook-window-actions">
+                    <button class="notebook-dock-btn" title="Закрепить / Открепить" onclick="window.toggleNotebookDock(true)">📌</button>
+                    <button class="notebook-collapse-btn" onclick="window.toggleWidgetVisibility(true)">⌄</button>
+                </div>
+                <div class="notebook-user-switcher" id="notebook-user-switcher">
+                    <select id="notebook-user-select" class="select-flat" onchange="switchNotebookUser(this.value)"></select>
+                </div>
+                <div class="notebook-view-mode" id="notebook-view-mode">Редактируется ваш блокнот</div>
+                <div class="notebook-toolbar">
+                    <button class="btn-secondary-pill" onclick="addMyCarsToNotebook()">Внести свои авто</button>
+                </div>
+                <div class="notebook-form-row">
+                    <input type="text" id="notebook-car-input" list="cars-datalist" class="input-flat" placeholder="Номер авто">
+                    <button class="btn-action btn-plus" style="width: 44px; height: 44px;" onclick="addCarToNotebookDirectly()">+</button>
+                </div>
+                <div class="widget-table-box" style="border: none; background: transparent; padding: 0;">
+                    <div id="personal-widget-body" class="personal-widget-cards-container"></div>
+                </div>
+            </div>
+            
+            <button class="notebook-minimized-pill" id="notebook-minimized-pill" onclick="window.toggleWidgetVisibility(true)">Блокнот</button>
+            <div class="split-resizer" id="split-divider-bar"></div>
+
+            <div class="split-right-journal" id="split-journal-container">
+                <div class="tabs-header" id="journal-tabs"></div>
+                <div style="margin: 10px 0 14px;"><input type="text" id="active-car-search" class="input-flat" placeholder="Поиск..." oninput="renderActiveStrips()"></div>
+                <div class="journal-container-wrapper">
+                    <div class="strip-list">
+                        <div class="car-strip strip-head">
+                            <div class="sortable-header active-sort" id="th-carNumber" onclick="handleHeaderClick('carNumber')">Авто <span class="sort-icon">▼</span></div>
+                            <div class="sortable-header" id="th-direction" onclick="handleHeaderClick('direction')">Направление</div>
+                            <div class="sortable-header" id="th-days" onclick="handleHeaderClick('days')">Даты</div>
+                            <div>Плечи</div>
+                            <div class="sortable-header" id="th-totalKm" onclick="handleHeaderClick('totalKm')">Пробег</div>
+                            <div class="sortable-header" id="th-totalFreight" onclick="handleHeaderClick('totalFreight')">Фрахт</div>
+                            <div style="color: #ef4444;">Расходы</div>
+                            <div class="sortable-header" id="th-profit" onclick="handleHeaderClick('profit')">Прибыль</div>
+                            <div class="sortable-header" id="th-days-plain">Дни</div>
+                            <div class="sortable-header" id="th-dayProfit">В день</div>
+                        </div>
+                        <div class="strip-list" id="active-strips-container"></div>
+                        <div id="active-cars-summary" class="active-summary-grid"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tab-archive" class="tab-content">
+        <div class="section-box">
+            <h2 class="section-title">🗄️ Архив по месяцам</h2>
+            <div class="archive-carousel-controls">
+                <button class="carousel-btn" onclick="shiftCarousel(-1)">◀ Прошлые</button>
+                <span id="carousel-current-view-label">Периоды</span>
+                <button class="carousel-btn" onclick="shiftCarousel(1)">Следующие ▶</button>
+            </div>
+            <div class="archive-grid" id="archive-columns-container"></div>
+        </div>
+    </div>
+
+    <div id="tab-history" class="tab-content">
+        <div class="section-box">
+            <div style="display: flex; justify-content: space-between;"><h2 class="section-title">📜 История</h2></div>
+            <div id="history-logs-container"></div>
+        </div>
+    </div>
+
+    <div id="tab-settings" class="tab-content">
+        <div class="section-box">
+            <h2 class="section-title">⚙️ Настройки</h2>
+            <div id="sergey-admin-panel" style="display: none; padding: 20px;">
+                <h3>Панель администратора</h3>
+                <div id="admin-rights-assignment-block"><div id="rights-checkboxes-container"></div></div>
+                <div id="admin-notebook-rights-block"><div id="notebook-rights-checkboxes-container"></div></div>
+                <div class="admin-soft-card">
+                    <label><input type="checkbox" id="distance-lookup-toggle" onchange="toggleDistanceLookup(this.checked)"> Включить подсказки дистанций</label>
+                    <select id="distance-lookup-mode" class="select-flat" onchange="setDistanceLookupMode(this.value)"><option value="full">Полный</option></select>
+                </div>
+            </div>
+            <div class="settings-grid">
+                <div style="background: var(--bg-main); padding: 15px; border-radius: 12px;">
+                    <h3>🚚 База ТС</h3>
+                    <div style="display: flex; gap: 8px;"><input type="text" id="new-car-db-input" class="input-flat"><button class="btn-secondary-pill" onclick="addCarToDatabase()">Добавить</button></div>
+                    <div class="settings-list-box"><table class="settings-table"><tbody id="settings-cars-tbody"></tbody></table></div>
+                </div>
+                <div style="background: var(--bg-main); padding: 15px; border-radius: 12px;">
+                    <h3>🌍 Направления</h3>
+                    <div style="display: flex; gap: 8px;"><input type="text" id="new-dir-name" class="input-flat"><input type="number" id="new-dir-coeff" class="input-flat"><button class="btn-secondary-pill" onclick="addDirectionToDB()">Добавить</button></div>
+                    <div class="settings-list-box"><table class="settings-table"><tbody id="settings-directions-tbody"></tbody></table></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="edit-trip-modal">
+    <div class="modal-window">
+        <div class="modal-header"><h3 id="modal-title-header">Редактирование</h3><button class="btn-action btn-minus" onclick="closeModal()">✕</button></div>
+        <input type="hidden" id="modal-trip-id">
+        <div class="constructor-inputs-grid">
+            <div><label>Номер авто</label><input type="text" id="modal-car-number" class="input-flat"></div>
+            <div><label>Направление</label><select id="modal-direction-select" class="select-flat" onchange="handleDirectionChange('modal')"></select></div>
+            <div><label>Выезд</label><input type="date" id="modal-date-start" class="input-flat" onchange="calculateModal()"></div>
+            <div><label>Приезд</label><input type="date" id="modal-date-end" class="input-flat" onchange="calculateModal()"></div>
+            <div><label>Доп. расходы</label><input type="number" id="modal-extra-expense" class="input-flat" oninput="calculateModal()"></div>
+            <div><label>Примечание</label><input type="text" id="modal-extra-note" class="input-flat"></div>
+        </div>
+        <div class="modal-note-grid">
+            <div><label>Примечание к рейсу</label><input type="text" id="modal-trip-note" class="input-flat"></div>
+            <div>
+                <label>Цвет</label>
+                <div class="modal-color-control">
+                    <button type="button" class="strip-color-preset" data-color="#3b82f6" style="--preset-color:#3b82f6;" onclick="selectStripColor('#3b82f6')"></button>
+                    <button type="button" class="strip-color-preset" data-color="#107c41" style="--preset-color:#107c41;" onclick="selectStripColor('#107c41')"></button>
+                    <input type="hidden" id="modal-strip-color" value="#3b82f6">
+                </div>
+            </div>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+            <span>Диспетчер: <select id="modal-dispatcher-select" class="select-flat" style="width: 150px; display: inline-block;"></select></span>
+            <span>Месяц: <select id="modal-archive-month-select" class="select-flat" style="width: 150px; display: inline-block;"></select></span>
+        </div>
+        <div class="table-responsive">
+            <table class="legs-table"><thead><tr><th>Тек.</th><th>Откуда</th><th>Куда</th><th>км</th><th>Ставка</th><th>Справка</th><th>Паром</th><th>Коэфф.</th><th>Действия</th></tr></thead><tbody id="modal-legs-body"></tbody></table>
+        </div>
+        <div class="dashboard-grid" style="background:var(--bg-main); padding:12px; border-radius:10px; margin-bottom:15px;">
+            <div><span id="m-res-days">0</span></div>
+            <div><span id="m-res-km">0 км</span></div>
+            <div><span id="m-res-freight">0 €</span></div>
+            <div><span id="m-res-expenses" style="color:#ef4444;">0 €</span></div>
+            <div><span id="m-res-profit" style="color:var(--text-green);">0 €</span></div>
+            <div><span id="m-res-profit-fact" style="color:#b45309;">—</span></div>
+        </div>
+        <div>
+            <label style="color:#b45309;">Фактический пробег после рейса</label>
+            <input type="number" id="modal-fact-km" class="input-flat" placeholder="4 850 км" oninput="calculateModal()">
+        </div>
+        <div id="modal-formula-explanation" style="margin: 15px 0;"></div>
+        <div class="modal-action-footer">
+            <button class="modal-btn modal-btn-danger" onclick="deleteTripFromDB()">Удалить</button>
+            <div class="modal-actions-right">
+                <button class="modal-btn modal-btn-neutral" onclick="closeModal()">Отмена</button>
+                <button id="modal-archive-action-btn" class="modal-btn modal-btn-warning" onclick="archiveTripDirectlyFromModal()">В архив</button>
+                <button class="modal-btn modal-btn-primary" onclick="updateTripInFirebase()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="chat-floating-button" onclick="toggleSystemChatWindow()">💬<div class="chat-badge" id="global-chat-badge" style="display:none;">0</div></div>
+<div class="chat-window-box" id="system-chat-box-root">
+    <div class="chat-header"><span>💬 Общий чат диспетчеров</span><span style="cursor:pointer;" onclick="toggleSystemChatWindow()">✕</span></div>
+    <div class="chat-messages-area" id="chat-messages-container"></div>
+    <div class="chat-input-row">
+        <input type="text" id="chat-message-input" class="input-flat" placeholder="Напишите сообщение...">
+        <button id="chat-edit-cancel-btn" class="chat-edit-cancel" style="display:none;" onclick="cancelEditChatMessage()">Esc</button>
+        <button id="chat-send-btn" class="btn-secondary-pill" onclick="sendChatMessage()">Отправить</button>
+    </div>
+</div>
+<div class="chat-toast" id="chat-new-message-toast" onclick="openChatFromToast()">
+    <div class="chat-toast-title" id="chat-toast-title">Новое</div>
+    <div class="chat-toast-body" id="chat-toast-body">...</div>
+</div>

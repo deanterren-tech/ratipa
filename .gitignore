@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.py
+paste_full.txt
+parse2.py
+import_pasted.py
+apply_pasted.py
+parse_pasted_plan.py
+.env*
+.DS_Store
