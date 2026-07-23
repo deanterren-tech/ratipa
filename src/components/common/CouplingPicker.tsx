@@ -2,7 +2,7 @@ import {useState, useRef, useEffect, useMemo} from 'react'
 import {createPortal} from 'react-dom'
 import {Search, Truck, X, MapPin} from 'lucide-react'
 import {dbService} from '../../api'
-import {getCouplings} from '../../services/fleetService'
+import {getCouplingsFlat} from '../../services/fleetService'
 import {formatDriverShortName} from '../../utils/driverSync'
 
 interface CouplingPickerProps {
@@ -34,8 +34,8 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // ЕДИНАЯ БАЗА: сцепки (авто+прицеп+водитель+диспетчер) из fleetService
-    const unsub = getCouplings((list: any[]) => setAll(list || []));
+    // ЕДИНАЯ БАЗА: плоский список сцепок (совместимый с вызывающим кодом)
+    const unsub = getCouplingsFlat((list: any[]) => setAll(list || []));
     return unsub;
   }, []);
 
@@ -102,17 +102,17 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
 
   const couplingsFiltered = useMemo(() => {
     if (mode === 'combined' && !query.trim()) {
-      return all.filter((c) => !excludeIds.includes(c.couplingId)).slice(0, 8);
+      return all.filter((c) => !excludeIds.includes(c.couplingId || c.id)).slice(0, 8);
     }
     const q = norm(query);
     return all
-      .filter((c) => !excludeIds.includes(c.couplingId))
+      .filter((c) => !excludeIds.includes(c.couplingId || c.id))
       .filter((c) => {
         if (!q) return true;
-        const car = c.tractor?.carNumber || '';
-        const trail = c.trailer?.trailerNumber || '';
-        const drv = c.driver?.shortNameRu || c.driver?.name || '';
-        const brand = c.tractor?.brandModel || c.tractor?.brandsRu || c.tractor?.brand || '';
+        const car = c.carNumber || c.tractor?.carNumber || '';
+        const trail = c.trailerNumber || c.trailer?.trailerNumber || '';
+        const drv = c.driverName || c.driverNameRu || c.driver?.shortNameRu || c.driver?.name || '';
+        const brand = c.brandModel || c.brand || c.tractor?.brandModel || c.tractor?.brandsRu || c.tractor?.brand || '';
         const hay = mode === 'driver'
           ? drv.toLowerCase().replace(/\s+/g, '')
           : [car, trail, drv, brand].join(' ').toLowerCase().replace(/\s+/g, '');
@@ -133,8 +133,8 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
   const handlePick = (rec: any) => {
     setSelected(rec);
     if (mode === 'combined') {
-      const label = rec.tractor?.carNumber || rec.couplingId || '';
-      const trail = rec.trailer?.trailerNumber || '';
+      const label = rec.carNumber || rec.tractor?.carNumber || rec.couplingId || '';
+      const trail = rec.trailerNumber || rec.trailer?.trailerNumber || '';
       setQuery(trail ? `${label} / ${trail}` : label);
     } else {
       setQuery('');
@@ -157,22 +157,22 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
 
   const displayLabel = (rec: any) => {
     if (mode === 'driver') {
-      return formatDriverShortName(rec.driver?.shortNameRu || rec.driver?.name || '') || 'нет водителя';
+      return formatDriverShortName(rec.driverName || rec.driverNameRu || rec.driver?.shortNameRu || rec.driver?.name || '') || 'нет водителя';
     }
-    const car = rec.tractor?.carNumber || rec.couplingId || '';
-    const trail = rec.trailer?.trailerNumber || '';
+    const car = rec.carNumber || rec.tractor?.carNumber || rec.couplingId || '';
+    const trail = rec.trailerNumber || rec.trailer?.trailerNumber || '';
     return trail ? `${car} / ${trail}` : car;
   };
   const displaySub = (rec: any) => {
-    const car = rec.tractor?.carNumber || '';
-    const trail = rec.trailer?.trailerNumber || '';
-    const brand = rec.tractor?.brandModel || rec.tractor?.brandsRu || rec.tractor?.brand || '';
+    const car = rec.carNumber || rec.tractor?.carNumber || '';
+    const trail = rec.trailerNumber || rec.trailer?.trailerNumber || '';
+    const brand = rec.brandModel || rec.brand || rec.tractor?.brandModel || rec.tractor?.brandsRu || rec.tractor?.brand || '';
     if (mode === 'driver') {
       return [car + (trail ? ` + ${trail}` : ''), brand].filter(Boolean).join(' · ');
     }
     if (mode === 'combined') return brand || '';
     return [
-      formatDriverShortName(rec.driver?.shortNameRu || rec.driver?.name || '') || 'нет водителя',
+      formatDriverShortName(rec.driverName || rec.driverNameRu || rec.driver?.shortNameRu || rec.driver?.name || '') || 'нет водителя',
       brand,
     ].filter(Boolean).join(' · ');
   };
