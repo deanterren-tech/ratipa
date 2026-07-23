@@ -4,13 +4,13 @@ import { getDatabase, ref, get, set, push, update, remove } from "firebase/datab
 
 // ---- Firebase init (inlined) ----
 const firebaseConfig = {
-  apiKey: process.env.FIREBASE_API_KEY || "REMOVED_GOOGLE_API_KEY",
-  authDomain: "ratipa-panel.firebaseapp.com",
-  databaseURL: "https://ratipa-panel-default-rtdb.firebaseio.com",
-  projectId: "ratipa-panel",
-  storageBucket: "ratipa-panel.firebasestorage.app",
-  messagingSenderId: "726344734944",
-  appId: "1:726344734944:web:10f511be867e03f9e71885",
+  apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY || "",
+  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || "ratipa-panel.firebaseapp.com",
+  databaseURL: process.env.VITE_FIREBASE_DATABASE_URL || "",
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID || "ratipa-panel",
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "ratipa-panel.firebasestorage.app",
+  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+  appId: process.env.VITE_FIREBASE_APP_ID || "",
 };
 
 let app: any;
