@@ -32,29 +32,7 @@ import {
   Driver,
   CurrencyPreset,
 } from "./types";
-
-const storedCustomConfig = localStorage.getItem(
-  "ratipa_custom_firebase_config",
-);
-let customConfig = null;
-if (storedCustomConfig) {
-  try {
-    customConfig = JSON.parse(storedCustomConfig);
-  } catch (e) {}
-}
-
-const defaultFirebaseConfig = {
-  apiKey: "REMOVED_GOOGLE_API_KEY",
-  authDomain: "ratipa-panel.firebaseapp.com",
-  databaseURL: "https://ratipa-panel-default-rtdb.firebaseio.com",
-  projectId: "ratipa-panel",
-  storageBucket: "ratipa-panel.firebasestorage.app",
-  messagingSenderId: "726344734944",
-  appId: "1:726344734944:web:10f511be867e03f9e71885",
-};
-
-export const firebaseConfig =
-  customConfig && customConfig.apiKey ? customConfig : defaultFirebaseConfig;
+import { firebaseConfig } from "./firebaseConfig";
 
 // Resilient initialization
 let app;

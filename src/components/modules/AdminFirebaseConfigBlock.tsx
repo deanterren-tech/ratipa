@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { Database } from 'lucide-react';
-import { firebaseConfig as activeConfig } from '../../firebase';
+import { firebaseConfig as activeConfig, getCustomFirebaseConfig } from '../../firebaseConfig';
 
 export default function AdminFirebaseConfigBlock() {
   const [config, setConfig] = useState(() => {
-     const stored = localStorage.getItem('ratipa_custom_firebase_config');
+     const stored = getCustomFirebaseConfig();
      if (stored) {
-         try { return JSON.parse(stored); } catch(e) {}
+         return stored;
      }
      return { ...activeConfig };
   });
