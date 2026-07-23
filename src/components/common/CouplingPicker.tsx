@@ -2,6 +2,7 @@ import {useState, useRef, useEffect, useMemo} from 'react'
 import {createPortal} from 'react-dom'
 import {Search, Truck, X, MapPin} from 'lucide-react'
 import {dbService} from '../../api'
+import {getCouplings} from '../../services/fleetService'
 import {formatDriverShortName} from '../../utils/driverSync'
 
 interface CouplingPickerProps {
@@ -33,7 +34,8 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const unsub = dbService.getVehicleDriverData((list: any[]) => setAll(list || []));
+    // ЕДИНАЯ БАЗА: сцепки (авто+прицеп+водитель+диспетчер) из fleetService
+    const unsub = getCouplings((list: any[]) => setAll(list || []));
     return unsub;
   }, []);
 

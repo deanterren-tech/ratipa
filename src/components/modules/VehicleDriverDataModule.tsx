@@ -25,7 +25,8 @@ import {
   Truck,
   Users
 } from 'lucide-react';
-import { dbService, database } from '../../api'
+import {dbService, database} from '../../api'
+import {getCouplings, getDriversFlat} from '../../services/fleetService'
 import { ref, update } from 'firebase/database';
 import {UserProfile, AppSettings, PhoneNumber, Driver, CarRateGroup} from '../../types'
 import {formatDriverShortName} from '../../utils/driverSync'
@@ -341,7 +342,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     // Fetch live vehicles data — getVehicleDriverData now reads the unified
     // base (vehicleFleet). Both `records` and `fleetVehicles` come from it,
     // and verifyFleet is just an alias of fleetVehicles (single source of truth).
-    const unsubData = dbService.getVehicleDriverData((list) => {
+    const unsubData = getCouplings((list) => {
       setRecords(list);
       setFleetVehicles(list); // Combined: records and fleetVehicles are identical, eliminating duplicate listeners!
       setVerifyFleet(list);   // verification queue reads the same unified base
@@ -351,9 +352,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     const unsubCarRateGroups = dbService.getCarRateGroups ? dbService.getCarRateGroups(setCarRateGroups) : () => {};
 
     // Fetch reference catalogs once on component mount with our built-in cache to improve speed
-    const unsubDrivers = (dbService as any).getDriversOnce ? (dbService as any).getDriversOnce((list: any[]) => {
-      setDrivers(list);
-    }) : dbService.getDrivers((list) => {
+    const unsubDrivers = getDriversFlat((list: any[]) => {
       setDrivers(list);
     });
 

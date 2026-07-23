@@ -3,6 +3,7 @@ import {createPortal} from 'react-dom'
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
 import {dbService, directoryService} from '../../api'
+import {getCouplings, getDriversFlat, getDispatchersFlat} from '../../services/fleetService'
 import {Truck, Plus, Trash2, Pencil, Search, Link2, X, Check, Layers, Tag, Users} from 'lucide-react'
 import {UserProfile} from '../../types'
 import CouplingCard from './CouplingCard';
@@ -62,7 +63,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   const [bulkField, setBulkField] = useState<'rateGroupId' | 'dispatcher' | null>(null);
 
   useEffect(() => {
-    const u1 = dbService.getVehicleDriverData((list: any[]) => {
+    const u1 = getCouplings((list: any[]) => {
       setCouplings((list || []).map((c) => ({
         id: c.id,
         carNumber: c.carNumber || c.vehicleNumbers || '',
@@ -81,8 +82,8 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
         status: c.status || 'base',
       })));
     });
-    const u2 = dbService.getDrivers((l: any[]) => setDrivers(l || []));
-    const u3 = directoryService.getDispatchers((l: any[]) => setDispatchers(l || []));
+    const u2 = getDriversFlat((l: any[]) => setDrivers(l || []));
+    const u3 = getDispatchersFlat((l: any[]) => setDispatchers(l || []));
     const u4 = directoryService.getRateGroups((l: any[]) => setRateGroups(l || []));
     const u5 = directoryService.getVehicleBrands((l: any[]) => setVehicleBrands(l || []));
     const u6 = directoryService.getTrailerBrands((l: any[]) => setTrailerBrands(l || []));
