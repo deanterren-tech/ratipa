@@ -41,7 +41,6 @@ import UserManagementBlock from './UserManagementBlock';
 import AdminOnlinePresenceBlock from './AdminOnlinePresenceBlock';
 import CurrentPlanningSettingsBlock from './CurrentPlanningSettingsBlock';
 import PlanZagruzokSettingsBlock from './PlanZagruzokSettingsBlock';
-import PlanDohodDispatchersSettingsBlock from './PlanDohodDispatchersSettingsBlock';
 import AdminFirebaseConfigBlock from './AdminFirebaseConfigBlock';
 import AdminMapboxLimitsBlock from './AdminMapboxLimitsBlock';
 import AdminAgentBlock from './AdminAgentBlock';
@@ -243,7 +242,16 @@ export default function AdminModule({ user }: AdminModuleProps) {
           </div>
 
           <div className={activeTab === 'income' ? 'space-y-6' : 'hidden'}>
-            <PlanDohodDispatchersSettingsBlock user={user} />
+            <div className="bg-white/40 backdrop-blur-md rounded-[1.8rem] p-6 lg:p-8 border border-white/45 shadow-xs">
+              <div className="flex items-center gap-2 mb-2">
+                <ShieldAlert className="w-4 h-4 text-[#3765F6]" />
+                <h2 className="text-sm font-bold text-slate-900">Диспетчеры</h2>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Справочник диспетчеров теперь единый — управляется в разделе <b>«Справочники» → «Диспетчеры»</b>.
+                Там же доступны цвета и перетаскивание для изменения порядка вывода.
+              </p>
+            </div>
           </div>
 
           <div className={activeTab === 'navigation' ? 'space-y-6' : 'hidden'}>

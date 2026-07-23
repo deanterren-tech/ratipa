@@ -294,6 +294,21 @@ export const directoryService = {
     dbService.logAction(user, role, "Удаление из справочника", "Directories", id, `Справочник ${collection}: ${id}`);
   },
 
+  // Переупорядочивание всего справочника (сохраняет переданный массив как новый порядок)
+  reorderDir: (collection: string, orderedItems: any[], user = "system", role = "admin") => {
+    if (useFirebase) {
+      const updates: Record<string, any> = {};
+      orderedItems.forEach((it) => {
+        const id = it.id || it.key;
+        if (id) updates[`directories/${collection}/${id}`] = { ...it, id };
+      });
+      update(ref(database, "."), updates);
+    } else {
+      setLocalStorageData(`ratipa_dir_${collection}`, orderedItems);
+    }
+    dbService.logAction(user, role, "Переупорядочивание справочника", "Directories", collection, `Справочник ${collection}: ${orderedItems.length} записей`);
+  },
+
   // --- АДАПТЕРЫ для унификации (pdService → единая база) ---
   // Диспетчеры как плоский список имён (совместимо с pdService.subscribeDispatchers)
   getDispatchersFlat: (cb: (names: string[]) => void) => {

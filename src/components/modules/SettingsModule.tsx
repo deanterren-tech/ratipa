@@ -997,7 +997,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       {activeTab === 'routes' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
-          {/* A. DIRECTIONS & COEFFICIENTS (Left panel) */}
+          {/* A. DIRECTIONS & COEFFICIENTS — перенесено в Справочники */}
           <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 flex flex-col">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
               <div>
@@ -1007,93 +1007,10 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                 </h3>
                 <span className="text-[10px] text-slate-400 font-mono font-bold uppercase">Наценка на путевой километр расхода</span>
               </div>
-
-              {/* Local search */}
-              <div className="relative w-full sm:w-40">
-                <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
-                  <Search className="w-3 h-3" />
-                </span>
-                <input
-                  type="text"
-                  placeholder="Поиск..."
-                  value={directionSearch}
-                  onChange={(e) => setDirectionSearch(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 pl-7 pr-2 py-1 rounded-lg text-[9px] font-mono font-bold uppercase tracking-wide outline-none focus:border-blue-400 transition"
-                />
-              </div>
             </div>
-
-            {isWritePermitted && (
-              <form onSubmit={handleAddDirection} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50/50 p-2.5 rounded-xl border border-slate-150">
-                <input
-                  type="text"
-                  placeholder="Германия / Азия"
-                  required
-                  value={dirName}
-                  onChange={(e) => setDirName(e.target.value)}
-                  className="px-3.5 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/10 font-bold text-slate-800 transition"
-                />
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="Коэф (напр. 1.25)"
-                  required
-                  value={dirCoeff}
-                  onChange={(e) => setDirCoeff(Number(e.target.value))}
-                  className="px-3.5 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/10 font-bold text-slate-800 font-mono transition"
-                />
-                <div className="flex gap-2">
-                  <button type="submit" className="flex-1 bg-[#3765F6] hover:bg-[#2555E5] text-white rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95 py-2.5">
-                    {editingDirKey ? 'Сохранить' : 'Добавить'}
-                  </button>
-                  {editingDirKey && (
-                    <button 
-                      type="button" 
-                      onClick={handleCancelEditDirection} 
-                      className="px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold transition cursor-pointer"
-                    >
-                      X
-                    </button>
-                  )}
-                </div>
-              </form>
-            )}
-
-            <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar flex-1">
-              {filteredDirections.map(([name, coeff]) => (
-                <div key={name} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl text-xs font-bold border border-slate-100 group transition">
-                  <span className="text-slate-800 uppercase font-mono tracking-tight flex items-center gap-2">
-                    <MapPin size={13} className="text-slate-400" />
-                    {name}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <strong className="text-slate-950 font-mono font-black py-0.5 px-2 bg-slate-200 rounded">x{coeff as number}</strong>
-                    {isWritePermitted && (
-                      <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition duration-150">
-                        <button 
-                          onClick={() => handleEditClickDirection(name, coeff as number)} 
-                          className="text-indigo-600 hover:text-indigo-800 p-1 bg-white border border-slate-200 rounded transition"
-                          title="Изменить"
-                        >
-                          <Edit2 className="h-3.5 w-3.5" />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteDirection(name)} 
-                          className="text-rose-500 hover:text-rose-700 p-1 bg-white border border-slate-200 rounded transition"
-                          title="Удалить"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {filteredDirections.length === 0 && (
-                <div className="text-center py-10 text-slate-400 text-[10px] font-mono font-black uppercase tracking-widest bg-slate-50 rounded-xl">
-                  Направления не найдены
-                </div>
-              )}
+            <div className="p-4 bg-blue-50/60 border border-blue-100 rounded-xl text-xs text-slate-600 leading-relaxed">
+              Редактирование направлений и коэффициентов теперь в едином разделе{' '}
+              <b>«Справочники» → «Направления»</b>. Там доступны поиск, изменение коэффициента и удаление записей.
             </div>
           </div>
 
