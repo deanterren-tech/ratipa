@@ -25,6 +25,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [activeEnv, setActiveEnv] = useState<"PROD" | "TEST">("PROD");
+  const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const usernameRef = useRef("");
 
@@ -171,11 +172,11 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
       <div className="absolute inset-0 overflow-hidden pointer-events-none select-none z-0">
         <motion.div
           className="absolute -top-32 -left-32 w-[650px] h-[650px] rounded-full bg-[#3765F6]/14 blur-[130px] md:blur-[170px]"
-          animate={{
+          animate={prefersReducedMotion ? undefined : {
             x: [0, 20, -10, 0],
             y: [0, -15, 15, 0],
           }}
-          transition={{
+          transition={prefersReducedMotion ? undefined : {
             duration: 25,
             repeat: Infinity,
             ease: "easeInOut"
@@ -183,11 +184,11 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
         />
         <motion.div
           className="absolute -bottom-32 right-[10%] w-[700px] h-[550px] rounded-full bg-emerald-500/10 blur-[130px] md:blur-[170px]"
-          animate={{
+          animate={prefersReducedMotion ? undefined : {
             x: [0, -20, 20, 0],
             y: [0, 15, -15, 0],
           }}
-          transition={{
+          transition={prefersReducedMotion ? undefined : {
             duration: 30,
             repeat: Infinity,
             ease: "easeInOut",
@@ -215,11 +216,11 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
               ...(pill.left ? { left: pill.left } : { right: pill.right })
             }}
             className="hidden md:flex items-center gap-2 px-3.5 py-2 bg-white/45 border border-slate-200/40 rounded-full text-[11px] font-bold text-slate-500/80 shadow-3xs backdrop-blur-3xs opacity-60 pointer-events-none select-none"
-            animate={{
+            animate={prefersReducedMotion ? undefined : {
               x: pill.x,
               y: pill.y
             }}
-            transition={{
+            transition={prefersReducedMotion ? undefined : {
               duration: pill.duration,
               repeat: Infinity,
               ease: "easeInOut",

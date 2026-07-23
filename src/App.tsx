@@ -3,6 +3,7 @@ import { UserProfile } from './types';
 import AuthScreen from './components/AuthScreen';
 import AppShell from './components/AppShell';
 import { dbService } from './api';
+import { MotionConfig } from 'motion/react';
 
 import { DialogProvider } from './components/DialogProvider';
 import { ToastProvider } from './components/ToastProvider';
@@ -116,14 +117,16 @@ export default function App() {
   }
 
   return (
-    <ToastProvider>
-      <DialogProvider>
-        {!user ? (
-          <AuthScreen onLoginSuccess={handleLoginSuccess} />
-        ) : (
-          <AppShell user={user} onLogout={handleLogout} />
-        )}
-      </DialogProvider>
-    </ToastProvider>
+    <MotionConfig reducedMotion="user">
+      <ToastProvider>
+        <DialogProvider>
+          {!user ? (
+            <AuthScreen onLoginSuccess={handleLoginSuccess} />
+          ) : (
+            <AppShell user={user} onLogout={handleLogout} />
+          )}
+        </DialogProvider>
+      </ToastProvider>
+    </MotionConfig>
   );
 }

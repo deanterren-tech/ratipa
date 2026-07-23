@@ -15,11 +15,6 @@ import {
   Navigation,
   X,
   Minus,
-  Truck,
-  Home,
-  Search,
-  ChevronLeft,
-  ChevronRight,
   FileSpreadsheet
 } from 'lucide-react';
 
@@ -530,7 +525,18 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
                position: 'absolute'
             }}>
               {settings && embedUrl && (
-                <GoogleSheetFrame title="Диспозиция" toolbar>
+                <GoogleSheetFrame
+                  title="Диспозиция"
+                  subtitle="Полная таблица с информацией о местонахождении авто, статусах и комментариях"
+                  zoom={zoomLevel}
+                  onZoomChange={setZoomLevel}
+                  onRefresh={() => {
+                    setIframeKey(prev => prev + 1);
+                    setIsIframeLoading(true);
+                  }}
+                  collapseKey="disposition"
+                  toolbar
+                >
                   <iframe
                     key={iframeKey + '-' + embedUrl}
                     src={embedUrl}
