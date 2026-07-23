@@ -67,7 +67,7 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
               <div className="text-[10px] font-bold uppercase text-slate-400">Местонахождение (Учёт выезда)</div>
               {inBaza ? (
                 <div className="text-sm font-semibold text-slate-800">
-                  В учёте выезда · статус: {bazaStatus === 'base' ? 'на базе' : bazaStatus === 'trip' ? 'в рейсе' : bazaStatus || '—'}
+                  В учёте выезда · статус: {bazaStatus === 'base' ? 'на базе' : bazaStatus === 'departure' ? 'в рейсе' : bazaStatus || '—'}
                   {bazaRec?.dateDeparture ? ` · выезд ${bazaRec.dateDeparture}` : ''}
                 </div>
               ) : (
