@@ -1026,7 +1026,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                 <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
                   {onlineUsers.map(u => (
                     <div key={u.presenceId} className="flex items-center gap-2">
-                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse shrink-0"></span>
+                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] shrink-0"></span>
                        <span className="text-xs font-bold text-slate-800 truncate" title={`${u.name} (${u.role})`}>{u.name}</span>
                     </div>
                   ))}
@@ -1308,7 +1308,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-2.5">
-                  <div className="p-1.5 bg-slate-900 border border-slate-800 rounded-lg text-[#70FC8E] mt-0.5 animate-pulse">
+                  <div className="p-1.5 bg-slate-900 border border-slate-800 rounded-lg text-[#70FC8E] mt-0.5">
                     <BellRing className="h-4.5 w-4.5" />
                   </div>
                   <div>

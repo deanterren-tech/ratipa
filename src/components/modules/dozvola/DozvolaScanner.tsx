@@ -196,7 +196,7 @@ export default function DozvolaScanner({ user, customTypesKeys, customTypesMap }
                 {isProcessing && (
                     <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center z-10">
                         <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mb-3" />
-                        <span className="text-sm font-black tracking-tight text-slate-800 animate-pulse">Идет распознавание...</span>
+                        <span className="text-sm font-black tracking-tight text-slate-800">Идет распознавание...</span>
                     </div>
                 )}
             </div>

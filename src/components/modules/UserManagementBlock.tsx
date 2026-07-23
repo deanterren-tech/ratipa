@@ -510,7 +510,7 @@ export default function UserManagementBlock({ user }: Props) {
                   <span className="bg-[#3765F6]/10 text-[#3765F6] border border-[#3765F6]/20 px-2.5 py-0.5 rounded-full font-semibold">{ROLE_LABELS[selectedUser.role] || selectedUser.role}</span>
                   <span className="bg-slate-100 text-slate-500 border border-slate-200/50 px-2 py-0.5 rounded-full font-semibold">ID: {selectedUser.uid}</span>
                   <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
                     Активность: {new Date(selectedUser.lastActive || new Date()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>

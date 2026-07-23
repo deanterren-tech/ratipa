@@ -30,7 +30,7 @@ export default function TypingText({ phrases, className }: { phrases: string[]; 
     return (
         <span className={className || "text-xl font-mono text-slate-500 font-bold ml-4 inline-block tracking-tight"}>
             {text}
-            <span className="animate-pulse">|</span>
+            <span className="">|</span>
         </span>
     );
 }

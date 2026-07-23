@@ -178,7 +178,7 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
           {/* 1. ACTIVE SESSIONS (ONLINE) */}
           <div className="space-y-4">
             <h3 className="text-xs font-semibold tracking-wide text-slate-500 font-mono flex items-center gap-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               Активные сессии в системе ({onlineList.length})
             </h3>
             

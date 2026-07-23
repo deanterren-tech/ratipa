@@ -488,7 +488,7 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
         {(!settings || isIframeLoading) && (
           <div className="absolute inset-0 bg-white/85 backdrop-blur-md flex flex-col p-8 gap-6 z-10 transition duration-350 select-none">
             {/* Table Area Skeleton */}
-            <div className="flex-1 bg-white/40 rounded-2xl border border-slate-200/30 flex items-center justify-center relative overflow-hidden animate-pulse">
+            <div className="flex-1 bg-white/40 rounded-2xl border border-slate-200/30 flex items-center justify-center relative overflow-hidden">
               <div className="text-center space-y-2.5 z-10">
                 <FileSpreadsheet className="h-8 w-8 text-[#3765F6]/40 mx-auto animate-bounce" />
                 <p className="text-xs font-bold uppercase text-slate-500 tracking-wider font-sans">Интеграция Google Sheets</p>
@@ -497,15 +497,15 @@ export default function DispositionModule({ user }: DispositionModuleProps) {
             </div>
             {/* Sidebar/Details Skeleton */}
             <div className="h-24 flex gap-4">
-              <div className="flex-1 bg-white/40 border border-slate-200/30 rounded-xl p-4 flex flex-col justify-between animate-pulse">
+              <div className="flex-1 bg-white/40 border border-slate-200/30 rounded-xl p-4 flex flex-col justify-between">
                 <div className="h-3 w-1/3 bg-slate-200/60 rounded" />
                 <div className="h-4 w-1/2 bg-slate-100/60 rounded" />
               </div>
-              <div className="flex-1 bg-white/40 border border-slate-200/30 rounded-xl p-4 flex flex-col justify-between animate-pulse">
+              <div className="flex-1 bg-white/40 border border-slate-200/30 rounded-xl p-4 flex flex-col justify-between">
                 <div className="h-3 w-1/4 bg-slate-200/60 rounded" />
                 <div className="h-4 w-2/3 bg-slate-100/60 rounded" />
               </div>
-              <div className="flex-1 bg-white/40 border border-slate-200/30 rounded-xl p-4 flex flex-col justify-between animate-pulse">
+              <div className="flex-1 bg-white/40 border border-slate-200/30 rounded-xl p-4 flex flex-col justify-between">
                 <div className="h-3 w-1/2 bg-slate-200/60 rounded" />
                 <div className="h-4 w-1/3 bg-slate-100/60 rounded" />
               </div>

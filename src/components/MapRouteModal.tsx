@@ -362,7 +362,7 @@ const MapRouteModal = ({
               {/* Minimalist Footnote Bar - Semi-transparent float over the map corner */}
               <div className="absolute bottom-4 left-4 right-4 md:left-auto md:right-4 z-10 p-3 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/60 shadow-lg flex items-center justify-between gap-4 animate-fade-in max-w-sm">
                 <div className="text-[10px] text-slate-600 font-bold flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                   <span>Интерактивный Яндекс режим</span>
                 </div>
                 

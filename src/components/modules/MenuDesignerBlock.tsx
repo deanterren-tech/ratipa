@@ -507,7 +507,7 @@ export default function MenuDesignerBlock({ settings, onSave }: MenuDesignerBloc
           {/* Quick Add Action Card */}
           <div className="p-5 rounded-[1.5rem] bg-white/55 backdrop-blur-md border border-white/45 shadow-sm space-y-4">
             <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-              <Sparkles size={14} className="text-indigo-600 animate-pulse" />
+              <Sparkles size={14} className="text-indigo-600" />
               Быстрое добавление
             </h3>
 

@@ -365,7 +365,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
         {/* Real-time Clock */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="bg-white/95 border border-slate-200/60 rounded-2xl px-4 py-2 flex items-center gap-2 shadow-xs">
-            <Clock size={13} className="text-[#3765F6] animate-pulse" />
+            <Clock size={13} className="text-[#3765F6]" />
             <span className="font-mono text-xs font-black text-slate-800">{timeStr || "00:00:00"}</span>
           </div>
         </div>

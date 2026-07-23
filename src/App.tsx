@@ -76,7 +76,7 @@ export default function App() {
   if (isSessionRestoring) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center font-sans">
-        <div className="animate-pulse space-y-4 text-center">
+        <div className="space-y-4 text-center">
           <div className="h-10 w-10 bg-slate-900 mx-auto rounded-xl flex items-center justify-center text-white font-extrabold text-lg">
             R
           </div>

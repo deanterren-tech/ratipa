@@ -69,7 +69,7 @@ const VehicleDriverCard = React.memo(({
       className="bg-white/80 backdrop-blur-xl rounded-2xl border border-slate-200/40 shadow-2xs hover:shadow-md hover:border-slate-300/50 hover:bg-white/95 transition-all duration-300 flex flex-col overflow-hidden relative font-sans"
     >
       {showVerificationIndicator && (
-        <div className="absolute top-2 right-2 bg-amber-50 text-amber-600 border border-amber-200/60 text-[9px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 animate-pulse z-10 font-sans shadow-2xs">
+        <div className="absolute top-2 right-2 bg-amber-50 text-amber-600 border border-amber-200/60 text-[9px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 z-10 font-sans shadow-2xs">
           <AlertTriangle className="w-3 h-3" />
           <span>Верификация</span>
         </div>
@@ -1401,7 +1401,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
             {/* AI Input Assistant block */}
             <div className="mx-6 my-4 p-4.5 bg-[#3765F6]/5 border border-[#3765F6]/10 rounded-2xl space-y-3 shadow-2xs">
               <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#3765F6] uppercase tracking-widest font-sans">
-                <Sparkles className="w-4 h-4 text-[#3765F6] animate-pulse" />
+                <Sparkles className="w-4 h-4 text-[#3765F6]" />
                 <span>ИИ ПОМОЩНИК (ПАРСЕР)</span>
               </div>
               

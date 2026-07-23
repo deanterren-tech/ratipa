@@ -1404,7 +1404,7 @@ export default function DocumentsModule({ user }: Props) {
                           className="bg-[#3765F6] hover:bg-[#2555E5] disabled:opacity-50 text-white px-3.5 rounded-xl text-xs font-semibold transition shrink-0 flex items-center justify-center gap-1 cursor-pointer"
                         >
                           {isParsingCouple ? (
-                            <span className="animate-pulse">Обработка...</span>
+                            <span className="">Обработка...</span>
                           ) : (
                             "Разобрать"
                           )}
@@ -2025,7 +2025,7 @@ export default function DocumentsModule({ user }: Props) {
                           className="bg-[#3765F6] hover:bg-[#2555E5] disabled:opacity-50 text-white px-5 rounded-xl text-xs font-bold transition shrink-0 flex items-center justify-center gap-1 cursor-pointer"
                         >
                           {isParsingCouple ? (
-                            <span className="animate-pulse">Обработка...</span>
+                            <span className="">Обработка...</span>
                           ) : (
                             "Разобрать"
                           )}

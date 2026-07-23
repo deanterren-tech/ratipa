@@ -613,7 +613,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         {hasMatchingDozvol && (
-                          <span className="bg-amber-500 text-white px-1.5 py-0.2 rounded text-[8px] font-bold uppercase animate-pulse">
+                          <span className="bg-amber-500 text-white px-1.5 py-0.2 rounded text-[8px] font-bold uppercase">
                             Найдено
                           </span>
                         )}

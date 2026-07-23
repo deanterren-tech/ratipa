@@ -347,7 +347,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
             </div>
 
             {errorMsg && (
-              <div className="p-3 bg-rose-50 border border-rose-100 rounded-2xl text-[10.5px] text-rose-600 font-semibold animate-pulse">
+              <div className="p-3 bg-rose-50 border border-rose-100 rounded-2xl text-[10.5px] text-rose-600 font-semibold">
                 {errorMsg}
               </div>
             )}

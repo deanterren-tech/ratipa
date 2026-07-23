@@ -275,7 +275,7 @@ const DozvolaRow = React.memo(({
             today.setHours(0,0,0,0);
             const diffTime = targetDate.getTime() - today.getTime();
             const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            if (daysLeft < 0) return (<span className="text-rose-600 bg-rose-50 border border-rose-100/55 text-[9px] font-semibold uppercase px-2 py-0.5 rounded-lg font-mono animate-pulse">🔥 Просрочено {Math.abs(daysLeft)} дн.!</span>);
+            if (daysLeft < 0) return (<span className="text-rose-600 bg-rose-50 border border-rose-100/55 text-[9px] font-semibold uppercase px-2 py-0.5 rounded-lg font-mono">🔥 Просрочено {Math.abs(daysLeft)} дн.!</span>);
             else if (daysLeft === 0) return (<span className="text-amber-600 bg-amber-50 border border-amber-200/55 text-[9px] font-semibold uppercase px-2 py-0.5 rounded-lg font-mono animate-bounce">⚠️ Крайний день!</span>);
             else if (daysLeft <= 10) return (<span className="text-amber-500 bg-amber-50 border border-amber-100/55 text-[9px] font-semibold uppercase px-2 py-0.5 rounded-lg font-mono">⌛ {daysLeft} дней</span>);
             else return (<span className="text-purple-600 bg-purple-50 border border-purple-100/55 text-[9px] font-semibold uppercase px-2 py-0.5 rounded-lg font-mono">⌛ {daysLeft} дн.</span>);

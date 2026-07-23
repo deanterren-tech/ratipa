@@ -2332,7 +2332,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           <div className="absolute right-1 flex items-center gap-1">
                             {leg.manualOverride && (
                               <span 
-                                className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" 
+                                className="w-1.5 h-1.5 rounded-full bg-amber-500" 
                                 title="Ручной ввод километража (кликните на «Маршрут» для восстановления привязки)"
                               />
                             )}
@@ -2569,7 +2569,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       <div className="absolute right-1 flex items-center gap-1">
                         {leg.manualOverride && (
                           <span 
-                            className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" 
+                            className="w-1.5 h-1.5 rounded-full bg-amber-500" 
                             title="Ручной ввод километража (кликните на «Маршрут» для восстановления привязки)"
                           />
                         )}
@@ -3266,7 +3266,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
           <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl border border-slate-200 p-6 lg:p-8 space-y-6">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#3765F6]">
-                <Sparkles className="h-6 w-6 animate-pulse" />
+                <Sparkles className="h-6 w-6" />
               </div>
               <div>
                 <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 font-mono">

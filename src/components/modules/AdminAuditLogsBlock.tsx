@@ -114,7 +114,7 @@ export default function AdminAuditLogsBlock({ logs }: AdminAuditLogsBlockProps) 
           </h2>
         </div>
         <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500 font-semibold bg-white/50 border border-white/40 px-3 py-1 rounded-xl shadow-xs shrink-0 self-start sm:self-auto">
-          <Clock size={11} className="text-slate-400 animate-pulse" />
+          <Clock size={11} className="text-slate-400" />
           Всего записей: {logs.length}
         </div>
       </div>
@@ -263,7 +263,7 @@ export default function AdminAuditLogsBlock({ logs }: AdminAuditLogsBlockProps) 
           />
         ) : (
           <div className="text-center py-20 text-slate-400 text-xs font-mono font-semibold tracking-wider bg-white/30 backdrop-blur-sm rounded-[1.5rem] border border-white/40 shadow-inner flex flex-col items-center justify-center gap-3 h-full">
-            <span className="p-4 bg-slate-900/5 text-slate-400 rounded-2xl animate-pulse">
+            <span className="p-4 bg-slate-900/5 text-slate-400 rounded-2xl">
               <Activity size={28} />
             </span>
             <span>Логов не обнаружено.</span>

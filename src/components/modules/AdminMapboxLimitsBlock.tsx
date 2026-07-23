@@ -381,7 +381,7 @@ export default function AdminMapboxLimitsBlock({ settings, user }: AdminMapboxLi
 
       {/* Info Notice Banner */}
       <div className="bg-white/40 border border-white/45 backdrop-blur-md shadow-inner rounded-[1.8rem] p-6 flex gap-3.5">
-        <AlertCircle className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5 animate-pulse" />
+        <AlertCircle className="h-5 w-5 text-indigo-600 shrink-0 mt-0.5" />
         <div className="text-xs text-slate-600 space-y-1 font-medium leading-relaxed">
           <p className="font-bold text-slate-800">Как распределяются лимиты?</p>
           <ul className="list-disc list-inside space-y-1 pl-1 text-[11px] text-slate-500">

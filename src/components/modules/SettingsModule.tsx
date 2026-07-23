@@ -1464,7 +1464,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
           <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
             <div>
               <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
-                <Layers className="h-4.5 w-4.5 text-blue-500 animate-pulse" />
+                <Layers className="h-4.5 w-4.5 text-blue-500" />
                 <span>Генеральные ссылки интеграций Google Sheets & GPS</span>
               </h2>
               <p className="text-[11px] text-slate-400 font-mono mt-0.5 uppercase tracking-wide">

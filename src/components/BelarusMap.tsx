@@ -525,7 +525,7 @@ export default function BelarusMap({
     return (
       <div className="w-full h-full min-h-[400px] bg-slate-900 flex flex-col items-center justify-center p-6 text-center text-white space-y-4 rounded-b-2xl">
         <div className="bg-rose-500/10 p-4 rounded-full border border-rose-500/20">
-          <Navigation className="h-8 w-8 text-rose-500 animate-pulse" />
+          <Navigation className="h-8 w-8 text-rose-500" />
         </div>
         <div className="space-y-2 max-w-sm">
           <h3 className="text-sm font-black uppercase tracking-tight text-white">
