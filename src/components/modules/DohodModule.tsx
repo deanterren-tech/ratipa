@@ -1,5 +1,6 @@
 import {useDialog} from '../DialogProvider'
 import React, {useState, useEffect, useMemo} from 'react'
+import { normalizeRoadString } from '../../utils/format'
 import {
   UserProfile,
   RouteCalculation,
@@ -49,20 +50,6 @@ const API_KEY =
   (window as any).GOOGLE_MAPS_PLATFORM_KEY ||
   "";
 const hasValidKey = Boolean(API_KEY) && API_KEY !== "YOUR_API_KEY";
-
-function normalizeRoadString(s: string): string {
-  if (!s) return "";
-  return s
-    .toLowerCase()
-    .replace(/m/g, "м")
-    .replace(/e/g, "е")
-    .replace(/a/g, "а")
-    .replace(/o/g, "о")
-    .replace(/p/g, "р")
-    .replace(/c/g, "с")
-    .replace(/x/g, "х")
-    .replace(/t/g, "т");
-}
 
 const useMap = () => null;
 const useMapsLibrary = (...args: any[]) => null;

@@ -1,5 +1,6 @@
 import React, {useState, useEffect, useRef, useMemo, useCallback} from 'react'
 import {useToast} from '../ToastProvider'
+import { formatToTitleCase } from '../../utils/format'
 import {TripList} from './TripList'
 import {Virtuoso} from 'react-virtuoso'
 import {
@@ -39,14 +40,6 @@ interface PlanDohodModuleProps {
 }
 
 export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
-  const formatToTitleCase = (str: string) => {
-    if (!str) return "";
-    const trimmed = str.trim();
-    if (trimmed.toUpperCase() === "ВСЕ ДИСПЕТЧЕРЫ") return "Все диспетчеры";
-    if (trimmed.toUpperCase() === "ВСЕ НАПРАВЛЕНИЯ") return "Все направления";
-    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
-  };
-
   const [searchQuery, setSearchQuery] = useState("");
   const { toast: addToast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
