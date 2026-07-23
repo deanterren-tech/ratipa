@@ -381,6 +381,8 @@ export interface AppSettings {
     roleNotificationTypes?: Record<string, string[]>;
     roleAvailableChannels?: Record<string, string[]>;
   };
+  /** Верссия сессии. Root-admin инкрементирует её, чтобы принудительно разлогинить ВСЕХ пользователей (force-logout). */
+  globalSessionVersion?: number;
 }
 
 export interface FerryTemplate {

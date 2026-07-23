@@ -2,9 +2,12 @@ import { useState, useEffect } from 'react';
 import { UserProfile } from './types';
 import AuthScreen from './components/AuthScreen';
 import AppShell from './components/AppShell';
+import { dbService } from './api';
 
 import { DialogProvider } from './components/DialogProvider';
 import { ToastProvider } from './components/ToastProvider';
+
+const SESSION_VERSION_KEY = 'ratipa_session_version';
 
 export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -15,6 +18,24 @@ export default function App() {
       document.title = 'Ratipa | Вход в систему';
     }
   }, [user]);
+
+  // Глобальная подписка на appSettings: принудительный выход всех пользователей
+  // (root-admin инкрементирует globalSessionVersion -> все клиенты разлогиниваются).
+  useEffect(() => {
+    const unsub = dbService.getSettings((s) => {
+      const serverVersion = Number(s?.globalSessionVersion || 0);
+      const localVersion = Number(localStorage.getItem(SESSION_VERSION_KEY) || 0);
+      if (serverVersion > localVersion) {
+        // Версия сессии изменилась сервером -> принудительно выходим
+        handleLogout();
+      } else if (serverVersion > 0 && localVersion === 0) {
+        // первичная синхронизация baseline-версии
+        localStorage.setItem(SESSION_VERSION_KEY, String(serverVersion));
+      }
+    });
+    return () => { if (typeof unsub === 'function') unsub(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const ensurePermissions = (profile: UserProfile): UserProfile => {
     const prof = { ...profile };
@@ -66,11 +87,17 @@ export default function App() {
     const prof = ensurePermissions(profile);
     setUser(prof);
     localStorage.setItem('ratipa_user_session', JSON.stringify(prof));
+    // Синхронизируем baseline версии сессии (читаем актуальную с сервера)
+    dbService.getSettings((s) => {
+      const v = Number(s?.globalSessionVersion || 0);
+      localStorage.setItem(SESSION_VERSION_KEY, String(v));
+    });
   };
 
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('ratipa_user_session');
+    localStorage.removeItem(SESSION_VERSION_KEY);
   };
 
   if (isSessionRestoring) {

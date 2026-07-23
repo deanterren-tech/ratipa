@@ -34,8 +34,9 @@ import {
   Map, 
   Truck, 
   FileText, 
-  Clock, 
-  Settings 
+  Clock,
+  Settings,
+  LogOut
 } from 'lucide-react';
 import UserManagementBlock from './UserManagementBlock';
 import AdminOnlinePresenceBlock from './AdminOnlinePresenceBlock';
@@ -85,6 +86,19 @@ export default function AdminModule({ user }: AdminModuleProps) {
   const saveSettings = (newStgs: AppSettings) => {
     setSettings(newStgs);
     dbService.saveSettings(newStgs, user.name, user.role);
+  };
+
+  // Принудительно завершить ВСЕ активные сессии (force-logout).
+  // Инкрементируем globalSessionVersion -> все клиенты получают обновление и разлогиниваются.
+  const handleForceLogoutAll = () => {
+    showConfirm(
+      'Все пользователи будут принудительно выведены из системы. Им потребуется повторно авторизоваться. Это безопасно после обновлений — гарантирует, что у всех подхватятся новые функции и схема данных.',
+      'Завершить все сессии?'
+    ).then((ok) => {
+      if (!ok) return;
+      const nextVersion = (Number(settings?.globalSessionVersion || 0)) + 1;
+      saveSettings({ ...(settings as AppSettings), globalSessionVersion: nextVersion });
+    });
   };
 
   const allModules = [
@@ -262,6 +276,36 @@ export default function AdminModule({ user }: AdminModuleProps) {
           <div className={activeTab === 'system' ? 'space-y-6' : 'hidden'}>
             <AdminFirebaseConfigBlock />
             <AdminMapboxLimitsBlock settings={settings} user={user} />
+
+            {/* Force Logout All Sessions — только для Root Admin */}
+            {user.role === 'root_admin' && (
+              <div className="bg-white/40 backdrop-blur-md rounded-[1.8rem] p-6 lg:p-8 border border-rose-200/60 shadow-xs space-y-4 w-full">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="bg-rose-500/10 text-rose-600 border border-rose-500/20 font-mono text-[9px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full mb-1.5 inline-block">
+                      Безопасность сессий
+                    </span>
+                    <h2 className="text-sm font-bold tracking-tight text-slate-900 flex items-center gap-1.5">
+                      <ShieldAlert className="h-4.5 w-4.5 text-rose-500" />
+                      Завершение всех сессий
+                    </h2>
+                    <p className="text-[11px] text-slate-500 mt-1 max-w-md">
+                      Принудительно выводит из системы всех пользователей. Используйте после обновлений, чтобы все гарантированно вошли заново и работали на актуальной схеме данных.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleForceLogoutAll}
+                    className="bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all shadow-xs border border-rose-600/20 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    Завершить все сессии
+                  </button>
+                </div>
+                <div className="text-[10px] font-mono text-slate-400">
+                  Текущая версия сессии: {settings?.globalSessionVersion || 0}
+                </div>
+              </div>
+            )}
 
             {/* Read-Only Dynamic Menu Overview */}
             <div className="bg-white/40 backdrop-blur-md rounded-[1.8rem] p-6 lg:p-8 border border-white/45 shadow-xs space-y-6 w-full">
