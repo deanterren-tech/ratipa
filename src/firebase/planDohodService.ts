@@ -96,90 +96,9 @@ export const pdService = {
     dbService.logAction(user, role, 'Удаление плана рейса', 'PlanDohod', id, `Удален план рейса ${id}`);
   },
 
-  // --- SAVED VEHICLES LIST ---
-  subscribeCars: (callback: (cars: string[]) => void) => {
-    if (!useFirebase) return () => {};
-    return onValue(ref(database, 'saved_vehicles_list'), (snapshot) => {
-      const data = snapshot.val();
-      callback(data ? (Array.isArray(data) ? data : Object.values(data)) : []);
-    });
-  },
 
-  addCar: (carNumbers: string[]) => {
-    if (!useFirebase) return;
-    set(ref(database, 'saved_vehicles_list'), carNumbers);
-  },
-
-  removeCar: (carNumbers: string[]) => {
-    if (!useFirebase) return;
-    set(ref(database, 'saved_vehicles_list'), carNumbers);
-  },
-
-  // --- APP DIRECTIONS ---
-  subscribeDirections: (callback: (directions: Record<string, number>) => void) => {
-    if (!useFirebase) return () => {};
-    return onValue(ref(database, 'app_directions'), (snapshot) => {
-      callback(snapshot.val() || {});
-    });
-  },
-
-  addDirection: (directions: Record<string, number>) => {
-    if (!useFirebase) return;
-    set(ref(database, 'app_directions'), directions);
-  },
-
-  removeDirection: (directions: Record<string, number>) => {
-    if (!useFirebase) return;
-    set(ref(database, 'app_directions'), directions);
-  },
-
-  // --- KNOWN DISTANCES ---
-  subscribeKnownDistances: (callback: (distances: any[]) => void) => {
-    if (!useFirebase) return () => {};
-    return onValue(ref(database, 'knownDistancesList'), (snapshot) => {
-      const data = snapshot.val();
-      callback(data ? Object.values(data) : []);
-    });
-  },
-
-  // --- PLAN DOHOD SETTINGS ---
-  subscribePlanDohodSettings: (callback: (settings: any) => void) => {
-    if (!useFirebase) return () => {};
-    return onValue(ref(database, 'plan_dohod_settings'), (snapshot) => {
-      callback(snapshot.val() || { useDistanceLookup: false, distanceLookupMode: 'cities' });
-    });
-  },
-
-  updatePlanDohodSettings: (settings: any) => {
-    if (!useFirebase) return;
-    update(ref(database, 'plan_dohod_settings'), settings);
-  },
-
-  // --- DISPATCHERS ---
-  subscribeDispatchers: (callback: (dispatchers: string[], order: string[]) => void) => {
-    if (!useFirebase) return () => {};
-    let disp: string[] = [];
-    let order: string[] = [];
-    const unsubDisp = onValue(ref(database, 'dispatchers'), (s) => {
-      disp = s.val() || [];
-      callback(disp, order);
-    });
-    const unsubOrder = onValue(ref(database, 'dispatchers_order'), (s) => {
-      order = s.val() || [];
-      callback(disp, order);
-    });
-    return () => { unsubDisp(); unsubOrder(); };
-  },
-
-  updateDispatchersOrder: (order: string[]) => {
-    if (!useFirebase) return;
-    set(ref(database, 'dispatchers_order'), order);
-  },
-
-  updateDispatchers: (dispatchers: string[]) => {
-    if (!useFirebase) return;
-    set(ref(database, 'dispatchers'), dispatchers);
-  },
+  // --- УДАЛЕНО: дублирующие ветки (dispatchers/dispatchers_order/dispatchers_colors/app_directions/saved_vehicles_list) ---
+  // Теперь диспетчеры/направления/авто читаются из единой базы (directoryService / dbService).
 
   // --- DISPATCHERS CAR MAPPING ---
   // Firebase RTDB keys cannot contain '.', '#', '$', '/', '[', ']'. Coupling strings
@@ -230,20 +149,6 @@ export const pdService = {
     const safe: Record<string, string> = {};
     Object.keys(mapping).forEach((k) => { safe[pdService.sanitizeMappingKey(k)] = mapping[k]; });
     set(ref(database, 'drivers_car_mapping'), safe);
-  },
-
-  // --- DISPATCHERS COLORS ---
-  subscribeDispatchersColors: (callback: (colors: Record<string, string>) => void) => {
-    if (!useFirebase) return () => {};
-    const dbRef = ref(database, 'dispatchers_colors');
-    return onValue(dbRef, (s) => {
-      callback(s.val() || {});
-    });
-  },
-
-  updateDispatcherColor: (dispatcherName: string, color: string) => {
-    if (!useFirebase) return;
-    set(ref(database, `dispatchers_colors/${dispatcherName}`), color);
   },
 
   // --- USER NOTEBOOK ---

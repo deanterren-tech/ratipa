@@ -1,7 +1,7 @@
 import {useDialog} from '../DialogProvider'
 import React, {useState, useEffect, useRef} from 'react'
 import {UserProfile} from '../../types'
-import { dbService, database, onValue } from '../../api'
+import { dbService, directoryService, database, onValue } from '../../api';
 import {pdService} from '../../api'
 import {getCouplingsFlat} from '../../services/fleetService'
 import LossDeclarationEditor from "./LossDeclarationEditor";
@@ -177,7 +177,7 @@ export default function DocumentsModule({ user }: Props) {
   const [ferryDispatchers, setFerryDispatchers] = useState<string[]>([]);
   const canWrite = user.role === 'root_admin' || user.permissions.documents === 'write';
   useEffect(() => {
-    return pdService.subscribeDispatchers((disp) => {
+    return directoryService.getDispatchersFlat((disp) => {
       setFerryDispatchers(disp);
     });
   }, []);

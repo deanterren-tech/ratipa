@@ -1,7 +1,7 @@
 import {useDialog} from '../DialogProvider'
 import {useState, useEffect} from 'react'
 import {UserProfile, AppSettings} from '../../types'
-import {dbService} from '../../api'
+import { dbService, directoryService } from '../../api';
 import { 
   ShieldAlert, 
   ArrowUp, 
@@ -48,7 +48,7 @@ import AdminAgentBlock from './AdminAgentBlock';
 import MenuDesignerBlock from './MenuDesignerBlock';
 import AdminAuditLogsBlock from './AdminAuditLogsBlock';
 import AdminWelcomePhrasesBlock from './AdminWelcomePhrasesBlock';
-import {pdService} from '../../api'
+import {pdService} from '../../api';
 
 interface AdminModuleProps {
   user: UserProfile;
@@ -74,7 +74,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
     const unsubSettings = dbService.getSettings(setSettings);
     const unsubLogs = dbService.getAuditLogs(setLogs);
     const unsubUsers = dbService.getUsers((list) => setUserListCount(list?.length || 0));
-    const unsubDisp = pdService.subscribeDispatchers((disp) => setDispatchersCount(disp?.length || 0));
+    const unsubDisp = directoryService.getDispatchersFlat((disp) => setDispatchersCount(disp?.length || 0));
     return () => {
       unsubSettings();
       unsubLogs();

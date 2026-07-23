@@ -15,8 +15,8 @@ import {
   CurrencyPreset,
 } from "../../types";
 import {calculateTripFinances} from '../../utils/financeCalculators'
-import {dbService} from '../../api'
-import {pdService} from '../../api'
+import {dbService, directoryService} from '../../api';
+import {pdService} from '../../api';
 import CouplingPicker from "../common/CouplingPicker";
 import {
   Plus,
@@ -113,22 +113,27 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     } catch (e) {}
 
     const unsubTrips = pdService.subscribeTrips(setActiveTrips, false);
-    const unsubCars = pdService.subscribeCars(setSavedCars);
-    const unsubDirs = pdService.subscribeDirections(setDirections);
+    const unsubCars = directoryService.getCarsList(setSavedCars);
+    const unsubDirs = directoryService.getDirectionsMap(setDirections);
     const unsubDist = pdService.subscribeKnownDistances(setDistances);
     const unsubCurrencies = dbService.getCurrencies(setCurrencies);
     const unsubSet = pdService.subscribePlanDohodSettings(setSettings);
-    const unsubColors =
-      pdService.subscribeDispatchersColors(setDispatchersColors);
-    const unsubDisp = pdService.subscribeDispatchers((disp, order) => {
-      setDispatchers(disp);
-      setDispatchersOrder(order);
+    // Цвета диспетчеров — теперь из единой базы (directories/dispatchers[].color)
+    const unsubColors = directoryService.getDispatchersObjects((list) => {
+      const colors: Record<string, string> = {};
+      (list || []).forEach((d) => { if (d.name) colors[d.name] = d.color || '#94a3b8'; });
+      setDispatchersColors(colors);
+    });
+    const unsubDisp = directoryService.getDispatchersObjects((list) => {
+      const objs = list || [];
+      setDispatchers(objs.map((d) => d.name));
+      setDispatchersOrder(objs.map((d) => d.name));
     });
     pdService.setPresence(user.name);
 
     return () => {
       unsubTrips();
-      
+
       unsubCars();
       unsubDirs();
       unsubDist();
@@ -1689,7 +1694,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setIsSubmitting(true);
     try {
       if (!savedCars.includes(trimmedCar)) {
-        pdService.addCar([...savedCars, trimmedCar]);
+        dbService.saveVehicle({ id: trimmedCar, carNumber: trimmedCar } as any, user.name, user.role);
       }
 
       const totals = calculateTotals();

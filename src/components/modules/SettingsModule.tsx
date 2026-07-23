@@ -1,7 +1,7 @@
 import React from 'react';
 import {useState, useEffect} from 'react'
 import {UserProfile, AppSettings, FerryTemplate, DistancePreset, CurrencyPreset, QuickLink, CarRateGroup, Driver} from '../../types'
-import {dbService, database, onValue} from '../../api'
+import {dbService, directoryService, database, onValue} from '../../api';
 import {pdService} from '../../api'
 import {ref, set, push, remove} from 'firebase/database'
 import CouplingDirectoryEditor from './CouplingDirectoryEditor';
@@ -244,9 +244,9 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     const unsubDistances = dbService.getDistances(setDistances);
     const unsubCurrencies = dbService.getCurrencies(setCurrencies);
     const unsubCars = dbService.getCarRateGroups(setCarRateGroups);
-    const unsubDirections = pdService.subscribeDirections(setDirections);
+    const unsubDirs = directoryService.getDirectionsMap(setDirections);
     const unsubDrivers = dbService.getDrivers(setDrivers);
-    const unsubDisp = pdService.subscribeDispatchers((disp) => setDispatchers(disp));
+    const unsubDisp = directoryService.getDispatchersFlat(setDispatchers);
     const unsubMap = pdService.subscribeDispatchersCarMapping((m) => setDispatchersMap(m));
     const unsubDriversMap = pdService.subscribeDriversCarMapping((m) => setDriversMap(m));
     const unsubBazaCarsList = onValue(ref(database, 'known_fleet'), snap => {
@@ -259,7 +259,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       setKnownFleet(list.map(x => x.plate));
       setIsKnownFleetLoaded(true);
     });
-    const unsubSavedCarsList = pdService.subscribeCars(setSavedCars);
+    const unsubSavedCarsList = directoryService.getCarsList(setSavedCars);
 
     return () => {
       unsubSettings();
@@ -377,7 +377,10 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     }
     
     updatedDirections[formattedName] = dirCoeff;
-    pdService.addDirection(updatedDirections);
+    // Persist into unified directories/directions (each entry = {id, name, coeff})
+    Object.entries(updatedDirections).forEach(([name, coeff]) => {
+      directoryService.saveDirItem('directions', { id: name, name, coeff: Number(coeff) || 0 }, user.name, user.role);
+    });
     dbService.logAction(user.name, user.role, editingDirKey ? 'Edit Direction' : 'Add Direction', 'Settings', formattedName, `${editingDirKey ? 'Обновлено' : 'Добавлено'} направление: ${formattedName} с коэф: ${dirCoeff}`);
     
     setDirName('');
@@ -389,7 +392,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     if (!(await showConfirm(`Вы действительно хотите удалить направление "${nameToDel}"?`))) return;
     const updatedDirections = { ...directions };
     delete updatedDirections[nameToDel];
-    pdService.removeDirection(updatedDirections);
+    directoryService.deleteDirItem('directions', nameToDel, user.name, user.role);
     dbService.logAction(user.name, user.role, 'Delete Direction', 'Settings', nameToDel, `Удалено направление: ${nameToDel}`);
     if (editingDirKey === nameToDel) {
       setDirName('');

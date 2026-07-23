@@ -12,8 +12,8 @@ import {
   DirectionPreset,
   AppSettings,
 } from "../../types";
-import {dbService} from '../../api'
-import {pdService} from '../../api'
+import {dbService, directoryService} from '../../api';
+import {pdService} from '../../api';
 import {
   Plus,
   Trash2,
@@ -1062,7 +1062,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
     const subRouteTpl = dbService.getRouteTemplates(setRouteTemplates);
     const subFerries = dbService.getFerryTemplates(setFerries);
     const subDistances = dbService.getDistances(setDistances);
-    const subDirs = pdService.subscribeDirections((data: Record<string, number>) => {
+    const subDirs = directoryService.getDirectionsMap((data: Record<string, number>) => {
       if (data) {
         const list: DirectionPreset[] = Object.keys(data).map((key) => ({
           id: key,
