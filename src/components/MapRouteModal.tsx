@@ -3,7 +3,6 @@ import {
   X,
   Compass,
   Check,
-  Globe,
   Navigation,
   MapPin,
   ChevronRight,
@@ -22,20 +21,6 @@ interface MapRouteModalProps {
   saveToDirectoryChecked?: boolean;
   setSaveToDirectoryChecked?: (val: boolean) => void;
   onApply: () => void;
-}
-
-// 9. Realize in code: buildGoogleMapUrl(...)
-export function buildGoogleMapUrl(origin: string, destination: string, waypoints: string[] = []): string {
-  const cleanOrigin = origin.trim();
-  const cleanDestination = destination.trim();
-  const validWaypoints = waypoints.map(wp => wp.trim()).filter(wp => wp !== "");
-  
-  if (validWaypoints.length > 0) {
-    const daddr = [...validWaypoints, cleanDestination].map(encodeURIComponent).join("+to:");
-    return `https://maps.google.com/maps?saddr=${encodeURIComponent(cleanOrigin)}&daddr=${daddr}&dirflg=d&t=m&output=embed`;
-  } else {
-    return `https://maps.google.com/maps?saddr=${encodeURIComponent(cleanOrigin)}&daddr=${encodeURIComponent(cleanDestination)}&dirflg=d&t=m&output=embed`;
-  }
 }
 
 // 9. Realize in code: buildYandexMapUrl(...)
@@ -58,7 +43,7 @@ const MapRouteModal = ({
   const [localOrigin, setLocalOrigin] = useState("");
   const [localDestination, setLocalDestination] = useState("");
   const [localWaypoints, setLocalWaypoints] = useState<string[]>([]);
-  const [currentProvider, setCurrentProvider] = useState<"google" | "yandex">("google");
+  const [currentProvider, setCurrentProvider] = useState<"yandex">("yandex");
   const [manualDistanceKm, setManualDistanceKm] = useState<string>("");
 
   // Sync state only when the modal opens to avoid typing cursor jumps and race conditions
@@ -68,7 +53,7 @@ const MapRouteModal = ({
       setLocalDestination(leg.destination || leg.to || "");
       const initialWaypoints = leg.waypoints || [];
       setLocalWaypoints(initialWaypoints);
-      setCurrentProvider(leg.mapProvider === "yandex" ? "yandex" : "google");
+      setCurrentProvider("yandex");
       
       const currentDistance = leg.totalDistanceKm || leg.dist || leg.distance || 0;
       setManualDistanceKm(currentDistance > 0 ? currentDistance.toString() : "");
@@ -82,7 +67,7 @@ const MapRouteModal = ({
     originVal: string,
     destVal: string,
     wpsVal: string[],
-    providerVal: "google" | "yandex"
+    providerVal: "yandex"
   ) => {
     const distanceValue = parseFloat(manualDistanceKm) || 0;
     onUpdateLegRoute(legIndex, {
@@ -128,7 +113,7 @@ const MapRouteModal = ({
     syncPointsToParent(localOrigin, localDestination, updated, currentProvider);
   };
 
-  const handleMapProviderChange = (provider: "google" | "yandex") => {
+  const handleMapProviderChange = (provider: "yandex") => {
     setCurrentProvider(provider);
     syncPointsToParent(localOrigin, localDestination, localWaypoints, provider);
   };
@@ -145,15 +130,10 @@ const MapRouteModal = ({
 
   const hasRoute = localOrigin.trim() !== "" && localDestination.trim() !== "";
 
-  // Dynamic preview map URL using the standard buildGoogleMapUrl and buildYandexMapUrl functions
-  const embedUrl =
-    currentProvider === "yandex"
-      ? buildYandexMapUrl(localOrigin, localDestination, localWaypoints)
-      : buildGoogleMapUrl(localOrigin, localDestination, localWaypoints);
+  // Dynamic preview map URL using the standard buildYandexMapUrl function
+  const embedUrl = buildYandexMapUrl(localOrigin, localDestination, localWaypoints);
 
-  // External link helpers
-  const googleExternalUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(localOrigin)}&destination=${encodeURIComponent(localDestination)}${localWaypoints.length > 0 ? `&waypoints=${encodeURIComponent(localWaypoints.filter(w => w.trim() !== "").join("|"))}` : ""}`;
-  
+  // External link helper
   const yandexPoints = [localOrigin, ...localWaypoints, localDestination].map((p) => p.trim()).filter((p) => p !== "");
   const yandexExternalUrl = `https://yandex.ru/maps/?rtext=${yandexPoints.map(encodeURIComponent).join("~")}&rtt=auto`;
 
@@ -272,36 +252,16 @@ const MapRouteModal = ({
               />
             </div>
 
-            {/* Clean Map Provider Switcher */}
+            {/* Map Provider - Yandex only */}
             <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-1.5 shadow-2xs">
               <span className="text-[9px] font-black uppercase text-slate-400 font-mono tracking-wider block">
                 Провайдер карты
               </span>
               <div className="flex gap-1">
-                <button
-                  type="button"
-                  onClick={() => handleMapProviderChange("google")}
-                  className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition flex items-center justify-center gap-1.5 border ${
-                    currentProvider === "google"
-                      ? "bg-slate-900 border-slate-900 text-[#70FC8E]"
-                      : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  <Globe className="w-3.5 h-3.5" />
-                  <span>Google Maps</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleMapProviderChange("yandex")}
-                  className={`flex-1 py-1.5 rounded-lg text-[11px] font-black transition flex items-center justify-center gap-1.5 border ${
-                    currentProvider === "yandex"
-                      ? "bg-slate-900 border-slate-900 text-[#70FC8E]"
-                      : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
+                <div className="flex-1 py-1.5 rounded-lg text-[11px] font-black flex items-center justify-center gap-1.5 border bg-slate-900 border-slate-900 text-[#70FC8E]">
                   <Navigation className="w-3.5 h-3.5" />
                   <span>Яндекс.Карты</span>
-                </button>
+                </div>
               </div>
             </div>
 
@@ -403,19 +363,10 @@ const MapRouteModal = ({
               <div className="absolute bottom-4 left-4 right-4 md:left-auto md:right-4 z-10 p-3 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/60 shadow-lg flex items-center justify-between gap-4 animate-fade-in max-w-sm">
                 <div className="text-[10px] text-slate-600 font-bold flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span>Интерактивный {currentProvider === "yandex" ? "Яндекс" : "Google"} режим</span>
+                  <span>Интерактивный Яндекс режим</span>
                 </div>
                 
                 <div className="flex gap-1.5">
-                  <a
-                    href={googleExternalUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-2.5 py-1 bg-slate-50 hover:bg-slate-150 border border-slate-200 rounded-lg text-[9px] font-black text-slate-600 uppercase tracking-wider flex items-center gap-1 transition"
-                  >
-                    <span>Google</span>
-                    <ChevronRight className="w-3 h-3" />
-                  </a>
                   <a
                     href={yandexExternalUrl}
                     target="_blank"
