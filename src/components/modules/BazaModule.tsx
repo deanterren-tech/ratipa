@@ -1,5 +1,5 @@
 import React, {useState, useEffect, useMemo} from 'react'
-import {UserProfile} from '../../types'
+import {UserProfile, Vehicle, BazaRecord, CouplingRecord, VehicleHistoryItem, Driver} from '../../types'
 import {dbService, onValue} from '../../api'
 import {pdService} from '../../api'
 import {getDatabase, ref, set, push, remove, update, query, limitToLast} from 'firebase/database'
@@ -59,11 +59,11 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   const [currentTab, setCurrentTab] = useState<'base' | 'archive' | 'history'>('base');
   
   // Data State
-  const [fleetVehicles, setFleetVehicles] = useState<any[]>([]);
-  const [bazaLegacy, setBazaLegacy] = useState<any[]>([]);
-  const [bazaCarsLegacy, setBazaCarsLegacy] = useState<any[]>([]);
-  const [vehicleDriverLegacy, setVehicleDriverLegacy] = useState<any[]>([]);
-  const [archiveLegacy, setArchiveLegacy] = useState<any[]>([]);
+  const [fleetVehicles, setFleetVehicles] = useState<Vehicle[]>([]);
+  const [bazaLegacy, setBazaLegacy] = useState<BazaRecord[]>([]);
+  const [bazaCarsLegacy, setBazaCarsLegacy] = useState<BazaRecord[]>([]);
+  const [vehicleDriverLegacy, setVehicleDriverLegacy] = useState<CouplingRecord[]>([]);
+  const [archiveLegacy, setArchiveLegacy] = useState<VehicleHistoryItem[]>([]);
   const bazaVehicles = useMemo(() => {
       // Учёт выезда = РУЧНОЙ журнал (baza + baza_cars) + archive + центр (vehicle_driver_data, для архива).
       const all = [...bazaLegacy, ...bazaCarsLegacy, ...archiveLegacy, ...vehicleDriverLegacy];
@@ -79,10 +79,10 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
       return unique;
   }, [bazaLegacy, bazaCarsLegacy, archiveLegacy, vehicleDriverLegacy]);
 
-  const [globalHistory, setGlobalHistory] = useState<any[]>([]);
+  const [globalHistory, setGlobalHistory] = useState<VehicleHistoryItem[]>([]);
   const [knownFleet, setKnownFleet] = useState<string[]>([]);
-  const [systemUsers, setSystemUsers] = useState<any[]>([]);
-  const [drivers, setDrivers] = useState<any[]>([]);
+  const [systemUsers, setSystemUsers] = useState<UserProfile[]>([]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
   const [driversMap, setDriversMap] = useState<Record<string, string>>({});
 
   const allVehicles = useMemo(() => {
@@ -130,7 +130,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   });
 
   // Modal State
-  const [modalData, setModalData] = useState<any>({});
+  const [modalData, setModalData] = useState<BazaRecord | null>(null);
   // Tracks which fields the user actually edited in the modal. Only touched fields
   // are written to the DB on save — this guarantees untouched dates/comment can NEVER
   // be wiped (e.g. when the car coupling is changed).
