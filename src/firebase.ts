@@ -595,7 +595,7 @@ function createSharedSubscription<T>(
 
 const sharedGetDrivers = createSharedSubscription<Driver[]>(
   (onData, onError) => {
-    const dbRef = ref(database, "driversPool");
+    const dbRef = ref(database, "drivers");
     return onValue(
       dbRef,
       (snapshot) => {
@@ -641,6 +641,67 @@ const sharedGetDrivers = createSharedSubscription<Driver[]>(
   (onData) => {
     onData(getLocalStorageData<Driver[]>("ratipa_drivers", []));
   }
+);
+
+// === ЕДИНАЯ БАЗА (portal-схема): tractors / trailers / couplings ===
+const sharedGetTractors = createSharedSubscription<any[]>(
+  (onData, onError) => {
+    const dbRef = ref(database, "tractors");
+    return onValue(
+      dbRef,
+      (snapshot) => {
+        const val = snapshot.val();
+        if (val) {
+          const list = Object.keys(val).map((key) => ({ id: key, ...val[key] }));
+          onData(list);
+        } else {
+          onData([]);
+        }
+      },
+      onError
+    );
+  },
+  (onData) => onData([])
+);
+
+const sharedGetTrailers = createSharedSubscription<any[]>(
+  (onData, onError) => {
+    const dbRef = ref(database, "trailers");
+    return onValue(
+      dbRef,
+      (snapshot) => {
+        const val = snapshot.val();
+        if (val) {
+          const list = Object.keys(val).map((key) => ({ id: key, ...val[key] }));
+          onData(list);
+        } else {
+          onData([]);
+        }
+      },
+      onError
+    );
+  },
+  (onData) => onData([])
+);
+
+const sharedGetCouplings = createSharedSubscription<any[]>(
+  (onData, onError) => {
+    const dbRef = ref(database, "couplings");
+    return onValue(
+      dbRef,
+      (snapshot) => {
+        const val = snapshot.val();
+        if (val) {
+          const list = Object.keys(val).map((key) => ({ id: key, ...val[key] }));
+          onData(list);
+        } else {
+          onData([]);
+        }
+      },
+      onError
+    );
+  },
+  (onData) => onData([])
 );
 
 const sharedGetVehicleDriverData = createSharedSubscription<any[]>(
@@ -2817,6 +2878,17 @@ export const dbService = {
   // DRIVERS POOL (Справочник водителей)
   getDrivers: (callback: (drivers: Driver[]) => void) => {
     return sharedGetDrivers(callback);
+  },
+
+  // === ЕДИНАЯ БАЗА (portal): tractors / trailers / couplings ===
+  getTractors: (callback: (list: any[]) => void) => {
+    return sharedGetTractors(callback);
+  },
+  getTrailers: (callback: (list: any[]) => void) => {
+    return sharedGetTrailers(callback);
+  },
+  getCouplings: (callback: (list: any[]) => void) => {
+    return sharedGetCouplings(callback);
   },
 
   getDriversOnce: (callback: (drivers: Driver[]) => void) => {

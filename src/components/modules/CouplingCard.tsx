@@ -32,10 +32,14 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
 
   const inBaza = !!bazaRec;
   const bazaStatus = bazaRec?.status || (inBaza ? 'base' : null);
-  // Водитель/диспетчер — из единой базы (разрешённые сущности), fallback на denormalized.
-  const driverId = center?.driverId || center?.driver?.id || '';
-  const driverName = center?.driverName || center?.driver?.shortNameRu || center?.driver?.name || bazaRec?.driverName || '';
-  const dispatcherName = center?.dispatcherName || center?.dispatcher?.name || '—';
+  // Из единой базы (вложенный FleetUnit): tractor / trailer / driver / dispatcher
+  const tractor = center?.tractor || null;
+  const trailer = center?.trailer || null;
+  const driver = center?.driver || null;
+  const dispatcher = center?.dispatcher || null;
+  const driverId = driver?.id || '';
+  const driverName = driver?.shortNameRu || driver?.name || bazaRec?.driverName || '';
+  const dispatcherName = dispatcher?.name || '—';
 
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" onClick={onClose}>
@@ -47,12 +51,12 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
               <Truck className="w-5 h-5 text-[#3765F6]" />
             </div>
             <div>
-              <div className="text-lg font-black text-slate-900 font-mono">{center?.coupling || carNumber}</div>
+              <div className="text-lg font-black text-slate-900 font-mono">{tractor?.carNumber || center?.couplingId || carNumber}</div>
               <div className="text-[11px] text-slate-400 font-mono">
-                {center?.trailerNumber ? `${center.trailerNumber}` : '—'}
-                {(center?.brandModel || center?.brandsRu || center?.brand) ? ` · ${center.brandModel || center?.brandsRu || center.brand}` : ''}
-                {center?.trailerMake ? ` / ${center.trailerMake}` : ''}
-                {center?.year ? ` · ${center.year} г.` : ''}
+                {trailer?.trailerNumber ? `${trailer.trailerNumber}` : '—'}
+                {(tractor?.brandModel || tractor?.brandsRu || tractor?.brand) ? ` · ${tractor.brandModel || tractor?.brandsRu || tractor.brand}` : ''}
+                {trailer?.trailerBrand ? ` / ${trailer.trailerBrand}` : ''}
+                {tractor?.year ? ` · ${tractor.year} г.` : ''}
               </div>
             </div>
           </div>
@@ -97,15 +101,15 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 rounded-2xl bg-slate-50">
                 <div className="text-[10px] font-bold uppercase text-slate-400">Марка тягача</div>
-                <div className="text-sm font-semibold text-slate-800">{center?.brandModel || center?.brandsRu || center?.brand || '—'}</div>
+                <div className="text-sm font-semibold text-slate-800">{tractor?.brandModel || tractor?.brandsRu || tractor?.brand || '—'}</div>
               </div>
               <div className="p-3 rounded-2xl bg-slate-50">
                 <div className="text-[10px] font-bold uppercase text-slate-400">Марка прицепа</div>
-                <div className="text-sm font-semibold text-slate-800">{center?.trailerMake || '—'}</div>
+                <div className="text-sm font-semibold text-slate-800">{trailer?.trailerBrand || '—'}</div>
               </div>
               <div className="p-3 rounded-2xl bg-slate-50">
                 <div className="text-[10px] font-bold uppercase text-slate-400">Прицеп (сцепка)</div>
-                <div className="text-sm font-semibold text-slate-800">{center?.trailerNumber || '—'}</div>
+                <div className="text-sm font-semibold text-slate-800">{trailer?.trailerNumber || '—'}</div>
               </div>
               <div className="p-3 rounded-2xl bg-slate-50">
                 <div className="text-[10px] font-bold uppercase text-slate-400">Диспетчер</div>
@@ -113,23 +117,23 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
               </div>
               <div className="p-3 rounded-2xl bg-slate-50">
                 <div className="text-[10px] font-bold uppercase text-slate-400">Тип</div>
-                <div className="text-sm font-semibold text-slate-800">{center?.vehicleType || '—'}</div>
+                <div className="text-sm font-semibold text-slate-800">{tractor?.vehicleType || '—'}</div>
               </div>
               <div className="p-3 rounded-2xl bg-slate-50">
                 <div className="text-[10px] font-bold uppercase text-slate-400">Год</div>
-                <div className="text-sm font-semibold text-slate-800">{center?.year || '—'}</div>
+                <div className="text-sm font-semibold text-slate-800">{tractor?.year || '—'}</div>
               </div>
               <div className="p-3 rounded-2xl bg-slate-50">
                 <div className="text-[10px] font-bold uppercase text-slate-400">Габариты</div>
-                <div className="text-sm font-semibold text-slate-800">{center?.dimensions || '—'}</div>
+                <div className="text-sm font-semibold text-slate-800">{tractor?.dimensions || '—'}</div>
               </div>
               <div className="p-3 rounded-2xl bg-slate-50">
                 <div className="text-[10px] font-bold uppercase text-slate-400">Вес</div>
-                <div className="text-sm font-semibold text-slate-800">{center?.weight || '—'}</div>
+                <div className="text-sm font-semibold text-slate-800">{tractor?.weight || '—'}</div>
               </div>
               <div className="p-3 rounded-2xl bg-slate-50">
                 <div className="text-[10px] font-bold uppercase text-slate-400">Ставка</div>
-                <div className="text-sm font-semibold text-slate-800">{center?.rate != null ? `${center.rate} €` : '—'}</div>
+                <div className="text-sm font-semibold text-slate-800">{tractor?.rate != null ? `${tractor.rate} €` : '—'}</div>
               </div>
             </div>
           </div>

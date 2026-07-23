@@ -26,7 +26,7 @@ import {
   Users
 } from 'lucide-react';
 import {dbService, database} from '../../api'
-import {getCouplings, getDriversFlat} from '../../services/fleetService'
+import {getCouplingsFlat, getDriversFlat} from '../../services/fleetService'
 import { ref, update } from 'firebase/database';
 import {UserProfile, AppSettings, PhoneNumber, Driver, CarRateGroup} from '../../types'
 import {formatDriverShortName} from '../../utils/driverSync'
@@ -342,7 +342,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     // Fetch live vehicles data — getVehicleDriverData now reads the unified
     // base (vehicleFleet). Both `records` and `fleetVehicles` come from it,
     // and verifyFleet is just an alias of fleetVehicles (single source of truth).
-    const unsubData = getCouplings((list) => {
+    const unsubData = getCouplingsFlat((list) => {
       setRecords(list);
       setFleetVehicles(list); // Combined: records and fleetVehicles are identical, eliminating duplicate listeners!
       setVerifyFleet(list);   // verification queue reads the same unified base

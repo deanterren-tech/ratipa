@@ -1,6 +1,6 @@
 import {useState, useEffect} from 'react'
 import {dbService} from '../../api'
-import {getDriversFlat, getCouplings} from '../../services/fleetService'
+import {getDriversFlat, getCouplingsFlat} from '../../services/fleetService'
 import {User, Truck, Banknote, FileText, X, ArrowLeft} from 'lucide-react'
 
 interface DriverCardProps {
@@ -29,7 +29,7 @@ export default function DriverCard({ driverId, driverName, onClose, onOpenCoupli
       setDriver(found || null);
     });
     // coupling (which car) - search center by driverId or name
-    const u2 = getCouplings((list: any[]) => {
+    const u2 = getCouplingsFlat((list: any[]) => {
       const found = (list || []).find((c) =>
         (c.driverId && c.driverId === driverId) ||
         ((c.driverNameRu || c.driverName || c.driverShortNameRu || '') === driverName && driverName)

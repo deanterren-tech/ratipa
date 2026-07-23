@@ -1,169 +1,164 @@
-// ЕДИНАЯ БАЗА ТС / ПРИЦЕПОВ / ВОДИТЕЛЕЙ / ДИСПЕТЧЕРОВ
-// ---------------------------------------------------
-// ОДИН ИСТОЧНИК ПРАВДЫ для всех модулей. Агрегирует существующие ветки RTDB
-// без изменения формата записи в БД:
-//   - vehicleFleet            → авто (тягач) + trailerNumber + denormalized driver/dispatcher
-//   - vehicle_driver_data     → legacy центр/сцепки (паспорта, read-only fallback)
-//   - driversPool             → водители (единый источник)
-//   - directories/dispatchers → диспетчеры (справочник)
+// ЕДИНАЯ БАЗА RATIPA — агрегатор сцепок (portal-схема)
+// ------------------------------------------------------
+// ОДИН ИСТОЧНИК ПРАВДЫ для авто/прицепов/водителей/диспетчеров.
+// Читает ТОЛЬКО через dbService (единый слой доступа к БД), никогда
+// напрямую из firebase. Имена веток — portal:
+//   tractors    → авто (тягачи)
+//   trailers    → прицепы
+//   couplings   → связка (tractorId + trailerId + driverId + dispatcherName + status)
+//   drivers     → водители
+//   directories/dispatchers → диспетчеры (справочник)
 //
-// СВЯЗКА (изменяемая): выбрал carNumber (авто) → подтягиваются
-//   trailerNumber (прицеп), driver (по driverId/телефону/имени), dispatcher.
-//
-// Это НЕ повторяет ошибку ratipa-clean (там domain/types.ts лежал мёртвым,
-// модули лазили в legacy/firebase.ts). Здесь сервис РЕАЛЬНО агрегирует
-// данные и отдаёт их модулям через подписки и плоские селекторы.
+// FleetUnit — это НЕ запись в БД. Это тип (виртуальная сборка), которую
+// fleetService отдаёт модулю: раскрытая couplings + полные сущности
+// tractor/trailer/driver/dispatcher (нормализованная вложенная структура).
 
 import {dbService, directoryService} from '../api';
 import type {Driver} from '../types';
 
-export interface DispatcherRef {
+export interface TractorRef {
   id: string;
+  carNumber: string;
+  brand?: string;
+  [key: string]: unknown;
+}
+
+export interface TrailerRef {
+  id: string;
+  trailerNumber: string;
+  trailerBrand?: string;
+  [key: string]: unknown;
+}
+
+export interface DispatcherRef {
+  id?: string;
   name: string;
   color?: string;
 }
 
+/** Вложенная нормализованная структура сцепки (Variant A). */
 export interface FleetUnit {
-  // Авто (тягач) — ключ поиска = carNumber
-  carNumber: string;
-  vehicleId?: string;
-  brandModel?: string;
-  // Прицеп (входит в сцепку)
-  trailerNumber?: string;
-  // Водитель (ссылка + denormalized для показа)
-  driverId?: string | null;
-  driverName?: string;
-  driverPhone?: string;
-  driver?: Driver | null; // разрешённая сущность из driversPool
-  // Диспетчер (ссылка + denormalized)
-  dispatcherId?: string | null;
-  dispatcherName?: string;
-  dispatcher?: DispatcherRef | null; // разрешённая сущность из directories/dispatchers
-  // паспортные/прочие поля (проброс из vehicleFleet / vehicle_driver_data)
-  [key: string]: unknown;
+  couplingId: string;                 // couplings.id
+  tractor: TractorRef | null;         // из tractors (полностью)
+  trailer: TrailerRef | null;         // из trailers (полностью)
+  driver: Driver | null;              // из drivers (полностью)
+  dispatcher: DispatcherRef | null;   // из directories.dispatchers (по dispatcherName)
+  status: string;                     // из couplings.status
+  // сырьё couplings для записи/редактирования
+  raw: {
+    tractorId?: string | null;
+    trailerId?: string | null;
+    driverId?: string | null;
+    dispatcherName?: string | null;
+    status?: string;
+  };
 }
 
-// soft-normalize для матчинга
 const norm = (s?: string): string =>
   (s || '').toString().trim().toUpperCase().replace(/\s+/g, ' ');
 
-// Локальный кэш трёх веток (чтобы селекторы отдавали консистентные снимки)
-let _vehicles: any[] = [];
-let _drivers: Driver[] = [];
-let _dispatchers: DispatcherRef[] = [];
-let _legacy: Record<string, any> = {}; // pasport map keyed by normalized carNumber
-
-const resolveDriver = (v: any): Driver | null => {
-  const key = norm(v.driverPhone || v.phone);
-  const byPhone = key ? _drivers.find((d) => norm(d.phone) === key) : undefined;
-  const byName = v.driverName
-    ? _drivers.find((d) => norm(d.shortNameRu || d.name) === norm(v.driverName))
-    : undefined;
-  return (v.driverId && _drivers.find((d) => d.id === v.driverId)) || byPhone || byName || null;
-};
-
-const resolveDispatcher = (v: any): DispatcherRef | null => {
-  return (
-    (v.dispatcherId && _dispatchers.find((d) => d.id === v.dispatcherId)) ||
-    (v.dispatcherName && _dispatchers.find((d) => norm(d.name) === norm(v.dispatcherName))) ||
-    null
-  );
-};
-
-const buildUnit = (v: any): FleetUnit => {
-  const driver = resolveDriver(v);
-  const dispatcher = resolveDispatcher(v);
-  // merge legacy passport fields (read-only)
-  const legacy = _legacy[norm(v.carNumber || v.id)] || {};
-  return {
-    ...legacy,
-    ...v,
-    carNumber: v.carNumber || v.id,
-    vehicleId: v.id,
-    trailerNumber: v.trailerNumber ?? legacy.trailerNumber,
-    driverId: v.driverId ?? (driver ? driver.id : null),
-    driverName: v.driverName ?? (driver ? driver.shortNameRu || driver.name : legacy.driverName),
-    driverPhone: v.driverPhone ?? (driver ? driver.phone : legacy.driverPhone),
-    driver,
-    dispatcherId: v.dispatcherId ?? (dispatcher ? dispatcher.id : null),
-    dispatcherName: v.dispatcherName ?? (dispatcher ? dispatcher.name : legacy.dispatcherName),
-    dispatcher,
-  };
-};
-
 /**
- * Подписаться на единую базу сцепок. callback → FleetUnit[] с разрешёнными
- * водителем/диспетчером и смерженными паспортными полями из legacy.
+ * Подписаться на единую базу сцепок. callback → FleetUnit[] с раскрытыми
+ * tractor/trailer/driver/dispatcher (изменяемая связка «авто → всё остальное»).
  */
 export const subscribeFleetUnits = (callback: (units: FleetUnit[]) => void): (() => void) => {
-  const emit = () => callback(_vehicles.map(buildUnit));
+  let tractors: any[] = [];
+  let trailers: any[] = [];
+  let drivers: Driver[] = [];
+  let couplings: any[] = [];
+  let dispatchers: DispatcherRef[] = [];
 
-  const unsubV = dbService.getVehicleFleet((list) => {
-    _vehicles = list || [];
-    emit();
-  });
-  const unsubD = dbService.getDrivers((list) => {
-    _drivers = list || [];
-    emit();
-  });
-  const unsubDisp = directoryService.getDispatchers((list) => {
-    _dispatchers = (list || []).map((d: any) => ({ id: d.id, name: d.name, color: d.color }));
-    emit();
-  });
-  // legacy passport data (read-only fallback, как в sharedGetVehicleDriverData)
-  const unsubLegacy = (() => {
-    try {
-      // используем onceValue через dbService если доступно, иначе firebaseGet
-      const { onceValue } = require('../firebase');
-      const { ref, getDatabase } = require('firebase/database');
-      onceValue(
-        ref(getDatabase(), 'vehicle_driver_data'),
-        (snap: any) => {
-          const val = snap && snap.val ? snap.val() : null;
-          if (val) {
-            const map: Record<string, any> = {};
-            Object.keys(val).forEach((lk) => {
-              const lr = val[lk] || {};
-              const lCar = (lr.carNumber || lr.vehicleNumbers || '').toString().replace(/[^А-ЯA-Z0-9]/g, '');
-              if (lCar) map[lCar] = lr;
-            });
-            _legacy = map;
-            emit();
-          }
+  const emit = () => {
+    const driverById = new Map<string, Driver>();
+    drivers.forEach((d) => driverById.set(norm(d.id), d));
+    const trailerById = new Map<string, any>();
+    trailers.forEach((t) => trailerById.set(norm(t.id), t));
+    const dispatcherByName = new Map<string, DispatcherRef>();
+    dispatchers.forEach((d) => dispatcherByName.set(norm(d.name), d));
+
+    const units: FleetUnit[] = couplings.map((c) => {
+      const tractorId = c.tractorId || c.id;
+      const tractor = tractorId ? (tractors.find((t) => norm(t.id) === norm(tractorId)) || null) : null;
+      const trailer = c.trailerId ? (trailerById.get(norm(c.trailerId)) || null) : null;
+      const driver = c.driverId ? (driverById.get(norm(c.driverId)) || null) : null;
+      const dispatcher = c.dispatcherName ? (dispatcherByName.get(norm(c.dispatcherName)) || null) : null;
+      return {
+        couplingId: c.id,
+        tractor: tractor ? { id: tractor.id, carNumber: tractor.carNumber || tractor.id, ...tractor } : null,
+        trailer: trailer ? { id: trailer.id, trailerNumber: trailer.trailerNumber || trailer.id, ...trailer } : null,
+        driver: driver || null,
+        dispatcher: dispatcher || (c.dispatcherName ? { name: c.dispatcherName } : null),
+        status: c.status || 'base',
+        raw: {
+          tractorId: c.tractorId ?? null,
+          trailerId: c.trailerId ?? null,
+          driverId: c.driverId ?? null,
+          dispatcherName: c.dispatcherName ?? null,
+          status: c.status,
         },
-      );
-    } catch {
-      /* offline: legacy просто пустой */
-    }
-    return () => {};
-  })();
-
-  return () => {
-    unsubV();
-    unsubD();
-    unsubDisp();
-    unsubLegacy();
+      };
+    });
+    callback(units);
   };
+
+  const u1 = dbService.getTractors((list) => { tractors = list || []; emit(); });
+  const u2 = dbService.getTrailers((list) => { trailers = list || []; emit(); });
+  const u3 = dbService.getDrivers((list) => { drivers = list || []; emit(); });
+  const u4 = dbService.getCouplings((list) => { couplings = list || []; emit(); });
+  const u5 = directoryService.getDispatchers((list) => {
+    dispatchers = (list || []).map((d: any) => ({ id: d.id, name: d.name, color: d.color }));
+    emit();
+  });
+
+  return () => { u1(); u2(); u3(); u4(); u5(); };
 };
 
 /** Разово получить все сцепки (без подписки). */
 export const getFleetUnitsOnce = (callback: (units: FleetUnit[]) => void): void => {
   let done = 0;
+  const acc = { tractors: [] as any[], trailers: [] as any[], drivers: [] as Driver[], couplings: [] as any[], dispatchers: [] as DispatcherRef[] };
   const finish = () => {
-    callback(_vehicles.map(buildUnit));
+    const driverById = new Map<string, Driver>();
+    acc.drivers.forEach((d) => driverById.set(norm(d.id), d));
+    const trailerById = new Map<string, any>();
+    acc.trailers.forEach((t) => trailerById.set(norm(t.id), t));
+    const dispatcherByName = new Map<string, DispatcherRef>();
+    acc.dispatchers.forEach((d) => dispatcherByName.set(norm(d.name), d));
+    const units: FleetUnit[] = acc.couplings.map((c) => {
+      const tractor = c.tractorId ? (acc.tractors.find((t) => norm(t.id) === norm(c.tractorId)) || null) : null;
+      const trailer = c.trailerId ? (trailerById.get(norm(c.trailerId)) || null) : null;
+      const driver = c.driverId ? (driverById.get(norm(c.driverId)) || null) : null;
+      const dispatcher = c.dispatcherName ? (dispatcherByName.get(norm(c.dispatcherName)) || null) : null;
+      return {
+        couplingId: c.id,
+        tractor: tractor ? { id: tractor.id, carNumber: tractor.carNumber || tractor.id, ...tractor } : null,
+        trailer: trailer ? { id: trailer.id, trailerNumber: trailer.trailerNumber || trailer.id, ...trailer } : null,
+        driver: driver || null,
+        dispatcher: dispatcher || (c.dispatcherName ? { name: c.dispatcherName } : null),
+        status: c.status || 'base',
+        raw: { tractorId: c.tractorId ?? null, trailerId: c.trailerId ?? null, driverId: c.driverId ?? null, dispatcherName: c.dispatcherName ?? null, status: c.status },
+      };
+    });
+    callback(units);
   };
-  dbService.getVehicleFleet((l) => { _vehicles = l || []; if (++done === 3) finish(); });
-  dbService.getDrivers((l) => { _drivers = l || []; if (++done === 3) finish(); });
-  directoryService.getDispatchers((l) => { _dispatchers = (l || []).map((d: any) => ({id: d.id, name: d.name, color: d.color})); if (++done === 3) finish(); });
+  dbService.getTractors((l) => { acc.tractors = l || []; if (++done === 5) finish(); });
+  dbService.getTrailers((l) => { acc.trailers = l || []; if (++done === 5) finish(); });
+  dbService.getDrivers((l) => { acc.drivers = l || []; if (++done === 5) finish(); });
+  dbService.getCouplings((l) => { acc.couplings = l || []; if (++done === 5) finish(); });
+  directoryService.getDispatchers((l) => { acc.dispatchers = (l || []).map((d: any) => ({ id: d.id, name: d.name, color: d.color })); if (++done === 5) finish(); });
 };
 
 // ============ ПЛОСКИЕ СЕЛЕКТОРЫ (для модулей, которым нужен 1 вид сущности) ============
 
 /** Авто (тягачи) — плоский список из единой базы. */
 export const getVehicles = (cb: (list: any[]) => void): (() => void) =>
-  subscribeFleetUnits((units) => cb(units));
+  dbService.getTractors(cb);
 
-/** Водители — из driversPool (единый источник). */
+/** Прицепы — плоский список. */
+export const getTrailersFlat = (cb: (list: any[]) => void): (() => void) =>
+  dbService.getTrailers(cb);
+
+/** Водители — из drivers (единый источник). */
 export const getDriversFlat = (cb: (list: Driver[]) => void): (() => void) =>
   dbService.getDrivers(cb);
 
@@ -174,3 +169,32 @@ export const getDispatchersFlat = (cb: (list: DispatcherRef[]) => void): (() => 
 /** Центр/сцепки (couplings) — FleetUnit[] (авто+прицеп+водитель+диспетчер). */
 export const getCouplings = (cb: (list: FleetUnit[]) => void): (() => void) =>
   subscribeFleetUnits(cb);
+
+/**
+ * Плоский список сцепок для UI-пикеров/редакторов (обратно-совместимый вид):
+ * раскрывает вложенный FleetUnit в плоские поля carNumber/trailerNumber/driverName/...
+ */
+export const getCouplingsFlat = (cb: (list: any[]) => void): (() => void) =>
+  subscribeFleetUnits((units) => cb(units.map((u) => ({
+    id: u.couplingId,
+    couplingId: u.couplingId,
+    carNumber: u.tractor?.carNumber || u.couplingId,
+    tractorId: u.raw.tractorId,
+    trailerNumber: u.trailer?.trailerNumber || '',
+    trailerId: u.raw.trailerId,
+    brand: u.tractor?.brand || u.tractor?.brandModel || '',
+    brandModel: u.tractor?.brandModel || u.tractor?.brandsRu || u.tractor?.brand || '',
+    trailerBrand: u.trailer?.trailerBrand || '',
+    trailerMake: u.trailer?.trailerBrand || '',
+    driverId: u.raw.driverId || '',
+    driverName: u.driver?.shortNameRu || u.driver?.name || '',
+    driverNameRu: u.driver?.shortNameRu || '',
+    dispatcher: u.dispatcher?.name || '',
+    dispatcherName: u.dispatcher?.name || '',
+    status: u.status,
+    year: u.tractor?.year,
+    dimensions: u.tractor?.dimensions,
+    weight: u.tractor?.weight,
+    rate: u.tractor?.rate,
+    vehicleType: u.tractor?.vehicleType,
+  }))));

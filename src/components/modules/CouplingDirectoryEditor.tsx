@@ -3,7 +3,7 @@ import {createPortal} from 'react-dom'
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
 import {dbService, directoryService} from '../../api'
-import {getCouplings, getDriversFlat, getDispatchersFlat} from '../../services/fleetService'
+import {getCouplingsFlat, getDriversFlat, getDispatchersFlat} from '../../services/fleetService'
 import {Truck, Plus, Trash2, Pencil, Search, Link2, X, Check, Layers, Tag, Users} from 'lucide-react'
 import {UserProfile} from '../../types'
 import CouplingCard from './CouplingCard';
@@ -63,7 +63,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   const [bulkField, setBulkField] = useState<'rateGroupId' | 'dispatcher' | null>(null);
 
   useEffect(() => {
-    const u1 = getCouplings((list: any[]) => {
+    const u1 = getCouplingsFlat((list: any[]) => {
       setCouplings((list || []).map((c) => ({
         id: c.id,
         carNumber: c.carNumber || c.vehicleNumbers || '',

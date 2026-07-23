@@ -102,21 +102,20 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
 
   const couplingsFiltered = useMemo(() => {
     if (mode === 'combined' && !query.trim()) {
-      return all.filter((c) => !excludeIds.includes(c.id)).slice(0, 8);
+      return all.filter((c) => !excludeIds.includes(c.couplingId)).slice(0, 8);
     }
     const q = norm(query);
     return all
-      .filter((c) => !excludeIds.includes(c.id))
+      .filter((c) => !excludeIds.includes(c.couplingId))
       .filter((c) => {
         if (!q) return true;
+        const car = c.tractor?.carNumber || '';
+        const trail = c.trailer?.trailerNumber || '';
+        const drv = c.driver?.shortNameRu || c.driver?.name || '';
+        const brand = c.tractor?.brandModel || c.tractor?.brandsRu || c.tractor?.brand || '';
         const hay = mode === 'driver'
-          ? [c.driverNameRu || c.driverName || c.driverShortNameRu || ''].join(' ').toLowerCase().replace(/\s+/g, '')
-          : [
-              c.carNumber || c.vehicleNumbers || '',
-              c.trailerNumber || c.trailerMake || '',
-              c.driverNameRu || c.driverName || c.driverShortNameRu || '',
-              c.brandModel || c.brands || '',
-            ].join(' ').toLowerCase().replace(/\s+/g, '');
+          ? drv.toLowerCase().replace(/\s+/g, '')
+          : [car, trail, drv, brand].join(' ').toLowerCase().replace(/\s+/g, '');
         return hay.includes(q);
       })
       .slice(0, 12);
@@ -134,8 +133,8 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
   const handlePick = (rec: any) => {
     setSelected(rec);
     if (mode === 'combined') {
-      const label = rec.carNumber || rec.vehicleNumbers || '';
-      const trail = rec.trailerNumber || rec.trailerMake || '';
+      const label = rec.tractor?.carNumber || rec.couplingId || '';
+      const trail = rec.trailer?.trailerNumber || '';
       setQuery(trail ? `${label} / ${trail}` : label);
     } else {
       setQuery('');
@@ -158,21 +157,23 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
 
   const displayLabel = (rec: any) => {
     if (mode === 'driver') {
-      return formatDriverShortName(rec.driverNameRu || rec.driverName || '') || 'нет водителя';
+      return formatDriverShortName(rec.driver?.shortNameRu || rec.driver?.name || '') || 'нет водителя';
     }
-    const car = rec.carNumber || rec.vehicleNumbers || '';
-    const trail = rec.trailerNumber || rec.trailerMake || '';
+    const car = rec.tractor?.carNumber || rec.couplingId || '';
+    const trail = rec.trailer?.trailerNumber || '';
     return trail ? `${car} / ${trail}` : car;
   };
   const displaySub = (rec: any) => {
+    const car = rec.tractor?.carNumber || '';
+    const trail = rec.trailer?.trailerNumber || '';
+    const brand = rec.tractor?.brandModel || rec.tractor?.brandsRu || rec.tractor?.brand || '';
     if (mode === 'driver') {
-      const car = (rec.carNumber || rec.vehicleNumbers) + (rec.trailerNumber ? ` + ${rec.trailerNumber}` : '');
-      return [car, rec.brandModel].filter(Boolean).join(' · ');
+      return [car + (trail ? ` + ${trail}` : ''), brand].filter(Boolean).join(' · ');
     }
-    if (mode === 'combined') return rec.brandModel || '';
+    if (mode === 'combined') return brand || '';
     return [
-      formatDriverShortName(rec.driverNameRu || rec.driverName || '') || 'нет водителя',
-      rec.brandModel,
+      formatDriverShortName(rec.driver?.shortNameRu || rec.driver?.name || '') || 'нет водителя',
+      brand,
     ].filter(Boolean).join(' · ');
   };
 
