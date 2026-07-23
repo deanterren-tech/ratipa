@@ -268,7 +268,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       unsubDistances();
       unsubCurrencies();
       unsubCars();
-      unsubDirections();
+      unsubDirs();
       unsubDrivers();
       unsubDisp();
       unsubMap();
