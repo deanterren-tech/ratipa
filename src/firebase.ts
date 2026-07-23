@@ -293,6 +293,35 @@ export const directoryService = {
     }
     dbService.logAction(user, role, "Удаление из справочника", "Directories", id, `Справочник ${collection}: ${id}`);
   },
+
+  // --- АДАПТЕРЫ для унификации (pdService → единая база) ---
+  // Диспетчеры как плоский список имён (совместимо с pdService.subscribeDispatchers)
+  getDispatchersFlat: (cb: (names: string[]) => void) => {
+    return sharedDirDispatchers((list: any[]) => cb((list || []).map((d) => d.name).filter(Boolean)));
+  },
+  // Диспетчеры как (имена, порядок) — порядок = порядок в справочнике
+  getDispatchersWithOrder: (cb: (names: string[], order: string[]) => void) => {
+    return sharedDirDispatchers((list: any[]) => {
+      const names = (list || []).map((d) => d.name).filter(Boolean);
+      cb(names, names);
+    });
+  },
+  // Направления как Record<label, coeff> (совместимо с pdService.subscribeDirections)
+  getDirectionsMap: (cb: (map: Record<string, number>) => void) => {
+    return sharedDirDirections((list: any[]) => {
+      const map: Record<string, number> = {};
+      (list || []).forEach((d) => { if (d.label) map[d.label] = Number(d.coeff || 0); });
+      cb(map);
+    });
+  },
+  // Авто как плоский список carNumber (совместимо с pdService.subscribeCars)
+  getCarsList: (cb: (cars: string[]) => void) => {
+    return dbService.getTractors((list: any[]) => cb((list || []).map((t) => t.carNumber || t.id).filter(Boolean)));
+  },
+  // Диспетчеры как объекты {id, name, color}[] (для редакторов справочника)
+  getDispatchersObjects: (cb: (list: {id: string; name: string; color?: string}[]) => void) => {
+    return sharedDirDispatchers((list: any[]) => cb((list || []).map((d) => ({ id: d.id, name: d.name, color: d.color }))));
+  },
 };
 
 // Database Services mapping with robust localized fallbacks and error handling helpers

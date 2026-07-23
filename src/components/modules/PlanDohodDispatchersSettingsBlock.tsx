@@ -1,29 +1,33 @@
-import {useState, useEffect} from 'react'
-import {UserProfile} from '../../types'
-import {pdService} from '../../api'
-import {Plus, Trash2, ArrowUp, ArrowDown} from 'lucide-react'
-import {useToast} from '../ToastProvider'
+import {useState, useEffect} from 'react';
+import {UserProfile} from '../../types';
+import {directoryService} from '../../api';
+import {Plus, Trash2, ArrowUp, ArrowDown} from 'lucide-react';
+import {useToast} from '../ToastProvider';
 
 interface Props {
   user: UserProfile;
 }
 
+interface DispObj {
+  id: string;
+  name: string;
+  color?: string;
+}
+
 export default function PlanDohodDispatchersSettingsBlock({ user }: Props) {
   const { toast } = useToast();
-  const [dispatchers, setDispatchers] = useState<string[]>([]);
-  const [dispatchersOrder, setDispatchersOrder] = useState<string[]>([]);
+  const [dispatchers, setDispatchers] = useState<DispObj[]>([]);
   const [newDispatcherName, setNewDispatcherName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    return pdService.subscribeDispatchers((disp, order) => {
-      setDispatchers(disp);
-      setDispatchersOrder(order);
+    return directoryService.getDispatchersObjects((list) => {
+      setDispatchers((list || []).map((d) => ({ id: d.id, name: d.name, color: d.color })));
     });
   }, []);
 
-  const filteredDispatchers = dispatchersOrder.filter(d => 
-    d.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredDispatchers = dispatchers.filter(d =>
+    d.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleAddDispatcher = () => {
@@ -32,58 +36,43 @@ export default function PlanDohodDispatchersSettingsBlock({ user }: Props) {
       toast('Введите имя диспетчера', 'error');
       return;
     }
-    if (dispatchers.includes(trimmed)) {
+    if (dispatchers.some((d) => d.name.toLowerCase() === trimmed.toLowerCase())) {
       toast('Такой диспетчер уже существует', 'error');
       return;
     }
 
-    const updatedDisp = [...dispatchers, trimmed];
-    const updatedOrder = [...dispatchersOrder];
-    if (!updatedOrder.includes(trimmed)) {
-      // Add right before 'All' if it exists, otherwise at the end
-      const allIdx = updatedOrder.indexOf('All');
-      if (allIdx > -1) {
-        updatedOrder.splice(allIdx, 0, trimmed);
-      } else {
-        updatedOrder.push(trimmed);
-      }
-    }
-
-    pdService.updateDispatchers(updatedDisp);
-    pdService.updateDispatchersOrder(updatedOrder);
+    const id = 'disp_' + Date.now().toString();
+    directoryService.saveDirItem('dispatchers', { id, name: trimmed, color: '#70FC8E' }, user.name, user.role);
     setNewDispatcherName('');
     toast('Диспетчер добавлен', 'success');
   };
 
-  const handleDeleteDispatcher = (name: string) => {
-    const updatedDisp = dispatchers.filter(d => d !== name);
-    const updatedOrder = dispatchersOrder.filter(d => d !== name);
-    pdService.updateDispatchers(updatedDisp);
-    pdService.updateDispatchersOrder(updatedOrder);
-    toast('Диспетчер удален', 'success');
+  const handleDeleteDispatcher = (disp: DispObj) => {
+    directoryService.deleteDirItem('dispatchers', disp.id, user.name, user.role);
+    toast('Диспетчер удалён', 'success');
   };
 
-  const handleMove = (name: string, direction: 'up' | 'down') => {
-    const idx = dispatchersOrder.indexOf(name);
+  const handleMove = (disp: DispObj, direction: 'up' | 'down') => {
+    const idx = dispatchers.findIndex((d) => d.id === disp.id);
     if (idx === -1) return;
-    const newOrder = [...dispatchersOrder];
-    
+    const newList = [...dispatchers];
     if (direction === 'up' && idx > 0) {
-      const temp = newOrder[idx];
-      newOrder[idx] = newOrder[idx - 1];
-      newOrder[idx - 1] = temp;
-    } else if (direction === 'down' && idx < newOrder.length - 1) {
-      const temp = newOrder[idx];
-      newOrder[idx] = newOrder[idx + 1];
-      newOrder[idx + 1] = temp;
+      [newList[idx - 1], newList[idx]] = [newList[idx], newList[idx - 1]];
+    } else if (direction === 'down' && idx < newList.length - 1) {
+      [newList[idx + 1], newList[idx]] = [newList[idx], newList[idx + 1]];
+    } else {
+      return;
     }
-
-    pdService.updateDispatchersOrder(newOrder);
+    // Persist new order by rewriting the whole dispatchers collection in new order.
+    newList.forEach((d) =>
+      directoryService.saveDirItem('dispatchers', d, user.name, user.role)
+    );
+    setDispatchers(newList);
   };
 
   return (
     <div className="bg-white/60 backdrop-blur-2xl rounded-[2.5rem] p-6 lg:p-8 border border-white/40 shadow-xl space-y-6 w-full select-none mt-6">
-      
+
       {/* Block Header */}
       <div className="border-b border-white/40 pb-4">
         <span className="bg-indigo-600 text-white font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-wider">
@@ -93,7 +82,7 @@ export default function PlanDohodDispatchersSettingsBlock({ user }: Props) {
           Диспетчеры (План Дохода)
         </h2>
         <p className="text-[10px] text-slate-500 font-medium mt-1 leading-relaxed">
-          Управление списком и порядком вывода диспетчеров в модуле плана доходов.
+          Управление списком и порядком вывода диспетчеров. Единый справочник (директория directories/dispatchers).
         </p>
       </div>
 
@@ -124,28 +113,29 @@ export default function PlanDohodDispatchersSettingsBlock({ user }: Props) {
       <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
         {filteredDispatchers.map((disp, idx) => {
           return (
-            <div key={disp} className="flex justify-between items-center py-2.5 px-4 border border-white/45 rounded-xl bg-white/40 backdrop-blur-md hover:bg-white/50 transition">
+            <div key={disp.id} className="flex justify-between items-center py-2.5 px-4 border border-white/45 rounded-xl bg-white/40 backdrop-blur-md hover:bg-white/50 transition">
               <span className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                👤 {disp}
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: disp.color || '#94a3b8' }}></span>
+                👤 {disp.name}
               </span>
               <div className="flex gap-1 items-center">
-                <button 
-                  onClick={() => handleMove(disp, 'up')} 
-                  disabled={idx === 0 || searchQuery !== ''} 
+                <button
+                  onClick={() => handleMove(disp, 'up')}
+                  disabled={idx === 0 || searchQuery !== ''}
                   className="p-1 hover:bg-white border border-transparent hover:border-white/40 transition rounded-lg text-slate-400 disabled:opacity-20 cursor-pointer"
                 >
                   <ArrowUp size={12}/>
                 </button>
-                <button 
-                  onClick={() => handleMove(disp, 'down')} 
-                  disabled={idx === filteredDispatchers.length - 1 || searchQuery !== ''} 
+                <button
+                  onClick={() => handleMove(disp, 'down')}
+                  disabled={idx === filteredDispatchers.length - 1 || searchQuery !== ''}
                   className="p-1 hover:bg-white border border-transparent hover:border-white/40 transition rounded-lg text-slate-400 disabled:opacity-20 cursor-pointer"
                 >
                   <ArrowDown size={12}/>
                 </button>
-                {disp !== 'All' && disp !== 'Все' && disp !== 'Все диспетчеры' && (
-                  <button 
-                    onClick={() => handleDeleteDispatcher(disp)} 
+                {disp.name !== 'All' && disp.name !== 'Все' && disp.name !== 'Все диспетчеры' && (
+                  <button
+                    onClick={() => handleDeleteDispatcher(disp)}
                     className="p-1 text-rose-500 hover:bg-rose-500/10 rounded-lg cursor-pointer transition-colors"
                   >
                     <Trash2 size={14}/>
