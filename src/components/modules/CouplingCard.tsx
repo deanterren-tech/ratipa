@@ -1,7 +1,6 @@
 import {useState, useEffect} from 'react'
 import {dbService} from '../../api'
 import {Truck, User, Calendar, MapPin, X, ArrowLeft} from 'lucide-react'
-import type { CouplingRecord, BazaRecord, TripPlan } from '../../types'
 
 interface CouplingCardProps {
   carNumber: string;
@@ -10,23 +9,23 @@ interface CouplingCardProps {
 }
 
 export default function CouplingCard({ carNumber, onClose, onOpenDriver }: CouplingCardProps) {
-  const [center, setCenter] = useState<CouplingRecord | null>(null);
-  const [bazaRec, setBazaRec] = useState<BazaRecord | null>(null);
-  const [trips, setTrips] = useState<TripPlan[]>([]);
+  const [center, setCenter] = useState<any>(null);
+  const [bazaRec, setBazaRec] = useState<any>(null);
+  const [trips, setTrips] = useState<any[]>([]);
 
   useEffect(() => {
     // center (soft reference - read only)
-    const u1 = dbService.getVehicleDriverData((list: CouplingRecord[]) => {
+    const u1 = dbService.getVehicleDriverData((list: any[]) => {
       const found = (list || []).find((c) => (c.carNumber || c.vehicleNumbers || '').replace(/[^А-ЯA-Z0-9]/g, '') === carNumber.replace(/[^А-ЯA-Z0-9]/g, ''));
       setCenter(found || null);
     });
     // baza (Учёт выезда) - is this coupling currently there?
-    const u2 = dbService.getBazaRecords((list: BazaRecord[]) => {
+    const u2 = dbService.getBazaRecords((list: any[]) => {
       const found = (list || []).find((c) => (c.carNumber || '').replace(/[^А-ЯA-Z0-9]/g, '') === carNumber.replace(/[^А-ЯA-Z0-9]/g, ''));
       setBazaRec(found || null);
     });
     // plan dohod trips
-    const u3 = dbService.getPlanDohod((list: TripPlan[]) => {
+    const u3 = dbService.getPlanDohod((list: any[]) => {
       const found = (list || []).filter((t) => (t.carNumber || '').replace(/[^А-ЯA-Z0-9]/g, '') === carNumber.replace(/[^А-ЯA-Z0-9]/g, ''));
       setTrips(found.slice(0, 5));
     });
