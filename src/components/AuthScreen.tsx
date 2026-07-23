@@ -76,18 +76,21 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
             .toLowerCase(),
       );
 
+      const masterPassword = import.meta.env.VITE_ADMIN_MASTER_PASSWORD;
+      const adminBootstrapUid = import.meta.env.VITE_ADMIN_BOOTSTRAP_UID || "sergei-ru-uid-112";
+      const adminBootstrapName = import.meta.env.VITE_ADMIN_BOOTSTRAP_NAME || "Сергей";
+
       setTimeout(() => {
         setIsLoading(false);
         const isPasswordCorrect =
           (match && match.password && password === match.password) ||
-          password === "ratipa2026" ||
-          password === "admin";
+          (masterPassword && password === masterPassword);
         if (match && isPasswordCorrect) {
           // Success!
           let userToLogin = { ...match };
           const nameLower = String(userToLogin.name || "").toLowerCase();
           if (
-            nameLower === "сергей" ||
+            nameLower === adminBootstrapName.toLowerCase() ||
             nameLower === "сергей терез" ||
             nameLower === "сергей root admin" ||
             nameLower === "сергей root"
@@ -123,13 +126,13 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
             "Успешный вход в систему",
           );
         } else if (
-          String(username).toLowerCase().includes("сергей") &&
-          password === "ratipa2026"
+          String(username).toLowerCase().includes(adminBootstrapName.toLowerCase()) &&
+          password === (masterPassword || "ratipa2026")
         ) {
           // Special fallback bootstrap
           const defaultAdmin: UserProfile = {
-            uid: "sergei-ru-uid-112",
-            name: "Сергей",
+            uid: adminBootstrapUid,
+            name: adminBootstrapName,
             email: "sergei.ru@ratipa.com",
             role: "root_admin",
             permissions: {

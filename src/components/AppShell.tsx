@@ -60,27 +60,6 @@ interface NotificationItem {
   targetRoles?: string[];
 }
 
-const defaultNotifications: NotificationItem[] = [
-  {
-    id: 'notif_1',
-    title: '🛠️ Ремонт закончен — BY 1982 MH',
-    text: 'Тягач BY 1982 MH (водитель Козлов) успешно прошел ремонт осей SAF. Готов к рейсу! Диспетчер: Алексей. Нужно грузить!',
-    type: 'success',
-    date: '13.06.2026 10:15',
-    isRead: false,
-    dispatcher: 'Алексей'
-  },
-  {
-    id: 'notif_2',
-    title: '📦 Срок готовности — BY 8812 AM',
-    text: 'Машина должна быть готова к 15.06.2026. Подходит дата готовности — необходимо планировать погрузку! Диспетчер: Татьяна.',
-    type: 'warning',
-    date: '12.06.2026 18:40',
-    isRead: false,
-    dispatcher: 'Татьяна'
-  }
-];
-
 // Import newly created business modules
 const DashboardModule = lazy(() => import('./modules/DashboardModule'));
 const DohodModule = lazy(() => import('./modules/DohodModule'));

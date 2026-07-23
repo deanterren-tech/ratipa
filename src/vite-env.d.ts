@@ -10,6 +10,10 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_APP_ID?: string;
   readonly VITE_FIREBASE_MEASUREMENT_ID?: string;
   readonly GEMINI_API_KEY?: string;
+  readonly VITE_ADMIN_MASTER_PASSWORD?: string;
+  readonly VITE_ADMIN_BOOTSTRAP_UID?: string;
+  readonly VITE_ADMIN_BOOTSTRAP_NAME?: string;
+  readonly VITE_MAPBOX_TOKEN?: string;
 }
 
 interface ImportMeta {

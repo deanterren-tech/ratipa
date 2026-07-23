@@ -349,7 +349,7 @@ export default function BelarusMap({
   }, [legs, activeLegIndex, origin, destination, JSON.stringify(waypoints)]);
 
   // Inject content into the Mapbox GL JS iframe
-  const mapboxToken = "REMOVED_MAPBOX_TOKEN";
+  const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN || "";
 
   const srcDoc = `
     <!DOCTYPE html>
