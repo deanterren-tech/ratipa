@@ -48,6 +48,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   const [rateGroups, setRateGroups] = useState<any[]>([]);
   const [vehicleBrands, setVehicleBrands] = useState<any[]>([]);
   const [trailerBrands, setTrailerBrands] = useState<any[]>([]);
+  const [tractors, setTractors] = useState<any[]>([]);
   const [statusTypes, setStatusTypes] = useState<any[]>([]);
 
   const [search, setSearch] = useState('');
@@ -88,7 +89,8 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
     const u5 = directoryService.getVehicleBrands((l: any[]) => setVehicleBrands(l || []));
     const u6 = directoryService.getTrailerBrands((l: any[]) => setTrailerBrands(l || []));
     const u7 = directoryService.getStatusTypes((l: any[]) => setStatusTypes(l || []));
-    return () => { u1(); u2(); u3(); u4(); u5(); u6(); u7(); };
+    const u8 = dbService.getTractors((l: any[]) => setTractors(l || []));
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); u7(); u8(); };
   }, []);
 
   const driverName = (id?: string) => {
@@ -405,7 +407,8 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
             </div>
             <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Тягач *" value={form.carNumber} onChange={(v) => setForm({ ...form, carNumber: v })} placeholder="АС 0246-7" />
+              <SelectField label="Тягач *" value={form.carNumber} onChange={(v) => setForm({ ...form, carNumber: v })}
+                options={tractors.map((t: any) => ({ v: t.carNumber || t.id, l: t.carNumber || t.id }))} allowCustom placeholder="АС 0246-7" />
               <Field label="Прицеп" value={form.trailerNumber} onChange={(v) => setForm({ ...form, trailerNumber: v })} placeholder="А 1635 Е-7" />
               <SelectField label="Марка тягача" value={form.brand} onChange={(v) => setForm({ ...form, brand: v })}
                 options={vehicleBrands.map((b) => ({ v: b.key || b.name, l: b.name }))} allowCustom />

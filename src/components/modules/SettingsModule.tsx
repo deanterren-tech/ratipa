@@ -1014,7 +1014,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
             </div>
           </div>
 
-          {/* B. FERRY DFS TARIFFS (Right panel) */}
+          {/* B. FERRY DFS TARIFFS — перенесено в Справочники */}
           <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 flex flex-col">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
               <div>
@@ -1022,74 +1022,14 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                   <Anchor className="h-4.5 w-4.5 text-blue-500" />
                   <span>Тарифы Паромных линий DFS</span>
                 </h3>
-                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase">Базовые стоимости переправ в EUR</span>
-              </div>
-
-              {/* Local search */}
-              <div className="relative w-full sm:w-40">
-                <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
-                  <Search className="w-3 h-3" />
-                </span>
-                <input
-                  type="text"
-                  placeholder="Поиск..."
-                  value={ferrySearch}
-                  onChange={(e) => setFerrySearch(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 pl-7 pr-2 py-1 rounded-lg text-[9px] font-mono font-bold uppercase tracking-wide outline-none focus:border-blue-400 transition"
-                />
               </div>
             </div>
-
-            {isWritePermitted && (
-              <form onSubmit={handleAddFerry} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50/50 p-2.5 rounded-xl border border-slate-150">
-                <input
-                  type="text"
-                  placeholder="Liepaja - Travemunde"
-                  required
-                  value={fName}
-                  onChange={(e) => setFName(e.target.value)}
-                  className="px-3.5 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/10 font-bold text-slate-800 transition"
-                />
-                <input
-                  type="number"
-                  placeholder="Цена (EUR)"
-                  required
-                  value={fPrice || ''}
-                  onChange={(e) => setFPrice(Number(e.target.value))}
-                  className="px-3.5 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/10 font-bold text-slate-800 font-mono transition"
-                />
-                <button type="submit" className="bg-[#3765F6] hover:bg-[#2555E5] text-white rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95 py-2.5">
-                  Добавить
-                </button>
-              </form>
-            )}
-
-            <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar flex-1">
-              {filteredFerries.map((fe) => (
-                <div key={fe.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl text-xs font-bold border border-slate-100 group transition">
-                  <span className="text-slate-800 uppercase tracking-tight font-black">{fe.name}</span>
-                  <div className="flex items-center gap-3">
-                    <strong className="text-slate-950 font-mono font-black py-0.5 px-2 bg-slate-200 rounded">{fe.price} EUR</strong>
-                    {isWritePermitted && (
-                      <button 
-                        onClick={() => handleDeleteFerry(fe.id)} 
-                        className="text-rose-500 hover:text-rose-700 p-1 bg-white border border-slate-200 rounded opacity-100 sm:opacity-0 group-hover:opacity-100 transition duration-150"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {filteredFerries.length === 0 && (
-                <div className="text-center py-10 text-slate-400 text-[10px] font-mono font-black uppercase tracking-widest bg-slate-50 rounded-xl">
-                  Тарифы не найдены
-                </div>
-              )}
+            <div className="p-4 bg-blue-50/60 border border-blue-100 rounded-xl text-xs text-slate-600 leading-relaxed">
+              Редактирование тарифов паромов теперь в едином разделе <b>«Справочники» → «Паромы»</b>.
             </div>
           </div>
 
-          {/* C. STANDARD DISTANCES DATABASE (Full width bottom panel) */}
+          {/* C. STANDARD DISTANCES — перенесено в Справочники */}
           <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 lg:col-span-2 flex flex-col">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
               <div>
@@ -1097,84 +1037,10 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                   <Compass className="h-4.5 w-4.5 text-blue-500 animate-spin-slow" />
                   <span>База стандартных расстояний RATIPA (КМ)</span>
                 </h3>
-                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase">Предустановленный километраж ключевых логистических плеч</span>
-              </div>
-
-              {/* Local search */}
-              <div className="relative w-full sm:w-60">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                  <Search className="w-3.5 h-3.5" />
-                </span>
-                <input
-                  type="text"
-                  placeholder="Поиск по городам отправления/прибытия..."
-                  value={distanceSearch}
-                  onChange={(e) => setDistanceSearch(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 pl-9 pr-3 py-1.5 rounded-xl text-xs font-bold outline-none focus:border-blue-400 transition"
-                />
               </div>
             </div>
-
-            {isWritePermitted && (
-              <form onSubmit={handleAddDistance} className="grid grid-cols-1 sm:grid-cols-4 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/50">
-                <input
-                  type="text"
-                  placeholder="От (напр., Минск)"
-                  required
-                  value={dFrom}
-                  onChange={(e) => setDFrom(e.target.value)}
-                  className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none font-bold text-slate-800"
-                />
-                <input
-                  type="text"
-                  placeholder="До (напр., Берлин)"
-                  required
-                  value={dTo}
-                  onChange={(e) => setDTo(e.target.value)}
-                  className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none font-bold text-slate-800"
-                />
-                <input
-                  type="number"
-                  placeholder="Расстояние (КМ)"
-                  required
-                  value={dKm || ''}
-                  onChange={(e) => setDKm(Number(e.target.value))}
-                  className="p-2 bg-white text-xs rounded-lg border border-slate-200 focus:outline-none font-bold font-mono text-slate-800"
-                />
-                <button type="submit" className="bg-slate-950 hover:bg-slate-850 text-[#70FC8E] rounded-lg text-[10px] font-black uppercase transition cursor-pointer font-mono">
-                  Записать в базу
-                </button>
-              </form>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
-              {filteredDistances.map((di) => (
-                <div key={di.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs font-bold hover:border-slate-300 transition group select-none">
-                  <div className="flex items-center gap-2">
-                    <Navigation className="w-3.5 h-3.5 text-emerald-500" />
-                    <span className="text-slate-700 uppercase">{di.from} &rarr; {di.to}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-black text-slate-900 bg-white border border-slate-200 px-2 py-0.5 rounded text-[10px]">
-                      {di.distance} км
-                    </span>
-                    {isWritePermitted && (
-                      <button 
-                        onClick={() => handleDeleteDistance(di.id)} 
-                        className="text-rose-500 hover:text-rose-700 p-1 bg-white border border-slate-200 rounded opacity-100 sm:opacity-0 group-hover:opacity-100 transition duration-150"
-                        title="Удалить"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {filteredDistances.length === 0 && (
-                <div className="col-span-full text-center py-10 text-slate-400 text-[10px] font-mono font-black uppercase tracking-wider bg-slate-50 rounded-xl">
-                  Расстояния не найдены
-                </div>
-              )}
+            <div className="p-4 bg-blue-50/60 border border-blue-100 rounded-xl text-xs text-slate-600 leading-relaxed">
+              Редактирование стандартных расстояний теперь в едином разделе <b>«Справочники» → «Расстояния»</b>.
             </div>
           </div>
 
