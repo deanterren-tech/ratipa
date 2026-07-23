@@ -49,12 +49,12 @@ try {
   auth = getAuth(app);
   database = getDatabase(app);
   useFirebase = true;
-  console.log("Firebase initialized successfully on projectId: ratipa-panel");
+  // Firebase initialized (projectId logged only in dev if needed)
 
   // Attempt silent anonymous auth to satisfy "auth != null" DB access rules
   signInAnonymously(auth)
     .then((cred) => {
-      console.log("Firebase Auth signed in anonymously: " + cred.user.uid);
+      // signed in anonymously
     })
     .catch((err) => {
       console.warn(
