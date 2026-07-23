@@ -98,6 +98,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
     { key: 'dozvola', label: 'Учет Дозволов', icon: FileText },
     { key: 'disposition', label: 'Диспозиция', icon: Map },
     { key: 'settings', label: 'Справочники', icon: Settings },
+    { key: 'appSettings', label: 'Настройки', icon: Settings2 },
     { key: 'admin', label: 'Администрирование', icon: ShieldAlert }
   ];
 

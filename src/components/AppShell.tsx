@@ -18,6 +18,7 @@ import {
   Clock, 
   Map,
   Settings, 
+  Settings2,
   ShieldAlert, 
   LogOut, 
   Menu, 
@@ -71,6 +72,7 @@ const BazaModule = lazy(() => import('./modules/BazaModule'));
 const DozvolaModule = lazy(() => import('./modules/DozvolaModule'));
 const DispositionModule = lazy(() => import('./modules/DispositionModule'));
 const SettingsModule = lazy(() => import('./modules/SettingsModule'));
+const DirectoriesModule = lazy(() => import('./modules/DirectoriesModule'));
 const AdminModule = lazy(() => import('./modules/AdminModule'));
 const DocumentsModule = lazy(() => import('./modules/DocumentsModule'));
 const VehicleDriverDataModule = lazy(() => import('./modules/VehicleDriverDataModule'));
@@ -86,6 +88,7 @@ const groupIconMap: Record<string, React.ComponentType<any>> = {
   g_docs: Files,
   g_disp: Map,
   g_settings: Settings,
+  g_appSettings: Settings2,
   g_admin: ShieldAlert,
 };
 
@@ -638,6 +641,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'documents', label: 'Документы', icon: Files, permissionKey: 'documents' },
     { key: 'disposition', label: 'Диспозиция', icon: Map, permissionKey: 'disposition' },
     { key: 'settings', label: 'Справочники', icon: Settings, permissionKey: 'settings' },
+    { key: 'appSettings', label: 'Настройки', icon: Settings2, permissionKey: 'settings' },
     { key: 'admin', label: 'Администрирование', icon: ShieldAlert, permissionKey: 'admin' }
   ];
 
@@ -726,6 +730,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       { id: 'g_docs', label: 'Документы', isDropdown: false, singleModuleKey: 'documents' },
       { id: 'g_disp', label: 'Диспозиция', isDropdown: false, singleModuleKey: 'disposition' },
       { id: 'g_settings', label: 'Справочники', isDropdown: false, singleModuleKey: 'settings' },
+      { id: 'g_appSettings', label: 'Настройки', isDropdown: false, singleModuleKey: 'appSettings' },
       { id: 'g_admin', label: 'Админ', isDropdown: false, singleModuleKey: 'admin' }
     ];
   }, [settings]);
@@ -828,6 +833,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       case 'disposition':
         return <DispositionModule user={user} />;
       case 'settings':
+        return <DirectoriesModule user={user} />;
+      case 'appSettings':
         return <SettingsModule user={user} />;
       case 'admin':
         return <AdminModule user={user} />;
