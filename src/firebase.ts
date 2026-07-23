@@ -33,7 +33,7 @@ import {
   CurrencyPreset,
 } from "./types";
 import { firebaseConfig } from "./firebaseConfig";
-import { sharedGetDrivers, sharedGetTractors, sharedGetTrailers, sharedGetCouplings, sharedGetCarRateGroups, sharedDirVehicleBrands, sharedDirTrailerBrands, sharedDirDispatchers, sharedDirRateGroups, sharedDirStatusTypes, sharedDirDirections } from "./db/subscriptions";
+import { sharedGetDrivers, sharedGetTractors, sharedGetTrailers, sharedGetCouplings, sharedGetCarRateGroups, sharedGetCurrencies, sharedGetSettings, sharedGetFerryTemplates, sharedGetDistances, sharedGetDirections, sharedGetVehicleStatuses, sharedDirVehicleBrands, sharedDirTrailerBrands, sharedDirDispatchers, sharedDirRateGroups, sharedDirStatusTypes, sharedDirDirections } from "./db/subscriptions";
 import { DEFAULT_USERS, INITIAL_VEHICLES, INITIAL_TRIPS, INITIAL_PERMITS, INITIAL_FERRY_TEMPLATES, INITIAL_DISTANCES, INITIAL_CARS_POOL, INITIAL_DIRECTIONS, INITIAL_SETTINGS } from "./db/seed";
 
 // Resilient initialization
