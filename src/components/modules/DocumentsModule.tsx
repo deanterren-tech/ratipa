@@ -387,7 +387,7 @@ export default function DocumentsModule({ user }: Props) {
       
       setCoupleRawText("");
       setCoupleImageBase64(null);
-    } catch (e: any) {
+    } catch (e: unknown) {
       alert("Ошибка при распознавании: " + (e?.message || ""));
       console.error(e);
     } finally {

@@ -1,24 +1,26 @@
-import {  ref, get, update, push, set } from 'firebase/database';
+import { ref, get, update, push, set } from 'firebase/database';
 import { database } from '../api';
+import type { Vehicle, Driver, BazaRecord } from '../types';
 
+/** Запись в ветке `baza` (история нахождения машины). Поля опциональны — данные приходят из Firebase. */
 export function normalizePlate(value: string): string {
   if (!value) return '';
   return value.toUpperCase().replace(/[^А-ЯA-Z0-9]/g, '');
 }
 
-export function resolveDriverForCar(carId: string, cars: any[], drivers: any[]): any {
-  const car = cars.find(c => c.id === carId);
+export function resolveDriverForCar(carId: string, cars: Vehicle[], drivers: Driver[]): Driver | null {
+  const car = cars.find((c) => c.id === carId);
   if (!car) return null;
   if (car.driverId) {
-    const driver = drivers.find(d => d.id === car.driverId);
+    const driver = drivers.find((d) => d.id === car.driverId);
     if (driver) return driver;
   }
   return null;
 }
 
-export function applySharedCarToBazaRecord(bazaRecord: any, cars: any[]): any {
+export function applySharedCarToBazaRecord(bazaRecord: BazaRecord, cars: Vehicle[]): BazaRecord {
   if (!bazaRecord.carId) return bazaRecord;
-  const car = cars.find(c => c.id === bazaRecord.carId);
+  const car = cars.find((c) => c.id === bazaRecord.carId);
   if (!car) return bazaRecord;
   return {
     ...bazaRecord,
@@ -27,10 +29,20 @@ export function applySharedCarToBazaRecord(bazaRecord: any, cars: any[]): any {
   };
 }
 
-export function applySharedDriverToBazaRecord(bazaRecord: any, drivers: any[]): any {
-  if (!bazaRecord.driverId) return { ...bazaRecord, driverShortNameRu: bazaRecord.driverShortNameRu || bazaRecord.driverName || '— (Нет водителя)' };
-  const driver = drivers.find(d => d.id === bazaRecord.driverId);
-  if (!driver) return { ...bazaRecord, driverShortNameRu: bazaRecord.driverShortNameRu || bazaRecord.driverName || '— (Водитель удален)' };
+export function applySharedDriverToBazaRecord(bazaRecord: BazaRecord, drivers: Driver[]): BazaRecord {
+  if (!bazaRecord.driverId) {
+    return {
+      ...bazaRecord,
+      driverShortNameRu: bazaRecord.driverShortNameRu || bazaRecord.driverName || '— (Нет водителя)',
+    };
+  }
+  const driver = drivers.find((d) => d.id === bazaRecord.driverId);
+  if (!driver) {
+    return {
+      ...bazaRecord,
+      driverShortNameRu: bazaRecord.driverShortNameRu || bazaRecord.driverName || '— (Водитель удален)',
+    };
+  }
   return {
     ...bazaRecord,
     driverShortNameRu: driver.shortNameRu || driver.name,
@@ -42,16 +54,16 @@ export async function migrateLegacyBazaCars() {
   const db = database;
   const vfSnap = await get(ref(db, 'vehicleFleet'));
   const bazaSnap = await get(ref(db, 'baza'));
-  
-  const vfData = vfSnap.val() || {};
-  const bazaData = bazaSnap.val() || {};
-  
-  const updates: any = {};
-  
-  const masterCars: Record<string, any> = {};
-  Object.keys(vfData).forEach(key => {
+
+  const vfData = (vfSnap.val() || {}) as Record<string, Vehicle>;
+  const bazaData = (bazaSnap.val() || {}) as Record<string, BazaRecord>;
+
+  const updates: Record<string, unknown> = {};
+
+  const masterCars: Record<string, Vehicle> = {};
+  Object.keys(vfData).forEach((key) => {
     const car = vfData[key];
-    const norm = normalizePlate(car.carNumber || car.vehicleNumbers);
+    const norm = normalizePlate(car.carNumber || car.vehicleNumbers || '');
     if (norm) {
       if (!masterCars[norm] || (!masterCars[norm].driverId && car.driverId)) {
         masterCars[norm] = { id: key, ...car };
@@ -59,24 +71,30 @@ export async function migrateLegacyBazaCars() {
     }
   });
 
-  Object.keys(vfData).forEach(key => {
+  Object.keys(vfData).forEach((key) => {
     const record = vfData[key];
-    if (record.dateArrival || record.dateLoading || record.dateDeparture || record.dateRepairStart || record.status === 'archive') {
+    if (
+      record.dateArrival ||
+      record.dateLoading ||
+      record.dateDeparture ||
+      record.dateRepairStart ||
+      record.status === 'archive'
+    ) {
       if (!bazaData[key]) {
-        const norm = normalizePlate(record.carNumber || record.vehicleNumbers);
+        const norm = normalizePlate(record.carNumber || record.vehicleNumbers || '');
         const masterCar = masterCars[norm];
-        const newBazaRec = {
+        const newBazaRec: BazaRecord = {
           ...record,
           carId: masterCar ? masterCar.id : null,
           driverId: masterCar ? masterCar.driverId : record.driverId,
-          isLegacyMigrated: true
+          isLegacyMigrated: true,
         };
         updates[`baza/${key}`] = newBazaRec;
       }
     }
   });
 
-  Object.keys(bazaData).forEach(key => {
+  Object.keys(bazaData).forEach((key) => {
     const record = bazaData[key];
     if (!record.carId && record.carNumber) {
       const norm = normalizePlate(record.carNumber);
@@ -93,6 +111,6 @@ export async function migrateLegacyBazaCars() {
   if (Object.keys(updates).length > 0) {
     await update(ref(db), updates);
   }
-  
+
   return { migrated: Object.keys(updates).length };
 }

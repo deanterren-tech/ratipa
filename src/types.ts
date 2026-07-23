@@ -662,3 +662,44 @@ export const allModules = [
     permissionKey: "analysis",
   },
 ];
+
+/** Запись в ветке `baza` (учёт выезда). Поля опциональны — данные приходят из Firebase. */
+export interface BazaRecord {
+  id?: string;
+  carId?: string | null;
+  carNumber?: string;
+  brandModel?: string;
+  driverId?: string | null;
+  driverName?: string;
+  driverShortNameRu?: string;
+  status?: "base" | "loading" | "repair" | "departure" | "archive";
+  dateDeparture?: string;
+  [key: string]: unknown;
+}
+
+/** Запись сцепки (тягач+прицеп) из ветки `vehicleFleet` / `vehicle_driver_data`. Поля опциональны. */
+export interface CouplingRecord {
+  id?: string;
+  coupling?: string;
+  carNumber?: string;
+  vehicleNumbers?: string;
+  trailerNumber?: string;
+  trailerMake?: string;
+  brandModel?: string;
+  brands?: string;
+  brandsRu?: string;
+  brand?: string;
+  vehicleType?: string;
+  year?: string | number;
+  dimensions?: string;
+  weight?: string | number;
+  rate?: number;
+  dispatcher?: string;
+  dispatcherName?: string;
+  driverId?: string;
+  driverName?: string;
+  driverNameRu?: string;
+  driverShortNameRu?: string;
+  isLocation?: boolean;
+  [key: string]: unknown;
+}

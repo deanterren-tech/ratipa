@@ -2100,7 +2100,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
           "system",
         );
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("AI parse failed:", err);
       dbService.sendChatMessage(
         "ai_dispatcher",

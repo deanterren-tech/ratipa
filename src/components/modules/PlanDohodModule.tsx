@@ -13,6 +13,7 @@ import {
   DISPATCHER_COLORS_PRESETS,
   PotentialLoad,
   CurrencyPreset,
+  AuditLog,
 } from "../../types";
 import {calculateTripFinances} from '../../utils/financeCalculators'
 import {dbService} from '../../api'
@@ -86,8 +87,12 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     }
   };
   const [directions, setDirections] = useState<Record<string, number>>({});
-  const [distances, setDistances] = useState<any[]>([]);
-  const [settings, setSettings] = useState<any>({
+  const [distances, setDistances] = useState<DistancePreset[]>([]);
+  const [settings, setSettings] = useState<{
+    useDistanceLookup: boolean;
+    distanceLookupMode: string;
+    [key: string]: unknown;
+  }>({
     useDistanceLookup: false,
     distanceLookupMode: "cities",
   });
@@ -96,8 +101,8 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [dispatchersColors, setDispatchersColors] = useState<
     Record<string, string>
   >({});
-  const [currencies, setCurrencies] = useState<any[]>([]); // CurrencyPreset
-  const [logs, setLogs] = useState<any[]>([]);
+  const [currencies, setCurrencies] = useState<CurrencyPreset[]>([]); // CurrencyPreset
+  const [logs, setLogs] = useState<AuditLog[]>([]);
   const [manualTripsOrder, setManualTripsOrder] = useState<string[]>([]);
 
   // Current filter specific to dispatchers
@@ -1751,9 +1756,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
       resetForm();
       setIsModalOpen(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Save error:", error);
-      addToast("Ошибка при сохранении: " + (error.message || "Unknown error"), "error");
+      const msg = error instanceof Error ? error.message : String(error);
+      addToast("Ошибка при сохранении: " + (msg || "Unknown error"), "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -1787,7 +1793,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       await pdService.deleteTrip(id, user.name, user.role);
       addToast("План рейса удален", "info");
       if (isModal) setIsModalOpen(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Delete error:", error);
       addToast("Ошибка при удалении", "error");
     } finally {

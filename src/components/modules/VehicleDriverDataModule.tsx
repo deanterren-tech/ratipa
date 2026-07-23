@@ -509,7 +509,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
         }
       }
       toast('Паспортные данные подтверждены', 'success');
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('[PassportVerify] save failed', e);
       toast('Ошибка подтверждения: ' + (e?.message || e), 'error');
     } finally {
@@ -697,7 +697,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       await dbService.saveVehicleDriverRecord(record, user.name, user.role);
       setIsSaving(false);
       setModalOpen(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Save error:", err);
       setSaveError(`Ошибка при сохранении: ${err.message || String(err)}`);
       setIsSaving(false);
@@ -882,7 +882,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       } else {
         setAiError('Не удалось корректно распознать данные. Попробуйте еще раз.');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       setAiError(err.message || 'Ошибка распознавания');
     } finally {
@@ -961,7 +961,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     const updatedRecord = { ...rec, dispatcher: nextDispatcher };
     try {
       await dbService.saveVehicleDriverRecord(updatedRecord, user.name, user.role);
-    } catch (err: any) {
+    } catch (err: unknown) {
       alert("Ошибка изменения диспетчера: " + (err.message || String(err)));
     }
   };

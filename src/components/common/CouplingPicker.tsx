@@ -3,10 +3,11 @@ import {createPortal} from 'react-dom'
 import {Search, Truck, X, MapPin} from 'lucide-react'
 import {dbService} from '../../api'
 import {formatDriverShortName} from '../../utils/driverSync'
+import type { CouplingRecord } from '../../types'
 
 interface CouplingPickerProps {
   value?: string;            // selected coupling id (or raw string for combined)
-  onSelect: (rec: any) => void;
+  onSelect: (rec: CouplingRecord) => void;
   placeholder?: string;
   excludeIds?: string[];
   mode?: 'coupling' | 'driver' | 'combined';  // 'combined': couplings + locations in one field
@@ -27,13 +28,13 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null);
-  const [all, setAll] = useState<any[]>([]);
-  const [selected, setSelected] = useState<any | null>(null);
+  const [all, setAll] = useState<CouplingRecord[]>([]);
+  const [selected, setSelected] = useState<CouplingRecord | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const unsub = dbService.getVehicleDriverData((list: any[]) => setAll(list || []));
+    const unsub = dbService.getVehicleDriverData((list: CouplingRecord[]) => setAll(list || []));
     return unsub;
   }, []);
 
@@ -129,7 +130,7 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
       .slice(0, 8);
   }, [locations, mode, query]);
 
-  const handlePick = (rec: any) => {
+  const handlePick = (rec: CouplingRecord) => {
     setSelected(rec);
     if (mode === 'combined') {
       const label = rec.carNumber || rec.vehicleNumbers || '';
@@ -154,7 +155,7 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
       : mode === 'combined' ? 'Авто (из базы) или локация...'
       : 'Поиск сцепки (тягач / прицеп / водитель)...');
 
-  const displayLabel = (rec: any) => {
+  const displayLabel = (rec: CouplingRecord) => {
     if (mode === 'driver') {
       return formatDriverShortName(rec.driverNameRu || rec.driverName || '') || 'нет водителя';
     }
@@ -162,7 +163,7 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
     const trail = rec.trailerNumber || rec.trailerMake || '';
     return trail ? `${car} / ${trail}` : car;
   };
-  const displaySub = (rec: any) => {
+  const displaySub = (rec: CouplingRecord) => {
     if (mode === 'driver') {
       const car = (rec.carNumber || rec.vehicleNumbers) + (rec.trailerNumber ? ` + ${rec.trailerNumber}` : '');
       return [car, rec.brandModel].filter(Boolean).join(' · ');
