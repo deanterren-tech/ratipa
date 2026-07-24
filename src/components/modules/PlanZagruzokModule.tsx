@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronUp,
   Table2,
+  Loader2,
 } from "lucide-react";
 
 interface PlanZagruzokModuleProps {
@@ -26,6 +27,8 @@ interface TabItem {
   blacklist?: boolean;
 }
 
+const MODULE_KEY = "planZagruzok";
+
 export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   useEffect(() => {
@@ -33,10 +36,12 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
     return () => unsub();
   }, []);
 
-  const [zoom, setZoom] = useState(100);
+  const initialZoom = user.sheetZoom?.[MODULE_KEY] ?? 100;
+  const [zoom, setZoom] = useState(initialZoom);
   const [frameKey, setFrameKey] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const hasBase = user.role === "root_admin" || user.role === "admin" || (user.permissions && user.permissions.planZagruzok !== "none");
 
@@ -81,29 +86,51 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
   const activeTab = allowedTabs.find((t) => t.id === activeTabId) || allowedTabs[0];
   const embedUrl = activeTab ? getEmbeddableSheetUrl(activeTab.sheetUrl) : "";
 
+  // Сбрасываем индикатор загрузки при смене таба / обновлении
+  useEffect(() => {
+    if (embedUrl) setLoading(true);
+  }, [frameKey, embedUrl]);
+
+  const changeZoom = (next: number) => {
+    const clamped = Math.max(50, Math.min(200, next));
+    setZoom(clamped);
+    dbService.saveUserSheetZoom(user.uid, MODULE_KEY, clamped);
+  };
+
   const iconBtn =
-    "inline-flex items-center justify-center h-8 w-8 rounded-lg border border-slate-200/70 bg-white/60 text-slate-700 hover:bg-white transition backdrop-blur";
+    "inline-flex items-center justify-center h-7 w-7 sm:h-8 sm:w-8 rounded-lg border border-slate-200/70 bg-white/60 text-slate-700 hover:bg-white transition backdrop-blur";
 
   return (
     <div className="fixed top-16 inset-x-0 bottom-0 z-40 bg-slate-100 overflow-hidden">
       {/* === FULL-SCREEN IFRAME === */}
       <div className="absolute inset-0">
         {embedUrl ? (
-          <div
-            style={{
-              width: `${10000 / zoom}%`,
-              height: `${10000 / zoom}%`,
-              transform: `scale(${zoom / 100})`,
-              transformOrigin: "top left",
-            }}
-          >
-            <iframe
-              key={frameKey + "-" + embedUrl}
-              src={embedUrl}
-              title={activeTab?.name || "План загрузок"}
-              className="w-full h-full border-0"
-            />
-          </div>
+          <>
+            <div
+              style={{
+                width: `${10000 / zoom}%`,
+                height: `${10000 / zoom}%`,
+                transform: `scale(${zoom / 100})`,
+                transformOrigin: "top left",
+              }}
+            >
+              <iframe
+                key={frameKey + "-" + embedUrl}
+                src={embedUrl}
+                title={activeTab?.name || "План загрузок"}
+                onLoad={() => setLoading(false)}
+                className="w-full h-full border-0"
+              />
+            </div>
+            {loading && (
+              <div className="absolute inset-0 z-[1] flex items-center justify-center bg-slate-100/70 backdrop-blur-sm">
+                <div className="flex flex-col items-center gap-3 text-slate-500">
+                  <Loader2 className="h-8 w-8 animate-spin text-[#3765F6]" />
+                  <span className="text-xs font-bold uppercase tracking-wider">Загрузка таблицы…</span>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div className="flex h-full w-full items-center justify-center text-center text-slate-400 text-sm px-8">
             Ссылка на таблицу не задана.
@@ -138,12 +165,12 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button className={iconBtn} title="Уменьшить масштаб" onClick={() => setZoom((z) => Math.max(50, z - 10))}>
+            <div className="flex items-center gap-1 sm:gap-1.5">
+              <button className={iconBtn} title="Уменьшить масштаб" onClick={() => changeZoom(zoom - 10)}>
                 <ZoomOut className="h-4 w-4" />
               </button>
               <span className="text-[11px] font-mono text-slate-600 w-9 text-center">{zoom}%</span>
-              <button className={iconBtn} title="Увеличить масштаб" onClick={() => setZoom((z) => Math.min(200, z + 10))}>
+              <button className={iconBtn} title="Увеличить масштаб" onClick={() => changeZoom(zoom + 10)}>
                 <ZoomIn className="h-4 w-4" />
               </button>
               <button className={iconBtn} title="Обновить таблицу" onClick={() => setFrameKey((k) => k + 1)}>
@@ -181,7 +208,7 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTabId(tab.id)}
+                    onClick={() => { setActiveTabId(tab.id); setFrameKey((k) => k + 1); }}
                     className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl transition duration-150 shrink-0 cursor-pointer border ${
                       active
                         ? activeCls

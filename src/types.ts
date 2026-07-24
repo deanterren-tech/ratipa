@@ -44,6 +44,8 @@ export interface UserProfile {
   currentModule?: string;
   password?: string;
   color?: string;
+  /** Персональный масштаб фреймов Google-таблиц по модулям: { disposition, planZagruzok, currentPlanning } -> 50..200 */
+  sheetZoom?: Record<string, number>;
 }
 
 export interface VehicleHistoryItem {

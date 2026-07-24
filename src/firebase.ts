@@ -2504,4 +2504,20 @@ export const dbService = {
       }
     }
   },
+
+  /**
+   * Сохраняет масштаб фрейма Google-таблицы для конкретного пользователя
+   * и конкретного модуля. Merge-апдейт ветки users_list/{uid}, чтобы не
+   * перезаписывать весь профиль (безопасно при параллельных правках).
+   * moduleKey: 'disposition' | 'planZagruzok' | 'currentPlanning'
+   */
+  saveUserSheetZoom: (uid: string, moduleKey: string, zoom: number) => {
+    if (useFirebase) {
+      const patch: Record<string, any> = {};
+      patch[`sheetZoom/${moduleKey}`] = zoom;
+      update(ref(database, `users_list/${uid}`), patch).catch((err) =>
+        console.warn("Failed to save user sheet zoom:", err)
+      );
+    }
+  },
 };
