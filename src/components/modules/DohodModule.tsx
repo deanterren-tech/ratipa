@@ -1121,10 +1121,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
     return () => {
       subHistory();
       subRouteTpl();
-      subFerries();
       subDistances();
       subDirs();
-      subChat();
       subPdSettings();
     };
   }, []);
