@@ -203,7 +203,7 @@ export default function AdminWelcomePhrasesBlock({ settings, onSave }: Props) {
                           </button>
                           <button
                             onClick={() => setEditingIndex(null)}
-                            className="p-1.5 bg-slate-150 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
+                            className="p-1.5 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
                             title="Отмена"
                           >
                             <X size={13} />

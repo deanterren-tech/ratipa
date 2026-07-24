@@ -65,6 +65,28 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const [editingSalaryId, setEditingSalaryId] = useState<string | null>(null);
   const [editingSalaryData, setEditingSalaryData] = useState<Partial<SalaryLog>>({});
 
+  // handlers модалки редактирования выплаты (восстановлены: ранее были удалены,
+  // но вызовы остались в JSX → ReferenceError при клике "Править"/"Дублировать")
+  const openEditModal = (rec: SalaryLog) => {
+    setEditingSalaryId(rec.id || null);
+    setEditingSalaryData(rec);
+  };
+  const closeEditModal = () => {
+    setEditingSalaryId(null);
+    setEditingSalaryData({});
+  };
+  const saveEditModal = () => {
+    if (editingSalaryData && editingSalaryData.id) {
+      dbService.updateSalary(editingSalaryData.id, editingSalaryData, user.name, user.role);
+    }
+    closeEditModal();
+  };
+  const copyHistoryToForm = (rec: SalaryLog) => {
+    // дублируем запись в форму редактирования (переиспользуем тот же state)
+    setEditingSalaryId(rec.id || null);
+    setEditingSalaryData(rec);
+  };
+
   const getYearMonth = (item: SalaryLog): string => {
     if (item.datetime) {
       const parts = item.datetime.split('.');

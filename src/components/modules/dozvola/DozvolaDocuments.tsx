@@ -1035,7 +1035,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
             <div className="table-responsive select-none overflow-x-auto custom-scrollbar border border-slate-200/50 rounded-2xl bg-white">
               <table className="main-table w-full text-xs">
                 <thead>
-                  <tr className="bg-slate-50/50 border-b border-slate-150 text-[10px] font-bold uppercase text-slate-400">
+                  <tr className="bg-slate-50/50 border-b border-slate-200 text-[10px] font-bold uppercase text-slate-400">
                     <th className="p-3 text-left">Государство</th>
                     <th className="p-3 text-left">Вид (категория) разрешения</th>
                     <th className="p-3 w-28 text-center">Год бланка</th>
@@ -1132,7 +1132,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
             <div className="table-responsive select-none overflow-x-auto custom-scrollbar border border-slate-200/50 rounded-2xl bg-white">
               <table className="main-table w-full text-xs">
                 <thead>
-                  <tr className="bg-slate-50/50 border-b border-slate-150 text-[10px] font-bold uppercase text-slate-400">
+                  <tr className="bg-slate-50/50 border-b border-slate-200 text-[10px] font-bold uppercase text-slate-400">
                     <th className="p-3 text-left">Государство</th>
                     <th className="p-3 text-left">Вид бланков</th>
                     <th className="p-3 w-24 text-center">Год</th>
@@ -1230,7 +1230,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
             <div className="table-responsive select-none overflow-x-auto custom-scrollbar border border-slate-200/50 rounded-2xl bg-white">
               <table className="main-table w-full text-xs">
                 <thead>
-                  <tr className="bg-slate-50/50 border-b border-slate-150 text-[10px] font-bold uppercase text-slate-400">
+                  <tr className="bg-slate-50/50 border-b border-slate-200 text-[10px] font-bold uppercase text-slate-400">
                     <th className="p-3 w-48 text-left">Страна</th>
                     <th className="p-3 text-left">Номера разрешений</th>
                     <th className="p-3 w-16 text-center">Убрать</th>

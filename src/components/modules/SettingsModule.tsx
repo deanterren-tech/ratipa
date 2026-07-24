@@ -1194,7 +1194,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
 
           {/* CURRENCY REGISTRY (Full width bottom panel) */}
           <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-xl shadow-slate-900/5 space-y-4">
-            <div className="border-b border-slate-150 pb-2.5">
+            <div className="border-b border-slate-200 pb-2.5">
               <h3 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
                 <Wallet className="h-4.5 w-4.5 text-[#3765F6]" style={{ fill: '#3765F6', fillOpacity: 0.15 }} />
                 <span>Справочник Валют RATIPA</span>
@@ -1203,7 +1203,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
             </div>
 
             {isWritePermitted && (
-              <form onSubmit={handleAddCurrency} className="flex gap-2.5 bg-slate-50/50 p-2.5 rounded-xl border border-slate-150 max-w-md">
+              <form onSubmit={handleAddCurrency} className="flex gap-2.5 bg-slate-50/50 p-2.5 rounded-xl border border-slate-200 max-w-md">
                 <input
                   type="text"
                   placeholder="Код валюты (напр. USD, PLN, BYN)"
@@ -1376,7 +1376,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
               </div>
 
               {isWritePermitted && (
-                <form onSubmit={handleAddQuickLink} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50/50 p-2.5 rounded-xl border border-slate-150 select-none">
+                <form onSubmit={handleAddQuickLink} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50/50 p-2.5 rounded-xl border border-slate-200 select-none">
                   <input
                     type="text"
                     placeholder="Название службы"
@@ -1468,7 +1468,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
               </div>
 
               {isWritePermitted && (
-                <form onSubmit={handleAddExternalTab} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50/50 p-2.5 rounded-xl border border-slate-150 select-none">
+                <form onSubmit={handleAddExternalTab} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50/50 p-2.5 rounded-xl border border-slate-200 select-none">
                   <input
                     type="text"
                     placeholder="Название"

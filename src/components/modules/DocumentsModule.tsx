@@ -1691,7 +1691,7 @@ export default function DocumentsModule({ user }: Props) {
               </div>
             </div>
             {/* Save parameters node action */}
-            <div className="pt-4 border-t border-slate-150/80 flex flex-col sm:flex-row gap-3">
+            <div className="pt-4 border-t border-slate-200/80 flex flex-col sm:flex-row gap-3">
               <button
                 onClick={handleSaveFerryDataForCar}
                 className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-3 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95 border border-slate-200 cursor-pointer"

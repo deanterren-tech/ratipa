@@ -133,7 +133,7 @@ export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryPro
       <div className="overflow-x-auto custom-scrollbar">
         <table className="w-full text-left border-collapse min-w-[600px]">
           <thead>
-            <tr className="bg-slate-50/40 border-b border-slate-150 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            <tr className="bg-slate-50/40 border-b border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               <th className="p-4 pl-6 w-16 text-center">Позиция</th>
               <th className="p-4">Название вида (Вкладка)</th>
               <th className="p-4">Страна (для документов)</th>

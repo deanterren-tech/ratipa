@@ -578,7 +578,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                   placeholder="Быстрый поиск по названию или описанию модуля..."
                   value={launcherSearch}
                   onChange={(e) => setLauncherSearch(e.target.value)}
-                  className="w-full bg-slate-950 text-slate-150 text-xs px-5 py-3.5 rounded-2xl border border-slate-800 focus:border-amber-500/50 outline-none focus:ring-1 focus:ring-amber-500/30 transition-all font-medium font-sans"
+                  className="w-full bg-slate-950 text-slate-200 text-xs px-5 py-3.5 rounded-2xl border border-slate-800 focus:border-amber-500/50 outline-none focus:ring-1 focus:ring-amber-500/30 transition-all font-medium font-sans"
                 />
                 {launcherSearch && (
                   <button 

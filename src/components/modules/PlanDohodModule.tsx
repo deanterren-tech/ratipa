@@ -2390,7 +2390,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       return (
                         <div
                           key={pl.id}
-                          className={`p-3.5 rounded-2xl border ${plEditingId === pl.id ? "border-purple-400 bg-purple-50/30 shadow-sm" : "border-slate-150 bg-slate-50/50 hover:border-slate-300 hover:bg-slate-50"} transition cursor-pointer flex flex-col gap-2.5 relative`}
+                          className={`p-3.5 rounded-2xl border ${plEditingId === pl.id ? "border-purple-400 bg-purple-50/30 shadow-sm" : "border-slate-200 bg-slate-50/50 hover:border-slate-300 hover:bg-slate-50"} transition cursor-pointer flex flex-col gap-2.5 relative`}
                           onClick={() => editPotentialLoad(pl)}
                         >
                           <div className="flex justify-between items-center">

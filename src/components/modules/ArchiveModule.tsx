@@ -234,7 +234,7 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
                     <th className="p-3.5">Машина</th>
                     <th className="p-3.5">Пробег (км)</th>
                     <th className="p-3.5">Общий итог</th>
-                    <th className="p-3.5">Оператор логист</th>
+                    <th className="p-3.5">Сотрудник логист</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-650 font-semibold">

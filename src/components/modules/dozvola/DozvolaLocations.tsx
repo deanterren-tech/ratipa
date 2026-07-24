@@ -992,7 +992,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                    </h4>
                    <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto custom-scrollbar">
                      {Object.entries(typeCounts).map(([type, total]) => (
-                       <div key={type} className="flex justify-between items-center bg-white border border-slate-150 p-2 rounded-lg text-xs font-semibold shadow-sm">
+                       <div key={type} className="flex justify-between items-center bg-white border border-slate-200 p-2 rounded-lg text-xs font-semibold shadow-sm">
                          <span className="text-slate-700">{type}</span>
                          <span className="font-mono font-bold text-[#3765F6] bg-blue-50/50 border border-blue-100/50 px-2 py-0.5 rounded">{total} шт</span>
                        </div>
@@ -1013,7 +1013,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                        const isFrom = op.fromLocId === loc.id;
                        const targetName = isFrom ? (locations[op.toLocId]?.name || 'Unknown') : (locations[op.fromLocId]?.name || 'Unknown');
                        return (
-                         <div key={op.id} className="bg-slate-50/50 border border-slate-150/70 p-2 rounded-xl text-[10px] flex flex-col gap-1 shadow-sm">
+                         <div key={op.id} className="bg-slate-50/50 border border-slate-200/70 p-2 rounded-xl text-[10px] flex flex-col gap-1 shadow-sm">
                            <div className="flex justify-between items-center">
                              <span className={`font-bold ${isFrom ? 'text-rose-600' : 'text-emerald-600'}`}>
                                {isFrom ? '➔ Отправка' : '← Получение'}
@@ -1038,7 +1038,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                </div>
 
                {/* Location actions */}
-               <div className="mt-auto pt-3 border-t border-slate-150 flex flex-col gap-2">
+               <div className="mt-auto pt-3 border-t border-slate-200 flex flex-col gap-2">
                  <button
                    onClick={() => {
                      setDelivFrom(loc.id);
@@ -1202,7 +1202,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
                 <div className="flex flex-col gap-1.5 border border-slate-200/60 rounded-2xl p-2.5 overflow-y-auto bg-slate-50/50 flex-1 min-h-[120px] custom-scrollbar">
                   {filteredDozvolsAtFrom.map((d: any) => (
-                    <div key={d.id} className="flex items-center gap-2.5 bg-white hover:bg-slate-50 border border-slate-150 px-2.5 py-1.5 rounded-xl shadow-sm transition">
+                    <div key={d.id} className="flex items-center gap-2.5 bg-white hover:bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl shadow-sm transition">
                       <input 
                         type="checkbox" 
                         checked={delivDozvols.includes(d.id)} 

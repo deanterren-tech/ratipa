@@ -394,7 +394,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
                 placeholder="Квартальная квота"
               />
             </div>
-            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-150 text-xs font-semibold leading-relaxed mt-2">
+            <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200 text-xs font-semibold leading-relaxed mt-2">
               <div className="flex justify-between mb-1">
                 <span>Лимит квоты по штату:</span>
                 <span className="font-bold text-[#3765F6]">
@@ -448,7 +448,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
               placeholder="Напр. 60"
             />
           </div>
-          <div className="bg-slate-50/70 border border-slate-150 rounded-xl p-3 text-xs font-semibold mt-1 max-h-48 overflow-y-auto custom-scrollbar">
+          <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-3 text-xs font-semibold mt-1 max-h-48 overflow-y-auto custom-scrollbar">
             {!configuredDays ? (
               <div className="text-slate-400 italic text-center text-[10px]">
                 Задайте нормативный срок в днях
