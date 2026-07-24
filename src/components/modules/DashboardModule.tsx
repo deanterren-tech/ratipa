@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { UserProfile, AuditLog, AppSettings, Vehicle, TripPlan, Permit, HighlightData } from '../../types';
 import { dbService } from '../../api';
 import {motion, AnimatePresence} from 'motion/react';
-import AnimatedGradient from '../common/AnimatedGradient';
 import {
   Activity,
   Users,
@@ -29,22 +28,7 @@ import {
   Settings,
   ShieldAlert,
   LayoutDashboard,
-  Eye,
-  EyeOff,
 } from 'lucide-react';
-
-// Управление анимацией градиента: по умолчанию включена,
-// кроме случаев prefers-reduced-motion (чтобы не грузить слабые ПК).
-// Выбор пользователя (из localStorage) переопределяет системную настройку.
-const GRAD_KEY = 'ratipa_gradient_enabled';
-const getInitialGradient = (): boolean => {
-  if (typeof window === 'undefined') return true;
-  const saved = localStorage.getItem(GRAD_KEY);
-  // нет сохранённого выбора → включено по умолчанию (красиво).
-  // Пользователь может выключить кнопкой на дашборде (для слабых ПК).
-  if (saved !== null) return saved === '1';
-  return true;
-};
 
 const formatDateToRu = (dateVal: any): string => {
   if (!dateVal) return '';
@@ -98,7 +82,6 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
   const [permits, setPermits] = useState<Permit[]>([]);
   const [isDbOnline, setIsDbOnline] = useState(false);
   const [isEditingHighlight, setIsEditingHighlight] = useState(false);
-  const [gradientOn, setGradientOn] = useState<boolean>(getInitialGradient());
   const [timeStr, setTimeStr] = useState('');
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [backgroundPills, setBackgroundPills] = useState<typeof SUGGESTED_BACKGROUND_ITEMS>([]);
@@ -328,9 +311,6 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
   return (
     <div className="w-full relative min-h-screen flex flex-col justify-between p-6 sm:p-8 md:p-10 select-none text-slate-900 overflow-hidden">
       
-      {/* 1. Animated gradient background layer (фирменный стиль Ratipa, лёгкий CSS) */}
-      <AnimatedGradient className="ratipa-gradient-reduced" enabled={gradientOn} />
-
       {/* 2. Technical overlay grid over base */}
       <div className="absolute inset-0 tech-grid opacity-[0.08] pointer-events-none z-0" />
       
@@ -961,24 +941,6 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Переключатель анимации градиента — еле видимый, чтобы не мешать,
-          но давал слабым ПК выключить движение. Выбор в localStorage. */}
-      <button
-        type="button"
-        onClick={() => {
-          const next = !gradientOn;
-          setGradientOn(next);
-          localStorage.setItem(GRAD_KEY, next ? '1' : '0');
-        }}
-        title={gradientOn ? 'Выключить анимацию фона' : 'Включить анимацию фона'}
-        className="fixed bottom-4 right-4 z-[60] inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/5 text-white/30 hover:bg-white/10 hover:text-white/70 border border-white/10 backdrop-blur transition cursor-pointer"
-      >
-        {gradientOn ? <EyeOff size={13} /> : <Eye size={13} />}
-        <span className="text-[9px] font-bold uppercase tracking-wider">
-          {gradientOn ? 'Фон' : 'Фон·стоп'}
-        </span>
-      </button>
     </div>
   );
 }
