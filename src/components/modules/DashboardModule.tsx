@@ -40,8 +40,10 @@ const GRAD_KEY = 'ratipa_gradient_enabled';
 const getInitialGradient = (): boolean => {
   if (typeof window === 'undefined') return true;
   const saved = localStorage.getItem(GRAD_KEY);
+  // нет сохранённого выбора → включено по умолчанию (красиво).
+  // Пользователь может выключить кнопкой на дашборде (для слабых ПК).
   if (saved !== null) return saved === '1';
-  return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return true;
 };
 
 const formatDateToRu = (dateVal: any): string => {

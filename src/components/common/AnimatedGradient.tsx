@@ -22,15 +22,15 @@ export default function AnimatedGradient({ className = '', style, opacity = 1, e
     opacity,
     pointerEvents: 'none',
     backgroundImage: `
-      radial-gradient(at 18% 22%, rgba(55,101,246,0.55) 0px, transparent 55%),
-      radial-gradient(at 82% 18%, rgba(99,102,241,0.45) 0px, transparent 50%),
-      radial-gradient(at 25% 85%, rgba(14,165,233,0.40) 0px, transparent 55%),
-      radial-gradient(at 78% 80%, rgba(139,92,246,0.40) 0px, transparent 50%),
+      radial-gradient(at 18% 22%, rgba(55,101,246,0.65) 0px, transparent 55%),
+      radial-gradient(at 82% 18%, rgba(99,102,241,0.55) 0px, transparent 50%),
+      radial-gradient(at 25% 85%, rgba(14,165,233,0.50) 0px, transparent 55%),
+      radial-gradient(at 78% 80%, rgba(139,92,246,0.50) 0px, transparent 50%),
       linear-gradient(135deg, #0b1220 0%, #111c33 38%, #16213e 70%, #0f1a2e 100%)
     `,
-    backgroundSize: '200% 200%',
+    backgroundSize: '300% 300%',
     backgroundPosition: '0% 0%',
-    ...(enabled ? { animation: 'ratipaGradientShift 22s ease-in-out infinite alternate' } : {}),
+    ...(enabled ? { animation: 'ratipaGradientShift 14s ease-in-out infinite alternate' } : {}),
     ...style,
   };
 
@@ -39,8 +39,9 @@ export default function AnimatedGradient({ className = '', style, opacity = 1, e
       <style>{`
         @keyframes ratipaGradientShift {
           0%   { background-position: 0% 0%; }
-          50%  { background-position: 100% 50%; }
-          100% { background-position: 30% 100%; }
+          33%  { background-position: 100% 50%; }
+          66%  { background-position: 30% 100%; }
+          100% { background-position: 100% 0%; }
         }
       `}</style>
     </div>
