@@ -10,6 +10,23 @@
   --color-obsidian-black: #181D25;
   --color-ghost-grey: #F2F3F6;
   --color-cool-mist: #606E80;
+
+  /* Единая брендовая палитра: indigo переопределён под бренд Ratipa (#3765F6).
+     Это убирает случайный фиолетовый оттенок стандартного Tailwind indigo
+     и приводит админку/настройки/сканер к единому акценту. */
+  --color-indigo-50: #eef2ff;
+  --color-indigo-100: #e0e7ff;
+  --color-indigo-200: #c7d2fe;
+  --color-indigo-300: #a5b4fc;
+  --color-indigo-400: #818cf8;
+  --color-indigo-500: #5b78f7;
+  --color-indigo-600: #3765F6; /* БРЕНД Ratipa */
+  --color-indigo-700: #2c52d4;
+  --color-indigo-800: #2546b8;
+  --color-indigo-900: #1f3a96;
+  --color-indigo-550: #4670f8;
+  --color-indigo-750: #2f57d8;
+  --color-indigo-755: #2d54d2;
 }
 
 body, html, #root, button, input, select, textarea, [class*="font-"] {
@@ -66,6 +83,15 @@ html, body {
   display: grid;
   grid-template-columns: 1fr;
   gap: 1rem;
+}
+
+/* Tablet/mobile: таблицы со скроллом не вызывают скролла страницы,
+   и имеют инерционный скролл (нежный для слабых устройств) */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  max-width: 100%;
 }
 
 ::-webkit-scrollbar {

@@ -150,7 +150,7 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
           
           {/* TAP 1: VEHICLES */}
           {activeTab === 'vehicles' && (
-            <div className="overflow-x-auto">
+            <div className="table-scroll">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-slate-200/40 text-[10px] uppercase font-mono font-black text-slate-400">
@@ -225,7 +225,7 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
 
           {/* TAB 3: SALARIES */}
           {activeTab === 'salaries' && (
-            <div className="overflow-x-auto">
+            <div className="table-scroll">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-slate-200/40 text-[10px] uppercase font-mono font-black text-slate-400">
