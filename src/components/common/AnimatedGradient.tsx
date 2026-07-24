@@ -1,18 +1,21 @@
-import {CSSProperties} from 'react'
+import { CSSProperties } from 'react';
 
 interface AnimatedGradientProps {
   className?: string;
   style?: CSSProperties;
   /** интенсивность (прозрачность слоя) 0..1 */
   opacity?: number;
+  /** включена ли анимация. false → статичный градиент (для слабых ПК / reduced-motion).
+   *  Управляется с экрана (кнопка на дашборде), а не только системной настройкой. */
+  enabled?: boolean;
 }
 
 /**
  * Лёгкий анимированный градиентный фон в фирменном стиле Ratipa (#3765F6).
  * Реализован pure-CSS (сдвиг background-position) — НЕ использует WebGL/Canvas,
- * поэтому не нагружает слабые ПК. Уважает prefers-reduced-motion (отключает анимацию).
+ * поэтому не нагружает слабые ПК.
  */
-export default function AnimatedGradient({ className = '', style, opacity = 1 }: AnimatedGradientProps) {
+export default function AnimatedGradient({ className = '', style, opacity = 1, enabled = true }: AnimatedGradientProps) {
   const layerStyle: CSSProperties = {
     position: 'absolute',
     inset: 0,
@@ -27,7 +30,7 @@ export default function AnimatedGradient({ className = '', style, opacity = 1 }:
     `,
     backgroundSize: '200% 200%',
     backgroundPosition: '0% 0%',
-    animation: 'ratipaGradientShift 22s ease-in-out infinite alternate',
+    ...(enabled ? { animation: 'ratipaGradientShift 22s ease-in-out infinite alternate' } : {}),
     ...style,
   };
 
@@ -38,9 +41,6 @@ export default function AnimatedGradient({ className = '', style, opacity = 1 }:
           0%   { background-position: 0% 0%; }
           50%  { background-position: 100% 50%; }
           100% { background-position: 30% 100%; }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .ratipa-gradient-reduced { animation: none !important; }
         }
       `}</style>
     </div>
