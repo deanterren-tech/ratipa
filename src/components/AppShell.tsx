@@ -766,24 +766,29 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
      return dbService.getSettings(setSettings);
   }, []);
 
-  // Redirect to first available tab if active is not allowed
+  // Redirect to first available tab only if the active key is NOT a known module at all
+  // (protects against broken/invalid hashes). System/console keys (settings, appSettings,
+  // admin, dashboard) are never force-redirected even if absent from allowedModules.
+  const SYSTEM_MODULE_KEYS = ['dashboard', 'settings', 'appSettings', 'admin'];
   useEffect(() => {
-    const isAllowed = allowedModules.some(m => m.key === activeModule);
-    if (!isAllowed && allowedModules.length > 0) {
-      // Find modules sorted by settings.moduleOrder if possible
-      const sortedModules = [...allowedModules];
-      if (settings && settings.moduleOrder) {
-        sortedModules.sort((a,b) => {
-          const orderA = settings.moduleOrder.indexOf(a.key);
-          const orderB = settings.moduleOrder.indexOf(b.key);
-          const idxA = orderA === -1 ? 99 : orderA;
-          const idxB = orderB === -1 ? 99 : orderB;
-          return idxA - idxB;
-        });
+    const knownKeys = allModules.map(m => m.key);
+    if (!knownKeys.includes(activeModule) && !SYSTEM_MODULE_KEYS.includes(activeModule)) {
+      if (allowedModules.length > 0) {
+        // Find modules sorted by settings.moduleOrder if possible
+        const sortedModules = [...allowedModules];
+        if (settings && settings.moduleOrder) {
+          sortedModules.sort((a,b) => {
+            const orderA = settings.moduleOrder.indexOf(a.key);
+            const orderB = settings.moduleOrder.indexOf(b.key);
+            const idxA = orderA === -1 ? 99 : orderA;
+            const idxB = orderB === -1 ? 99 : orderB;
+            return idxA - idxB;
+          });
+        }
+        setActiveModule(sortedModules[0].key);
       }
-      setActiveModule(sortedModules[0].key);
     }
-  }, [activeModule, allowedModules]);
+  }, [activeModule, allowedModules, settings]);
 
   const navModules = useMemo(() => {
     const modules = [...allowedModules];
@@ -1252,7 +1257,10 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           }`}
         >
           {allModules.map((mod) => {
-            const isAllowed = user.role === 'mechanic' ? (mod.key === 'baza') : (user.role === 'root_admin' || (user.permissions && user.permissions[mod.permissionKey] && user.permissions[mod.permissionKey] !== 'none'));
+            const isSystemModule = ['dashboard', 'settings', 'appSettings', 'admin'].includes(mod.key);
+            const isAllowed = isSystemModule
+              ? true
+              : (user.role === 'mechanic' ? (mod.key === 'baza') : (user.role === 'root_admin' || (user.permissions && user.permissions[mod.permissionKey] && user.permissions[mod.permissionKey] !== 'none')));
             if (!isAllowed) return null;
 
             const isActive = activeModule === mod.key;
