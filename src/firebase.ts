@@ -1791,12 +1791,26 @@ export const dbService = {
   },
 
   saveSettings: (settings: AppSettings, user: string, role: string) => {
-    catalogCache.settings = null;
     const cleanSettings = sanitizeFirebaseObject(settings);
     if (useFirebase) {
-      set(ref(database, "appSettings"), cleanSettings);
+      // MERGE with current appSettings so partial saves (from other modules)
+      // don't wipe fields like dispositionSheetUrl/planZagruzokSheetUrl.
+      firebaseGet(ref(database, "appSettings"))
+        .then((snap) => {
+          const base = (snap.val() as AppSettings) || ({} as AppSettings);
+          const merged = sanitizeFirebaseObject({ ...base, ...settings });
+          set(ref(database, "appSettings"), merged);
+          catalogCache.settings = merged;
+        })
+        .catch(() => {
+          set(ref(database, "appSettings"), cleanSettings);
+          catalogCache.settings = cleanSettings;
+        });
     } else {
-      setLocalStorageData("ratipa_settings", cleanSettings);
+      const local = getLocalStorageData<AppSettings>("ratipa_settings", {} as AppSettings);
+      const merged = sanitizeFirebaseObject({ ...local, ...settings });
+      setLocalStorageData("ratipa_settings", merged);
+      catalogCache.settings = merged;
     }
     dbService.logAction(
       user,
