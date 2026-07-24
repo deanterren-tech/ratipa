@@ -320,6 +320,7 @@ export interface PlanZagruzokTab {
   id: string;
   name: string;
   sheetUrl: string;
+  blacklist?: boolean;
 }
 
 export interface CurrencyPreset {

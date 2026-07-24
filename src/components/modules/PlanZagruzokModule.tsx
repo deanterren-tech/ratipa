@@ -23,6 +23,7 @@ interface TabItem {
   name: string;
   sheetUrl: string;
   variant?: "default" | "rose" | "blue";
+  blacklist?: boolean;
 }
 
 export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
@@ -45,15 +46,25 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
       if (settings?.planZagruzokSheetUrl) {
         tabs.push({ id: "plan", name: "План загрузок", sheetUrl: settings.planZagruzokSheetUrl, variant: "default" });
       }
-      if (settings?.planZagruzokBlacklistUrl) {
-        tabs.push({ id: "blacklist", name: "Чёрный список", sheetUrl: settings.planZagruzokBlacklistUrl, variant: "rose" });
-      }
+    }
+    // Чёрный список и динамические вкладки — берутся из настроек (planZagruzokTabs),
+    // отдельная жёстко заданная вкладка не используется. Для обратной совместимости
+    // отдельное поле planZagruzokBlacklistUrl тоже превращаем во вкладку-таб.
+    if (settings?.planZagruzokBlacklistUrl) {
+      tabs.push({ id: "blacklist", name: "Чёрный список", sheetUrl: settings.planZagruzokBlacklistUrl, variant: "rose", blacklist: true });
     }
     const dyn = settings?.planZagruzokTabs || [];
     dyn.forEach((t) => {
+      const isBlacklist = !!t.blacklist;
       const perm = user.permissions?.[`planZagruzok_${t.id}`];
       if (user.role === "root_admin" || user.role === "admin" || perm !== "none") {
-        tabs.push({ id: t.id, name: t.name, sheetUrl: t.sheetUrl, variant: "blue" });
+        tabs.push({
+          id: t.id,
+          name: t.name,
+          sheetUrl: t.sheetUrl,
+          variant: isBlacklist ? "rose" : "blue",
+          blacklist: isBlacklist,
+        });
       }
     });
     return tabs;
@@ -112,7 +123,7 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
         </button>
       ) : (
         <div className="absolute top-0 left-0 right-0 z-[100] px-3 sm:px-4 py-2.5 bg-white/70 backdrop-blur-xl border-b border-white/40 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-8 h-8 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0">
                 <Table2 className="h-4 w-4 text-orange-600" />
