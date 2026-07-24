@@ -3,7 +3,8 @@ import {UserProfile, AppSettings} from '../../types'
 import {dbService} from '../../api'
 import {getEmbeddableSheetUrl} from '../../utils/embed'
 import {useToast} from '../ToastProvider'
-import GoogleSheetFrame from '../common/GoogleSheetFrame'
+import GoogleSheetFrame, {SheetTab} from '../common/GoogleSheetFrame'
+import {Lock} from 'lucide-react'
 
 interface PlanZagruzokModuleProps {
   user: UserProfile;
@@ -14,38 +15,14 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [loadedFrameIds, setLoadedFrameIds] = useState<Record<string, boolean>>({});
-  const [iframeKey, setIframeKey] = useState(0); 
+  const [iframeKey, setIframeKey] = useState(0);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
 
   const activeIsLoading = activeTabId ? !loadedFrameIds[activeTabId] : true;
   const [zoomLevel, setZoomLevel] = useState(() => {
     const saved = localStorage.getItem('ratipa_zoom_planZagruzok');
-    return saved ? parseFloat(saved) : 1;
+    return saved ? parseInt(saved, 10) : 100;
   });
-
-  const [frameHeight, setFrameHeight] = useState(() => {
-    const saved = localStorage.getItem('ratipa_height_planZagruzok');
-    return saved ? parseInt(saved, 10) : 600;
-  });
-
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    localStorage.setItem('ratipa_height_planZagruzok', frameHeight.toString());
-  }, [frameHeight]);
-
-  useEffect(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    const handleWheel = (e: WheelEvent) => {
-      // Prevent scrolling the main body/parent page while scroll starts/happens over google sheets
-      e.preventDefault();
-    };
-    el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => {
-      el.removeEventListener('wheel', handleWheel);
-    };
-  }, [activeTabId]); // Re-attach when tab changes or ref is ready
 
   useEffect(() => {
     localStorage.setItem('ratipa_zoom_planZagruzok', zoomLevel.toString());
@@ -67,14 +44,14 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
           id: 'plan', 
           name: 'План загрузок', 
           sheetUrl: settings?.planZagruzokSheetUrl || settings?.googleSheetsUrl || "https://docs.google.com/spreadsheets/d/1qUSrRKGqqo3fZSlpZnxEw-59Y86KJ7tmSnf4liNoMM/edit#gid=0", 
-          variant: 'default' 
+          variant: 'default' as const 
         },
         ...(settings?.planZagruzokBlacklistUrl ? [
           { 
             id: 'blacklist', 
-            name: 'Черный список', 
+            name: 'Чёрный список', 
             sheetUrl: settings?.planZagruzokBlacklistUrl, 
-            variant: 'rose' 
+            variant: 'rose' as const 
           }
         ] : [])
       ] : []),
@@ -82,7 +59,7 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
         id: t.id,
         name: t.name,
         sheetUrl: t.sheetUrl,
-        variant: 'blue'
+        variant: 'blue' as const
       }))
     ];
   }, [settings, user.role, user.permissions]);
@@ -97,7 +74,6 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
 
   const activeTabObj = allowedTabs.find(t => t.id === activeTabId) || allowedTabs[0];
   const embedUrl = activeTabObj?.sheetUrl || "";
-  const sheetsExternalUrl = embedUrl;
 
   const handleRefresh = () => {
     if (activeTabId) {
@@ -111,6 +87,7 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
       <GoogleSheetFrame
         title="План загрузок"
         subtitle="Полная таблица планирования загрузок"
+        url={embedUrl}
         zoom={zoomLevel}
         onZoomChange={setZoomLevel}
         onRefresh={handleRefresh}
@@ -119,14 +96,32 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
         onTabChange={setActiveTabId}
         collapseKey="planZagruzok"
         toolbar
+        mode="fill"
       >
         {allowedTabs.length === 0 ? (
           <div className="absolute inset-0 flex flex-col justify-center items-center p-8 text-center bg-slate-50/50 rounded-2xl select-none">
-            <Lock className="h-10 w-10 text-slate-400 mb-3" />
             <span className="text-sm font-bold text-slate-800 uppercase tracking-tight">Доступ Заблокирован</span>
           </div>
         ) : (
-          <div ref={scrollContainerRef} className="w-full h-full relative overflow-auto bg-slate-50/50 rounded-2xl">
+          <div style={{
+             width: `${10000 / zoomLevel}%`,
+             height: `${10000 / zoomLevel}%`,
+             transform: `scale(${zoomLevel / 100})`,
+             transformOrigin: 'top left',
+             minHeight: '100%',
+             position: 'absolute'
+          }}>
+            {allowedTabs.map(tab => (
+              <iframe
+                key={tab.id + '-' + (activeTabId === tab.id ? iframeKey : 0)}
+                src={getEmbeddableSheetUrl(tab.sheetUrl)}
+                onLoad={() => setLoadedFrameIds(prev => ({ ...prev, [tab.id]: true }))}
+                className="w-full h-full border-0 absolute top-0 left-0"
+                style={{ display: activeTabId === tab.id ? 'block' : 'none' }}
+                allow="clipboard-write"
+                title={`План Загрузок Ratipa ${tab.name}`}
+              />
+            ))}
             {activeIsLoading && (
               <div className="absolute inset-0 bg-white/95 flex flex-col p-8 gap-6 z-10 transition duration-350 select-none">
                 <div className="flex items-center justify-between">
@@ -157,26 +152,6 @@ export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
                 </div>
               </div>
             )}
-            <div style={{
-               width: `${100 / zoomLevel}%`,
-               height: `${100 / zoomLevel}%`,
-               transform: `scale(${zoomLevel})`,
-               transformOrigin: '0 0',
-               minHeight: '100%',
-               position: 'absolute'
-            }}>
-              {allowedTabs.map(tab => (
-                <iframe
-                  key={tab.id + '-' + (activeTabId === tab.id ? iframeKey : 0)}
-                  src={getEmbeddableSheetUrl(tab.sheetUrl)}
-                  onLoad={() => setLoadedFrameIds(prev => ({ ...prev, [tab.id]: true }))}
-                  className="w-full h-full border-0 absolute top-0 left-0 rounded-2xl"
-                  style={{ display: activeTabId === tab.id ? 'block' : 'none' }}
-                  allow="clipboard-write"
-                  title={`План Загрузок Ratipa ${tab.name}`}
-                />
-              ))}
-            </div>
           </div>
         )}
       </GoogleSheetFrame>

@@ -18,7 +18,7 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
 
   const [zoomLevel, setZoomLevel] = useState(() => {
     const saved = localStorage.getItem('ratipa_zoom_currentPlanning');
-    return saved ? parseFloat(saved) : 1;
+    return saved ? parseInt(saved, 10) : 100;
   });
 
   useEffect(() => {
@@ -81,9 +81,9 @@ export default function CurrentPlanningModule({ user }: CurrentPlanningModulePro
       >
         {activeTab && activeTab.sheetUrl ? (
           <div style={{
-              width: `${100 / zoomLevel}%`,
-              height: `${100 / zoomLevel}%`,
-              transform: `scale(${zoomLevel})`,
+              width: `${10000 / zoomLevel}%`,
+              height: `${10000 / zoomLevel}%`,
+              transform: `scale(${zoomLevel / 100})`,
               transformOrigin: 'top left'
             }} 
             className="absolute top-0 left-0"

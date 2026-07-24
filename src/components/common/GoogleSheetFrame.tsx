@@ -12,38 +12,32 @@ interface GoogleSheetFrameProps {
   url?: string
   title?: string
   subtitle?: string
-  /** фиксированная высота контента (px/строка). Если не задана — занимает всю высоту родителя (h-full). */
-  height?: number | string
-  /** текущий зум (для отображения %). Реальное масштабирование делает родитель в children. */
+  /** 100-based (100 = 100%). */
   zoom?: number
   onZoomChange?: (z: number) => void
   toolbar?: boolean
-  /** вкладки (как в Плане загрузок) — рендерятся в тулбаре */
   tabs?: SheetTab[]
   activeTabId?: string | null
   onTabChange?: (id: string) => void
-  /** кастомное содержимое вместо iframe (напр. iframe с зумом) */
   children?: ReactNode
   /** ключ для сохранения состояния "свернута плашка" в localStorage */
   collapseKey?: string
-  /** колбэк обновления (для кнопки "Обновить") */
+  /** колбэк обновления (кнопка "Обновить") */
   onRefresh?: () => void
 }
 
-const iconBtn =
-  "inline-flex items-center justify-center h-8 w-8 rounded-lg border border-slate-200/70 bg-white/60 text-slate-700 hover:bg-white transition backdrop-blur cursor-pointer";
-
 /**
- * Единая обёртка для Google-таблицы как фрейм — вид 1-в-1 как в ratipa-clean (DispositionPage):
- * полноразмерный iframe (фрейм на весь экран) + плавающая полоска инструментов сверху
- * (зум, обновить, открыть в новой вкладке, на весь экран браузера, скрыть плашку).
- * Используется во ВСЕХ модулях, где таблица отображается через iframe.
+ * Эталонный Google Sheet Frame (вид как в ratipa-clean DispositionPage), адаптированный под AppShell.
+ * - плашка с инструментами идёт В ПОТОКЕ сразу под топбаром (не перекрывает выпадающее меню)
+ * - iframe занимает ВЕСЬ остаток контейнера до краёв (без отступов/rounded)
+ * - зум, обновить, открыть в новой вкладке, fullscreen браузера, скрыть/показать плашку
+ * - вкладки (tabs) рендерятся в плашке
+ * - состояние "свернута плашка" сохраняется в localStorage
  */
 export default function GoogleSheetFrame({
   url,
   title = 'Google Таблица',
   subtitle,
-  height,
   zoom,
   onZoomChange,
   toolbar = true,
@@ -64,6 +58,9 @@ export default function GoogleSheetFrame({
   })
   const [internalKey, setInternalKey] = useState(0)
   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false)
+
+  const iconBtn =
+    "inline-flex items-center justify-center h-8 w-8 rounded-lg border border-slate-200/70 bg-white/60 text-slate-700 hover:bg-white transition backdrop-blur cursor-pointer"
 
   const toggleCollapse = () => {
     setCollapsed((c) => {
@@ -95,9 +92,8 @@ export default function GoogleSheetFrame({
     }
   }
 
-  // Контент (дочерний или iframe)
   const content = children ? (
-    children
+    <div className="absolute inset-0">{children}</div>
   ) : (
     <iframe
       key={internalKey}
@@ -109,17 +105,12 @@ export default function GoogleSheetFrame({
   )
 
   return (
-    <div
-      className={`relative bg-white/60 backdrop-blur-md rounded-3xl border border-slate-200/50 shadow-sm overflow-hidden flex flex-col min-h-0 ${
-        height ? '' : 'h-full'
-      }`}
-      style={height ? { height: typeof height === 'number' ? `${height}px` : height } : undefined}
-    >
-      {/* === ПЛАВАЮЩАЯ ПОЛОСКА ИНСТРУМЕНТОВ (overlay сверху) === */}
+    <div className="relative w-full h-full flex flex-col min-h-0 bg-slate-100">
+      {/* === ПЛАШКА В ПОТОКЕ (под топбаром) === */}
       {toolbar && !collapsed && (
-        <div className="absolute top-0 left-0 right-0 z-[100] px-3 sm:px-4 py-2.5 bg-white/70 backdrop-blur-xl border-b border-white/40 shadow-sm">
+        <div className="shrink-0 px-3 sm:px-4 py-2.5 bg-white/70 backdrop-blur-xl border-b border-white/40 shadow-sm z-10">
           <div className="flex items-center justify-between gap-3">
-            {/* Лево: иконка + заголовок */}
+            {/* Left: icon + title */}
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-8 h-8 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0">
                 <Table2 className="h-4 w-4 text-orange-600" />
@@ -136,25 +127,23 @@ export default function GoogleSheetFrame({
               </div>
             </div>
 
-            {/* Право: инструменты */}
+            {/* Right: tools */}
             <div className="flex items-center gap-1.5 shrink-0">
-              {/* Зум */}
-              {onZoomChange && (
+              {/* Zoom */}
+              {onZoomChange && zoom !== undefined && (
                 <div className="flex items-center bg-slate-100/60 border border-slate-200/40 p-0.5 rounded-xl">
                   <button
                     className="p-1.5 hover:bg-white text-slate-500 hover:text-slate-800 rounded-lg transition active:scale-90 cursor-pointer"
                     title="Уменьшить масштаб"
-                    onClick={() => onZoomChange(Math.max(0.5, (zoom ?? 1) - 0.1))}
+                    onClick={() => onZoomChange(Math.max(50, zoom - 10))}
                   >
                     <ZoomOut className="h-4 w-4" />
                   </button>
-                  <span className="text-[11px] font-mono text-slate-600 w-9 text-center">
-                    {Math.round((zoom ?? 1) * 100)}%
-                  </span>
+                  <span className="text-[11px] font-mono text-slate-600 w-9 text-center">{zoom}%</span>
                   <button
                     className="p-1.5 hover:bg-white text-slate-500 hover:text-slate-800 rounded-lg transition active:scale-90 cursor-pointer"
                     title="Увеличить масштаб"
-                    onClick={() => onZoomChange(Math.min(2, (zoom ?? 1) + 0.1))}
+                    onClick={() => onZoomChange(Math.min(200, zoom + 10))}
                   >
                     <ZoomIn className="h-4 w-4" />
                   </button>
@@ -191,7 +180,7 @@ export default function GoogleSheetFrame({
             </div>
           </div>
 
-          {/* Вкладки (если есть) */}
+          {/* Tabs row */}
           {tabs && tabs.length > 0 && (
             <div className="flex items-center gap-1.5 mt-2 flex-wrap">
               {tabs.map((tab) => {
@@ -221,18 +210,20 @@ export default function GoogleSheetFrame({
         </div>
       )}
 
-      {/* Кнопка восстановления плашки */}
-      {toolbar && collapsed && (
-        <button
-          onClick={toggleCollapse}
-          className="absolute top-3 right-3 z-[101] inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#3765F6]/90 text-white text-xs font-bold shadow-lg backdrop-blur hover:bg-[#3765F6] transition active:scale-95 cursor-pointer"
-        >
-          <ChevronDown className="h-4 w-4" /> {title}
-        </button>
-      )}
+      {/* === IFRAME НА ВЕСЬ ОСТАТОК (до краёв) === */}
+      <div className="flex-1 relative min-h-0">
+        {content}
 
-      {/* === ФРЕЙМ НА ВЕСЬ ЭКРАН (под плашкой) === */}
-      <div className="absolute inset-0">{content}</div>
+        {/* Collapsed badge — в углу iframe-area */}
+        {toolbar && collapsed && (
+          <button
+            onClick={toggleCollapse}
+            className="absolute top-3 right-3 z-20 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#3765F6]/90 text-white text-xs font-bold shadow-lg backdrop-blur hover:bg-[#3765F6] transition active:scale-95 cursor-pointer"
+          >
+            <ChevronDown className="h-4 w-4" /> {title}
+          </button>
+        )}
+      </div>
     </div>
   )
 }
