@@ -375,9 +375,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
     if (!cNum) return;
 
     if (!knownFleet.includes(cNum)) {
-      if (await showConfirm(`Обнаружен новый автомобиль [${cNum}].\nСохранить в постоянную базу автопарка?`)) {
-        push(ref(db, 'known_fleet'), cNum);
-      }
+      push(ref(db, 'known_fleet'), cNum);
     }
 
     const trimmedDriver = formData.driverName.trim();
@@ -391,8 +389,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
         (d.shortNameRu && d.shortNameRu.trim().toLowerCase() === trimmedDriver.toLowerCase())
       );
       if (!existingDriver) {
-        if (await showConfirm(`Водитель "${trimmedDriver}" отсутствует в справочнике. Занести его в справочник?`)) {
-          const parts = trimmedDriver.split(/\s+/);
+        const parts = trimmedDriver.split(/\s+/);
           const last = parts[0] || '';
           const first = parts[1] || '';
           const middle = parts[2] || '';
@@ -413,7 +410,6 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
           driverId = newDriverId;
           driverShortNameRu = newDriver.shortNameRu;
           migrationStatus = 'matched';
-        }
       } else {
         driverId = existingDriver.id;
         driverShortNameRu = existingDriver.shortNameRu || formatDriverShortName(existingDriver);
@@ -502,9 +498,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
         );
 
         if (!existingDriver) {
-          const confirmAdd = await showConfirm(`Водитель "${trimmedDriver}" отсутствует в справочнике. Занести его в справочник?`);
-          if (confirmAdd) {
-            const parts = trimmedDriver.split(/\s+/);
+          const parts = trimmedDriver.split(/\s+/);
             const last = parts[0] || '';
             const first = parts[1] || '';
             const middle = parts[2] || '';
@@ -525,7 +519,6 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
             driverId = newDriverId;
             driverShortNameRu = newDriver.shortNameRu;
             migrationStatus = 'matched';
-          }
         } else {
           driverId = existingDriver.id;
           driverShortNameRu = existingDriver.shortNameRu || formatDriverShortName(existingDriver);
@@ -599,9 +592,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
           (d.shortNameRu && d.shortNameRu.trim().toLowerCase() === trimmedDriver.toLowerCase())
         );
         if (!existingDriver) {
-          const confirmAdd = await showConfirm(`Водитель "${trimmedDriver}" отсутствует в справочнике. Занести его в справочник?`);
-          if (confirmAdd) {
-            const parts = trimmedDriver.split(/\s+/);
+          const parts = trimmedDriver.split(/\s+/);
             const last = parts[0] || '';
             const first = parts[1] || '';
             const middle = parts[2] || '';
@@ -620,7 +611,6 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
             driverId = newDriverId;
             driverShortNameRu = newDriver.shortNameRu;
             migrationStatus = 'matched';
-          }
         } else {
           driverId = existingDriver.id;
           driverShortNameRu = existingDriver.shortNameRu || formatDriverShortName(existingDriver);
