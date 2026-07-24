@@ -749,7 +749,7 @@ const CalculationCard = React.memo(({
     <div
       className="p-5 bg-white/65 backdrop-blur-md border border-slate-200/50 hover:border-slate-300/80 hover:bg-white/80 rounded-3xl shadow-sm hover:shadow-md transition duration-300 flex flex-col group"
     >
-      <div className="flex items-start justify-between mb-4 pb-3 border-b border-slate-150/40 gap-4">
+      <div className="flex items-start justify-between mb-4 pb-3 border-b border-slate-200/40 gap-4">
         <div className="flex flex-col gap-1 min-w-0">
           <div className="text-sm font-bold text-slate-900 uppercase tracking-tight flex items-center gap-1.5 flex-wrap">
             <span className="text-[#3765F6] font-mono">&rarr;</span>
@@ -845,7 +845,7 @@ const CalculationCard = React.memo(({
       </div>
 
       {/* Visual rendering of calculation legs steps inside drop list */}
-      <div className="mt-1 border-t border-slate-150/40 pt-3">
+      <div className="mt-1 border-t border-slate-200/40 pt-3">
         <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-2.5">
           Детализация по плечам
         </span>
@@ -1316,7 +1316,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
             updatedFields.from !== undefined ||
             updatedFields.to !== undefined
           ) {
-            const prevTo = i === 0 ? "Минск" : newLegs[i - 1]?.to || legs[i - 1]?.to;
+            const prevTo = i === 0 ? "Минск" : prevLegs[i - 1]?.to || legs[i - 1]?.to;
             if (prevTo && merged.from) {
               const emptyRunRes = applyDistanceToField(prevTo, merged.from, distances);
               if (emptyRunRes.estimatedRouteKm > 0) {
@@ -2025,7 +2025,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
         {/* Table Container */}
         <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 lg:p-8 border border-slate-200/50 shadow-sm overflow-hidden flex flex-col">
-          <h2 className="text-base font-bold text-slate-900 tracking-tight pb-4 border-b border-slate-150/40 mb-6 flex items-center justify-between">
+          <h2 className="text-base font-bold text-slate-900 tracking-tight pb-4 border-b border-slate-200/40 mb-6 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-slate-900">
               <MapPin className="h-5 w-5 text-[#3765F6]" />{" "}
               Конструктор плеч маршрута
@@ -2088,7 +2088,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-150/30">
+              <tbody className="divide-y divide-slate-200/30">
                 {legs.map((leg, idx) => (
                   <tr
                     key={idx}
@@ -2557,7 +2557,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
         {/* Total Stats Banner - Full Width Layout Panel */}
         <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 lg:p-8 text-slate-900 shadow-sm border border-slate-200/50 flex flex-col">
-          <h2 className="text-sm font-bold text-slate-900 tracking-tight pb-4 border-b border-slate-150/40 mb-6 flex items-center justify-between">
+          <h2 className="text-sm font-bold text-slate-900 tracking-tight pb-4 border-b border-slate-200/40 mb-6 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-slate-900">
               <TrendingUp className="h-5 w-5 text-[#3765F6]" />{" "}
               Экономика и доходность рейса
@@ -2893,7 +2893,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
         {/* Templates Board */}
         <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 lg:p-8 border border-slate-200/50 shadow-sm flex flex-col transition-all">
-          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-4 border-b border-slate-150/40 mb-6">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-4 border-b border-slate-200/40 mb-6">
             <div>
               <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
                 <FileSpreadsheet className="h-5 w-5 text-[#3765F6]" />
@@ -2928,7 +2928,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                     className="group bg-white/40 hover:bg-white/70 backdrop-blur-xs border border-slate-200/50 hover:border-[#3765F6]/50 rounded-2xl p-5 flex flex-col gap-4 transition-all duration-200 shadow-2xs"
                   >
                     {/* Top Row: Info and Actions */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-slate-150/20">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-slate-200/20">
                       {/* Left: Icon, Name and Badges */}
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="p-2.5 rounded-xl bg-blue-50/55 text-[#3765F6] shrink-0 border border-blue-100/20">
@@ -2989,7 +2989,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                     </div>
 
                     {/* Bottom Row: Legs Timeline Flow (Full Width, beautifully styled) */}
-                    <div className="bg-white/30 p-3 rounded-xl border border-slate-150/20">
+                    <div className="bg-white/30 p-3 rounded-xl border border-slate-200/20">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-xs font-bold text-slate-700 w-full">
                         {(t.legs || []).map((l, i) => (
                           <div key={i} className="flex items-center gap-2">
@@ -3023,7 +3023,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
       {/* History of Saved Calculations - FULL WIDTH BOTTOM */}
       <div className="w-full">
         <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 lg:p-8 border border-slate-200/50 shadow-sm flex flex-col">
-          <div className="flex flex-col gap-4 border-b border-slate-150/40 pb-5 mb-6">
+          <div className="flex flex-col gap-4 border-b border-slate-200/40 pb-5 mb-6">
             <div className="flex justify-between items-center">
               <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
                 <FileSpreadsheet className="h-5 w-5 text-[#3765F6]" /> Журнал расчетов
