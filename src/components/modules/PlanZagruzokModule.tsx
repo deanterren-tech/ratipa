@@ -1,160 +1,190 @@
-import {useState, useEffect, useRef, useMemo} from 'react'
-import {UserProfile, AppSettings} from '../../types'
-import {dbService} from '../../api'
-import {getEmbeddableSheetUrl} from '../../utils/embed'
-import {useToast} from '../ToastProvider'
-import GoogleSheetFrame, {SheetTab} from '../common/GoogleSheetFrame'
-import {Lock} from 'lucide-react'
+import { useState, useRef, useEffect } from "react";
+import { dbService } from "../../api";
+import { AppSettings, UserProfile } from "../../types";
+import { getEmbeddableSheetUrl } from "../../utils/embed";
+import {
+  RefreshCw,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Minimize2,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  Table2,
+} from "lucide-react";
 
 interface PlanZagruzokModuleProps {
   user: UserProfile;
 }
 
+interface TabItem {
+  id: string;
+  name: string;
+  sheetUrl: string;
+  variant?: "default" | "rose" | "blue";
+}
+
 export default function PlanZagruzokModule({ user }: PlanZagruzokModuleProps) {
-  const { toast } = useToast();
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [isFocusMode, setIsFocusMode] = useState(false);
-  const [loadedFrameIds, setLoadedFrameIds] = useState<Record<string, boolean>>({});
-  const [iframeKey, setIframeKey] = useState(0);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
-
-  const activeIsLoading = activeTabId ? !loadedFrameIds[activeTabId] : true;
-  const [zoomLevel, setZoomLevel] = useState(() => {
-    const saved = localStorage.getItem('ratipa_zoom_planZagruzok');
-    return saved ? parseInt(saved, 10) : 100;
-  });
-
   useEffect(() => {
-    localStorage.setItem('ratipa_zoom_planZagruzok', zoomLevel.toString());
-  }, [zoomLevel]);
-
-  useEffect(() => {
-    const unsubscribe = dbService.getSettings((s) => setSettings(s));
-    return () => unsubscribe();
+    const unsub = dbService.getSettings(setSettings);
+    return () => unsub();
   }, []);
 
-  const allowedTabs = useMemo(() => {
-    const dynamicTabs = settings?.planZagruzokTabs || [];
-    const allowedDynamicTabs = dynamicTabs.filter(t => user.role === 'root_admin' || user.role === 'admin' || (user.permissions && user.permissions[`planZagruzok_${t.id}`] !== 'none'));
-    const hasBasePermission = user.role === 'root_admin' || user.role === 'admin' || (user.permissions && user.permissions.planZagruzok !== 'none');
+  const [zoom, setZoom] = useState(100);
+  const [frameKey, setFrameKey] = useState(0);
+  const [collapsed, setCollapsed] = useState(false);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
 
-    return [
-      ...(hasBasePermission ? [
-        { 
-          id: 'plan', 
-          name: 'План загрузок', 
-          sheetUrl: settings?.planZagruzokSheetUrl || settings?.googleSheetsUrl || "https://docs.google.com/spreadsheets/d/1qUSrRKGqqo3fZSlpZnxEw-59Y86KJ7tmSnf4liNoMM/edit#gid=0", 
-          variant: 'default' as const 
-        },
-        ...(settings?.planZagruzokBlacklistUrl ? [
-          { 
-            id: 'blacklist', 
-            name: 'Чёрный список', 
-            sheetUrl: settings?.planZagruzokBlacklistUrl, 
-            variant: 'rose' as const 
-          }
-        ] : [])
-      ] : []),
-      ...allowedDynamicTabs.map(t => ({
-        id: t.id,
-        name: t.name,
-        sheetUrl: t.sheetUrl,
-        variant: 'blue' as const
-      }))
-    ];
-  }, [settings, user.role, user.permissions]);
+  const hasBase = user.role === "root_admin" || user.role === "admin" || (user.permissions && user.permissions.planZagruzok !== "none");
+
+  const allowedTabs: TabItem[] = (() => {
+    const tabs: TabItem[] = [];
+    if (hasBase) {
+      if (settings?.planZagruzokSheetUrl) {
+        tabs.push({ id: "plan", name: "План загрузок", sheetUrl: settings.planZagruzokSheetUrl, variant: "default" });
+      }
+      if (settings?.planZagruzokBlacklistUrl) {
+        tabs.push({ id: "blacklist", name: "Чёрный список", sheetUrl: settings.planZagruzokBlacklistUrl, variant: "rose" });
+      }
+    }
+    const dyn = settings?.planZagruzokTabs || [];
+    dyn.forEach((t) => {
+      const perm = user.permissions?.[`planZagruzok_${t.id}`];
+      if (user.role === "root_admin" || user.role === "admin" || perm !== "none") {
+        tabs.push({ id: t.id, name: t.name, sheetUrl: t.sheetUrl, variant: "blue" });
+      }
+    });
+    return tabs;
+  })();
 
   useEffect(() => {
-    const firstAllowedId = allowedTabs[0]?.id;
-    if (!firstAllowedId) return;
+    const first = allowedTabs[0]?.id;
+    if (!first) return;
     if (!activeTabId || !allowedTabs.some((t) => t.id === activeTabId)) {
-      setActiveTabId(firstAllowedId);
+      setActiveTabId(first);
     }
   }, [allowedTabs, activeTabId]);
 
-  const activeTabObj = allowedTabs.find(t => t.id === activeTabId) || allowedTabs[0];
-  const embedUrl = activeTabObj?.sheetUrl || "";
+  const activeTab = allowedTabs.find((t) => t.id === activeTabId) || allowedTabs[0];
+  const embedUrl = activeTab ? getEmbeddableSheetUrl(activeTab.sheetUrl) : "";
 
-  const handleRefresh = () => {
-    if (activeTabId) {
-      setLoadedFrameIds(prev => ({ ...prev, [activeTabId]: false }));
-      setIframeKey(prev => prev + 1);
-    }
-  };
+  const iconBtn =
+    "inline-flex items-center justify-center h-8 w-8 rounded-lg border border-slate-200/70 bg-white/60 text-slate-700 hover:bg-white transition backdrop-blur";
 
   return (
-    <div className={`w-full h-full font-sans flex flex-col ${isFocusMode ? 'fixed inset-0 z-50 bg-slate-900/10 backdrop-blur-md p-4 lg:p-6' : ''}`}>
-      <GoogleSheetFrame
-        title="План загрузок"
-        subtitle="Полная таблица планирования загрузок"
-        url={embedUrl}
-        zoom={zoomLevel}
-        onZoomChange={setZoomLevel}
-        onRefresh={handleRefresh}
-        tabs={allowedTabs}
-        activeTabId={activeTabId}
-        onTabChange={setActiveTabId}
-        collapseKey="planZagruzok"
-        toolbar
-        mode="fill"
-      >
-        {allowedTabs.length === 0 ? (
-          <div className="absolute inset-0 flex flex-col justify-center items-center p-8 text-center bg-slate-50/50 rounded-2xl select-none">
-            <span className="text-sm font-bold text-slate-800 uppercase tracking-tight">Доступ Заблокирован</span>
+    <div className="fixed top-16 inset-x-0 bottom-0 z-40 bg-slate-100 overflow-hidden">
+      {/* === FULL-SCREEN IFRAME === */}
+      <div className="absolute inset-0">
+        {embedUrl ? (
+          <div
+            style={{
+              width: `${10000 / zoom}%`,
+              height: `${10000 / zoom}%`,
+              transform: `scale(${zoom / 100})`,
+              transformOrigin: "top left",
+            }}
+          >
+            <iframe
+              key={frameKey + "-" + embedUrl}
+              src={embedUrl}
+              title={activeTab?.name || "План загрузок"}
+              className="w-full h-full border-0"
+            />
           </div>
         ) : (
-          <div style={{
-             width: `${10000 / zoomLevel}%`,
-             height: `${10000 / zoomLevel}%`,
-             transform: `scale(${zoomLevel / 100})`,
-             transformOrigin: 'top left',
-             minHeight: '100%',
-             position: 'absolute'
-          }}>
-            {allowedTabs.map(tab => (
-              <iframe
-                key={tab.id + '-' + (activeTabId === tab.id ? iframeKey : 0)}
-                src={getEmbeddableSheetUrl(tab.sheetUrl)}
-                onLoad={() => setLoadedFrameIds(prev => ({ ...prev, [tab.id]: true }))}
-                className="w-full h-full border-0 absolute top-0 left-0"
-                style={{ display: activeTabId === tab.id ? 'block' : 'none' }}
-                allow="clipboard-write"
-                title={`План Загрузок Ratipa ${tab.name}`}
-              />
-            ))}
-            {activeIsLoading && (
-              <div className="absolute inset-0 bg-white/95 flex flex-col p-8 gap-6 z-10 transition duration-350 select-none">
-                <div className="flex items-center justify-between">
-                  <div className="h-6 w-48 bg-slate-200 rounded-lg" />
-                  <div className="flex gap-2">
-                    <div className="h-10 w-24 bg-slate-100 rounded-xl" />
-                    <div className="h-10 w-24 bg-slate-100 rounded-xl" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 flex-1 overflow-hidden">
-                  {Array.from({ length: 8 }).map((_, i) => (
-                    <div key={i} className="border border-slate-200/40 rounded-2xl p-5 space-y-4 bg-white/60 backdrop-blur-xs shadow-2xs">
-                      <div className="flex justify-between items-center">
-                        <div className="h-4 w-2/3 bg-slate-200 rounded" />
-                        <div className="h-4 w-1/4 bg-slate-100 rounded" />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="h-3 w-full bg-slate-100 rounded" />
-                        <div className="h-3 w-5/6 bg-slate-100 rounded" />
-                        <div className="h-3 w-4/6 bg-slate-100 rounded" />
-                      </div>
-                      <div className="pt-2 flex gap-2">
-                        <div className="h-7 w-16 bg-slate-100 rounded-lg" />
-                        <div className="h-7 w-16 bg-slate-100 rounded-lg" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+          <div className="flex h-full w-full items-center justify-center text-center text-slate-400 text-sm px-8">
+            Ссылка на таблицу не задана.
+            <br />
+            Укажите её в Настройках (planZagruzokSheetUrl / planZagruzokTabs).
           </div>
         )}
-      </GoogleSheetFrame>
+      </div>
+
+      {/* === FLOATING HEADER OVERLAY === */}
+      {collapsed ? (
+        <button
+          onClick={() => setCollapsed(false)}
+          className="absolute top-3 right-3 z-[101] inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#3765F6]/90 text-white text-xs font-bold shadow-lg backdrop-blur hover:bg-[#3765F6] transition active:scale-95"
+        >
+          <ChevronDown className="h-4 w-4" /> План загрузок
+        </button>
+      ) : (
+        <div className="absolute top-0 left-0 right-0 z-[100] px-3 sm:px-4 py-2.5 bg-white/70 backdrop-blur-xl border-b border-white/40 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0">
+                <Table2 className="h-4 w-4 text-orange-600" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-sm sm:text-base font-bold text-slate-950 tracking-tight leading-none">
+                  План загрузок
+                </h1>
+                <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 truncate hidden sm:block">
+                  Полная таблица планирования загрузок
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button className={iconBtn} title="Уменьшить масштаб" onClick={() => setZoom((z) => Math.max(50, z - 10))}>
+                <ZoomOut className="h-4 w-4" />
+              </button>
+              <span className="text-[11px] font-mono text-slate-600 w-9 text-center">{zoom}%</span>
+              <button className={iconBtn} title="Увеличить масштаб" onClick={() => setZoom((z) => Math.min(200, z + 10))}>
+                <ZoomIn className="h-4 w-4" />
+              </button>
+              <button className={iconBtn} title="Обновить таблицу" onClick={() => setFrameKey((k) => k + 1)}>
+                <RefreshCw className="h-4 w-4" />
+              </button>
+              {embedUrl && (
+                <a className={iconBtn} title="Открыть в новой вкладке" href={embedUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              )}
+              <button className={iconBtn} title="На весь экран (браузер)" onClick={() => {
+                const el = document.documentElement;
+                if (!document.fullscreenElement) el.requestFullscreen?.();
+                else document.exitFullscreen?.();
+              }}>
+                <Maximize2 className="h-4 w-4" />
+              </button>
+              <button className={iconBtn} title="Скрыть плашку" onClick={() => setCollapsed(true)}>
+                <ChevronUp className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Tabs row */}
+          {allowedTabs.length > 1 && (
+            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+              {allowedTabs.map((tab) => {
+                const active = tab.id === activeTabId;
+                const activeCls =
+                  tab.variant === "rose"
+                    ? "bg-rose-600 border-rose-600 text-white shadow-xs"
+                    : tab.variant === "blue"
+                    ? "bg-[#3765F6] border-[#3765F6] text-white shadow-xs"
+                    : "bg-slate-900 border-slate-900 text-white shadow-xs";
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTabId(tab.id)}
+                    className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl transition duration-150 shrink-0 cursor-pointer border ${
+                      active
+                        ? activeCls
+                        : "bg-white/45 border-slate-200/50 text-slate-500 hover:bg-white/80 hover:text-slate-800"
+                    }`}
+                  >
+                    {tab.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
