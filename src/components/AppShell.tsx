@@ -640,7 +640,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'dozvola', label: 'Учет Дозволов', icon: FileText, permissionKey: 'dozvola' },
     { key: 'documents', label: 'Документы', icon: Files, permissionKey: 'documents' },
     { key: 'disposition', label: 'Диспозиция', icon: Map, permissionKey: 'disposition' },
-    { key: 'settings', label: 'Справочники', icon: Settings, permissionKey: 'settings' },
     { key: 'appSettings', label: 'База данных', icon: Settings2, permissionKey: 'settings' },
     { key: 'admin', label: 'Администрирование', icon: ShieldAlert, permissionKey: 'admin' }
   ];
@@ -724,7 +723,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       { id: 'g_planning', label: 'Планирование', isDropdown: true, subtabKeys: ['planDohod', 'currentPlanning', 'dohod', 'planZagruzok'] },
       { id: 'g_ops', label: 'Операции', isDropdown: true, subtabKeys: ['disposition', 'baza', 'documents', 'vehicleDriverData', 'dozvola'] },
       { id: 'g_report', label: 'Отчетность', isDropdown: true, subtabKeys: ['salary'] },
-      { id: 'g_settings', label: 'Настройки', isDropdown: true, subtabKeys: ['settings', 'appSettings', 'admin'] }
+      { id: 'g_settings', label: 'Настройки', isDropdown: true, subtabKeys: ['appSettings', 'admin'] }
     ];
   }, [settings]);
 
