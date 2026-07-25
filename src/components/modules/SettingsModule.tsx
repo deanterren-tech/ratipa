@@ -5,13 +5,14 @@ import {dbService, directoryService, database, onValue} from '../../api';
 import {pdService} from '../../api'
 import {ref, set, push, remove} from 'firebase/database'
 import CouplingDirectoryEditor from './CouplingDirectoryEditor';
+import DirectoriesModule from './DirectoriesModule';
 import { 
   Settings, 
-  Plus, 
-  Trash2, 
-  Anchor, 
-  Compass, 
-  ExternalLink, 
+  Plus,
+  Trash2,
+  Anchor,
+  Compass,
+  ExternalLink,
   Lock,
   Truck,
   Wallet,
@@ -28,7 +29,8 @@ import {
   FileText,
   Layers,
   Link,
-  RefreshCw
+  RefreshCw,
+  BookOpen
 } from 'lucide-react';
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
@@ -46,7 +48,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const [pdSettings, setPdSettings] = useState<any>({ useDistanceLookup: false, googleMapsApiKey: '' });
   
   // Navigation Tab State
-  const [activeTab, setActiveTab] = useState<'fleet' | 'routes' | 'system' | 'links'>('fleet');
+  const [activeTab, setActiveTab] = useState<'fleet' | 'routes' | 'system' | 'links' | 'directories'>('fleet');
 
   // Search states for directories
   const [carSearch, setCarSearch] = useState('');
@@ -932,6 +934,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const tabList = [
     { id: 'fleet', label: 'Автопарк и Водители', icon: Truck, count: filteredKnownFleet.length + filteredDrivers.length },
     { id: 'routes', label: 'Маршруты и Направления', icon: Compass, count: filteredDistances.length + filteredFerries.length + filteredDirections.length },
+    { id: 'directories', label: 'Справочники', icon: BookOpen, count: 0 },
     { id: 'system', label: 'Системные Настройки', icon: Settings, count: currencies.length },
     { id: 'links', label: 'Ссылки и Порталы', icon: ExternalLink, count: (settings?.quickLinks?.length || 0) + (settings?.externalTabs?.length || 0) }
   ] as const;
@@ -1552,6 +1555,11 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
           </div>
 
         </div>
+      )}
+
+      {/* TAB CONTENT 5: LEGACY DIRECTORIES (перенесено из «Справочники») */}
+      {activeTab === 'directories' && (
+        <DirectoriesModule user={user} />
       )}
 
     </div>
