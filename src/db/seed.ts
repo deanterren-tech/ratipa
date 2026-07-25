@@ -281,8 +281,8 @@ export const INITIAL_SETTINGS: AppSettings = {
   },
   menuStructure: [
     { id: "g_home", label: "Главная", isDropdown: false, singleModuleKey: "dashboard" },
+    { id: "g_ops", label: "Текущее", isDropdown: true, subtabKeys: ["disposition", "baza", "documents", "vehicleDriverData", "dozvola"] },
     { id: "g_planning", label: "Планирование", isDropdown: true, subtabKeys: ["planDohod", "currentPlanning", "dohod", "planZagruzok"] },
-    { id: "g_ops", label: "Операции", isDropdown: true, subtabKeys: ["disposition", "baza", "documents", "vehicleDriverData", "dozvola"] },
     { id: "g_report", label: "Отчетность", isDropdown: true, subtabKeys: ["salary"] },
     { id: "g_settings", label: "Настройки", isDropdown: true, subtabKeys: ["appSettings", "admin"] },
   ],
