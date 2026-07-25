@@ -1,7 +1,7 @@
 // Фабрики общих подписок и кэширующие обёртки (sharedGet*/sharedDir*).
 // Вынесено из firebase.ts для уменьшения монолита.
 // Импортируем примитивы из firebase.ts (live bindings: database/useFirebase — let).
-import { set } from "firebase/database";
+import { set, update } from "firebase/database";
 import { ref } from "firebase/database";
 import {
   database,
@@ -432,7 +432,11 @@ export const sharedGetSettings = createSharedSubscription<AppSettings>(
             if (innerUpdated) updated = true;
           }
           if (updated) {
-            set(dbRef, data).catch((err) => console.warn(err));
+            update(dbRef, {
+              highlight: data.highlight,
+              highlights: data.highlights,
+              mapboxUsage: data.mapboxUsage,
+            }).catch((err) => console.warn(err));
           }
           onData(data);
         } else {
