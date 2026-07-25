@@ -24,7 +24,6 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const [activeEnv, setActiveEnv] = useState<"PROD" | "TEST">("PROD");
   const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const usernameRef = useRef("");
@@ -236,32 +235,6 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
       {/* 4. Glassmorphic Portal Container */}
       <div className="w-full max-w-sm relative z-10 flex flex-col gap-4">
         
-        {/* Environment Selector pill controls */}
-        <div className="flex bg-white/40 backdrop-blur-xs p-1 rounded-2xl border border-slate-200/50 items-center shadow-3xs self-end">
-          <button
-            type="button"
-            onClick={() => setActiveEnv("PROD")}
-            className={`px-3.5 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all duration-150 cursor-pointer ${
-              activeEnv === "PROD" 
-                ? "bg-[#3765F6] text-white shadow-xs" 
-                : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            PROD
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveEnv("TEST")}
-            className={`px-3.5 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all duration-150 cursor-pointer ${
-              activeEnv === "TEST" 
-                ? "bg-[#3765F6] text-white shadow-xs" 
-                : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            TEST
-          </button>
-        </div>
-
         {/* Central Frosted Glass Card */}
         <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-8 border border-slate-200/50 shadow-xl shadow-slate-900/5 flex flex-col">
           
