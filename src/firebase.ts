@@ -1791,12 +1791,6 @@ export const dbService = {
   },
 
   saveSettings: (settings: AppSettings, user: string, role: string) => {
-    try {
-      (window as any).__saveCount = ((window as any).__saveCount || 0) + 1;
-      (window as any).__lastSaveHasMenu = !!settings.menuStructure;
-      const stack = new Error().stack || '';
-      localStorage.setItem('__lastSave', JSON.stringify({ hasMenu: !!settings.menuStructure, stack: stack.split('\n').slice(0,8) }));
-    } catch (e) {}
     const cleanSettings = sanitizeFirebaseObject(settings);
     if (useFirebase) {
       // MERGE with current appSettings so partial saves (from other modules)
