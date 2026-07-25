@@ -1107,7 +1107,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 
                  <div className="hidden lg:block overflow-x-auto custom-scrollbar">
                      
-<table className="w-full text-left min-w-[1250px] border-separate border-spacing-y-2">
+<table className="w-full text-left border-separate border-spacing-y-2">
   <thead>
     <tr>
       <th className="text-[11px] font-bold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Госномер</th>

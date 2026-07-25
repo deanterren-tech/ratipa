@@ -1856,24 +1856,16 @@ export const dbService = {
       return;
     }
     const path = `ferryTemplates/${id}`;
-    console.log(`dbService: Attempting remove path: ${path}`);
     if (useFirebase) {
       remove(ref(database, path))
-        .then(() =>
-          console.log(`Ferry ${path} removed successfully by remove()`),
-        )
         .catch((err) => console.error(`Error removing ferry ${path}:`, err));
     } else {
       const local = getLocalStorageData<FerryTemplate[]>(
         "ratipa_ferry_templates",
         INITIAL_FERRY_TEMPLATES,
       );
-      console.log(
-        `dbService: Local storage deletion, total was ${local.length}`,
-      );
       const filtered = local.filter((x) => x.id !== id);
       setLocalStorageData("ratipa_ferry_templates", filtered);
-      console.log(`dbService: Local storage deletion, now ${filtered.length}`);
     }
     dbService.logAction(
       user,

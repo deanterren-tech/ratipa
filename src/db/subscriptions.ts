@@ -1,6 +1,7 @@
 // Фабрики общих подписок и кэширующие обёртки (sharedGet*/sharedDir*).
 // Вынесено из firebase.ts для уменьшения монолита.
 // Импортируем примитивы из firebase.ts (live bindings: database/useFirebase — let).
+import { set } from "firebase/database";
 import { ref } from "firebase/database";
 import {
   database,
@@ -8,6 +9,22 @@ import {
   getLocalStorageData,
   onValue,
 } from "../firebase";
+import type {
+  Driver,
+  CarRateGroup,
+  DirectionPreset,
+  FerryTemplate,
+  DistancePreset,
+  CurrencyPreset,
+  AppSettings,
+} from "../types";
+import {
+  INITIAL_CARS_POOL,
+  INITIAL_DIRECTIONS,
+  INITIAL_FERRY_TEMPLATES,
+  INITIAL_DISTANCES,
+  INITIAL_SETTINGS,
+} from "../db/seed";
 function createSharedSubscription<T>(
   fetchLive: (onData: (data: T) => void, onError: (err: any) => void) => () => void,
   fallbackLocal: (onData: (data: T) => void) => void
