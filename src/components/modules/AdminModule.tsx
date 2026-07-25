@@ -12,10 +12,7 @@ import {
   Plus, 
   Trash2, 
   Settings2, 
-  FolderPlus, 
   GripVertical, 
-  Folder, 
-  Link2, 
   RotateCcw, 
   Sparkles, 
   ChevronLeft, 
@@ -43,9 +40,7 @@ import AdminOnlinePresenceBlock from './AdminOnlinePresenceBlock';
 import CurrentPlanningSettingsBlock from './CurrentPlanningSettingsBlock';
 import PlanZagruzokSettingsBlock from './PlanZagruzokSettingsBlock';
 import AdminFirebaseConfigBlock from './AdminFirebaseConfigBlock';
-import AdminMapboxLimitsBlock from './AdminMapboxLimitsBlock';
 import AdminAgentBlock from './AdminAgentBlock';
-import MenuDesignerBlock from './MenuDesignerBlock';
 import AdminAuditLogsBlock from './AdminAuditLogsBlock';
 import AdminWelcomePhrasesBlock from './AdminWelcomePhrasesBlock';
 import {pdService} from '../../api';
@@ -158,13 +153,12 @@ export default function AdminModule({ user }: AdminModuleProps) {
     );
   }
 
-  const [activeTab, setActiveTab] = useState<'users' | 'planning' | 'income' | 'navigation' | 'system' | 'welcome' | 'push' | 'agent'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'planning' | 'income' | 'system' | 'welcome' | 'push' | 'agent'>('users');
 
   const tabsList = [
     { id: 'users', label: 'Пользователи и Сессии', icon: Users, count: userListCount },
     { id: 'planning', label: 'Планирование', icon: Compass, count: (settings?.currentPlanningTabs?.length || 0) + (settings?.planZagruzokTabs?.length || 0) },
     { id: 'income', label: 'План Дохода', icon: TrendingUp, count: dispatchersCount },
-    { id: 'navigation', label: 'Конструктор меню', icon: FolderPlus, count: settings?.menuStructure?.length || 10 },
     { id: 'welcome', label: 'Бегущая строка', icon: Sparkles, count: settings?.customPhrases?.length || 0 },
     { id: 'system', label: 'Система и Настройки', icon: Settings, count: 0 },
     { id: 'agent', label: 'Агент (API)', icon: Sparkles, count: 0 },
@@ -269,13 +263,8 @@ export default function AdminModule({ user }: AdminModuleProps) {
             </div>
           </div>
 
-          <div className={activeTab === 'navigation' ? 'space-y-6' : 'hidden'}>
-            <MenuDesignerBlock settings={settings} onSave={saveSettings} />
-          </div>
-
           <div className={activeTab === 'system' ? 'space-y-6' : 'hidden'}>
             <AdminFirebaseConfigBlock />
-            <AdminMapboxLimitsBlock settings={settings} user={user} />
 
             {/* Force Logout All Sessions — только для Root Admin */}
             {user.role === 'root_admin' && (
@@ -306,55 +295,6 @@ export default function AdminModule({ user }: AdminModuleProps) {
                 </div>
               </div>
             )}
-
-            {/* Read-Only Dynamic Menu Overview */}
-            <div className="bg-white/40 backdrop-blur-md rounded-[1.8rem] p-6 lg:p-8 border border-white/45 shadow-xs space-y-6 w-full">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/40 pb-5">
-                <div>
-                  <span className="bg-[#3765F6]/10 text-[#3765F6] border border-[#3765F6]/10 font-mono text-[9px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full mb-1.5 inline-block">
-                    Current Navigation Map
-                  </span>
-                  <h2 className="text-sm font-bold tracking-tight text-slate-900 flex items-center gap-1.5">
-                    <Folder className="h-4.5 w-4.5 text-[#3765F6]" />
-                    Активная навигация Ratipa
-                  </h2>
-                </div>
-                <button
-                  onClick={() => setActiveTab('navigation')}
-                  className="bg-[#3765F6] hover:bg-[#2555E5] active:scale-[0.98] text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all shadow-xs border border-[#3765F6]/10 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                  Перейти в конструктор
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5">
-                {(settings?.menuStructure || [
-                  { id: 'g_home', label: 'Главная', isDropdown: false, singleModuleKey: 'dashboard' },
-                  { id: 'g_planning', label: 'Планирование', isDropdown: true, subtabKeys: ['planDohod', 'planZagruzok', 'currentPlanning'] },
-                  { id: 'g_calc', label: 'Калькуляция', isDropdown: false, singleModuleKey: 'dohod' },
-                  { id: 'g_salary', label: 'Зарплата', isDropdown: false, singleModuleKey: 'salary' },
-                  { id: 'g_baza', label: 'Учет выезда', isDropdown: false, singleModuleKey: 'baza' },
-                  { id: 'g_dozvola', label: 'Дозволы', isDropdown: false, singleModuleKey: 'dozvola' },
-                  { id: 'g_docs', label: 'Документы', isDropdown: false, singleModuleKey: 'documents' },
-                  { id: 'g_disp', label: 'Диспозиция', isDropdown: false, singleModuleKey: 'disposition' },
-                  { id: 'g_settings', label: 'Справочники', isDropdown: false, singleModuleKey: 'settings' },
-                  { id: 'g_admin', label: 'Админ', isDropdown: false, singleModuleKey: 'admin' }
-                ]).map((group) => (
-                  <div key={group.id} className="p-4 bg-white/50 backdrop-blur-sm rounded-[1.25rem] border border-white/50 shadow-xs flex items-center gap-3">
-                    <div className={`p-2.5 rounded-xl text-xs shrink-0 ${group.isDropdown ? 'bg-[#3765F6]/10 text-[#3765F6]' : 'bg-slate-900/5 text-slate-700'}`}>
-                      {group.isDropdown ? <Folder size={14} /> : <Link2 size={14} />}
-                    </div>
-                    <div className="min-w-0">
-                      <span className="text-[11px] font-black text-slate-800 block truncate leading-tight">{group.label}</span>
-                      <span className="text-[8.5px] font-mono font-bold uppercase tracking-widest text-slate-400">
-                        {group.isDropdown ? `Группа (${group.subtabKeys?.length || 0} вкл.)` : 'Прямая ссылка'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
 
             <div className="mt-6">
               {/* Redesigned Audit Logs Block */}
