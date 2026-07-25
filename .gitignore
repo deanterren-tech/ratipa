@@ -13,3 +13,4 @@ parse_pasted_plan.py
 .env.local
 .env.portal
 .env.*.local
+vehicles.seed.json
