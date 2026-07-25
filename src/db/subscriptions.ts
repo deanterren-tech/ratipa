@@ -431,16 +431,12 @@ export const sharedGetSettings = createSharedSubscription<AppSettings>(
             }
             if (innerUpdated) updated = true;
           }
-          if (updated) {
-            update(dbRef, {
-              highlight: data.highlight,
-              highlights: data.highlights,
-              mapboxUsage: data.mapboxUsage,
-            }).catch((err) => console.warn(err));
-          }
+          // Чтение — НЕ перезаписываем узел целиком (риск стереть menuStructure и другие поля).
+          // Дописывание служебных полей (highlight/mapboxUsage) происходит в saveSettings при явном сохранении.
           onData(data);
         } else {
-          set(dbRef, INITIAL_SETTINGS).catch((err) => console.warn(err));
+          // БД пуста: не перезаписываем узел (риск стереть поля при гонке).
+          // Отдаём INITIAL_SETTINGS локально; реальная запись — при явном saveSettings.
           onData(INITIAL_SETTINGS);
         }
       },

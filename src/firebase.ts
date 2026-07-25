@@ -1791,14 +1791,24 @@ export const dbService = {
   },
 
   saveSettings: (settings: AppSettings, user: string, role: string) => {
+    try {
+      (window as any).__saveCount = ((window as any).__saveCount || 0) + 1;
+      (window as any).__lastSaveHasMenu = !!settings.menuStructure;
+      const stack = new Error().stack || '';
+      localStorage.setItem('__lastSave', JSON.stringify({ hasMenu: !!settings.menuStructure, stack: stack.split('\n').slice(0,8) }));
+    } catch (e) {}
     const cleanSettings = sanitizeFirebaseObject(settings);
     if (useFirebase) {
       // MERGE with current appSettings so partial saves (from other modules)
-      // don't wipe fields like dispositionSheetUrl/planZagruzokSheetUrl.
+      // don't wipe fields like dispositionSheetUrl/planZagruzokSheetUrl/menuStructure.
       firebaseGet(ref(database, "appSettings"))
         .then((snap) => {
           const base = (snap.val() as AppSettings) || ({} as AppSettings);
           const merged = sanitizeFirebaseObject({ ...base, ...settings });
+          // Защита: не стирать menuStructure, если он есть в базе, но отсутствует в частичном сохранении
+          if (base.menuStructure && !settings.menuStructure) {
+            merged.menuStructure = base.menuStructure;
+          }
           set(ref(database, "appSettings"), merged);
           catalogCache.settings = merged;
         })

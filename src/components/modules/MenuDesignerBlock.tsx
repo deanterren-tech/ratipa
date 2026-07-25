@@ -34,15 +34,10 @@ const AVAILABLE_MODULES = [
 
 const DEFAULT_STRUCTURE = [
   { id: 'g_home', label: 'Главная', isDropdown: false, singleModuleKey: 'dashboard' },
-  { id: 'g_planning', label: 'Планирование', isDropdown: true, subtabKeys: ['planDohod', 'planZagruzok', 'currentPlanning'] },
-  { id: 'g_calc', label: 'Калькуляция', isDropdown: false, singleModuleKey: 'dohod' },
-  { id: 'g_salary', label: 'Зарплата', isDropdown: false, singleModuleKey: 'salary' },
-  { id: 'g_baza', label: 'Учет выезда', isDropdown: false, singleModuleKey: 'baza' },
-  { id: 'g_dozvola', label: 'Дозволы', isDropdown: false, singleModuleKey: 'dozvola' },
-  { id: 'g_docs', label: 'Документы', isDropdown: false, singleModuleKey: 'documents' },
-  { id: 'g_disp', label: 'Диспозиция', isDropdown: false, singleModuleKey: 'disposition' },
-  { id: 'g_settings', label: 'Справочники', isDropdown: false, singleModuleKey: 'settings' },
-  { id: 'g_admin', label: 'Админ', isDropdown: false, singleModuleKey: 'admin' }
+  { id: 'g_planning', label: 'Планирование', isDropdown: true, subtabKeys: ['planDohod', 'currentPlanning', 'dohod', 'planZagruzok'] },
+  { id: 'g_ops', label: 'Операции', isDropdown: true, subtabKeys: ['disposition', 'baza', 'documents', 'vehicleDriverData', 'dozvola'] },
+  { id: 'g_report', label: 'Отчетность', isDropdown: true, subtabKeys: ['salary'] },
+  { id: 'g_settings', label: 'Настройки', isDropdown: true, subtabKeys: ['settings', 'admin'] }
 ];
 
 export default function MenuDesignerBlock({ settings, onSave }: MenuDesignerBlockProps) {
