@@ -17,3 +17,5 @@ export {
   onceValue,
 } from '../firebase';
 export { pdService } from '../firebase/planDohodService';
+export { agentApi } from './agent';
+export type { AgentAction } from './agent';
