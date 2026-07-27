@@ -66,6 +66,8 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
   const [editingSalaryId, setEditingSalaryId] = useState<string | null>(null);
   const [editingSalaryData, setEditingSalaryData] = useState<Partial<SalaryLog>>({});
+  const [editDirection, setEditDirection] = useState<string>("");
+  const [editCircles, setEditCircles] = useState<string>("");
   const [logsLimit, setLogsLimit] = useState(7);
 
   // handlers модалки редактирования выплаты (восстановлены: ранее были удалены,
@@ -73,14 +75,24 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const openEditModal = (rec: SalaryLog) => {
     setEditingSalaryId(rec.id || null);
     setEditingSalaryData(rec);
+    // Парсим mark "Направление, N круга" → отдельно направление и круги
+    const mark = rec.mark || "";
+    const circMatch = mark.match(/(\d+)\s*круг[а-я]*/i);
+    const circles = circMatch ? `${circMatch[1]} круга` : "";
+    const direction = mark.replace(circMatch ? circMatch[0] : "", "").replace(/[,，]/g, "").trim();
+    setEditDirection(direction || "");
+    setEditCircles(circles);
   };
   const closeEditModal = () => {
     setEditingSalaryId(null);
     setEditingSalaryData({});
+    setEditDirection("");
+    setEditCircles("");
   };
   const saveEditModal = () => {
     if (editingSalaryData && editingSalaryData.id) {
-      dbService.updateSalary(editingSalaryData.id, editingSalaryData, user.name, user.role);
+      const mark = [editDirection, editCircles].filter(Boolean).join(", ");
+      dbService.updateSalary(editingSalaryData.id, { ...editingSalaryData, mark }, user.name, user.role);
     }
     closeEditModal();
   };
@@ -1121,12 +1133,19 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                  }} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition uppercase" />
                             </div>
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Оценка</label>
-                                <select value={editingSalaryData.mark || ''} onChange={e => setEditingSalaryData({...editingSalaryData, mark: e.target.value})} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition cursor-pointer appearance-none">
-                                    <option value="Хорошо">Хорошо</option>
-                                    <option value="Отлично">Отлично</option>
-                                    <option value="Удовлетворительно">Удовлетворительно</option>
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Направление</label>
+                                <select value={editDirection} onChange={e => setEditDirection(e.target.value)} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition cursor-pointer appearance-none">
+                                    <option value="">—</option>
                                     <option value="Турция">Турция</option>
+                                    <option value="Китай">Китай</option>
+                                </select>
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Круги</label>
+                                <select value={editCircles} onChange={e => setEditCircles(e.target.value)} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition cursor-pointer appearance-none">
+                                    <option value="">—</option>
+                                    <option value="2 круга">2 круга</option>
+                                    <option value="3 круга">3 круга</option>
                                 </select>
                             </div>
                             <div className="flex flex-col gap-1.5">
@@ -1156,6 +1175,22 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                             <div className="flex flex-col gap-1.5 col-span-2">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Логист / Кто внёс</label>
                                 <input type="text" value={editingSalaryData.logist || ''} onChange={e => setEditingSalaryData({...editingSalaryData, logist: e.target.value})} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition" />
+                            </div>
+                            <div className="flex flex-col gap-1.5 col-span-2">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Дата</label>
+                                <input
+                                    type="date"
+                                    value={editingSalaryData.datetime ? (() => {
+                                        const p = (editingSalaryData.datetime || '').split('.');
+                                        return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : '';
+                                    })() : ''}
+                                    onChange={e => {
+                                        const v = e.target.value; // YYYY-MM-DD
+                                        const parts = v.split('-');
+                                        const ru = parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : v;
+                                        setEditingSalaryData({...editingSalaryData, datetime: ru});
+                                    }}
+                                    className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition" />
                             </div>
                         </div>
                     </div>
