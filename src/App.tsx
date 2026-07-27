@@ -26,12 +26,20 @@ export default function App() {
     const unsub = dbService.getSettings((s) => {
       const serverVersion = Number(s?.globalSessionVersion || 0);
       const localVersion = Number(localStorage.getItem(SESSION_VERSION_KEY) || 0);
+      if (localVersion === 0) {
+        // Нет baseline (первый заход / после logout / экран входа) —
+        // просто синхронизируемся, НЕ разлогиниваем (иначе бесконечный reload-цикл).
+        if (serverVersion > 0) {
+          localStorage.setItem(SESSION_VERSION_KEY, String(serverVersion));
+        }
+        return;
+      }
       if (serverVersion > localVersion) {
-        // Версия сессии изменилась сервером -> принудительно выходим
-        handleLogout();
-      } else if (serverVersion > 0 && localVersion === 0) {
-        // первичная синхронизация baseline-версии
+        // Версия сессии изменилась сервером -> принудительно выходим.
+        // ВАЖНО: фиксируем новую версию ДО reload, чтобы после перезагрузки
+        // не сработал повторный logout (иначе цикл перезагрузок).
         localStorage.setItem(SESSION_VERSION_KEY, String(serverVersion));
+        handleLogout();
       }
     });
     return () => { if (typeof unsub === 'function') unsub(); };
