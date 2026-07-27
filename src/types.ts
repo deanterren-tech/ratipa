@@ -458,21 +458,6 @@ export interface DirectoryDirection {
   label: string;
 }
 
-export interface CouplingRecord {
-  id: string;
-  carNumber: string;          // tractor (gos-number)
-  trailerNumber?: string;     // trailer (gos-number) — the "coupling"
-  brand?: string;             // key -> directories/vehicleBrands
-  trailerBrand?: string;      // key -> directories/trailerBrands
-  driverId?: string;          // -> driversPool
-  driverName?: string;        // denormalized for display
-  dispatcher?: string;        // -> directories/dispatchers (id or name)
-  rateGroupId?: string;       // -> directories/rateGroups
-  status?: string;            // key -> directories/statusTypes
-  statusSince?: string;
-  comment?: string;
-}
-
 export interface DirectionPreset {
   id: string;
   name: string;

@@ -429,7 +429,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
             <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <SelectField label="Тягач *" value={form.carNumber} onChange={(v) => setForm({ ...form, carNumber: v })}
-                options={tractors.map((t: any) => ({ v: t.carNumber || t.id, l: t.carNumber || t.id }))} allowCustom placeholder="АС 0246-7" />
+                options={tractors.map((t: any) => ({ v: t.carNumber || t.id, l: t.carNumber || t.id }))} allowCustom />
               <Field label="Прицеп" value={form.trailerNumber} onChange={(v) => setForm({ ...form, trailerNumber: v })} placeholder="А 1635 Е-7" />
               <SelectField label="Марка тягача" value={form.brand} onChange={(v) => setForm({ ...form, brand: v })}
                 options={vehicleBrands.map((b) => ({ v: b.key || b.name, l: b.name }))} allowCustom />

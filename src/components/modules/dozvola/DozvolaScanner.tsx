@@ -110,7 +110,7 @@ export default function DozvolaScanner({ user, customTypesKeys, customTypesMap }
                 setPreviewUrls([]);
             }
         } catch (error: unknown) {
-            alert('Ошибка распознавания: ' + error.message);
+            alert('Ошибка распознавания: ' + (error instanceof Error ? error.message : String(error)));
         } finally {
             setIsProcessing(false);
         }
