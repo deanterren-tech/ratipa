@@ -193,7 +193,7 @@ const VehicleDriverCard = React.memo(({
             </div>
           ) : (
             <div className="flex items-center gap-1 font-bold text-slate-700 bg-slate-100 border border-slate-200/60 px-2 py-0.5 rounded-lg shadow-3xs font-sans text-[9.5px]">
-              <span>В рейса</span>
+              <span>В рейсе</span>
             </div>
           );
         })()}
@@ -311,6 +311,19 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   // Form/Modal states
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Закрытие модалки редактирования по ESC (capture-фаза, как в PlanDohodModule)
+  useEffect(() => {
+    if (!modalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setModalOpen(false);
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [modalOpen]);
   
   // Form fields state
   const [vehicleNumbers, setVehicleNumbers] = useState('');
@@ -356,6 +369,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   const [verificationQueue, setVerificationQueue] = useState<VehicleDriverRecord[]>([]);
   const [currentVerification, setCurrentVerification] = useState<VehicleDriverRecord | null>(null);
   const [verifyFleet, setVerifyFleet] = useState<any[]>([]);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   useEffect(() => {
     // Fetch live vehicles data — getVehicleDriverData now reads the unified
@@ -365,6 +379,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       setRecords(list);
       setFleetVehicles(list); // Combined: records and fleetVehicles are identical, eliminating duplicate listeners!
       setVerifyFleet(list);   // verification queue reads the same unified base
+      setIsDataLoaded(true);
     });
 
     // Fetch rate groups
@@ -1082,13 +1097,18 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   <option value="all">Все статусы</option>
                   <option value="verification">Требует верификации</option>
                   <option value="on_base">На базе</option>
-                  <option value="in_trip">В рейса</option>
+                  <option value="in_trip">В рейсе</option>
                 </select>
               </div>
             </div>
 
             {/* List of Unified Cards */}
-            {filteredRecords.length === 0 ? (
+            {!isDataLoaded ? (
+              <div className="bg-slate-50 rounded-2xl p-12 text-center border border-slate-200/60 text-slate-500 font-semibold text-xs italic flex flex-col items-center justify-center gap-2">
+                <div className="w-8 h-8 border-2 border-slate-300 border-t-[#3765F6] rounded-full animate-spin" />
+                <span>Загрузка данных автопарка...</span>
+              </div>
+            ) : filteredRecords.length === 0 ? (
               <div className="bg-slate-50 rounded-2xl p-12 text-center border border-slate-200/60 text-slate-500 font-semibold text-xs italic flex flex-col items-center justify-center gap-2">
                 <Truck className="w-8 h-8 text-slate-300 stroke-1" />
                 <span>Записи автопарка не найдены с выбранными фильтрами</span>

@@ -143,7 +143,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
       if (e.key === 'Escape') {
         setIsCarModalOpen(false);
       }
-      
+
       // Ctrl + Z : Revert last change in the modal database updates
       if (e.ctrlKey && (e.key === 'z' || e.key === 'я' || e.key === 'Z')) {
         if (bazaUndoStack.length > 0) {
@@ -163,8 +163,9 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    // Capture-фаза (true) — чтобы ESC срабатывал даже когда фокус в input/select внутри модалки
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, [isCarModalOpen, bazaUndoStack, currentTab, modalData]);
 
   // DB Sync for active fleet data, catalog & user listings

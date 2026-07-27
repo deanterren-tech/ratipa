@@ -281,7 +281,6 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
               <th className="px-4 py-3 whitespace-nowrap">Телефон</th>
               <th className="px-4 py-3 whitespace-nowrap">Паспорт</th>
               <th className="px-4 py-3 whitespace-nowrap">Личный №</th>
-              <th className="px-4 py-3 whitespace-nowrap">Диспетчер</th>
               <th className="px-4 py-3 whitespace-nowrap">Ставка</th>
               <th className="px-4 py-3 whitespace-nowrap">Машина</th>
               {isWritePermitted && <th className="px-4 py-3 text-right w-[80px]"></th>}
@@ -290,7 +289,6 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
           <tbody className="divide-y divide-slate-100/80 text-xs text-slate-700 font-mono">
             {filtered.map((d, i) => {
               const isSel = selected.has(d.id);
-              const col = dispColor(d.dispatcher);
               return (
                 <tr key={d.id} onClick={() => setViewCard({ type: 'driver', driverId: d.id, driverName: d.name })}
                   className={`hover:bg-slate-50/60 cursor-pointer transition ${isSel ? 'bg-[#3765F6]/10' : ''} ${focusIdx === i ? 'ring-2 ring-[#3765F6]/40 ring-inset' : ''}`} onMouseEnter={() => setFocusIdx(i)}>
@@ -311,13 +309,6 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
                   <td className="px-4 py-2.5 text-slate-500">{d.phone || '—'}</td>
                   <td className="px-4 py-2.5 text-slate-500">{d.passport || '—'}</td>
                   <td className="px-4 py-2.5 text-slate-500">{d.personalId || '—'}</td>
-                  <td className="px-4 py-2.5">
-                    {d.dispatcher ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold text-white" style={{ background: col }}>
-                        {dispName(d.dispatcher)}
-                      </span>
-                    ) : <span className="text-slate-300">—</span>}
-                  </td>
                   <td className="px-4 py-2.5 text-slate-500">{rateName(d.rateGroupId)}</td>
                   <td className="px-4 py-2.5 text-slate-500">{couplingOf(d.id)}</td>
                   {isWritePermitted && (
@@ -336,7 +327,7 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
               );
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={isWritePermitted ? 9 : 8} className="px-4 py-8 text-center text-xs text-slate-400">Пусто</td></tr>
+              <tr><td colSpan={isWritePermitted ? 8 : 7} className="px-4 py-8 text-center text-xs text-slate-400">Пусто</td></tr>
             )}
           </tbody>
         </table>

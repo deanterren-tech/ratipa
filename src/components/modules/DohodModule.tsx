@@ -765,6 +765,11 @@ const CalculationCard = React.memo(({
               <>
                 <span className="text-slate-300">•</span>
                 <span>Доп. расходы: <strong className="text-rose-600">{calc.additionalExpenses} €</strong></span>
+                {Array.isArray(calc.expenseItems) && calc.expenseItems.length > 0 && (
+                  <span className="text-[10px] text-slate-400 font-normal">
+                    ({calc.expenseItems.map((e) => e.label || "—").join(", ")})
+                  </span>
+                )}
               </>
             ) : null}
           </div>
@@ -912,6 +917,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
   const [tripEndDate, setTripEndDate] = useState<string>("");
   const [tripDays, setTripDays] = useState<number>(1);
   const [additionalExpenses, setAdditionalExpenses] = useState<number>(0);
+  const [expenseItems, setExpenseItems] = useState<{ label: string; amount: number }[]>([]);
 
   const [editingCalcId, setEditingCalcId] = useState<string | null>(null);
   const [editingCalcData, setEditingCalcData] = useState<
@@ -1005,6 +1011,10 @@ export default function DohodModule({ user }: DohodModuleProps) {
   const [historySearch, setHistorySearch] = useState("");
   const [activeHistoryDirectionTab, setActiveHistoryDirectionTab] =
     useState("Все");
+  const [historyPage, setHistoryPage] = useState(7);
+
+  // Сброс пагинации при смене фильтра/поиска
+  useEffect(() => { setHistoryPage(7); }, [historySearch, activeHistoryDirectionTab]);
 
   const uniqueDirections = useMemo(() => {
     return Array.from(
@@ -1041,6 +1051,10 @@ export default function DohodModule({ user }: DohodModuleProps) {
       return matchesSearch && matchesTab;
     });
   }, [calculationHistory, historySearch, activeHistoryDirectionTab]);
+
+  const visibleHistory = useMemo(() => {
+    return filteredHistory.slice(0, historyPage);
+  }, [filteredHistory, historyPage]);
 
   useEffect(() => {
     const today = new Date();
@@ -1512,6 +1526,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
       freight: totalFreight,
       expenses: totalExpenses,
       additionalExpenses: Number(additionalExpenses || 0),
+      expenseItems: expenseItems.filter((x) => x.label.trim() || Number(x.amount || 0) > 0),
       netProfit: totalProfit,
       dailyProfit: currentDailyProfit,
       datetime: new Date().toLocaleString("ru-RU"),
@@ -1574,6 +1589,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
       setGlobalDirection(calc.direction || calc.globalDirection || "Турция");
     if (calc.days) setTripDays(calc.days);
     setAdditionalExpenses(calc.additionalExpenses || 0);
+    setExpenseItems(Array.isArray(calc.expenseItems) ? calc.expenseItems : []);
 
     // Attempt reverse-engineer dates from days
     if (calc.days) {
@@ -1622,11 +1638,16 @@ export default function DohodModule({ user }: DohodModuleProps) {
   const openEditCalcModal = (calc: RouteCalculation) => {
     setEditingCalcId(calc.id);
     setEditingCalcData(calc);
+    // Подтянуть статьи расходов в основную форму для редактирования
+    setAdditionalExpenses(Number(calc.additionalExpenses || 0));
+    setExpenseItems(Array.isArray(calc.expenseItems) ? calc.expenseItems : []);
   };
 
   const closeEditCalcModal = () => {
     setEditingCalcId(null);
     setEditingCalcData({});
+    setAdditionalExpenses(0);
+    setExpenseItems([]);
   };
 
   const saveEditCalcModal = () => {
@@ -1648,6 +1669,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
       editingCalcId,
       {
         ...editingCalcData,
+        additionalExpenses: Number(additionalExpenses || 0),
+        expenseItems: expenseItems.filter((x) => x.label.trim() || Number(x.amount || 0) > 0),
         totalKm,
         totalFreight,
         dailyProfit,
@@ -2718,9 +2741,62 @@ export default function DohodModule({ user }: DohodModuleProps) {
                     </div>
                   </div>
                   
-                  <button className="flex items-center justify-center gap-1.5 py-2 rounded-xl border border-dashed border-slate-200 text-slate-400 text-xs font-medium hover:bg-white/40 hover:text-slate-600 hover:border-slate-300 transition">
+                  {/* Список статей расходов */}
+                  {expenseItems.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      {expenseItems.map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={item.label}
+                            onChange={(e) => {
+                              const next = [...expenseItems];
+                              next[idx] = { ...next[idx], label: e.target.value };
+                              setExpenseItems(next);
+                            }}
+                            placeholder="Название статьи"
+                            className="flex-1 bg-white border border-slate-200/50 rounded-lg px-2.5 py-1 text-xs text-slate-800 outline-none focus:border-[#3765F6] transition"
+                          />
+                          <input
+                            type="number"
+                            min="0"
+                            value={item.amount}
+                            onChange={(e) => {
+                              const next = [...expenseItems];
+                              next[idx] = { ...next[idx], amount: Number(e.target.value) };
+                              setExpenseItems(next);
+                              setAdditionalExpenses(next.reduce((a, x) => a + Number(x.amount || 0), 0));
+                            }}
+                            className="w-24 bg-white border border-slate-200/50 rounded-lg px-2.5 py-1 text-sm font-bold text-rose-600 outline-none focus:border-rose-400 transition text-right shadow-2xs"
+                          />
+                          <span className="text-xs font-bold text-slate-400">€</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = expenseItems.filter((_, i) => i !== idx);
+                              setExpenseItems(next);
+                              setAdditionalExpenses(next.reduce((a, x) => a + Number(x.amount || 0), 0));
+                            }}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/40 transition"
+                            title="Удалить статью"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = [...expenseItems, { label: "", amount: 0 }];
+                      setExpenseItems(next);
+                    }}
+                    className="flex items-center justify-center gap-1.5 py-2 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs font-medium hover:bg-white/40 hover:text-[#3765F6] hover:border-[#3765F6]/40 transition"
+                  >
                     <Plus className="w-3.5 h-3.5" />
-                    Добавить статью расхода (в разработке)
+                    Добавить статью расхода
                   </button>
                 </div>
               </div>
@@ -3072,8 +3148,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
             })}
           </div>
 
-          <div className="overflow-y-auto pr-1 space-y-2 pb-4 custom-scrollbar max-h-[600px]">
-            {filteredHistory.map((calc) => (
+          <div className="overflow-y-auto pr-1 space-y-2 pb-4 custom-scrollbar max-h-[480px]">
+            {visibleHistory.map((calc) => (
               <CalculationCard
                 key={calc.id}
                 calc={calc}
@@ -3082,10 +3158,22 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 openEditCalcModal={openEditCalcModal}
               />
             ))}
-            {calculationHistory.length === 0 && (
+            {filteredHistory.length === 0 && (
               <div className="text-center text-slate-400 text-sm font-mono font-black py-8 uppercase tracking-widest">
                 Журнал пуст
               </div>
+            )}
+            {historyPage < filteredHistory.length && (
+              <button
+                type="button"
+                onClick={() => setHistoryPage((p) => p + 10)}
+                className="w-full py-2.5 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs font-semibold hover:bg-white/40 hover:text-[#3765F6] hover:border-[#3765F6]/40 transition"
+              >
+                Показать ещё 10
+                <span className="text-slate-400 font-normal">
+                  {" "}(осталось {filteredHistory.length - historyPage})
+                </span>
+              </button>
             )}
           </div>
         </div>

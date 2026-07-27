@@ -387,7 +387,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
                     return s === 'base' ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/50">На базе</span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/50">В рейса</span>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/50">В рейсе</span>
                     );
                   })()}
                 </td>

@@ -99,6 +99,8 @@ export default function App() {
     setUser(null);
     localStorage.removeItem('ratipa_user_session');
     localStorage.removeItem(SESSION_VERSION_KEY);
+    // Полная перезагрузка страницы — очищает всё состояние как F5
+    window.location.reload();
   };
 
   if (isSessionRestoring) {

@@ -145,6 +145,7 @@ export interface RouteCalculation {
   totalFreight?: number;
   totalExpenses?: number;
   additionalExpenses?: number;
+  expenseItems?: { label: string; amount: number }[];
   totalProfit?: number;
   datetime?: string; // legacy field
   date?: string;

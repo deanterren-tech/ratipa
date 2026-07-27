@@ -44,6 +44,8 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const [ratePerDiem, setRatePerDiem] = useState<number | undefined>(undefined);
   const [totalKm, setTotalKm] = useState<number | ''>('');
   const [tripMark, setTripMark] = useState('Турция');
+  const [tripDirection, setTripDirection] = useState('Турция');
+  const [tripCircles, setTripCircles] = useState('');
   const [idleDays, setIdleDays] = useState(0);
   const [totalDays, setTotalDays] = useState(1);
   const [bonus, setBonus] = useState(0);
@@ -437,7 +439,8 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     setRatePerKm(0.125);
     setRatePerDiem(undefined);
     setTotalKm('');
-    setTripMark('Турция');
+    setTripDirection('Турция');
+    setTripCircles('');
     setIdleDays(0);
     setTotalDays(1);
     setBonus(0);
@@ -487,7 +490,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
         car: carNumber.trim().toUpperCase() || 'НЕ УКАЗАНО',
         rate: ratePerKm,
         km: Number(totalKm) || 0,
-        mark: tripMark,
+        mark: [tripDirection, tripCircles].filter(Boolean).join(', '),
         idleDays,
         totalDays: Math.max(totalDays, 1),
         bonus,
@@ -624,10 +627,16 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                         )}
                                     </div>
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Пометка рейса</label>
-                                        <select value={tripMark} onChange={e => setTripMark(e.target.value)} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition cursor-pointer appearance-none">
+                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Направление</label>
+                                        <select value={tripDirection} onChange={e => setTripDirection(e.target.value)} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition cursor-pointer appearance-none">
                                             <option value="Турция">Турция</option>
                                             <option value="Китай">Китай</option>
+                                        </select>
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Круги</label>
+                                        <select value={tripCircles} onChange={e => setTripCircles(e.target.value)} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition cursor-pointer appearance-none">
+                                            <option value="">—</option>
                                             <option value="2 круга">2 круга</option>
                                             <option value="3 круга">3 круга</option>
                                         </select>
@@ -890,8 +899,8 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                 ) : (
                     filteredHistory.slice(0, logsLimit).map((rec) => (
                         <div key={rec.id} className={`bg-white border rounded-[2rem] p-6 flex flex-col group hover:shadow-[0_8px_30px_rgba(0,0,0,0.01)] transition-all duration-300 ${
-                          rec.mark === '2 круга' ? 'border-blue-300 bg-blue-50/30 hover:border-blue-400' :
-                          rec.mark === '3 круга' ? 'border-purple-300 bg-purple-50/30 hover:border-purple-400' :
+                          (rec.mark || '').includes('2 круга') ? 'border-blue-300 bg-blue-50/30 hover:border-blue-400' :
+                          (rec.mark || '').includes('3 круга') ? 'border-purple-300 bg-purple-50/30 hover:border-purple-400' :
                           'border-slate-200 hover:border-[#3765F6]/40'
                         }`}>
                             
@@ -964,6 +973,22 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                         }
                                     </div>
                                 </div>
+                                {/круг/.test(rec.mark || '') && (
+                                <div className="flex flex-col">
+                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Круги</span>
+                                    <div>
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm ${
+                                            (rec.mark || '').includes('2 круга')
+                                                ? 'text-blue-700 bg-blue-100 border border-blue-200'
+                                                : (rec.mark || '').includes('3 круга')
+                                                ? 'text-purple-700 bg-purple-100 border border-purple-200'
+                                                : 'text-slate-600 bg-slate-100 border border-slate-200'
+                                        }`}>
+                                            {(rec.mark || '').match(/\d+\s*круг[а-я]*/i)?.[0] || '—'}
+                                        </span>
+                                    </div>
+                                </div>
+                                )}
                             </div>
 
                             {/* Second Row: Detailed Breakdown & Total Payment */}
