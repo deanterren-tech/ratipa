@@ -26,12 +26,12 @@ export default function FerryDirectoryBlock({ user }: Props) {
   }, [items, search]);
 
   const openAdd = () => { setDraft({}); setEditing({ id: '', name: '', price: 0 }); };
-  const openEdit = (f: FerryTemplate) => { setDraft({ name: f.name || '', price: String(f.price || 0), id: f.id || '' }); setEditing(f); };
+  const openEdit = (f: FerryTemplate) => { setDraft({ name: f.name || '', price: String(f.price || 0), id: f.id || '', dbKey: (f as any).dbKey || '' }); setEditing(f); };
 
   const handleSave = () => {
     const rec: any = { ...draft };
     rec.price = parseFloat(rec.price || '0') || 0;
-    if (!rec.id) rec.id = 'ferry_' + Date.now().toString();
+    if (!rec.id) rec.id = (rec.dbKey as string) || 'ferry_' + Date.now().toString();
     dbService.saveFerryTemplate(rec as FerryTemplate, user.name, user.role);
     toast('Тариф парома сохранён', 'success');
     setEditing(null);
@@ -39,7 +39,7 @@ export default function FerryDirectoryBlock({ user }: Props) {
 
   const handleDelete = async (f: FerryTemplate) => {
     if (await showConfirm(`Удалить тариф «${f.name}»?`)) {
-      dbService.deleteFerryTemplate(f.id || '', user.name, user.role);
+      dbService.deleteFerryTemplate((f as any).dbKey || f.id || '', user.name, user.role);
       toast('Удалено', 'success');
     }
   };

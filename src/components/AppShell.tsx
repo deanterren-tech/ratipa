@@ -641,6 +641,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'documents', label: 'Документы', icon: Files, permissionKey: 'documents' },
     { key: 'disposition', label: 'Диспозиция', icon: Map, permissionKey: 'disposition' },
     { key: 'appSettings', label: 'База данных', icon: Settings2, permissionKey: 'settings' },
+    { key: 'settings', label: 'Справочники', icon: BookOpen, permissionKey: 'settings' },
     { key: 'admin', label: 'Администрирование', icon: ShieldAlert, permissionKey: 'admin' }
   ];
 

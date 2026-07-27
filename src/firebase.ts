@@ -266,7 +266,13 @@ export const directoryService = {
 
   getVehicleBrands: (cb: (d: any[]) => void) => sharedDirVehicleBrands(cb),
   getTrailerBrands: (cb: (d: any[]) => void) => sharedDirTrailerBrands(cb),
-  getDispatchers: (cb: (d: any[]) => void) => sharedDirDispatchers(cb),
+  getDispatchers: (cb: (d: any[]) => void) => {
+    // Диспетчеры = учётные записи с флагом isDispatcher: true
+    return dbService.getUsers((users) => {
+      const list = (users || []).filter((u: any) => u.isDispatcher === true);
+      cb(list.map((u: any) => ({ id: u.uid || u.id, name: u.name })));
+    });
+  },
   getRateGroups: (cb: (d: any[]) => void) => sharedDirRateGroups(cb),
   getStatusTypes: (cb: (d: any[]) => void) => sharedDirStatusTypes(cb),
   getDirections: (cb: (d: any[]) => void) => sharedDirDirections(cb),
@@ -312,14 +318,31 @@ export const directoryService = {
   // --- АДАПТЕРЫ для унификации (pdService → единая база) ---
   // Диспетчеры как плоский список имён (совместимо с pdService.subscribeDispatchers)
   getDispatchersFlat: (cb: (names: string[]) => void) => {
-    return sharedDirDispatchers((list: any[]) => cb((list || []).map((d) => d.name).filter(Boolean)));
+    // Диспетчеры = справочник + учётные записи c isDispatcher: true
+    let unsubUsers: (() => void) | null = null;
+    const unsubDir = sharedDirDispatchers((list: any[]) => {
+      if (unsubUsers) unsubUsers();
+      unsubUsers = dbService.getUsers((users) => {
+        const userNames = (users || []).filter((u: any) => u.isDispatcher === true).map((u: any) => u.name).filter(Boolean);
+        const dirNames = (list || []).map((d) => d.name).filter(Boolean);
+        cb(Array.from(new Set([...dirNames, ...userNames])));
+      });
+    });
+    return () => { unsubDir(); if (unsubUsers) unsubUsers(); };
   },
   // Диспетчеры как (имена, порядок) — порядок = порядок в справочнике
   getDispatchersWithOrder: (cb: (names: string[], order: string[]) => void) => {
-    return sharedDirDispatchers((list: any[]) => {
-      const names = (list || []).map((d) => d.name).filter(Boolean);
-      cb(names, names);
+    let unsubUsers: (() => void) | null = null;
+    const unsubDir = sharedDirDispatchers((list: any[]) => {
+      if (unsubUsers) unsubUsers();
+      unsubUsers = dbService.getUsers((users) => {
+        const userNames = (users || []).filter((u: any) => u.isDispatcher === true).map((u: any) => u.name).filter(Boolean);
+        const dirNames = (list || []).map((d) => d.name).filter(Boolean);
+        const merged = Array.from(new Set([...dirNames, ...userNames]));
+        cb(merged, merged);
+      });
     });
+    return () => { unsubDir(); if (unsubUsers) unsubUsers(); };
   },
   // Направления как Record<label, coeff> (совместимо с pdService.subscribeDirections)
   getDirectionsMap: (cb: (map: Record<string, number>) => void) => {
@@ -335,7 +358,24 @@ export const directoryService = {
   },
   // Диспетчеры как объекты {id, name, color}[] (для редакторов справочника)
   getDispatchersObjects: (cb: (list: {id: string; name: string; color?: string}[]) => void) => {
-    return sharedDirDispatchers((list: any[]) => cb((list || []).map((d) => ({ id: d.id, name: d.name, color: d.color }))));
+    // Диспетчеры = справочник + учётные записи c isDispatcher: true
+    let unsubUsers: (() => void) | null = null;
+    const unsubDir = sharedDirDispatchers((list: any[]) => {
+      if (unsubUsers) unsubUsers();
+      unsubUsers = dbService.getUsers((users) => {
+        const userObjects = (users || []).filter((u: any) => u.isDispatcher === true).map((u: any) => ({ id: u.uid || u.id, name: u.name }));
+        const dirObjects = (list || []).map((d: any) => ({ id: d.id, name: d.name, color: d.color }));
+        // Убираем дубли по имени (пользователь приоритетнее если имя совпадает)
+        const seen = new Set<string>();
+        const merged: {id: string; name: string; color?: string}[] = [];
+        [...dirObjects, ...userObjects].forEach((item) => {
+          const key = item.name?.toLowerCase().trim();
+          if (key && !seen.has(key)) { seen.add(key); merged.push(item); }
+        });
+        cb(merged);
+      });
+    });
+    return () => { unsubDir(); if (unsubUsers) unsubUsers(); };
   },
 };
 
@@ -1190,12 +1230,31 @@ export const dbService = {
       phone: phoneNum,
       lastPassportVerificationYear: rec.lastPassportVerificationYear ?? null,
     };
-    
+
+    // Firebase RTDB не принимает undefined в объекте — set() падает целиком.
+    // Убираем все undefined-поля (напр. пустые опц. поля: rate, dimensions, weight, year…).
+    const cleaned: Record<string, any> = {};
+    for (const [k, v] of Object.entries(normalized)) {
+      if (v !== undefined) cleaned[k] = v;
+    }
+
     let mainPromise: Promise<void>;
     
     if (useFirebase) {
-      mainPromise = set(ref(database, `tractors/${rec.id}`), normalized)
+      // ИСПРАВЛЕНИЕ: update() вместо set() — иначе при назначении диспетчера
+      // перезаписывается вся ветка tractars/${id} и стираются поля тягача
+      // (brand, trailerMake, year, rate, dimensions, weight…), что визуально
+      // выглядит как «пропажа данных» в Базе водителей.
+      mainPromise = update(ref(database, `tractors/${rec.id}`), cleaned)
         .then(() => {
+          // Sync dispatcher to couplings branch (list читает оттуда)
+          if (disp) {
+            update(ref(database, `couplings/${rec.id}`), { dispatcherName: disp }).catch(() => {});
+          }
+          // Sync dispatcher to the driver record (База водителей читает drivers)
+          if (disp && rec.driverId) {
+            update(ref(database, `drivers/${rec.driverId}`), { dispatcher: disp }).catch(() => {});
+          }
           // Save brand to master-nodes under directories/vehicleBrands / trailerBrands
           if (brand) {
             const brandKey = brand.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_');
@@ -2147,11 +2206,20 @@ export const dbService = {
       shortNameLat: d.shortNameLat || "",
       phone: d.phone || "",
       license: d.license || "",
+      passport: d.passport || "",
+      personalId: d.personalId || "",
+      birthDate: d.birthDate || "",
+      passportStart: d.passportStart || "",
+      passportEnd: d.passportEnd || "",
+      passportIssued: d.passportIssued || "",
       rateGroupId: d.rateGroupId || "",
+      dispatcher: d.dispatcher || "",
       comment: d.comment || "",
     };
     if (useFirebase) {
-      set(ref(database, `drivers/${d.id}`), payload);
+      // update() вместо set() — не затирает поля, которые могли быть
+      // записаны в drivers другими модулями (защита от потери данных).
+      update(ref(database, `drivers/${d.id}`), payload);
     } else {
       const local = getLocalStorageData<Driver[]>("ratipa_drivers", []);
       const idx = local.findIndex((x) => x.id === d.id);
@@ -2421,6 +2489,25 @@ export const dbService = {
       const updated = all.map((c) => (set2.has(c.id) ? { ...c, ...patch } : c));
       setLocalStorageData("ratipa_vehicle_fleet", updated);
       window.dispatchEvent(new Event("ratipa_vehicle_fleet_changed"));
+      return Promise.resolve();
+    }
+  },
+
+  bulkUpdateDrivers: (ids: string[], patch: Record<string, any>): Promise<void> => {
+    if (useFirebase) {
+      const updates: Record<string, any> = {};
+      for (const id of ids) {
+        for (const [k, v] of Object.entries(patch)) {
+          updates[`drivers/${id}/${k}`] = v;
+        }
+      }
+      return update(ref(database), updates).catch((err) => console.warn("bulkUpdateDrivers failed:", err));
+    } else {
+      const all = getLocalStorageData<Driver[]>("ratipa_drivers", []);
+      const set2 = new Set(ids);
+      const updated = all.map((d) => (set2.has(d.id) ? { ...d, ...patch } : d));
+      setLocalStorageData("ratipa_drivers", updated);
+      window.dispatchEvent(new Event("ratipa_drivers_changed"));
       return Promise.resolve();
     }
   },

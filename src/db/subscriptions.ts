@@ -289,6 +289,7 @@ export const sharedGetFerryTemplates = createSharedSubscription<FerryTemplate[]>
         if (data) {
           const list: FerryTemplate[] = Object.keys(data).map((key) => ({
             id: key,
+            dbKey: key,
             ...data[key],
           }));
           onData(list);
@@ -319,6 +320,7 @@ export const sharedGetDistances = createSharedSubscription<DistancePreset[]>(
         if (data) {
           const list: DistancePreset[] = Object.keys(data).map((key) => ({
             id: key,
+            dbKey: key,
             ...data[key],
           }));
           onData(list);
@@ -472,7 +474,7 @@ function createDirSub<T>(path: string) {
       return onValue(ref(database, path), (snap) => {
         const val = snap.val();
         if (!val) { onData([] as any); return; }
-        const list = Object.keys(val).map((k) => ({ ...val[k], id: val[k].id || k }));
+        const list = Object.keys(val).map((k) => ({ ...val[k], id: val[k].id || k, dbKey: k }));
         onData(list as any);
       }, () => onError && onError(null));
     },

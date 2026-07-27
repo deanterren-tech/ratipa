@@ -69,10 +69,11 @@ export default function DriverCard({ driverId, driverName, onClose, onOpenCoupli
   return (
     <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-emerald-500/10 to-transparent border-b border-slate-100">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-[#3765F6]/10 to-transparent border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-              <User className="w-5 h-5 text-emerald-600" />
+            <div className="w-10 h-10 rounded-xl bg-[#3765F6]/10 flex items-center justify-center">
+              <User className="w-5 h-5 text-[#3765F6]" />
             </div>
             <div>
               <div className="text-lg font-black text-slate-900">{driverName}</div>
@@ -103,7 +104,7 @@ export default function DriverCard({ driverId, driverName, onClose, onOpenCoupli
             <div className="text-[10px] font-bold uppercase text-slate-400 mb-2 flex items-center gap-1">
               <FileText className="w-3.5 h-3.5" /> Паспортные данные
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-2 gap-3">
               <Field label="ФИО (рус)" value={driverNameRu} />
               <Field label="ФИО (лат)" value={driverNameLat || '—'} />
               <Field label="ИНН" value={src.personalId || src.inn || '—'} />
@@ -125,7 +126,7 @@ export default function DriverCard({ driverId, driverName, onClose, onOpenCoupli
             ) : (
               <div className="space-y-1.5">
                 {salaries.map((s, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs p-2 rounded-xl bg-slate-50">
+                  <div key={i} className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-slate-50">
                     <span className="text-slate-600">{s.date || s.datetime || s.period || '—'}</span>
                     <span className="font-bold text-emerald-600">{s.amount != null ? `${s.amount} €` : (s.total != null ? `${s.total} €` : '—')}</span>
                   </div>
@@ -141,9 +142,9 @@ export default function DriverCard({ driverId, driverName, onClose, onOpenCoupli
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div className="p-2.5 rounded-xl bg-slate-50">
-      <div className="text-[9px] font-bold uppercase text-slate-400">{label}</div>
-      <div className="text-slate-700 font-medium truncate">{value}</div>
+    <div className="p-3 rounded-2xl bg-slate-50">
+      <div className="text-[10px] font-bold uppercase text-slate-400">{label}</div>
+      <div className="text-sm font-semibold text-slate-800 truncate">{value}</div>
     </div>
   );
 }

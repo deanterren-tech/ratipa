@@ -19,9 +19,19 @@ export function useKeyboardShortcuts() {
         const rect = el.getBoundingClientRect();
         const style = window.getComputedStyle(el);
         const zIndex = parseInt(style.zIndex || '0', 10);
+        // Consider only overlays that actually contain a close control,
+        // so stray fixed elements (toasts, portals) are ignored.
+        const closeEls = el.querySelectorAll('button');
+        const hasClose = el.querySelector(
+          'button.rounded-full, button[aria-label*="close" i], button[title*="Закрыть" i], button[title*="Close" i], [data-close-modal]'
+        ) || Array.from(closeEls).some(b => {
+          const t = (b.textContent || '').toLowerCase();
+          return t.includes('отмена') || t.includes('закрыть') || t.includes('close') || t.includes('cancel');
+        });
         return rect.width > 0 && rect.height > 0 &&
                style.display !== 'none' && style.visibility !== 'hidden' &&
-               (zIndex > 0 || style.position === 'fixed');
+               (zIndex > 0 || style.position === 'fixed') &&
+               !!hasClose;
       });
       if (visibleOverlays.length === 0) return null;
       // topmost by z-index / DOM order
@@ -39,6 +49,7 @@ export function useKeyboardShortcuts() {
         'tbody tr, ' +
         '[id^="vehicle-driver-card-"], ' +
         '[data-nav-item], ' +
+        '[data-trip-id], ' +
         '.grid .group.cursor-pointer, ' +
         'ul.divide-y li, ' +
         '.space-y-2 div.group, ' +
@@ -104,12 +115,14 @@ export function useKeyboardShortcuts() {
         activeEl.isContentEditable
       );
 
-      // Verify typing context: allow only saving (Ctrl+S) and search (Ctrl+K) in text editors
+      // Verify typing context: allow saving (Ctrl+S), search (Ctrl+K) and Escape
+      // to pass through even while typing in inputs (so modals can be closed).
       if (isInputActive) {
         const isCtrlS = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's';
         const isCtrlK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k';
-        if (!isCtrlS && !isCtrlK) {
-          return; // Skip global shortcut triggers when actively typing
+        const isEsc = e.key === 'Escape';
+        if (!isCtrlS && !isCtrlK && !isEsc) {
+          return; // Skip other global shortcut triggers when actively typing
         }
       }
 

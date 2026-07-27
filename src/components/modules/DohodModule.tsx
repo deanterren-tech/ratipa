@@ -747,7 +747,7 @@ const CalculationCard = React.memo(({
 
   return (
     <div
-      className="p-5 bg-white/65 backdrop-blur-md border border-slate-200/50 hover:border-slate-300/80 hover:bg-white/80 rounded-3xl shadow-sm hover:shadow-md transition duration-300 flex flex-col group"
+      className="p-5 bg-white border border-slate-200/50 hover:border-slate-300/80 rounded-[2rem] shadow-[0_8px_30px_rgba(0,0,0,0.01)] hover:shadow-md transition duration-300 flex flex-col group"
     >
       <div className="flex items-start justify-between mb-4 pb-3 border-b border-slate-200/40 gap-4">
         <div className="flex flex-col gap-1 min-w-0">
@@ -2010,10 +2010,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
       {/* Main Left Workspace */}
       <div className="w-full space-y-6">
         {/* Header Block */}
-        <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 lg:p-8 border border-slate-200/50 shadow-sm flex flex-col sm:flex-row justify-between gap-4 items-center">
+        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col sm:flex-row justify-between gap-4 items-center">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              <Calculator className="h-6 w-6 text-slate-800" />
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">Модуль Доход</span>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+              <Calculator className="w-7 h-7 text-slate-800" />
               Калькуляция дохода
             </h1>
             <p className="text-sm text-slate-500 font-medium mt-1">
@@ -2024,7 +2025,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
 
         {/* Table Container */}
-        <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 lg:p-8 border border-slate-200/50 shadow-sm overflow-hidden flex flex-col">
+        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex flex-col">
           <h2 className="text-base font-bold text-slate-900 tracking-tight pb-4 border-b border-slate-200/40 mb-6 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-slate-900">
               <MapPin className="h-5 w-5 text-[#3765F6]" />{" "}
@@ -2048,7 +2049,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
           <div className="hidden lg:block w-full overflow-x-auto overflow-y-auto max-h-[500px] pb-4 custom-scrollbar">
             <table className="w-full min-w-[1200px] border-collapse relative">
-              <thead className="sticky top-0 bg-slate-50/80 backdrop-blur-md z-20 shadow-[inset_0_-1px_0_rgba(226,232,240,0.4)]">
+              <thead className="sticky top-0 bg-slate-50 z-20 shadow-[inset_0_-1px_0_rgba(226,232,240,0.4)]">
                 <tr>
                   <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-left rounded-tl-xl w-8">
                     #
@@ -2556,7 +2557,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
         </div>
 
         {/* Total Stats Banner - Full Width Layout Panel */}
-        <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 lg:p-8 text-slate-900 shadow-sm border border-slate-200/50 flex flex-col">
+        <div className="bg-white rounded-[2rem] p-6 lg:p-8 text-slate-900 shadow-[0_8px_30px_rgba(0,0,0,0.01)] border border-slate-200/50 flex flex-col">
           <h2 className="text-sm font-bold text-slate-900 tracking-tight pb-4 border-b border-slate-200/40 mb-6 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-slate-900">
               <TrendingUp className="h-5 w-5 text-[#3765F6]" />{" "}
@@ -2572,7 +2573,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
               </h3>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-white/40 backdrop-blur-xs border border-slate-200/40 p-4 rounded-2xl">
+                <div className="bg-white border border-slate-200/40 p-4 rounded-2xl">
                   <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold mb-1">
                     Общий пробег
                   </span>
@@ -2581,7 +2582,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   </span>
                 </div>
 
-                <div className="bg-white/40 backdrop-blur-xs border border-slate-200/40 p-4 rounded-2xl">
+                <div className="bg-white border border-slate-200/40 p-4 rounded-2xl">
                   <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold mb-1">
                     Общий Фрахт
                   </span>
@@ -2590,7 +2591,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   </span>
                 </div>
 
-                <div className="bg-white/40 backdrop-blur-xs border border-slate-200/40 p-4 rounded-2xl">
+                <div className="bg-white border border-slate-200/40 p-4 rounded-2xl">
                   <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold mb-1">
                     Расходы ({globalDirection})
                   </span>
@@ -2599,7 +2600,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   </span>
                 </div>
 
-                <div className="bg-white/40 backdrop-blur-xs border border-slate-200/40 p-4 rounded-2xl">
+                <div className="bg-white border border-slate-200/40 p-4 rounded-2xl">
                   <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold mb-1">
                     Дней в пути
                   </span>
@@ -2651,7 +2652,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   Время в пути
                 </h3>
                 
-                <div className="bg-white/35 backdrop-blur-xs p-5 rounded-2xl border border-slate-200/40 flex flex-col gap-4">
+                <div className="bg-white p-5 rounded-2xl border border-slate-200/40 flex flex-col gap-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="flex flex-col gap-1.5">
                       <span className="text-xs font-semibold text-slate-500">Старт рейса</span>
@@ -2697,8 +2698,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   Дополнительные расходы
                 </h3>
                 
-                <div className="bg-white/35 backdrop-blur-xs p-4 rounded-2xl border border-slate-200/40 flex flex-col gap-3">
-                  <div className="flex items-center justify-between bg-white/50 border border-slate-200/40 rounded-xl p-3 shadow-2xs">
+                <div className="bg-white p-4 rounded-2xl border border-slate-200/40 flex flex-col gap-3">
+                  <div className="flex items-center justify-between bg-white border border-slate-200/40 rounded-xl p-3 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-rose-50/50 flex items-center justify-center text-rose-500">
                         <Receipt className="w-4 h-4" />
@@ -2734,7 +2735,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
         {/* Custom Currency Converter Widget */}
         <div
           id="nbrb-converter-widget"
-          className="bg-white/80 backdrop-blur-md rounded-[2rem] p-6 border border-slate-200/60 shadow-sm relative overflow-hidden"
+          className="bg-white rounded-[2rem] p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] relative overflow-hidden"
         >
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4 select-none">
             <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
@@ -2892,7 +2893,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
         </div>
 
         {/* Templates Board */}
-        <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 lg:p-8 border border-slate-200/50 shadow-sm flex flex-col transition-all">
+        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col transition-all">
           <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-4 border-b border-slate-200/40 mb-6">
             <div>
               <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
@@ -2925,7 +2926,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 return (
                   <div
                     key={idx}
-                    className="group bg-white/40 hover:bg-white/70 backdrop-blur-xs border border-slate-200/50 hover:border-[#3765F6]/50 rounded-2xl p-5 flex flex-col gap-4 transition-all duration-200 shadow-2xs"
+                    className="group bg-white hover:bg-white/70 border border-slate-200/50 hover:border-[#3765F6]/50 rounded-2xl p-5 flex flex-col gap-4 transition-all duration-200 shadow-[0_8px_30px_rgba(0,0,0,0.01)]"
                   >
                     {/* Top Row: Info and Actions */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-slate-200/20">
@@ -3022,7 +3023,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
       {/* History of Saved Calculations - FULL WIDTH BOTTOM */}
       <div className="w-full">
-        <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 lg:p-8 border border-slate-200/50 shadow-sm flex flex-col">
+        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col">
           <div className="flex flex-col gap-4 border-b border-slate-200/40 pb-5 mb-6">
             <div className="flex justify-between items-center">
               <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
@@ -3042,7 +3043,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
           </div>
 
           {/* Directions Tabs */}
-          <div className="flex flex-wrap gap-1.5 mb-6 bg-white/30 backdrop-blur-xs p-1.5 rounded-xl border border-slate-200/40">
+          <div className="flex flex-wrap gap-1.5 mb-6 bg-white p-1.5 rounded-xl border border-slate-200/40">
             <button
               onClick={() => setActiveHistoryDirectionTab("Все")}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
@@ -3091,7 +3092,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
       </div>
 
       {conversionDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 animate-fade-in">
           <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl border border-slate-200 p-6 lg:p-8 space-y-6">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#3765F6]">
@@ -3183,7 +3184,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
       />
 
       {false && mapModalOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 animate-fade-in">
           <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col pt-1">
             <div className="px-6 py-5 border-b border-slate-100 flex flex-col gap-4">
               <div className="flex items-center justify-between">
@@ -3325,7 +3326,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider font-mono">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                     Пункт Отправления (Откуда)
                   </label>
                   <input
@@ -3337,7 +3338,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider font-mono">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                     Пункт Назначения (Куда)
                   </label>
                   <input
@@ -3414,7 +3415,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
       )}
 
       {editingCalcId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 animate-fade-in">
           <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl border border-slate-200">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-[2rem]">
               <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
@@ -3431,7 +3432,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
             <div className="p-6 space-y-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                   Направление
                 </label>
                 <input
@@ -3447,7 +3448,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                   Чистая прибыль (€)
                 </label>
                 <input
@@ -3464,7 +3465,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                   Доп. расходы (€)
                 </label>
                 <input
@@ -3481,7 +3482,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                   Дней в пути
                 </label>
                 <input
@@ -3498,7 +3499,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                   Дата
                 </label>
                 <input
@@ -3514,7 +3515,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                   Логист / Кто внёс
                 </label>
                 <input

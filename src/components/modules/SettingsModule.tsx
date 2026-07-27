@@ -1,11 +1,14 @@
 import React from 'react';
 import {useState, useEffect} from 'react'
-import {UserProfile, AppSettings, FerryTemplate, DistancePreset, CurrencyPreset, QuickLink, CarRateGroup, Driver} from '../../types'
+import {UserProfile, AppSettings, FerryTemplate, DistancePreset, QuickLink, CarRateGroup, Driver} from '../../types'
 import {dbService, directoryService, database, onValue} from '../../api';
 import {pdService} from '../../api'
 import {ref, set, push, remove} from 'firebase/database'
 import CouplingDirectoryEditor from './CouplingDirectoryEditor';
 import DirectoriesModule from './DirectoriesModule';
+import DriverDirectoryBlock from './directories/DriverDirectoryBlock';
+import CurrentPlanningSettingsBlock from './CurrentPlanningSettingsBlock';
+import PlanZagruzokSettingsBlock from './PlanZagruzokSettingsBlock';
 import { 
   Settings, 
   Plus,
@@ -48,7 +51,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const [pdSettings, setPdSettings] = useState<any>({ useDistanceLookup: false, googleMapsApiKey: '' });
   
   // Navigation Tab State
-  const [activeTab, setActiveTab] = useState<'fleet' | 'routes' | 'system' | 'links' | 'directories'>('fleet');
+  const [activeTab, setActiveTab] = useState<'fleet' | 'drivers' | 'system' | 'links' | 'directories'>('fleet');
 
   // Search states for directories
   const [carSearch, setCarSearch] = useState('');
@@ -60,7 +63,6 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   // Dynamic directory builders
   const [ferries, setFerries] = useState<FerryTemplate[]>([]);
   const [distances, setDistances] = useState<DistancePreset[]>([]);
-  const [currencies, setCurrencies] = useState<CurrencyPreset[]>([]);
   const [carRateGroups, setCarRateGroups] = useState<CarRateGroup[]>([]);
 
   // Local Form states (Tariff Group)
@@ -72,9 +74,6 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   // Local Form states (Ferry)
   const [fName, setFName] = useState('');
   const [fPrice, setFPrice] = useState<number>(0);
-
-  // Local Form states (Currency)
-  const [cCode, setCCode] = useState('');
 
   // Local Form states (Distance)
   const [dFrom, setDFrom] = useState('');
@@ -244,7 +243,6 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     const unsubPdSettings = pdService.subscribePlanDohodSettings(setPdSettings);
     const unsubFerries = dbService.getFerryTemplates(setFerries);
     const unsubDistances = dbService.getDistances(setDistances);
-    const unsubCurrencies = dbService.getCurrencies(setCurrencies);
     const unsubCars = dbService.getCarRateGroups(setCarRateGroups);
     const unsubDirs = directoryService.getDirectionsMap(setDirections);
     const unsubDrivers = dbService.getDrivers(setDrivers);
@@ -268,7 +266,6 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       unsubPdSettings();
       unsubFerries();
       unsubDistances();
-      unsubCurrencies();
       unsubCars();
       unsubDirs();
       unsubDrivers();
@@ -739,29 +736,6 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   };
 
   // Currencies handlers
-  const handleAddCurrency = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!cCode.trim()) return;
-    const code = cCode.trim().toUpperCase();
-    if (currencies.some(c => c.code === code)) {
-      toast("Такая валюта уже есть", "error");
-      return;
-    }
-    const newC: CurrencyPreset = {
-      id: "curr_" + Date.now().toString(),
-      code: code
-    };
-    dbService.saveCurrency(newC, user.name, user.role);
-    setCCode('');
-    toast("Валюта добавлена", "success");
-  };
-
-  const handleDeleteCurrency = async (id: string) => {
-    if (await showConfirm("Удалить эту валюту?")) {
-      dbService.deleteCurrency(id, user.name, user.role);
-    }
-  };
-
   const handleAddQuickLink = (e: React.FormEvent) => {
     e.preventDefault();
     if (!linkTitle || !linkUrl || !settings) return;
@@ -933,9 +907,9 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   // Tabs structure with design details and icons
   const tabList = [
     { id: 'fleet', label: 'Автопарк и Водители', icon: Truck, count: filteredKnownFleet.length + filteredDrivers.length },
-    { id: 'routes', label: 'Маршруты и Направления', icon: Compass, count: filteredDistances.length + filteredFerries.length + filteredDirections.length },
+    { id: 'drivers', label: 'База водителей', icon: Users, count: filteredDrivers.length },
     { id: 'directories', label: 'Справочники', icon: BookOpen, count: 0 },
-    { id: 'system', label: 'Системные Настройки', icon: Settings, count: currencies.length },
+    { id: 'system', label: 'Системные Настройки', icon: Settings, count: 0 },
     { id: 'links', label: 'Ссылки и Порталы', icon: ExternalLink, count: (settings?.quickLinks?.length || 0) + (settings?.externalTabs?.length || 0) }
   ] as const;
 
@@ -943,11 +917,12 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     <div className="w-full space-y-6 font-sans">
       
       {/* HEADER BAR */}
-      <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-xl shadow-slate-900/5">
+      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-              <Settings className="w-5.5 h-5.5 text-[#3765F6]" style={{ fill: '#3765F6', fillOpacity: 0.15 }} />
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">Модуль Справочники</span>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+              <Settings className="w-7 h-7 text-slate-800" />
               <span>Корпоративные справочники</span>
             </h1>
             <p className="text-xs text-slate-400 mt-1 font-medium">
@@ -996,57 +971,10 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       )}
 
 
-      {/* TAB CONTENT 2: ROUTES & LOGISTICS */}
-      {activeTab === 'routes' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          
-          {/* A. DIRECTIONS & COEFFICIENTS — перенесено в Справочники */}
-          <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 flex flex-col">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5">
-                  <TrendingUp className="h-4.5 w-4.5 text-blue-500" />
-                  <span>Направления и Коэффициенты расходов</span>
-                </h3>
-                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase">Наценка на путевой километр расхода</span>
-              </div>
-            </div>
-            <div className="p-4 bg-blue-50/60 border border-blue-100 rounded-xl text-xs text-slate-600 leading-relaxed">
-              Редактирование направлений и коэффициентов теперь в едином разделе{' '}
-              <b>«Справочники» → «Направления»</b>. Там доступны поиск, изменение коэффициента и удаление записей.
-            </div>
-          </div>
-
-          {/* B. FERRY DFS TARIFFS — перенесено в Справочники */}
-          <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 flex flex-col">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5">
-                  <Anchor className="h-4.5 w-4.5 text-blue-500" />
-                  <span>Тарифы Паромных линий DFS</span>
-                </h3>
-              </div>
-            </div>
-            <div className="p-4 bg-blue-50/60 border border-blue-100 rounded-xl text-xs text-slate-600 leading-relaxed">
-              Редактирование тарифов паромов теперь в едином разделе <b>«Справочники» → «Паромы»</b>.
-            </div>
-          </div>
-
-          {/* C. STANDARD DISTANCES — перенесено в Справочники */}
-          <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 lg:col-span-2 flex flex-col">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5">
-                  <Compass className="h-4.5 w-4.5 text-blue-500 animate-spin-slow" />
-                  <span>База стандартных расстояний RATIPA (КМ)</span>
-                </h3>
-              </div>
-            </div>
-            <div className="p-4 bg-blue-50/60 border border-blue-100 rounded-xl text-xs text-slate-600 leading-relaxed">
-              Редактирование стандартных расстояний теперь в едином разделе <b>«Справочники» → «Расстояния»</b>.
-            </div>
-          </div>
-
+      {/* TAB CONTENT 2: DRIVERS BASE */}
+      {activeTab === 'drivers' && (
+        <div className="space-y-6">
+          <DriverDirectoryBlock user={user} />
         </div>
       )}
 
@@ -1096,150 +1024,6 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
               )}
             </div>
 
-            {/* Google / OSRM Maps Integration (7 cols) */}
-            <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 lg:col-span-7 flex flex-col">
-              <div>
-                <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
-                  <MapPin className="h-4.5 w-4.5 text-blue-500" />
-                  <span>Интеграция карт и расчет расстояний</span>
-                </h3>
-                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase mt-1">Параметры OSRM / OpenRouteService маршрутизации</span>
-              </div>
-
-              <div className="space-y-4 text-xs font-medium text-slate-650 flex-1">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">Провайдер маршрутов</label>
-                    <select
-                      disabled={!isWritePermitted}
-                      value={pdSettings?.routingProvider || 'osrm'}
-                      onChange={(e) => {
-                        pdService.updatePlanDohodSettings({
-                          ...pdSettings,
-                          routingProvider: e.target.value
-                        });
-                        toast(`Провайдер изменен на ${e.target.value === 'osrm' ? 'OSRM' : 'OpenRouteService'}`, "success");
-                      }}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-450 cursor-pointer"
-                    >
-                      <option value="osrm">OSRM (Без ключа, бесплатно)</option>
-                      <option value="openrouteservice">OpenRouteService API (Требуется ключ)</option>
-                    </select>
-                  </div>
-
-                  <div className="flex items-center">
-                    <label className="flex items-center gap-3 cursor-pointer select-none bg-slate-50 border border-slate-200 p-3 rounded-xl hover:bg-slate-100 transition w-full">
-                      <input
-                        type="checkbox"
-                        disabled={!isWritePermitted}
-                        checked={pdSettings?.useDistanceLookup !== false}
-                        onChange={(e) => {
-                          pdService.updatePlanDohodSettings({
-                            ...pdSettings,
-                            useDistanceLookup: e.target.checked
-                          });
-                          toast(e.target.checked ? "Автоматический расчет расстояний включен" : "Автоматический расчет расстояний выключен", "success");
-                        }}
-                        className="w-4 h-4 text-emerald-500 border-slate-300 rounded focus:ring-emerald-400"
-                      />
-                      <div className="flex flex-col">
-                        <span className="font-bold text-slate-800 text-xs">Авторасчет</span>
-                        <span className="text-[8px] text-slate-400 font-mono uppercase">Если нет в КМ-базе</span>
-                      </div>
-                    </label>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">OpenRouteService API Key</label>
-                    <input
-                      type="password"
-                      disabled={!isWritePermitted}
-                      value={pdSettings?.openRouteServiceApiKey || ''}
-                      onChange={(e) => {
-                        pdService.updatePlanDohodSettings({
-                          ...pdSettings,
-                          openRouteServiceApiKey: e.target.value
-                        });
-                      }}
-                      placeholder="Скрыто..."
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-450 font-mono"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">Google Maps API Key (Резервный / Геокод)</label>
-                    <input
-                      type="password"
-                      disabled={!isWritePermitted}
-                      value={pdSettings?.googleMapsApiKey || ''}
-                      onChange={(e) => {
-                        pdService.updatePlanDohodSettings({
-                          ...pdSettings,
-                          googleMapsApiKey: e.target.value
-                        });
-                      }}
-                      placeholder="Скрыто..."
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-450 font-mono"
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-[#3765F6]/5 border border-[#3765F6]/20 p-3.5 rounded-xl space-y-1.5 text-slate-600 leading-relaxed text-[10px] font-mono uppercase tracking-wide">
-                  <div>• Маршруты: { pdSettings?.routingProvider === 'openrouteservice' ? 'OpenRouteService API' : 'OSRM API (Автономно)' }</div>
-                  <div>• Ключ OpenRouteService: { pdSettings?.openRouteServiceApiKey ? 'АКТИВЕН' : 'ОТСУТСТВУЕТ (OSRM Режим)' }</div>
-                  <div>• Ключ Google Maps: { pdSettings?.googleMapsApiKey ? 'УСТАНОВЛЕН ВРУЧНУЮ' : 'СИСТЕМНЫЙ' }</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* CURRENCY REGISTRY (Full width bottom panel) */}
-          <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-xl shadow-slate-900/5 space-y-4">
-            <div className="border-b border-slate-200 pb-2.5">
-              <h3 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
-                <Wallet className="h-4.5 w-4.5 text-[#3765F6]" style={{ fill: '#3765F6', fillOpacity: 0.15 }} />
-                <span>Справочник Валют RATIPA</span>
-              </h3>
-              <p className="text-xs text-slate-400 font-medium mt-1">Список валют для финансовых модулей и конвертаций</p>
-            </div>
-
-            {isWritePermitted && (
-              <form onSubmit={handleAddCurrency} className="flex gap-2.5 bg-slate-50/50 p-2.5 rounded-xl border border-slate-200 max-w-md">
-                <input
-                  type="text"
-                  placeholder="Код валюты (напр. USD, PLN, BYN)"
-                  required
-                  value={cCode}
-                  onChange={(e) => setCCode(e.target.value)}
-                  className="flex-1 px-3.5 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/10 font-bold text-slate-800 uppercase font-mono tracking-widest transition placeholder:normal-case placeholder:font-bold"
-                />
-                <button type="submit" className="bg-[#3765F6] hover:bg-[#2555E5] text-white rounded-xl text-xs font-semibold px-4 transition-all cursor-pointer shadow-sm active:scale-95 py-2.5">
-                  Добавить валюту
-                </button>
-              </form>
-            )}
-
-            <div className="flex flex-wrap gap-2.5 pt-2">
-              {currencies.map((c) => (
-                <div key={c.id} className="bg-slate-50 hover:bg-slate-100 border border-slate-200 p-2.5 px-4 rounded-xl flex items-center gap-3 transition">
-                  <span className="text-sm font-black font-mono tracking-widest text-slate-800 uppercase">{c.code}</span>
-                  {isWritePermitted && (
-                    <button 
-                      onClick={() => handleDeleteCurrency(c.id)} 
-                      className="text-rose-400 hover:text-rose-600 transition"
-                      title="Удалить"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              ))}
-              {!currencies.length && (
-                <div className="text-slate-400 font-mono font-black uppercase tracking-wider text-xs py-4">Валюты не заданы.</div>
-              )}
-            </div>
           </div>
 
         </div>
@@ -1554,10 +1338,14 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
 
           </div>
 
+          {/* Planning Blocks — из Администрирования */}
+          <CurrentPlanningSettingsBlock user={user} />
+          <PlanZagruzokSettingsBlock user={user} />
+
         </div>
       )}
 
-      {/* TAB CONTENT 5: LEGACY DIRECTORIES (перенесено из «Справочники») */}
+      {/* TAB CONTENT 5: LEGACY DIRECTORIES */}
       {activeTab === 'directories' && (
         <DirectoriesModule user={user} />
       )}

@@ -841,54 +841,44 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   };
 
   return (
-    <div className="w-full space-y-4 flex flex-col font-sans">
+    <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
       
       {/* Top Internal Tab Navigation for Baza module */}
-      <div className="bg-white/80 rounded-2xl p-4 border border-slate-200/40 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4 select-none">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 select-none pb-5 border-b border-slate-200/60">
         <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="w-9 h-9 rounded-xl bg-[#3765F6]/10 border border-[#3765F6]/20 flex items-center justify-center shrink-0">
-            <Truck className="h-4.5 w-4.5 text-[#3765F6]" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-bold text-slate-950 font-sans tracking-tight">
-                Учёт выезда
-              </h1>
-            </div>
-            <p className="text-[11px] text-slate-500 mt-0.5 font-medium hidden sm:block font-sans">
-              Контроль нахождения автомобилей на базе
-            </p>
-          </div>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+            <Truck className="w-7 h-7 text-slate-800" /> Учёт выезда
+          </h1>
         </div>
         
         <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto justify-start sm:justify-end">
-          <div className="flex items-center bg-slate-100/75 border border-slate-200/30 p-1 rounded-xl gap-1 shrink-0">
+          <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50">
             <button 
               onClick={() => setCurrentTab('base')} 
-              className={`px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-tight transition-all duration-150 whitespace-nowrap cursor-pointer ${
+              className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
                 currentTab === 'base' 
-                  ? 'bg-white text-slate-950 shadow-xs border border-slate-200/30'
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-white/20'
+                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
               }`}
             >
               На базе
             </button>
             <button 
               onClick={() => setCurrentTab('archive')} 
-              className={`px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-tight transition-all duration-150 whitespace-nowrap cursor-pointer ${
+              className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
                 currentTab === 'archive' 
-                  ? 'bg-white text-slate-950 shadow-xs border border-slate-200/30'
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-white/20'
+                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
               }`}
             >
               Архив
             </button>
             <button 
               onClick={() => setCurrentTab('history')} 
-              className={`px-3.5 py-1.5 rounded-lg text-[11px] font-bold tracking-tight transition-all duration-150 whitespace-nowrap cursor-pointer ${
+              className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
                 currentTab === 'history' 
-                  ? 'bg-white text-slate-950 shadow-xs border border-slate-200/30'
-                  : 'text-slate-500 hover:text-slate-800 hover:bg-white/20'
+                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
               }`}
             >
               История
@@ -898,52 +888,37 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
         </div>
       </div>
 
-      {/* Dynamic Counter widgets on top (Full width) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5">
+      {/* Dynamic Counter widgets on top (Full width) — PlanDohod KPI style */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 bg-slate-50/40 border border-slate-200/50 rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.01)] mt-6">
          {/* Всего на базе */}
-         <div className="bg-white/80 rounded-2xl p-4.5 border border-slate-200/40 shadow-3xs flex justify-between items-center transition-all hover:scale-[1.01]">
-            <div className="flex flex-col">
-               <span className="text-[11px] font-medium tracking-tight text-slate-400 font-sans">Всего на базе ТС</span>
-               <span className="text-2xl font-bold text-slate-950 mt-1 font-sans tracking-tight">{wTotal}</span>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-[#3765F6]/10 flex items-center justify-center border border-[#3765F6]/10">
-               <Truck className="h-5 w-5 text-[#3765F6]" />
-            </div>
+         <div className="flex flex-col">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Всего на базе ТС</span>
+            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900 font-sans tabular-nums">{wTotal}</span>
          </div>
          {/* В ремонте */}
-         <div className="bg-white/80 rounded-2xl p-4.5 border border-slate-200/40 shadow-3xs flex justify-between items-center transition-all hover:scale-[1.01]">
-            <div className="flex flex-col">
-               <span className="text-[11px] font-medium tracking-tight text-slate-400 font-sans">В ремонте ТС</span>
-               <span className="text-2xl font-bold text-rose-600 mt-1 font-sans tracking-tight">{wRepair}</span>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center border border-rose-500/10">
-               <Wrench className="h-5 w-5 text-rose-600" />
-            </div>
+         <div className="flex flex-col lg:border-l lg:border-slate-200/60 lg:pl-6">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1.5">В ремонте ТС</span>
+            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-rose-600 font-sans tabular-nums">{wRepair}</span>
          </div>
          {/* Готовы к рейсу */}
-         <div className="bg-white/80 rounded-2xl p-4.5 border border-slate-200/40 shadow-3xs flex justify-between items-center transition-all hover:scale-[1.01]">
-            <div className="flex flex-col">
-               <span className="text-[11px] font-medium tracking-tight text-slate-400 font-sans">Готовы к рейсу ТС</span>
-               <span className="text-2xl font-bold text-emerald-600 mt-1 font-sans tracking-tight">{wReady}</span>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/10">
-               <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            </div>
+         <div className="flex flex-col lg:border-l lg:border-slate-200/60 lg:pl-6">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Готовы к рейсу ТС</span>
+            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-emerald-600 font-sans tabular-nums">{wReady}</span>
          </div>
       </div>
 
       <div className="space-y-6">
           
           <div className={currentTab === 'base' ? '' : 'hidden'}>
-             <div className="bg-white/80 rounded-2xl p-5 lg:p-6 border border-slate-200/40 shadow-xs">
-                 <h2 className="text-sm font-bold text-slate-900 border-b border-slate-100/50 pb-3 mb-5 flex items-center gap-2 font-sans tracking-tight">
+             <div className="pt-6">
+                 <h2 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
                     <Plus className="h-4 w-4 text-[#3765F6]" />
                     Добавить новый автомобиль
                  </h2>
                  <form onSubmit={handleAddNewCar}>
                     {/* Quick coupling picker — pulls a coupling (tractor+trailer+driver) from the shared center */}
                     <div className="mb-4">
-                      <label className="text-xs font-semibold text-slate-600 block font-sans mb-1">Быстрый выбор из общей базы</label>
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Быстрый выбор из общей базы</label>
                       <CouplingPicker
                         onSelect={(rec) => {
                           if (!rec) return;
@@ -970,74 +945,77 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-600 block font-sans">Госномер авто *</label>
-                            <div className="text-xs font-bold uppercase py-2 px-1 text-slate-800">
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Госномер авто *</label>
+                            <div className="text-xs font-semibold uppercase py-2 px-1 text-slate-800">
                               {formData.carNumber || <span className="text-slate-400 font-normal">выберите сцепку выше</span>}
                             </div>
                          </div>
                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-600 block font-sans">ФИО Водителя</label>
-                            <div className="text-xs font-semibold py-2 px-1 text-slate-800">
-                              {formData.driverName || <span className="text-slate-400 font-normal">—</span>}
-                            </div>
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">ФИО Водителя</label>
+                            <input type="text"
+                              value={formData.driverName || ''}
+                              onChange={(e) => setFormData((f) => ({ ...f, driverName: e.target.value }))}
+                              className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full focus:border-[#3765F6]"
+                              placeholder="—"
+                            />
                          </div>
                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-600 block font-sans">Прибыл на базу</label>
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Прибыл на базу</label>
                             <input 
                               type="date" 
                               disabled={!canEditField('dateArrival')} 
                               value={formData.dateArrival} 
                               onChange={e => handleFormChange(e, 'dateArrival')} 
-                              className="w-full bg-white/60 hover:bg-white/90 border border-slate-200/60 rounded-xl px-3 py-2 text-xs font-medium disabled:opacity-50 outline-none focus:border-[#3765F6] focus:bg-white transition-all duration-150" 
+                              className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" 
                             />
                          </div>
                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-600 block font-sans truncate" title="Срок готовности">Срок готовности</label>
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="Срок готовности">Срок готовности</label>
                             <input 
                               type="date" 
                               disabled={!canEditField('dateLoading')} 
                               value={formData.dateLoading} 
                               onChange={e => handleFormChange(e, 'dateLoading')} 
-                              className="w-full bg-white/60 hover:bg-white/90 border border-slate-200/60 rounded-xl px-3 py-2 text-xs font-medium disabled:opacity-50 outline-none focus:border-[#3765F6] focus:bg-white transition-all duration-150" 
+                              className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" 
                             />
                          </div>
                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-600 block font-sans truncate">Заявка на ремонт</label>
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate">Заявка на ремонт</label>
                             <input 
                               type="date" 
                               disabled={!canEditField('dateRepairStart')} 
                               value={formData.dateRepairStart} 
                               onChange={e => handleFormChange(e, 'dateRepairStart')} 
-                              className="w-full bg-white/60 hover:bg-white/90 border border-slate-200/60 rounded-xl px-3 py-2 text-xs font-medium disabled:opacity-50 outline-none focus:border-[#3765F6] focus:bg-white transition-all duration-150" 
+                              className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" 
                             />
                          </div>
                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-600 block font-sans truncate">Завершение ремонта</label>
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate">Завершение ремонта</label>
                             <input 
                               type="date" 
                               disabled={!canEditField('dateRepairEnd')} 
                               value={formData.dateRepairEnd} 
                               onChange={e => handleFormChange(e, 'dateRepairEnd')} 
-                              className="w-full bg-white/60 hover:bg-white/90 border border-slate-200/60 rounded-xl px-3 py-2 text-xs font-medium disabled:opacity-50 outline-none focus:border-[#3765F6] focus:bg-white transition-all duration-150" 
+                              className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" 
                             />
                          </div>
                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-600 block font-sans">Фактический выезд</label>
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Фактический выезд</label>
                             <input 
                               type="date" 
                               disabled={!canEditField('dateDeparture')} 
                               value={formData.dateDeparture} 
                               onChange={e => handleFormChange(e, 'dateDeparture')} 
-                              className="w-full bg-white/60 hover:bg-white/90 border border-slate-200/60 rounded-xl px-3 py-2 text-xs font-medium disabled:opacity-50 outline-none focus:border-[#3765F6] focus:bg-white transition-all duration-150" 
+                              className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" 
                             />
                          </div>
                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-600 block font-sans">Примечание</label>
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Примечание</label>
                             <input 
                               disabled={!canEditField('comment')} 
                               value={formData.comment} 
                               onChange={e => handleFormChange(e, 'comment')} 
-                              className="w-full bg-white/60 hover:bg-white/90 border border-slate-200/60 rounded-xl px-3 py-2 text-xs font-medium disabled:opacity-50 outline-none focus:border-[#3765F6] focus:bg-white transition-all duration-150" 
+                              className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" 
                               placeholder="..." 
                             />
                          </div>
@@ -1045,7 +1023,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                      <button 
                        type="submit" 
                        disabled={!allFields.some(f => canEditField(f))} 
-                       className="bg-[#3765F6] hover:bg-[#3765F6]/90 font-sans text-white text-xs font-semibold tracking-tight py-2.5 px-5 rounded-xl transition-all duration-150 active:scale-95 shadow-md shadow-[#3765F6]/10 border border-[#3765F6]/10 disabled:opacity-40 cursor-pointer mt-2"
+                       className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold px-4 py-2.5 transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-40 mt-2"
                      >
                         Добавить в контроль
                      </button>
@@ -1057,9 +1035,9 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
           </div>
 
           <div className={currentTab !== 'history' ? '' : 'hidden'}>
-             <div className="bg-white/80 rounded-2xl p-5 border border-slate-200/40 shadow-xs flex flex-col">
+             <div className="pt-6 flex flex-col">
                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-5">
-                    <h2 className="text-base font-bold text-slate-900 font-sans tracking-tight">
+                    <h2 className="text-base font-semibold text-slate-800 tracking-tight">
                        {currentTab === 'base' ? 'Автомобили на базе' : 'Архив выехавших автомобилей'}
                     </h2>
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
@@ -1067,13 +1045,13 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                          value={searchQuery} 
                          onChange={e => setSearchQuery(e.target.value)} 
                          type="text" 
-                         className="w-full sm:w-64 bg-white/60 hover:bg-white/90 border border-slate-200/60 text-xs font-medium px-3.5 py-2 rounded-xl outline-none focus:border-[#3765F6] transition-all" 
+                         className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full sm:w-64 focus:border-[#3765F6]" 
                          placeholder="Быстрый поиск..." 
                        />
                        <select
                          value={selectedDispatcher}
                          onChange={e => setSelectedDispatcher(e.target.value)}
-                         className="bg-white/60 hover:bg-white/90 border border-slate-200/60 text-xs font-medium px-3.5 py-2 rounded-xl outline-none transition-all cursor-pointer"
+                         className="bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold outline-none px-3 py-2 cursor-pointer"
                        >
                           <option value="Все автомобили">Все диспетчеры</option>
                           {dispatcherList.map(disp => (
@@ -1083,7 +1061,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                        <select 
                          value={sortMode} 
                          onChange={e => setSortMode(e.target.value)} 
-                         className="bg-white/60 hover:bg-white/90 border border-slate-200/60 text-xs font-medium px-3.5 py-2 rounded-xl outline-none min-w-[170px] max-w-[250px] transition-all"
+                         className="bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold outline-none px-3 py-2 min-w-[170px] max-w-[250px]"
                        >
                           <option value="default">Умная сортировка</option>
                           <optgroup label="По номеру авто">
@@ -1110,47 +1088,47 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 <table className="w-full text-left border-separate border-spacing-y-2">
   <thead>
     <tr>
-      <th className="text-[11px] font-bold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Госномер</th>
-      <th className="text-[11px] font-bold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Водитель</th>
-      <th className="text-[11px] font-bold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Прибыл на базу</th>
-      <th className="text-[11px] font-bold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Срок готовности</th>
-      <th className="text-[11px] font-bold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Заявка на ремонт</th>
-      <th className="text-[11px] font-bold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Завершение ремонта</th>
-      <th className="text-[11px] font-bold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Фактический выезд</th>
-      <th className="text-[11px] font-bold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Примечание</th>
-      <th className="text-[11px] font-bold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Действия</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Госномер</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Водитель</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Прибыл на базу</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Срок готовности</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Заявка на ремонт</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Завершение ремонта</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Фактический выезд</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Примечание</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Действия</th>
     </tr>
   </thead>
   <tbody>
     {filteredList.map((v) => (
-      <tr key={`${v.id}-${normalizePlate(v.carNumber)}`} className="group cursor-pointer">
-        <td onClick={() => openCarModal(v)} className="bg-white/40 border-y border-l border-slate-200/30 rounded-l-xl px-4 py-3.5 group-hover:bg-white/80 transition duration-150">
-          <span className="font-bold text-xs bg-white text-slate-900 border border-slate-200/60 shadow-3xs px-2.5 py-1.5 rounded-xl font-mono tracking-wider inline-block select-all group-hover:border-[#3765F6]/40 transition-colors">{v.carNumber}</span>
+      <tr key={`${v.id}-${normalizePlate(v.carNumber)}`} data-nav-item className="group cursor-pointer">
+        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 group-hover:bg-slate-50 transition duration-150">
+          <span className="font-semibold text-sm text-slate-800 font-mono tracking-wider inline-block select-all">{v.carNumber}</span>
         </td>
-        <td onClick={() => openCarModal(v)} className="bg-white/40 border-y border-slate-200/30 px-4 py-3.5 text-sm font-semibold text-slate-800 group-hover:bg-white/80 transition">{v.displayDriver || '—'}</td>
-        <td onClick={() => openCarModal(v)} className="bg-white/40 border-y border-slate-200/30 px-4 py-3.5 text-xs font-medium text-slate-600 group-hover:bg-white/80 transition">
-          <span className="bg-white/60 border border-slate-200/40 px-2.5 py-1.5 rounded-lg whitespace-nowrap font-sans">{v.dateArrival ? v.dateArrival.split('-').reverse().join('.') : '—'}</span>
+        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 text-sm font-medium text-slate-700 group-hover:bg-slate-50 transition">{v.displayDriver || '—'}</td>
+        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 text-sm font-medium text-slate-500 group-hover:bg-slate-50 transition">
+          {v.dateArrival ? v.dateArrival.split('-').reverse().join('.') : '—'}
         </td>
-        <td onClick={() => openCarModal(v)} className="bg-white/40 border-y border-slate-200/30 px-4 py-3.5 text-xs font-medium text-slate-600 group-hover:bg-white/80 transition">
-          <span className="bg-white/60 border border-slate-200/40 px-2.5 py-1.5 rounded-lg whitespace-nowrap font-sans">{v.dateLoading ? v.dateLoading.split('-').reverse().join('.') : '—'}</span>
+        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 text-sm font-medium text-slate-500 group-hover:bg-slate-50 transition">
+          {v.dateLoading ? v.dateLoading.split('-').reverse().join('.') : '—'}
         </td>
-        <td onClick={() => openCarModal(v)} className="bg-white/40 border-y border-slate-200/30 px-4 py-3.5 text-xs font-medium text-slate-600 group-hover:bg-white/80 transition">
-          <span className="bg-white/60 border border-slate-200/40 px-2.5 py-1.5 rounded-lg whitespace-nowrap font-sans">{v.dateRepairStart ? v.dateRepairStart.split('-').reverse().join('.') : '—'}</span>
+        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 text-sm font-medium text-slate-500 group-hover:bg-slate-50 transition">
+          {v.dateRepairStart ? v.dateRepairStart.split('-').reverse().join('.') : '—'}
         </td>
-        <td onClick={() => openCarModal(v)} className="bg-white/40 border-y border-slate-200/30 px-4 py-3.5 text-xs font-medium text-slate-600 group-hover:bg-white/80 transition">
-          <span className="bg-white/60 border border-slate-200/40 px-2.5 py-1.5 rounded-lg whitespace-nowrap font-sans">{v.dateRepairEnd ? v.dateRepairEnd.split('-').reverse().join('.') : '—'}</span>
+        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 text-sm font-medium text-slate-500 group-hover:bg-slate-50 transition">
+          {v.dateRepairEnd ? v.dateRepairEnd.split('-').reverse().join('.') : '—'}
         </td>
-        <td onClick={() => openCarModal(v)} className="bg-white/40 border-y border-slate-200/30 px-4 py-3.5 text-xs font-medium text-slate-600 group-hover:bg-white/80 transition">
-          <span className={`px-2.5 py-1.5 rounded-lg border whitespace-nowrap font-sans ${
+        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 text-sm font-medium group-hover:bg-slate-50 transition">
+          <span className={`whitespace-nowrap font-sans ${
             v.dateDeparture
-                ? 'bg-emerald-500/10 border-emerald-500/15 text-emerald-800 font-semibold' 
-                : 'bg-white/60 border-slate-200/40 text-slate-500'
+                ? 'text-emerald-700 font-semibold' 
+                : 'text-slate-500'
           }`}>
             {v.dateDeparture ? v.dateDeparture.split('-').reverse().join('.') : '—'}
           </span>
         </td>
-        <td onClick={() => openCarModal(v)} className="bg-white/40 border-y border-slate-200/30 px-4 py-3.5 text-xs text-slate-500 group-hover:bg-white/80 transition max-w-[180px] truncate">{v.comment || v.notes || '—'}</td>
-        <td className="bg-white/40 border-y border-r border-slate-200/30 rounded-r-xl px-4 py-3.5 group-hover:bg-white/80 transition">
+        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 text-sm text-slate-400 group-hover:bg-slate-50 transition max-w-[180px] truncate">{v.comment || v.notes || '—'}</td>
+        <td className="border-t border-slate-100 px-4 py-3.5 group-hover:bg-slate-50 transition">
           <div className="flex gap-1.5 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
             <button 
               onClick={(e) => { e.stopPropagation(); openCarModal(v); }} 
@@ -1181,11 +1159,11 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                      <div 
                        key={`${v.id}-${normalizePlate(v.carNumber)}`} 
                        onClick={() => openCarModal(v)}
-                       className="bg-white/60 hover:bg-white/90 border border-slate-200/40 rounded-2xl p-4 shadow-3xs transition-all cursor-pointer flex flex-col gap-3"
+                       className="bg-slate-50 rounded-2xl p-4 border border-slate-200/50 transition-all cursor-pointer flex flex-col gap-3"
                      >
                        <div className="flex justify-between items-center">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold text-xs bg-white text-slate-900 border border-slate-200/60 shadow-3xs px-2.5 py-1.5 rounded-xl font-mono tracking-wider">{v.carNumber}</span>
+                            <span className="font-semibold text-xs bg-white text-slate-800 border border-slate-200/60 shadow-3xs px-2.5 py-1.5 rounded-xl font-mono tracking-wider">{v.carNumber}</span>
                             <span className="text-xs font-semibold text-slate-800">{v.displayDriver || "—"}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
@@ -1201,20 +1179,20 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                        </div>
                        
                        <div className="grid grid-cols-2 gap-2 text-[11px]">
-                         <div className="bg-white/40 p-2.5 rounded-xl border border-slate-200/20">
-                           <span className="block text-[9px] text-slate-400 uppercase font-semibold mb-1 tracking-wider">Прибыл на базу</span>
+                         <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-200/50">
+                           <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Прибыл на базу</span>
                            <span className="font-medium text-slate-700">{v.dateArrival ? v.dateArrival.split("-").reverse().join(".") : "—"}</span>
                          </div>
-                         <div className="bg-white/40 p-2.5 rounded-xl border border-slate-200/20">
-                           <span className="block text-[9px] text-slate-400 uppercase font-semibold mb-1 tracking-wider">Срок готовности</span>
+                         <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-200/50">
+                           <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Срок готовности</span>
                            <span className="font-medium text-slate-700">{v.dateLoading ? v.dateLoading.split("-").reverse().join(".") : "—"}</span>
                          </div>
-                         <div className="bg-white/40 p-2.5 rounded-xl border border-slate-200/20">
-                           <span className="block text-[9px] text-slate-400 uppercase font-semibold mb-1 tracking-wider">Заявка на ремонт</span>
+                         <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-200/50">
+                           <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Заявка на ремонт</span>
                            <span className="font-medium text-slate-700">{v.dateRepairStart ? v.dateRepairStart.split("-").reverse().join(".") : "—"}</span>
                          </div>
-                         <div className="bg-white/40 p-2.5 rounded-xl border border-slate-200/20">
-                           <span className="block text-[9px] text-slate-400 uppercase font-semibold mb-1 tracking-wider">Завершение ремонта</span>
+                         <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-200/50">
+                           <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Завершение ремонта</span>
                            <span className="font-medium text-slate-700">{v.dateRepairEnd ? v.dateRepairEnd.split("-").reverse().join(".") : "—"}</span>
                          </div>
                        </div>
@@ -1234,7 +1212,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                      </div>
                    ))}
                    {filteredList.length === 0 && (
-                     <div className="text-center p-8 text-slate-400 font-medium bg-white/40 rounded-2xl border border-slate-200/30">
+                     <div className="text-center p-8 text-slate-400 font-medium bg-slate-50 rounded-2xl border border-slate-200/50">
                        Нет записей
                      </div>
                    )}
@@ -1243,20 +1221,20 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
           </div>
 
           <div className={currentTab === 'history' ? '' : 'hidden'}>
-             <div className="bg-white/80 rounded-2xl p-5 lg:p-6 border border-slate-200/40 shadow-xs flex flex-col">
-                 <h2 className="text-sm font-bold text-slate-900 border-b border-slate-100/50 pb-4 mb-4 font-sans tracking-tight flex items-center gap-2">
+             <div className="pt-6 flex flex-col">
+                 <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-4 mb-4 flex items-center gap-2">
                     <History className="h-4 w-4 text-[#3765F6]" />
                     История всех действий в системе
                  </h2>
                  <div className="space-y-3 max-h-[700px] overflow-y-auto pr-2">
                     {[...globalHistory].reverse().slice(0, historyLimit).map(h => (
-                       <div key={h.id} className="bg-white border border-slate-200/40 rounded-2xl p-4 flex flex-col gap-3 shadow-3xs hover:border-[#3765F6]/10 transition-all">
+                       <div key={h.id} className="bg-slate-50 rounded-2xl p-4 border border-slate-200/50 flex flex-col gap-3 hover:border-[#3765F6]/20 transition-all">
                           <div className="flex items-center flex-wrap gap-3">
                              <span className="text-xs font-semibold text-slate-400 font-mono">{h.date}</span>
-                             <span className="text-xs font-bold bg-white px-2.5 py-1 rounded-xl border border-slate-200/60 shadow-3xs font-mono">{h.carNumber}</span>
+                             <span className="text-xs font-semibold bg-white px-2.5 py-1 rounded-xl border border-slate-200/60 shadow-3xs font-mono text-slate-800">{h.carNumber}</span>
                              <span className="text-xs font-semibold text-slate-700 bg-[#3765F6]/5 text-[#3765F6] border border-[#3765F6]/10 px-2.5 py-1 rounded-xl">{h.user}</span>
                           </div>
-                          <div className="text-xs text-slate-700 bg-slate-50/50 p-3 rounded-xl border border-slate-200/30 flex flex-wrap items-center gap-2">
+                          <div className="text-xs text-slate-700 bg-white p-3 rounded-xl border border-slate-200/30 flex flex-wrap items-center gap-2">
                              <span className="font-bold text-slate-800 border-r border-slate-200/60 pr-2">{getNormalizedFieldLabel(h.field)}:</span>
                              <span className={`text-rose-500 font-semibold ${h.actionType==='delete'?'line-through-none':''}`}>{h.old}</span>
                              {h.actionType !== 'delete' && (
@@ -1272,7 +1250,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     {globalHistory.length > historyLimit && (
                        <button 
                           onClick={() => setHistoryLimit(prev => prev + 100)}
-                          className="w-full py-3 bg-white/65 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl transition duration-150 cursor-pointer text-center tracking-tight border border-slate-200/50 active:scale-95"
+                          className="w-full py-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl transition-all cursor-pointer text-center tracking-tight border border-slate-200/50 active:scale-95 shadow-sm"
                        >
                           Загрузить еще (Показано {historyLimit} из {globalHistory.length})
                        </button>
@@ -1288,13 +1266,13 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
       {/* Car Editor Modal */}
       <AnimatePresence>
         {isCarModalOpen && (
-           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-              <motion.div initial={{y:30, scale:0.96}} animate={{y:0, scale:1}} exit={{y:20, opacity:0, scale:0.96}} className="bg-white text-slate-900 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-[0_24px_70px_rgba(0,0,0,0.12)] border border-slate-200/50 overflow-hidden font-sans">
-                 <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
+           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+              <motion.div initial={{y:30, scale:0.96}} animate={{y:0, scale:1}} exit={{y:20, opacity:0, scale:0.96}} className="bg-white text-slate-900 rounded-[2rem] w-full max-w-4xl max-h-[92vh] flex flex-col shadow-[0_8px_30px_rgba(0,0,0,0.01)] border border-slate-200/50 overflow-hidden">
+                 <div className="p-5 border-b border-slate-200/50 flex justify-between items-center bg-white shrink-0">
                     <div className="flex items-center gap-3">
-                       <h2 className="text-sm font-bold text-slate-800 tracking-tight">Карточка автомобиля</h2>
+                       <h2 className="text-sm font-semibold text-slate-800 tracking-tight">Карточка автомобиля</h2>
                        {modalData.carNumber && (
-                          <span className="font-bold text-[11px] bg-white text-slate-950 border border-slate-200 shadow-3xs px-2.5 py-1 rounded-lg font-mono tracking-wider">
+                          <span className="font-semibold text-[11px] bg-white text-slate-800 border border-slate-200 shadow-3xs px-2.5 py-1 rounded-lg font-mono tracking-wider">
                              {modalData.carNumber}
                           </span>
                        )}
@@ -1313,18 +1291,18 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 
                  <div className="p-6 overflow-y-auto flex-1 bg-white space-y-6 custom-scrollbar">
                     {/* Summary Widgets */}
-                    <div className="bg-slate-50/70 border border-slate-200/40 rounded-2xl p-4 lg:p-5">
+                    <div className="bg-slate-50 rounded-2xl p-4 lg:p-5 border border-slate-200/50">
                        <h3 className="text-[11px] font-bold uppercase text-slate-400 tracking-wider mb-3 block">Аналитика простоя по записи</h3>
                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                          <div className="bg-white border border-slate-200/40 rounded-xl p-3 text-center shadow-3xs hover:border-[#3765F6]/20 transition-all">
+                          <div className="bg-white rounded-xl p-3 text-center border border-slate-200/50 hover:border-[#3765F6]/20 transition-all">
                              <div className="text-[10px] font-semibold text-slate-400 mb-1">Дни отдыха водит.</div>
                              <div className="text-lg font-bold text-slate-800">{getDaysBetween(modalData.dateArrival, modalData.dateLoading)}</div>
                           </div>
-                          <div className="bg-white border border-slate-200/40 rounded-xl p-3 text-center shadow-3xs hover:border-[#3765F6]/20 transition-all">
+                          <div className="bg-white rounded-xl p-3 text-center border border-slate-200/50 hover:border-[#3765F6]/20 transition-all">
                              <div className="text-[10px] font-semibold text-slate-400 mb-1">Ожидание ремонта</div>
                              <div className="text-lg font-bold text-rose-500">{getDaysBetween(modalData.dateArrival, modalData.dateRepairStart)}</div>
                           </div>
-                          <div className="bg-white border border-slate-200/40 rounded-xl p-3 text-center shadow-3xs hover:border-[#3765F6]/20 transition-all">
+                          <div className="bg-white rounded-xl p-3 text-center border border-slate-200/50 hover:border-[#3765F6]/20 transition-all">
                              <div className="text-[10px] font-semibold text-slate-400 mb-1">Дни ремонта</div>
                              <div className="text-lg font-bold text-[#3765F6]">{getDaysBetween(modalData.dateRepairStart, modalData.dateRepairEnd)}</div>
                           </div>
@@ -1337,7 +1315,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                        <div className="space-y-1">
-                          <label className="text-[11px] font-semibold text-slate-500 block mb-1">Госномер автомобиля</label>
+                          <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Госномер автомобиля</label>
                           <CouplingPicker
                             onSelect={(rec) => {
                               if (!rec) return;
@@ -1358,7 +1336,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                           </div>
                        </div>
                         <div className="space-y-1">
-                           <label className="text-[11px] font-semibold text-slate-500 block mb-1">ФИО Водителя</label>
+                           <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">ФИО Водителя</label>
                            <div className="text-xs font-semibold py-2 px-1 text-slate-800">
                              {modalData.driverName || <span className="text-slate-400 font-normal">—</span>}
                            </div>
@@ -1367,80 +1345,80 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
                        <div className="space-y-1">
-                          <label className="text-[11px] font-semibold text-slate-500 block mb-1 truncate" title="Прибыл на базу">Прибыл на базу</label>
+                          <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="Прибыл на базу">Прибыл на базу</label>
                           <input 
                             type="date" 
                             disabled={!canEditField('dateArrival')} 
                             value={modalData.dateArrival||''} 
                             onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateArrival: true})); setModalData((mm) => ({...mm, dateArrival: e.target.value})); }}
                             onKeyDown={handleInputKeyDown} 
-                            className="w-full bg-slate-50/50 hover:bg-slate-50 border border-slate-200/50 text-slate-800 rounded-xl px-3 py-2.5 text-xs font-semibold disabled:opacity-50 outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-[#3765F6]/5 focus:bg-white transition-all" 
+                            className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" 
                           />
                        </div>
                        <div className="space-y-1">
-                          <label className="text-[11px] font-semibold text-slate-500 block mb-1 truncate text-[#3765F6]" title="К какому числу должна быть готова машина">Срок готовности</label>
+                          <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="К какому числу должна быть готова машина">Срок готовности</label>
                           <input 
                             type="date" 
                             disabled={!canEditField('dateLoading')} 
                             value={modalData.dateLoading||''} 
                             onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateLoading: true})); setModalData((mm) => ({...mm, dateLoading: e.target.value})); }}
                             onKeyDown={handleInputKeyDown} 
-                            className="w-full bg-slate-50/50 hover:bg-slate-50 border border-slate-200/50 text-slate-800 rounded-xl px-3 py-2.5 text-xs font-semibold disabled:opacity-50 outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-[#3765F6]/5 focus:bg-white transition-all" 
+                            className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" 
                           />
                        </div>
                        <div className="space-y-1">
-                          <label className="text-[11px] font-semibold text-slate-500 block mb-1 truncate" title="Дата подачи заявки на ремонт">Заявка на ремонт</label>
+                          <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="Дата подачи заявки на ремонт">Заявка на ремонт</label>
                           <input 
                             type="date" 
                             disabled={!canEditField('dateRepairStart')} 
                             value={modalData.dateRepairStart||''} 
                             onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateRepairStart: true})); setModalData((mm) => ({...mm, dateRepairStart: e.target.value})); }}
                             onKeyDown={handleInputKeyDown} 
-                            className="w-full bg-slate-50/50 hover:bg-slate-50 border border-slate-200/50 text-slate-800 rounded-xl px-3 py-2.5 text-xs font-semibold disabled:opacity-50 outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-[#3765F6]/5 focus:bg-white transition-all" 
+                            className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" 
                           />
                        </div>
                        <div className="space-y-1">
-                          <label className="text-[11px] font-semibold text-slate-500 block mb-1 truncate" title="Дата окончания ремонта">Завершение ремонта</label>
+                          <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="Дата окончания ремонта">Завершение ремонта</label>
                           <input 
                             type="date" 
                             disabled={!canEditField('dateRepairEnd')} 
                             value={modalData.dateRepairEnd||''} 
                             onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateRepairEnd: true})); setModalData((mm) => ({...mm, dateRepairEnd: e.target.value})); }}
                             onKeyDown={handleInputKeyDown} 
-                            className="w-full bg-slate-50/50 hover:bg-slate-50 border border-slate-200/50 text-slate-800 rounded-xl px-3 py-2.5 text-xs font-semibold disabled:opacity-50 outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-[#3765F6]/5 focus:bg-white transition-all" 
+                            className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" 
                           />
                        </div>
                        <div className="space-y-1">
-                          <label className="text-[11px] font-semibold text-slate-500 block mb-1 truncate" title="Фактический выезд">Фактический выезд</label>
+                          <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="Фактический выезд">Фактический выезд</label>
                           <input 
                             type="date" 
                             disabled={!canEditField('dateDeparture')} 
                             value={modalData.dateDeparture||''} 
                             onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateDeparture: true})); setModalData((mm) => ({...mm, dateDeparture: e.target.value})); }}
                             onKeyDown={handleInputKeyDown} 
-                            className="w-full bg-slate-50/50 hover:bg-slate-50 border border-slate-200/50 text-slate-800 rounded-xl px-3 py-2.5 text-xs font-semibold disabled:opacity-50 outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-[#3765F6]/5 focus:bg-white transition-all" 
+                            className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" 
                           />
                        </div>
                     </div>
 
                     <div className="space-y-1">
-                       <label className="text-[11px] font-semibold text-slate-500 block mb-1">Примечание</label>
+                       <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Примечание</label>
                        <input 
                          disabled={!canEditField('comment')} 
                          value={modalData.comment||''} 
                          onChange={(e)=>{ setTouchedFields(prev => ({...prev, comment: true})); setModalData((mm) => ({...mm, comment: e.target.value})); }}
                          onKeyDown={handleInputKeyDown} 
-                         className="w-full bg-slate-50/50 hover:bg-slate-50 border border-slate-200/50 text-slate-800 rounded-xl px-3.5 py-2.5 text-xs font-semibold disabled:opacity-50 outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-[#3765F6]/5 focus:bg-white transition-all" 
+                         className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" 
                        />
                     </div>
 
-                    <div className="bg-slate-50/70 border border-slate-200/40 rounded-2xl p-4 lg:p-5">
+                    <div className="bg-slate-50 rounded-2xl p-4 lg:p-5 border border-slate-200/50">
                        <h3 className="text-[11px] font-bold uppercase text-slate-400 tracking-wider mb-3 block">ЖУРНАЛ ИЗМЕНЕНИЙ ЗАПИСИ</h3>
                        <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
                            {modalData.history && Object.keys(modalData.history).reverse().map(hk => {
                               const h = modalData.history[hk];
                               return (
-                                 <div key={hk} className="bg-white border border-slate-200/40 rounded-xl p-3 flex flex-col gap-1 shadow-3xs">
+                                 <div className="bg-white rounded-xl p-3 flex flex-col gap-1 border border-slate-200/50">
                                     <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold font-sans">
                                        <span>{h.date}</span> • <span className="text-[#3765F6]">{h.user}</span>
                                     </div>
@@ -1455,18 +1433,18 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     </div>
                  </div>
 
-                 <div className="p-4 border-t border-slate-100 flex justify-end items-center gap-2 bg-slate-50/50 shrink-0">
+                 <div className="p-4 border-t border-slate-200/50 flex justify-end items-center gap-2 bg-white shrink-0">
                     {currentTab === 'base' && !isMechanic && (
                       <button 
                         onClick={moveCarToArchive} 
-                        className="px-4 py-2 bg-[#3765F6] hover:bg-[#3765F6]/90 text-white text-xs font-semibold rounded-xl transition-all duration-150 shadow-sm shadow-[#3765F6]/10 hover:shadow-[#3765F6]/25 active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                        className="bg-[#3765F6] hover:bg-[#2555E5] text-white rounded-xl text-xs font-semibold px-4 py-2.5 transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
                       >
                          Выехал в рейс
                       </button>
                     )}
                     <button 
                       onClick={saveCarModal} 
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all duration-150 shadow-sm shadow-emerald-600/10 hover:shadow-emerald-600/25 active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold px-4 py-2.5 transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
                     >
                        Сохранить
                     </button>

@@ -53,6 +53,18 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   );
   const [archiveMonth, setArchiveMonth] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  // Закрытие модалки редактирования по ESC (независимо от глобального хука)
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setIsModalOpen(false);
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [isModalOpen]);
   const [modalTab, setModalTab] = useState<"main" | "potential">("main");
   const [sortConfig, setSortConfig] = useState<{
     key: string;
@@ -1707,7 +1719,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-        <div className="bg-white/90 backdrop-blur-xl rounded-3xl w-full max-w-[1400px] shadow-2xl overflow-hidden flex flex-col relative my-auto">
+        <div className="bg-white/90 backdrop-blur-xl rounded-3xl w-full max-w-[1400px] shadow-2xl overflow-hidden flex flex-col relative m-2 sm:m-4 h-[calc(100vh-1rem)] sm:h-[calc(100vh-2rem)]">
           
           {/* Header */}
           <div className="bg-white px-6 py-4 flex flex-col md:flex-row md:items-center justify-between sticky top-0 z-10 border-b border-slate-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
@@ -1759,10 +1771,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             </div>
           </div>
 
-          <div className="p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto custom-scrollbar max-h-[80vh]">
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 lg:p-8 space-y-6">
             {modalTab === "main" ? (
               <>
-                <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-6">
+                <div className="grid grid-cols-1 gap-6">
                   {/* Основные реквизиты */}
                   <div className="bg-white/50 backdrop-blur-md rounded-3xl p-6 border border-slate-200/50 flex flex-col">
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2 mb-5">
@@ -2222,154 +2234,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                   </div>
                 </div>
 
-                {/* Dark Finance Dashboard */}
-                <div className="bg-slate-950 rounded-2xl p-6 text-white border border-slate-900 shadow-md">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-                    {/* Card 1: Profit Total */}
-                    <div className="border-l-2 border-emerald-500 pl-4 flex flex-col justify-between">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Прибыль общая</span>
-                      {factKm && factKm > 0 ? (
-                        <>
-                          <span className="text-3xl sm:text-4xl font-bold text-emerald-400 tracking-tight leading-none mb-4 font-sans">
-                            {Math.round(profitFact).toLocaleString("ru-RU")} <span className="text-lg text-slate-400 font-medium">€</span>
-                            <span className="text-[9px] uppercase tracking-wider text-emerald-400 block mt-2 font-semibold font-mono">Факт</span>
-                          </span>
-                          <div className="flex justify-between items-center text-[10px] border-t border-slate-900 pt-2 text-slate-400 mt-auto">
-                            <span className="font-mono text-slate-500 uppercase tracking-wider">План:</span>
-                            <span className="font-semibold text-slate-300 font-mono tabular-nums">{Math.round(profit).toLocaleString("ru-RU")} €</span>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-3xl sm:text-4xl font-bold text-emerald-400 tracking-tight leading-none mb-4 font-sans">
-                            {Math.round(profit).toLocaleString("ru-RU")} <span className="text-lg text-slate-400 font-medium">€</span>
-                          </span>
-                          <div className="flex justify-between items-center text-[10px] border-t border-slate-900 pt-2 text-slate-500 mt-auto">
-                            <span>План</span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    
-                    {/* Card 2: Profit per Day */}
-                    <div className="border-l-2 border-blue-500 pl-4 flex flex-col justify-between">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Прибыль в день</span>
-                      {factKm && factKm > 0 ? (
-                        <>
-                          <span className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-none mb-4 font-sans">
-                            {profitPerDay.toLocaleString("ru-RU")} <span className="text-lg text-slate-400 font-medium">€</span>
-                            <span className="text-[9px] uppercase tracking-wider text-blue-400 block mt-2 font-semibold font-mono">Факт</span>
-                          </span>
-                          <div className="flex justify-between items-center text-[10px] border-t border-slate-900 pt-2 text-slate-400 mt-auto">
-                            <span className="font-mono text-slate-500 uppercase tracking-wider">План:</span>
-                            <span className="font-semibold text-slate-300 font-mono tabular-nums">{profitPerDayPlan} €/дн</span>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-none mb-4 font-sans">
-                            {profitPerDayPlan.toLocaleString("ru-RU")} <span className="text-lg text-slate-400 font-medium">€</span>
-                          </span>
-                          <div className="flex justify-between items-center text-[10px] border-t border-slate-900 pt-2 text-slate-500 mt-auto">
-                            <span>План</span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    
-                    {/* Card 3: Days count */}
-                    <div className="border-l-2 border-orange-500 pl-4 flex flex-col justify-center">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Количество дней</span>
-                      {factKm && factKm > 0 && daysFact !== daysPlan ? (
-                        <>
-                          <span className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-none mb-4 font-sans">
-                            {daysFact} <span className="text-lg text-slate-400 font-medium">дн.</span>
-                            <span className="text-[9px] uppercase tracking-wider text-orange-400 block mt-2 font-semibold font-mono">Факт</span>
-                          </span>
-                          <div className="flex justify-between items-center text-[10px] border-t border-slate-900 pt-2 text-slate-400 mt-auto">
-                            <span className="font-mono text-slate-500 uppercase tracking-wider">План:</span>
-                            <span className="font-semibold text-slate-300 font-mono tabular-nums">{daysPlan} дн.</span>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <span className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-none font-sans">
-                            {daysPlan} <span className="text-lg text-slate-400 font-medium">дн.</span>
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 bg-slate-900/50 rounded-xl p-5 border border-slate-900">
-                    <div>
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
-                        {factKm && factKm > 0 ? "Километраж" : "План км"}
-                      </span>
-                      {factKm && factKm > 0 ? (
-                        <div className="flex flex-col">
-                          <span className="text-base font-bold text-white font-mono tabular-nums">
-                            {Math.round(factKm).toLocaleString("ru-RU")} км
-                            <span className="text-[9px] uppercase tracking-wider text-emerald-400 ml-2 font-semibold font-mono">Факт</span>
-                          </span>
-                          <span className="text-xs text-slate-500 mt-0.5 font-mono">План: {Math.round(totalKm).toLocaleString("ru-RU")} км</span>
-                        </div>
-                      ) : (
-                        <span className="text-base font-bold text-white font-mono tabular-nums">{Math.round(totalKm).toLocaleString("ru-RU")} км</span>
-                      )}
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">Фрахт</span>
-                      <span className="text-base font-bold text-blue-400 font-mono tabular-nums">{Math.round(totalFreight).toLocaleString("ru-RU")} €</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
-                        {factKm && factKm > 0 ? "Расходы" : "Расходы (План)"}
-                      </span>
-                      {factKm && factKm > 0 ? (
-                        <div className="flex flex-col">
-                          <span className="text-base font-bold text-orange-400 font-mono tabular-nums">
-                            {Math.round(totalExpenses).toLocaleString("ru-RU")} €
-                            <span className="text-[9px] uppercase tracking-wider text-emerald-400 ml-2 font-semibold font-mono">Факт</span>
-                          </span>
-                          <span className="text-xs text-slate-500 mt-0.5 font-mono">План: {Math.round(totalExpensesPlan).toLocaleString("ru-RU")} €</span>
-                        </div>
-                      ) : (
-                        <span className="text-base font-bold text-orange-400 font-mono tabular-nums">{Math.round(totalExpensesPlan).toLocaleString("ru-RU")} €</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer Buttons */}
-                <div className="flex flex-wrap justify-end gap-3 mt-4">
-                  {isEditing && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => deleteTrip(editingTripId!, true)}
-                        className="px-5 py-2.5 rounded-xl text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 flex items-center gap-1.5 transition"
-                      >
-                        <Trash2 className="w-4 h-4"/> Удалить
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => finishTripToArchive(currentEditingTrip, true)}
-                        className="px-5 py-2.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 flex items-center gap-1.5 transition"
-                      >
-                        <Archive className="w-4 h-4"/> В архив
-                      </button>
-                    </>
-                  )}
-                  <button
-                    type="button"
-                    onClick={saveTrip}
-                    disabled={isSubmitting}
-                    className="px-6 py-2.5 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 flex items-center gap-1.5 transition shadow-sm disabled:opacity-50"
-                  >
-                    <Save className="w-4 h-4"/> Сохранить
-                  </button>
-                </div>
               </>
             ) : modalTab === "potential" ? (
 
@@ -2674,8 +2539,66 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               </div>
             ) : null}
           </div>
-          {modalTab === "main" && (
-            <div className="bg-white px-6 py-4 border-t border-slate-200/60 shadow-sm flex items-center justify-between sticky bottom-0 z-10">
+          {/* UNIFIED STICKY FOOTER: stats + actions, always visible */}
+          <div className="shrink-0 bg-white border-t border-slate-200/60 shadow-[0_-4px_20px_rgba(0,0,0,0.04)] z-20">
+            {/* Light stats block — single layer, app style */}
+            <div className="px-4 sm:px-6 lg:px-8 py-4 bg-slate-50/40">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Прибыль общая — green */}
+                <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-emerald-400">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Прибыль общая</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(profit).toLocaleString("ru-RU")}</span>
+                    <span className="text-sm font-semibold text-emerald-500">€</span>
+                  </div>
+                </div>
+                {/* Прибыль в день — blue */}
+                <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-blue-400">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Прибыль в день</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(rawProfitPerDay).toLocaleString("ru-RU")}</span>
+                    <span className="text-sm font-semibold text-blue-500">€</span>
+                  </div>
+                </div>
+                {/* Количество дней — orange */}
+                <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-orange-400">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Количество дней</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{daysPlan || daysFact || 0}</span>
+                    <span className="text-sm font-semibold text-orange-500">дн.</span>
+                  </div>
+                </div>
+                {/* План км */}
+                <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-slate-300">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{factKm && factKm > 0 ? "Километраж" : "План км"}</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(factKm && factKm > 0 ? factKm : totalKm).toLocaleString("ru-RU")}</span>
+                    <span className="text-sm font-semibold text-slate-500">км</span>
+                    {factKm && factKm > 0 && <span className="text-[9px] uppercase tracking-wider text-emerald-500 ml-1.5 font-semibold">Факт</span>}
+                  </div>
+                </div>
+                {/* Фрахт — blue */}
+                <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-blue-400">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Фрахт</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(totalFreight).toLocaleString("ru-RU")}</span>
+                    <span className="text-sm font-semibold text-blue-500">€</span>
+                  </div>
+                </div>
+                {/* Расходы — orange */}
+                <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-orange-400">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{factKm && factKm > 0 ? "Расходы" : "Расходы (План)"}</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(factKm && factKm > 0 ? totalExpenses : totalExpensesPlan).toLocaleString("ru-RU")}</span>
+                    <span className="text-sm font-semibold text-orange-500">€</span>
+                    {factKm && factKm > 0 && <span className="text-[9px] uppercase tracking-wider text-emerald-500 ml-1.5 font-semibold">Факт</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action buttons row */}
+            <div className="bg-white px-6 py-3 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 {isEditing && currentEditingTrip && (
                   <button
@@ -2716,7 +2639,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 </button>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     );

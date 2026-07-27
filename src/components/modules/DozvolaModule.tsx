@@ -1,5 +1,6 @@
 import {useState, useEffect} from 'react'
 import {UserProfile} from '../../types'
+import {FileCheck} from 'lucide-react'
 import DozvolaRegistryList from './dozvola/DozvolaRegistryList';
 import DozvolaDocuments from './dozvola/DozvolaDocuments';
 import DozvolaTypesDirectory from './dozvola/DozvolaTypesDirectory';
@@ -30,55 +31,68 @@ export default function DozvolaModule({ user }: DozvolaModuleProps) {
   }, {});
 
   return (
-    <div className="w-full space-y-4">
+    <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col gap-5">
+      
+      {/* Page Header */}
+      <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+        <div>
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">
+            Модуль Дозвола
+          </span>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+            <FileCheck className="w-7 h-7 text-slate-800" /> Дозвола
+          </h1>
+        </div>
+      </div>
+
       {/* Tab Navigation */}
-      <div className="flex items-center gap-2 p-1.5 bg-slate-100 rounded-2xl w-fit overflow-x-auto shadow-inner border border-slate-200/50">
+      <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50">
         <button
           onClick={() => setActiveTab('registry')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+          className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
             activeTab === 'registry' 
-              ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' 
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+              ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40' 
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
           }`}
         >
           Реестр дозволов
         </button>
         <button
           onClick={() => setActiveTab('locations')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+          className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
             activeTab === 'locations' 
-              ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' 
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+              ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40' 
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
           }`}
         >
           Карта локаций
         </button>
         <button
           onClick={() => setActiveTab('documents')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+          className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
             activeTab === 'documents' 
-              ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' 
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+              ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40' 
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
           }`}
         >
           Документы
         </button>
         <button
           onClick={() => setActiveTab('history')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+          className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
             activeTab === 'history' 
-              ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' 
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+              ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40' 
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
           }`}
         >
           Журнал операций
         </button>
         <button
           onClick={() => setActiveTab('types')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+          className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
             activeTab === 'types' 
-              ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80' 
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+              ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40' 
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
           }`}
         >
           Справочник видов
@@ -86,7 +100,7 @@ export default function DozvolaModule({ user }: DozvolaModuleProps) {
       </div>
 
       {/* Active Tab Content */}
-      <div className="mt-4">
+      <div>
         <div className={activeTab === 'registry' ? '' : 'hidden'}>
           <DozvolaRegistryList user={user} />
         </div>

@@ -822,19 +822,14 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                     {/* Quick presets list */}
                     <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
                       <span className="text-[9px] font-bold text-slate-400 uppercase mr-1">Быстрый выбор:</span>
-                      {[
-                        { label: '🚚 В пути', url: 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?q=80&w=800&auto=format&fit=crop' },
-                        { label: '📦 Логистика', url: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?q=80&w=800&auto=format&fit=crop' },
-                        { label: '🗺️ Дорога', url: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?q=80&w=800&auto=format&fit=crop' },
-                        { label: '📅 Офис', url: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?q=80&w=800&auto=format&fit=crop' }
-                      ].map((preset) => (
+                      {['🚚 В пути', '📦 Логистика', '🗺️ Дорога', '📅 Офис'].map((label) => (
                         <button
-                          key={preset.label}
+                          key={label}
                           type="button"
-                          onClick={() => handleFieldChange('imageUrl', preset.url)}
+                          onClick={() => handleFieldChange('imageUrl', `https://picsum.photos/seed/${Date.now()}${Math.random()}/800/400`)}
                           className="px-2.5 py-1 bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-950 hover:border-slate-300 rounded-lg text-[9px] font-bold transition cursor-pointer"
                         >
-                          {preset.label}
+                          {label}
                         </button>
                       ))}
                     </div>

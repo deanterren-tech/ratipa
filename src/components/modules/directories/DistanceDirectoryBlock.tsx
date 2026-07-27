@@ -26,12 +26,12 @@ export default function DistanceDirectoryBlock({ user }: Props) {
   }, [items, search]);
 
   const openAdd = () => { setDraft({}); setEditing({ id: '', from: '', to: '', distance: 0 }); };
-  const openEdit = (d: DistancePreset) => { setDraft({ from: d.from, to: d.to, distance: String(d.distance), id: d.id }); setEditing(d); };
+  const openEdit = (d: DistancePreset) => { setDraft({ from: d.from, to: d.to, distance: String(d.distance), id: d.id, dbKey: (d as any).dbKey }); setEditing(d); };
 
   const handleSave = () => {
     const rec: any = { ...draft };
     rec.distance = parseFloat(rec.distance || '0') || 0;
-    if (!rec.id) rec.id = 'dist_' + Date.now().toString();
+    if (!rec.id) rec.id = (rec.dbKey as string) || 'dist_' + Date.now().toString();
     dbService.saveDistance(rec as DistancePreset, user.name, user.role);
     toast('Расстояние сохранено', 'success');
     setEditing(null);
@@ -39,7 +39,7 @@ export default function DistanceDirectoryBlock({ user }: Props) {
 
   const handleDelete = async (d: DistancePreset) => {
     if (await showConfirm(`Удалить «${d.from} → ${d.to}»?`)) {
-      dbService.deleteDistance(d.id, user.name, user.role);
+      dbService.deleteDistance((d as any).dbKey || d.id, user.name, user.role);
       toast('Удалено', 'success');
     }
   };

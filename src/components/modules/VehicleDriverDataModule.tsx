@@ -26,10 +26,12 @@ import {
   Users
 } from 'lucide-react';
 import {dbService, database} from '../../api'
+import {pdService} from '../../api'
 import {getCouplingsFlat, getDriversFlat} from '../../services/fleetService'
 import { ref, update } from 'firebase/database';
 import {UserProfile, AppSettings, PhoneNumber, Driver, CarRateGroup} from '../../types'
 import {formatDriverShortName} from '../../utils/driverSync'
+import {normalizePlate} from '../../utils/salaryAutofill'
 import CouplingPicker from '../common/CouplingPicker';
 import { useToast } from '../ToastProvider';
 
@@ -48,7 +50,8 @@ const VehicleDriverCard = React.memo(({
   trailerMake,
   matchedTariff,
   dispatchersList,
-  onUpdateDispatcher
+  onUpdateDispatcher,
+  bazaCars
 }: {
   rec: VehicleDriverRecord;
   copiedId: string | null;
@@ -61,13 +64,14 @@ const VehicleDriverCard = React.memo(({
   matchedTariff: CarRateGroup | null;
   dispatchersList: string[];
   onUpdateDispatcher: (rec: VehicleDriverRecord, dispatcher: string) => void;
+  bazaCars: string[];
 }) => {
   const brandsText = brandModel ? `${brandModel}${trailerMake ? ' / ' + trailerMake : ''}` : (rec.brandsLat || '');
   return (
     <div 
-      id={`vehicle-driver-card-${rec.id}`}
-      className="bg-white/80 backdrop-blur-xl rounded-2xl border border-slate-200/40 shadow-2xs hover:shadow-md hover:border-slate-300/50 hover:bg-white/95 transition-all duration-300 flex flex-col overflow-hidden relative font-sans"
-    >
+            id={`vehicle-driver-card-${rec.id}`}
+            className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-300 flex flex-col overflow-hidden relative font-sans"
+        >
       {showVerificationIndicator && (
         <div className="absolute top-2 right-2 bg-amber-50 text-amber-600 border border-amber-200/60 text-[9px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 z-10 font-sans shadow-2xs">
           <AlertTriangle className="w-3 h-3" />
@@ -79,22 +83,13 @@ const VehicleDriverCard = React.memo(({
       <div className="px-3.5 py-2.5 border-b border-slate-100/60 bg-slate-50/30 flex items-start justify-between gap-3">
         <div className="space-y-0.5 min-w-0 flex-1">
           <div className="text-xs font-bold text-[#3765F6] tracking-wide font-mono bg-[#3765F6]/5 border border-[#3765F6]/10 px-2 py-0.5 rounded-lg w-fit truncate">
-            {rec.vehicleNumbers}
-          </div>
-          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide font-sans truncate" title={brandsText}>
-            {brandModel ? (
-              <span>Сцепка: <span className="text-slate-700">{rec.coupling || (rec.carNumber || rec.vehicleNumbers || '')}</span></span>
-            ) : rec.brandsLat ? (
-              <span>Тягач: <span className="text-slate-700">{rec.brandsLat}</span></span>
-            ) : (
-              <span className="text-slate-300 italic font-normal text-[9px]">Марка не указана</span>
-            )}
+            {rec.coupling || `${rec.vehicleNumbers || ''}${rec.trailerNumber ? ' / ' + rec.trailerNumber : ''}`}
           </div>
         </div>
         
         {/* Quick Dispatcher Select Dropdown - Compacted */}
         <div className="flex flex-col items-end gap-0.5 shrink-0 select-none font-sans">
-          <span className="text-[8px] font-extrabold text-slate-400 uppercase tracking-wider">Диспетчер</span>
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Диспетчер</span>
           <select
             value={rec.dispatcher || ""}
             onChange={(e) => onUpdateDispatcher(rec, e.target.value)}
@@ -115,7 +110,7 @@ const VehicleDriverCard = React.memo(({
           <div className="min-w-0">
             <div className="flex items-center gap-1 mb-0.5 text-slate-400">
               <User className="w-3 h-3 text-[#3765F6]" />
-              <span className="text-[9px] uppercase font-bold tracking-wider">Водитель</span>
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Водитель</span>
             </div>
             <div className="text-[11px] font-bold text-slate-800 truncate" title={rec.driverNameRu}>
               {formatDriverShortName(rec.driverNameRu || (rec as any).driverName)}
@@ -126,7 +121,7 @@ const VehicleDriverCard = React.memo(({
           <div className="min-w-0">
             <div className="flex items-center gap-1 mb-0.5 text-slate-400">
               <Phone className="w-3 h-3 text-[#3765F6]" />
-              <span className="text-[9px] uppercase font-bold tracking-wider">Связь</span>
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Связь</span>
             </div>
             <div className="text-[10px] font-bold text-slate-700 font-mono leading-none space-y-0.5">
               {(rec.phones || []).slice(0, 2).map((p) => (
@@ -170,25 +165,48 @@ const VehicleDriverCard = React.memo(({
 
       {/* 3.5 Блок Тарифа (Tariff Block) - Embedded inside as tiny line */}
       <div className="px-3.5 py-1.5 bg-blue-50/10 border-b border-slate-100/40 flex items-center justify-between gap-2 font-sans text-[10px]">
-        <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400">Тариф</span>
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Тариф</span>
         {matchedTariff ? (
           <div className="flex items-center gap-1 font-bold text-emerald-600 bg-emerald-50 border border-emerald-200/40 px-2 py-0.5 rounded-lg shadow-3xs font-sans text-[9.5px]">
             <span>{matchedTariff.name}</span>
             <span className="text-[8.5px] text-emerald-500 font-mono">({matchedTariff.rate} €)</span>
+          </div>
+        ) : (rec as any).rate != null && (rec as any).rate !== '' ? (
+          <div className="flex items-center gap-1 font-bold text-[#3765F6] bg-[#3765F6]/5 border border-[#3765F6]/10 px-2 py-0.5 rounded-lg shadow-3xs font-sans text-[9.5px]">
+            <span>Ставка</span>
+            <span className="text-[8.5px] text-[#3765F6] font-mono">{(rec as any).rate} €/км</span>
           </div>
         ) : (
           <span className="text-slate-400 italic font-medium text-[9.5px]">Не установлен</span>
         )}
       </div>
 
+      {/* 3.6 Блок Статуса (На базе / В рейса) — по «Учёту выезда» */}
+      <div className="px-3.5 py-1.5 bg-slate-50/30 border-b border-slate-100/40 flex items-center justify-between gap-2 font-sans text-[10px]">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Статус</span>
+        {(() => {
+          const plate = normalizePlate(rec.carNumber || rec.vehicleNumbers || '');
+          const onBase = plate ? bazaCars.includes(plate) : false;
+          return onBase ? (
+            <div className="flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/50 px-2 py-0.5 rounded-lg shadow-3xs font-sans text-[9.5px]">
+              <span>На базе</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 font-bold text-slate-700 bg-slate-100 border border-slate-200/60 px-2 py-0.5 rounded-lg shadow-3xs font-sans text-[9.5px]">
+              <span>В рейса</span>
+            </div>
+          );
+        })()}
+      </div>
+
       {/* 4. Копируемый блок данных (Formatted Plain Copy Area) - Compressed to save space */}
       <div className="px-3.5 py-2 flex-1 flex flex-col justify-end bg-slate-50/5">
-        <div className="bg-[#3765F6]/5 border border-[#3765F6]/10 rounded-xl p-2 font-mono text-[9.5px] text-slate-600 leading-tight relative group">
+        <div className="bg-slate-50 rounded-2xl p-2 font-mono text-[9.5px] text-slate-600 leading-tight relative group">
           <div className="text-slate-400 border-b border-slate-200/40 pb-1 mb-1 flex items-center justify-between text-[8px] font-bold tracking-wider font-sans select-none">
             <span className="text-[#3765F6] font-extrabold">ДЛЯ БУФЕРА ОБМЕНА</span>
             <button
               onClick={() => copyToClipboard(rec)}
-              className="text-[#3765F6] hover:text-white hover:bg-[#3765F6] transition-all flex items-center gap-1 py-0.5 px-2 cursor-pointer bg-white rounded-md border border-[#3765F6]/10 shadow-3xs font-sans text-[8.5px] font-bold active:scale-95"
+              className="text-[#3765F6] hover:text-white hover:bg-[#3765F6] transition-all flex items-center gap-1 py-0.5 px-2 cursor-pointer bg-white rounded-md border border-slate-200 shadow-sm font-sans text-[8.5px] font-bold active:scale-95"
               title="Скопировать весь блок"
             >
               {copiedId === rec.id ? <ClipboardCheck className="w-2.5 h-2.5 text-emerald-500" /> : <Copy className="w-2.5 h-2.5" />}
@@ -212,17 +230,17 @@ const VehicleDriverCard = React.memo(({
       </div>
 
       {/* 5. Действия (Card Action Bar) - Minimal height */}
-      <div className="px-3.5 py-2 border-t border-slate-100 bg-slate-50/50 flex justify-between gap-2 font-sans">
+      <div className="px-3.5 py-2 border-t border-slate-100 bg-white flex justify-between gap-2 font-sans">
         <button
           onClick={() => openEdit(rec)}
-          className="flex-1 py-1.5 px-2.5 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200 hover:border-slate-300 font-bold text-[10px] rounded-lg transition duration-150 flex items-center justify-center gap-1 cursor-pointer font-sans active:scale-95 shadow-3xs"
+          className="flex-1 py-1.5 px-2.5 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200 hover:border-slate-300 font-bold text-[10px] rounded-lg transition duration-150 flex items-center justify-center gap-1 cursor-pointer font-sans active:scale-95 shadow-sm"
         >
           <Edit2 className="w-3 h-3 text-slate-400" />
           <span>Редактировать</span>
         </button>
         <button
           onClick={() => handleDelete(rec)}
-          className="py-1.5 px-2 bg-white text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg transition duration-150 flex items-center justify-center cursor-pointer active:scale-95 shadow-3xs"
+          className="py-1.5 px-2 bg-white text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg transition duration-150 flex items-center justify-center cursor-pointer active:scale-95 shadow-sm"
           title="Удалить"
         >
           <Trash2 className="w-3.5 h-3.5" />
@@ -272,6 +290,10 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [systemUsers, setSystemUsers] = useState<UserProfile[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  // «Учёт выезда» (baza) — источник статуса «На базе / В рейса» в базе сцепок
+  const [bazaCars, setBazaCars] = useState<string[]>([]);
+  // Маппинг авто→диспетчер из Плана дохода / Диспозиции
+  const [carDispatcherMapping, setCarDispatcherMapping] = useState<Record<string, string>>({});
   
   // Google Drive Iframe states
   const [isDriveOpen, setIsDriveOpen] = useState(() => {
@@ -373,6 +395,21 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       setExistingTrailerBrands(prev => Array.from(new Set([...prev, ...brandsList])));
     }) : () => {};
 
+    // Подписка на «Учёт выезда» (baza) для статуса «На базе / В рейса»
+    const unsubBaza = (dbService as any).getBazaRecords
+      ? (dbService as any).getBazaRecords((list: any[]) => {
+          const plates = (list || [])
+            .map((c: any) => normalizePlate(c.carNumber || c.vehicleNumbers || ''))
+            .filter(Boolean);
+          setBazaCars(plates);
+        })
+      : () => {};
+
+    // Подписка на маппинг авто→диспетчер из Плана дохода
+    const unsubDispMapping = (pdService as any).subscribeDispatchersCarMapping
+      ? (pdService as any).subscribeDispatchersCarMapping(setCarDispatcherMapping)
+      : () => {};
+
     return () => {
       unsubData();
       unsubCarRateGroups();
@@ -381,6 +418,8 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       if (typeof unsubSettings === 'function') unsubSettings();
       if (typeof unsubVBrands === 'function') unsubVBrands();
       if (typeof unsubTBrands === 'function') unsubTBrands();
+      if (typeof unsubBaza === 'function') unsubBaza();
+      if (typeof unsubDispMapping === 'function') unsubDispMapping();
     };
   }, []);
 
@@ -507,7 +546,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       toast('Паспортные данные подтверждены', 'success');
     } catch (e: unknown) {
       console.error('[PassportVerify] save failed', e);
-      toast('Ошибка подтверждения: ' + (e?.message || e), 'error');
+      toast('Ошибка подтверждения: ' + ((e as any)?.message || e), 'error');
     } finally {
       // Always remove from queue + close modal, regardless of write outcome
       const remaining = verificationQueue.filter(q => q.id !== rec.id);
@@ -612,7 +651,10 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     setPassportEnd(rec.passportEnd || '');
     setPassportIssuedBy(rec.passportIssuedBy || '');
     setPhones(rec.phones && rec.phones.length > 0 ? rec.phones : [{ id: "phone_1", number: '', isPrimary: true }]);
-    setDispatcher(rec.dispatcher || '');
+    // Предзаполняем диспетчера из маппинга (Диспозиция / План дохода), если есть
+    const recPlate = normalizePlate(rec.carNumber || rec.vehicleNumbers || '');
+    const mappedDisp = Object.entries(carDispatcherMapping).find(([k]) => normalizePlate(k) === recPlate)?.[1] || '';
+    setDispatcher(mappedDisp || rec.dispatcher || '');
     setDimensions((rec as any).dimensions || '');
     setWeight((rec as any).weight || '');
     setVehicleType((rec as any).vehicleType || '');
@@ -691,7 +733,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       setModalOpen(false);
     } catch (err: unknown) {
       console.error("Save error:", err);
-      setSaveError(`Ошибка при сохранении: ${err.message || String(err)}`);
+      setSaveError(`Ошибка при сохранении: ${(err as any).message || String(err)}`);
       setIsSaving(false);
     }
   };
@@ -775,7 +817,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     try {
       await dbService.saveVehicleDriverRecord(updatedRecord, user.name, user.role);
     } catch (err: unknown) {
-      alert("Ошибка изменения диспетчера: " + (err.message || String(err)));
+      alert("Ошибка изменения диспетчера: " + ((err as any).message || String(err)));
     }
   };
 
@@ -823,7 +865,18 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     const needsVerificationThisYear = rec.lastPassportVerificationYear !== new Date().getFullYear();
     const isVerificationRequired = isAnniversaryPassed && needsVerificationThisYear;
     
+    // Статус «На базе / В рейса»: есть номер авто в «Учёте выезда» (baza) → На базе, иначе → В рейса
+    const recPlate = normalizePlate(rec.carNumber || rec.vehicleNumbers || '');
+    const isOnBase = recPlate ? bazaCars.includes(recPlate) : false;
+    const couplingStatus = isOnBase ? 'on_base' : 'in_trip'; // На базе / В рейса
+
     if (selectedStatusFilter === 'verification' && !isVerificationRequired) {
+      return false;
+    }
+    if (selectedStatusFilter === 'on_base' && couplingStatus !== 'on_base') {
+      return false;
+    }
+    if (selectedStatusFilter === 'in_trip' && couplingStatus !== 'in_trip') {
       return false;
     }
 
@@ -887,6 +940,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
         matchedTariff={matchedTariff}
         dispatchersList={defaultDispatchers}
         onUpdateDispatcher={handleUpdateDispatcherDirectly}
+        bazaCars={bazaCars}
       />
     );
   };
@@ -916,11 +970,12 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   return (
     <div className="space-y-6 font-sans">
       {/* Header card styled like Ratipa Welcome Scene glass container */}
-      <div className="bg-white/80 backdrop-blur-xl border border-slate-200/40 rounded-3xl p-6 lg:p-8 shadow-xs">
+      <div className="bg-white border border-slate-200/60 rounded-3xl p-6 lg:p-8 shadow-sm">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-1">
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2.5 font-sans">
-              <FileText className="w-5.5 h-5.5 text-[#3765F6]" />
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">Модуль ТС и Водители</span>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+              <Truck className="w-7 h-7 text-slate-800" />
               <span>Данные по авто и водителям</span>
             </h1>
             <p className="text-xs text-slate-400 font-medium tracking-normal font-sans">
@@ -936,7 +991,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                 setIsDriveOpen(nextState);
                 localStorage.setItem('ratipa_driver_drive_visible', nextState.toString());
               }}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all duration-150 border flex items-center gap-2 cursor-pointer shadow-2xs active:scale-95 ${
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all duration-150 border flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 ${
                 isDriveOpen
                   ? 'bg-[#3765F6]/10 text-[#3765F6] border-[#3765F6]/20'
                   : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200/60'
@@ -949,7 +1004,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
             <button
               id="btn-add-driver-record"
               onClick={handleOpenAdd}
-              className="px-4 py-2.5 bg-[#3765F6] hover:bg-[#2555E5] text-white font-bold text-xs rounded-xl transition-all duration-150 border border-transparent flex items-center gap-2 cursor-pointer shadow-xs active:scale-95"
+              className="px-4 py-2.5 bg-[#3765F6] hover:bg-[#2555E5] text-white font-bold text-xs rounded-xl transition-all duration-150 border border-transparent flex items-center gap-2 cursor-pointer shadow-sm active:scale-95"
             >
               <Plus className="w-4 h-4" />
               <span>Добавить данные</span>
@@ -965,7 +1020,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
         <div className={isDriveOpen ? "xl:col-span-7 space-y-6" : "space-y-6"}>
           
           {/* Unified Fleet & Crew Registry Block */}
-          <div className="bg-white/80 backdrop-blur-xl border border-slate-200/40 rounded-3xl p-6 shadow-xs space-y-6">
+          <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm space-y-6">
             <div className="flex flex-col gap-4 border-b border-slate-100 pb-5">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -988,7 +1043,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={carSearchQuery}
                     onChange={e => setCarSearchQuery(e.target.value)}
                     placeholder="Поиск по номерам, ФИО..."
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-xs font-semibold pl-9 pr-3 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition placeholder-slate-400 shadow-2xs"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-xs font-semibold pl-9 pr-3 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition placeholder-slate-400"
                   />
                 </div>
 
@@ -996,7 +1051,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                 <select
                   value={selectedDispatcherFilter}
                   onChange={e => setSelectedDispatcherFilter(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold px-3 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition cursor-pointer shadow-2xs"
+                  className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold px-3 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition cursor-pointer"
                 >
                   <option value="all">Все диспетчеры</option>
                   <option value="none">Без диспетчера</option>
@@ -1009,7 +1064,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                 <select
                   value={selectedTariffFilter}
                   onChange={e => setSelectedTariffFilter(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold px-3 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition cursor-pointer shadow-2xs"
+                  className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold px-3 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition cursor-pointer"
                 >
                   <option value="all">Все тарифные группы</option>
                   <option value="none">Без тарифа</option>
@@ -1022,23 +1077,25 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                 <select
                   value={selectedStatusFilter}
                   onChange={e => setSelectedStatusFilter(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold px-3 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition cursor-pointer shadow-2xs"
+                  className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold px-3 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition cursor-pointer"
                 >
-                  <option value="all">Все статусы паспорта</option>
+                  <option value="all">Все статусы</option>
                   <option value="verification">Требует верификации</option>
+                  <option value="on_base">На базе</option>
+                  <option value="in_trip">В рейса</option>
                 </select>
               </div>
             </div>
 
             {/* List of Unified Cards */}
             {filteredRecords.length === 0 ? (
-              <div className="bg-slate-50/40 rounded-2xl p-12 text-center border border-slate-200/20 text-slate-400 font-semibold text-xs italic flex flex-col items-center justify-center gap-2">
+              <div className="bg-slate-50 rounded-2xl p-12 text-center border border-slate-200/60 text-slate-500 font-semibold text-xs italic flex flex-col items-center justify-center gap-2">
                 <Truck className="w-8 h-8 text-slate-300 stroke-1" />
                 <span>Записи автопарка не найдены с выбранными фильтрами</span>
               </div>
             ) : (
               <div className="space-y-6">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 pr-1 custom-scrollbar">
+                <div className={`grid grid-cols-2 ${isDriveOpen ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-6 pr-1 custom-scrollbar`}>
                   {filteredRecords.slice(0, carsLimit).map(renderCard)}
                 </div>
 
@@ -1046,7 +1103,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   <button
                     id="load-more-records"
                     onClick={() => setCarsLimit(prev => prev + 30)}
-                    className="w-full py-3 border border-dashed border-slate-200 hover:border-[#3765F6] text-slate-500 hover:text-[#3765F6] font-bold text-xs rounded-2xl transition bg-slate-50 hover:bg-blue-50/30 cursor-pointer text-center font-sans shadow-2xs block"
+                    className="w-full py-3 border border-dashed border-slate-200 hover:border-slate-400 text-slate-500 hover:text-slate-700 font-bold text-xs rounded-2xl transition bg-white hover:bg-slate-50 cursor-pointer text-center font-sans shadow-sm block"
                   >
                     Показать еще (+30)
                   </button>
@@ -1058,12 +1115,12 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
 
         {/* Right Column (Google Drive Iframe) */}
         {isDriveOpen && (
-          <div className={`xl:col-span-5 flex flex-col bg-white/70 backdrop-blur-xl border border-slate-200/40 rounded-2xl shadow-xs overflow-hidden transition-all duration-300 ${
-            isDriveFocusMode ? 'fixed inset-4 z-50 p-4 bg-white shadow-2xl' : 'h-[820px]'
+          <div className={`xl:col-span-5 flex flex-col bg-white border border-slate-200/60 rounded-2xl shadow-sm overflow-hidden transition-all duration-300 ${
+                      isDriveFocusMode ? 'fixed inset-4 z-50 p-4 bg-white shadow-2xl' : 'h-[820px]'
           }`}>
             
             {/* Drive Panel Header */}
-            <div className="p-4 bg-slate-50/60 border-b border-slate-200/40 backdrop-blur-xl flex items-center justify-between gap-4 shrink-0 select-none rounded-t-2xl font-sans">
+            <div className="p-4 bg-white border-b border-slate-200/60 flex items-center justify-between gap-4 shrink-0 select-none rounded-t-2xl font-sans">
               <div className="flex items-center gap-2">
                 <div className="p-1 px-2.5 bg-[#3765F6]/10 text-[#3765F6] font-bold text-[9px] rounded-full uppercase tracking-wider font-mono flex items-center gap-1 border border-[#3765F6]/10">
                   <HardDrive className="w-3 h-3" />
@@ -1119,7 +1176,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
             </div>
 
             {/* Drive Panel Iframe Container */}
-            <div className="flex-1 bg-slate-50 p-2 relative overflow-hidden min-h-0">
+            <div className="flex-1 bg-white p-2 relative overflow-hidden min-h-0">
               {isDriveLoading && (
                 <div className="absolute inset-2 bg-white rounded-xl flex flex-col items-center justify-center p-6 gap-3 z-10 transition duration-300 shadow-inner">
                   <Folder className="w-10 h-10 text-slate-300 animate-bounce" />
@@ -1143,8 +1200,8 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
 
       {/* Annual Passport Verification Pop-up Prompt */}
       {currentVerification && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md animate-fade-in">
-          <div className="bg-white/95 backdrop-blur-2xl rounded-3xl w-full max-w-md shadow-2xl p-6 border border-slate-200/50 flex flex-col gap-5 text-center font-sans">
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/50 animate-fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-6 border border-slate-200 flex flex-col gap-5 text-center font-sans">
             <div className="mx-auto bg-amber-50 text-amber-500 p-3.5 rounded-full shadow-2xs w-max">
               <AlertTriangle className="w-8 h-8 animate-bounce" />
             </div>
@@ -1168,7 +1225,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
             <div className="flex flex-col gap-2 pt-2">
               <button
                 onClick={() => handleVerifySuccess(currentVerification)}
-                className="w-full py-3 bg-[#3765F6] hover:bg-[#2555E5] text-white font-bold text-xs rounded-xl transition border border-transparent cursor-pointer shadow-xs"
+                className="w-full py-3 bg-[#3765F6] hover:bg-[#2555E5] text-white font-bold text-xs rounded-xl transition border border-transparent cursor-pointer shadow-sm"
               >
                 Да, данные актуальны
               </button>
@@ -1176,13 +1233,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
               <div className="flex gap-2">
                 <button
                   onClick={() => handleVerifyEdit(currentVerification)}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-xl transition cursor-pointer border border-slate-200/60"
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-xl transition cursor-pointer border border-slate-200/60 shadow-sm"
                 >
                   Нет, редактировать
                 </button>
                 <button
                   onClick={() => handleVerifySkip(currentVerification)}
-                  className="flex-1 py-2.5 bg-white hover:bg-slate-50 text-slate-400 font-bold text-[11px] rounded-xl transition cursor-pointer border border-slate-200"
+                  className="flex-1 py-2.5 bg-white hover:bg-slate-50 text-slate-500 font-bold text-[11px] rounded-xl transition cursor-pointer border border-slate-200 shadow-sm"
                 >
                   Пропустить
                 </button>
@@ -1194,10 +1251,10 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
 
       {/* Edit / Add Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md overflow-y-auto animate-fade-in font-sans">
-          <div className="bg-white/95 backdrop-blur-2xl rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col pt-1 my-8 border border-slate-200/50">
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/50 overflow-y-auto animate-fade-in font-sans">
+          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col pt-1 my-8 border border-slate-200/60">
             {/* Modal Header */}
-            <div className="px-6 py-4.5 border-b border-slate-100/60 flex items-center justify-between bg-slate-50/60">
+            <div className="px-6 py-4.5 border-b border-slate-100 flex items-center justify-between bg-white">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-[#3765F6]" />
                 <h3 className="text-xs font-bold text-slate-800 uppercase tracking-tight font-sans">
@@ -1206,7 +1263,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
               </div>
               <button
                 onClick={() => setModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-white border border-slate-200 hover:bg-slate-50 flex items-center justify-center transition text-slate-500 font-bold text-lg cursor-pointer active:scale-95 shadow-2xs"
+                className="w-8 h-8 rounded-full bg-white border border-slate-200 hover:bg-slate-50 flex items-center justify-center transition text-slate-500 font-bold text-lg cursor-pointer active:scale-95 shadow-sm"
               >
                 ×
               </button>
@@ -1218,7 +1275,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* 1. Номера ТС */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
                     Гос. номера Тягач / Полуприцеп <span className="text-rose-500">*</span>
                   </label>
                   <CouplingPicker
@@ -1230,7 +1287,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
 
                 {/* 2. Марка тягача и прицепа */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
                     Марка тягача <span className="text-slate-400 font-normal">(латиница)</span>
                   </label>
                   <input
@@ -1242,7 +1299,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                       setFormBrandModel(val);
                     }}
                     placeholder="Например, SCANIA, VOLVO"
-                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
                   />
                   <datalist id="vehicle-brands-datalist">
                     {existingVehicleBrands.map(brand => (
@@ -1252,7 +1309,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
                     Марка прицепа <span className="text-slate-400 font-normal">(латиница)</span>
                   </label>
                   <input
@@ -1264,7 +1321,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                       setFormTrailerMake(val);
                     }}
                     placeholder="Например, SCHMITZ, KRONA"
-                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
                   />
                   <datalist id="trailer-brands-datalist">
                     {existingTrailerBrands.map(brand => (
@@ -1275,7 +1332,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
 
                 {/* 3. Водитель */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
                     ФИО Водителя (Русский) <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1283,11 +1340,11 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={driverNameRu}
                     onChange={e => setDriverNameRu(e.target.value)}
                     placeholder="Устинов Олег Леонидович"
-                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
                     ФИО Водителя (Латиница)
                   </label>
                   <input
@@ -1295,13 +1352,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={driverNameLat}
                     onChange={e => setDriverNameLat(e.target.value)}
                     placeholder="USTSINAU ALEH"
-                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
                   />
                 </div>
 
                 {/* 4. Дата рождения */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
                     Дата рождения <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1309,13 +1366,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={birthDate}
                     onChange={e => setBirthDate(e.target.value)}
                     placeholder="08.02.1973"
-                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
                   />
                 </div>
 
                 {/* 5. Паспорт */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
                     Серия и номер Паспорта <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1323,13 +1380,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={passportNumber}
                     onChange={e => setPassportNumber(e.target.value)}
                     placeholder="МР 5065058"
-                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
                   />
                 </div>
 
                 {/* 6. Идентификационный номер */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
                     Идентификационный номер <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1343,7 +1400,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
 
                 {/* 7. Срок начала */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
                     Дата выдачи паспорта (Срок от) <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1351,13 +1408,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={passportStart}
                     onChange={e => setPassportStart(e.target.value)}
                     placeholder="09.01.2024"
-                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
                   />
                 </div>
 
                 {/* 8. Срок конца */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
                     Дата окончания паспорта (Срок до) <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1365,13 +1422,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={passportEnd}
                     onChange={e => setPassportEnd(e.target.value)}
                     placeholder="09.01.2034"
-                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
                   />
                 </div>
 
                 {/* 9. Выдан */}
                 <div className="space-y-1 md:col-span-2">
-                  <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
                     Кем выдан паспорт <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1379,20 +1436,20 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={passportIssuedBy}
                     onChange={e => setPassportIssuedBy(e.target.value)}
                     placeholder="Фрунзенским РУВД г. Минска"
-                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
                   />
                 </div>
 
                 {/* 10. Телефоны */}
-                <div className="md:col-span-2 space-y-2 bg-[#3765F6]/5 border border-[#3765F6]/10 p-4.5 rounded-xl">
-                  <div className="flex items-center justify-between border-b border-[#3765F6]/10 pb-2">
-                    <label className="text-[11px] font-extrabold text-[#3765F6] uppercase tracking-wider font-sans">
-                      Телефоны связи <span className="text-rose-500">*</span>
-                    </label>
+                <div className="md:col-span-2 space-y-2 bg-white border border-slate-200/60 p-4.5 rounded-xl">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                      <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
+                                        Телефоны связи <span className="text-rose-500">*</span>
+                                      </label>
                     <button
                       type="button"
                       onClick={addPhoneField}
-                      className="text-[10px] font-bold text-white bg-[#3765F6] hover:bg-[#2555E5] px-2.5 py-1 rounded-lg flex items-center gap-1 transition shadow-2xs cursor-pointer active:scale-95"
+                      className="text-[10px] font-bold text-white bg-[#3765F6] hover:bg-[#2555E5] px-2.5 py-1 rounded-lg flex items-center gap-1 transition shadow-sm cursor-pointer active:scale-95"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Добавить телефон</span>
@@ -1412,7 +1469,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                             value={p.number}
                             onChange={e => updatePhoneField(p.id, e.target.value)}
                             placeholder="+375 (29) 123-45-67"
-                            className="flex-1 bg-slate-50/30 border border-slate-200/80 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition font-mono"
+                            className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition font-mono"
                           />
                           <button
                             type="button"
@@ -1441,13 +1498,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
 
                 {/* 11. Диспетчер */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">
+                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
                     Закрепленный диспетчер <span className="text-rose-500">*</span>
                   </label>
                   <select
                     value={dispatcher}
                     onChange={e => setDispatcher(e.target.value)}
-                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition cursor-pointer"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition cursor-pointer"
                   >
                     <option value="">Выберите диспетчера...</option>
                     {defaultDispatchers.map((name) => (
@@ -1459,39 +1516,34 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                 {/* 12. Доп. параметры авто */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">Год выпуска</label>
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Год выпуска</label>
                     <input type="text" value={year} onChange={e => setYear(e.target.value)}
-                      className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition" placeholder="2018" />
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition" placeholder="2018" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">Тип ТС</label>
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Тип ТС</label>
                     <input type="text" value={vehicleType} onChange={e => setVehicleType(e.target.value)}
-                      className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition" placeholder="Тягач / Прицеп / Фургон" />
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition" placeholder="Тягач / Прицеп / Фургон" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">Габариты (Д×Ш×В, м)</label>
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Габариты (Д×Ш×В, м)</label>
                     <input type="text" value={dimensions} onChange={e => setDimensions(e.target.value)}
-                      className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition" placeholder="13.6 × 2.45 × 2.7" />
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition" placeholder="13.6 × 2.45 × 2.7" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">Грузоподъёмность (т)</label>
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Грузоподъёмность (т)</label>
                     <input type="text" value={weight} onChange={e => setWeight(e.target.value)}
-                      className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition" placeholder="24" />
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition" placeholder="24" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">Номер прицепа</label>
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Номер прицепа</label>
                     <input type="text" value={trailerNumber} onChange={e => setTrailerNumber(e.target.value)}
-                      className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition" placeholder="А 1635 Е-7" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">Телефон водителя</label>
-                    <input type="text" value={driverPhone} onChange={e => setDriverPhone(e.target.value)}
-                      className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition" placeholder="+375 (29) 123-45-67" />
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition" placeholder="А 1635 Е-7" />
                   </div>
                   <div className="space-y-1 sm:col-span-2">
-                    <label className="text-[11px] font-semibold text-slate-500 font-sans tracking-wide">Ставка (€/км, опц.)</label>
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Ставка (€/км, опц.)</label>
                     <input type="text" value={rate} onChange={e => setRate(e.target.value)}
-                      className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition" placeholder="2.10" />
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition" placeholder="2.10" />
                   </div>
                 </div>
               </div>
@@ -1499,25 +1551,25 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
 
             {/* Modal Error Banner */}
             {saveError && (
-              <div className="mx-6 mt-4 p-4.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl flex items-start gap-2.5 text-xs font-sans shadow-2xs animate-fade-in">
+              <div className="mx-6 mt-4 p-4.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl flex items-start gap-2.5 text-xs font-sans shadow-sm animate-fade-in">
                 <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
                 <div className="font-semibold leading-normal">{saveError}</div>
               </div>
             )}
 
             {/* Modal Footer */}
-            <div className="p-6 border-t border-slate-100/60 flex justify-end gap-3 bg-slate-50/60">
+            <div className="p-6 border-t border-slate-100 flex justify-end gap-3 bg-white">
               <button
                 onClick={() => setModalOpen(false)}
                 disabled={isSaving}
-                className="px-6 py-2.5 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition text-xs font-sans cursor-pointer shadow-2xs disabled:opacity-50"
+                className="px-6 py-2.5 rounded-xl font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition text-xs font-sans cursor-pointer shadow-sm disabled:opacity-50"
               >
                 Отмена
               </button>
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="px-6 py-3 rounded-xl font-bold text-white bg-[#3765F6] hover:bg-[#2555E5] transition shadow-xs text-xs font-sans cursor-pointer active:scale-95 flex items-center justify-center gap-1.5 min-w-[150px] disabled:bg-slate-400 disabled:cursor-not-allowed"
+                className="px-6 py-2.5 rounded-xl font-bold text-white bg-[#3765F6] hover:bg-[#2555E5] transition shadow-sm text-xs font-sans cursor-pointer active:scale-95 flex items-center justify-center gap-1.5 min-w-[150px] disabled:bg-slate-400 disabled:cursor-not-allowed"
               >
                 {isSaving ? (
                   <>

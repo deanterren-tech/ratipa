@@ -33,12 +33,12 @@ import {
   FileText, 
   Clock,
   Settings,
-  LogOut
+  LogOut,
+  Shield,
 } from 'lucide-react';
 import UserManagementBlock from './UserManagementBlock';
 import AdminOnlinePresenceBlock from './AdminOnlinePresenceBlock';
-import CurrentPlanningSettingsBlock from './CurrentPlanningSettingsBlock';
-import PlanZagruzokSettingsBlock from './PlanZagruzokSettingsBlock';
+
 import AdminFirebaseConfigBlock from './AdminFirebaseConfigBlock';
 import AdminAgentBlock from './AdminAgentBlock';
 import AdminAuditLogsBlock from './AdminAuditLogsBlock';
@@ -143,7 +143,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
   // Lock non-admins completely
   if (user.role !== 'root_admin' && user.role !== 'admin') {
     return (
-      <div className="bg-white/60 backdrop-blur-xl rounded-[2rem] p-8 shadow-sm border border-white/40 text-center flex flex-col justify-center items-center py-24 select-none">
+      <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-[0_15px_45px_rgba(0,0,0,0.1)] text-center flex flex-col justify-center items-center py-24 select-none">
         <Lock className="h-12 w-12 text-slate-400 mb-4" style={{ strokeWidth: 1.5 }} />
         <span className="text-sm font-black text-slate-900 uppercase font-mono tracking-wider">Доступ заблокирован</span>
         <p className="text-xs text-slate-500 max-w-xs mt-2 font-medium">
@@ -153,12 +153,11 @@ export default function AdminModule({ user }: AdminModuleProps) {
     );
   }
 
-  const [activeTab, setActiveTab] = useState<'users' | 'planning' | 'income' | 'system' | 'welcome' | 'push' | 'agent'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'system' | 'welcome' | 'push' | 'agent'>('users');
 
   const tabsList = [
     { id: 'users', label: 'Пользователи и Сессии', icon: Users, count: userListCount },
-    { id: 'planning', label: 'Планирование', icon: Compass, count: (settings?.currentPlanningTabs?.length || 0) + (settings?.planZagruzokTabs?.length || 0) },
-    { id: 'income', label: 'План Дохода', icon: TrendingUp, count: dispatchersCount },
+
     { id: 'welcome', label: 'Бегущая строка', icon: Sparkles, count: settings?.customPhrases?.length || 0 },
     { id: 'system', label: 'Система и Настройки', icon: Settings, count: 0 },
     { id: 'agent', label: 'Агент (API)', icon: Sparkles, count: 0 },
@@ -167,48 +166,30 @@ export default function AdminModule({ user }: AdminModuleProps) {
   return (
     <div className="w-full space-y-6 font-sans relative">
 
-      {/* BACKGROUND ELEMENTS */}
-      <div className="fixed inset-0 bg-[#f4f5f6] -z-20" />
-      <div className="fixed inset-0 tech-grid opacity-[0.08] pointer-events-none -z-10" />
-      <div className="fixed inset-0 overflow-hidden pointer-events-none select-none -z-10">
-        <div className="absolute -top-32 -left-32 w-[650px] h-[650px] rounded-full bg-[#3765F6]/10 blur-[130px] md:blur-[170px]" />
-        <div className="absolute -bottom-32 right-[10%] w-[700px] h-[550px] rounded-full bg-[#3765F6]/10 blur-[130px] md:blur-[170px]" />
-        <div className="absolute top-[40%] left-[20%] w-[500px] h-[400px] rounded-full bg-[#3765F6]/10 blur-[130px] md:blur-[140px]" />
-      </div>
-
-      
-      {/* UNIFIED GLASS PANEL */}
-      <div className="bg-white/40 backdrop-blur-xl rounded-[2rem] border border-white/45 shadow-sm overflow-hidden flex flex-col min-h-[85vh] relative">
-        {/* INNER GLOWS FOR THE PANEL */}
-        <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-white/60 to-transparent pointer-events-none" />
+      {/* UNIFIED PANEL */}
+      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-[0_15px_45px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col min-h-[85vh] relative">
         
         {/* HEADER BAR */}
-        <div className="p-6 lg:p-8 border-b border-white/40 bg-white/10 backdrop-blur-md select-none z-10 shrink-0">
+        <div className="p-6 lg:p-8 border-b border-slate-100 bg-slate-50/80 select-none z-10 shrink-0">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-1.5 bg-[#3765F6]/5 border border-[#3765F6]/10 text-[#3765F6] font-mono text-[9px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full mb-2">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                </span>
-                <span>Ratipa Control Center</span>
-              </div>
-              <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                <ShieldAlert className="w-5 h-5 text-[#3765F6]" />
+              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">Модуль Администрирование</span>
+              <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+                <Shield className="w-7 h-7 text-slate-800" />
                 <span>Панель администратора</span>
               </h1>
               <p className="text-xs text-slate-500 font-medium mt-1 max-w-2xl leading-relaxed">
                 Конфигурация прав доступа сотрудников, структуры навигационного меню, параметров планирования и пуш-рассылок Ratipa
               </p>
             </div>
-            <div className="flex items-center gap-1.5 text-[10px] bg-white/60 border border-white/50 shadow-xs text-slate-700 font-bold px-3.5 py-1.5 rounded-xl font-mono uppercase tracking-wider">
+            <div className="flex items-center gap-1.5 text-[10px] bg-slate-50 border border-slate-200 shadow-xs text-slate-700 font-bold px-3.5 py-1.5 rounded-xl font-mono uppercase tracking-wider">
               <ShieldCheck className="w-4 h-4 text-emerald-500" />
               <span>{user.role === 'root_admin' ? 'Root доступ' : 'Администратор'}</span>
             </div>
           </div>
 
           {/* PREMIUM SCROLLABLE TAB NAVIGATOR */}
-          <div className="mt-6 flex flex-wrap gap-1 p-1 bg-white/30 backdrop-blur-md shadow-inner rounded-2xl border border-white/40 max-w-max">
+          <div className="mt-6 flex flex-wrap gap-1 p-1 bg-slate-50 border border-slate-200 rounded-2xl max-w-max">
             {tabsList.map((t) => {
               const IconComp = t.icon;
               const isActive = activeTab === t.id;
@@ -218,15 +199,15 @@ export default function AdminModule({ user }: AdminModuleProps) {
                   onClick={() => setActiveTab(t.id)}
                   className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold tracking-tight transition-all duration-200 select-none cursor-pointer active:scale-95 ${
                     isActive 
-                      ? 'bg-[#3765F6] text-white shadow-xs border border-[#3765F6]/10 scale-[1.01]' 
-                      : 'text-slate-500 hover:text-slate-800 hover:bg-white/40'
+                      ? 'bg-white text-slate-900 shadow-sm border border-slate-200/60' 
+                      : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/50'
                   }`}
                 >
-                  <IconComp className={`w-3.5 h-3.5 transition-transform duration-150 ${isActive ? 'text-white scale-110' : 'text-slate-400'}`} />
+                  <IconComp className={`w-3.5 h-3.5 transition-transform duration-150 ${isActive ? 'text-[#3765F6]' : 'text-slate-400'}`} />
                   <span>{t.label}</span>
                   {t.count > 0 && (
                     <span className={`text-[8.5px] px-1.5 py-0.5 rounded-full font-mono font-bold leading-none transition-colors ${
-                      isActive ? 'bg-white/20 text-white font-bold' : 'bg-slate-900/5 text-slate-500 border border-white/30 font-bold'
+                      isActive ? 'bg-[#3765F6]/10 text-[#3765F6] font-bold' : 'bg-slate-900/5 text-slate-500 border border-slate-200/60 font-bold'
                     }`}>
                       {t.count}
                     </span>
@@ -239,36 +220,20 @@ export default function AdminModule({ user }: AdminModuleProps) {
 
         {/* CONTENT AREA */}
         <div className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar relative z-0">
-          <div className="space-y-6 max-w-7xl mx-auto">
+          <div className="space-y-6 max-w-full mx-auto">
           <div className={activeTab === 'users' ? 'space-y-6' : 'hidden'}>
             <UserManagementBlock user={user} />
             <AdminOnlinePresenceBlock user={user} />
           </div>
 
-          <div className={activeTab === 'planning' ? 'space-y-6' : 'hidden'}>
-            <CurrentPlanningSettingsBlock user={user} />
-            <PlanZagruzokSettingsBlock user={user} />
-          </div>
 
-          <div className={activeTab === 'income' ? 'space-y-6' : 'hidden'}>
-            <div className="bg-white/40 backdrop-blur-md rounded-[1.8rem] p-6 lg:p-8 border border-white/45 shadow-xs">
-              <div className="flex items-center gap-2 mb-2">
-                <ShieldAlert className="w-4 h-4 text-[#3765F6]" />
-                <h2 className="text-sm font-bold text-slate-900">Диспетчеры</h2>
-              </div>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Справочник диспетчеров теперь единый — управляется в разделе <b>«Справочники» → «Диспетчеры»</b>.
-                Там же доступны цвета и перетаскивание для изменения порядка вывода.
-              </p>
-            </div>
-          </div>
 
           <div className={activeTab === 'system' ? 'space-y-6' : 'hidden'}>
             <AdminFirebaseConfigBlock />
 
             {/* Force Logout All Sessions — только для Root Admin */}
             {user.role === 'root_admin' && (
-              <div className="bg-white/40 backdrop-blur-md rounded-[1.8rem] p-6 lg:p-8 border border-rose-200/60 shadow-xs space-y-4 w-full">
+              <div className="bg-white rounded-[1.8rem] p-6 lg:p-8 border border-rose-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 w-full">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <span className="bg-rose-500/10 text-rose-600 border border-rose-500/20 font-mono text-[9px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full mb-1.5 inline-block">
@@ -284,7 +249,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                   </div>
                   <button
                     onClick={handleForceLogoutAll}
-                    className="bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all shadow-xs border border-rose-600/20 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                    className="bg-rose-500 hover:bg-rose-600 active:scale-[0.98] text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all shadow-sm border border-rose-500/20 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
                   >
                     <LogOut className="w-3.5 h-3.5" />
                     Завершить все сессии

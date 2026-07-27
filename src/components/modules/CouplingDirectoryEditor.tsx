@@ -6,6 +6,7 @@ import {dbService, directoryService} from '../../api'
 import {getCouplingsFlat, getDriversFlat, getDispatchersFlat} from '../../services/fleetService'
 import {Truck, Plus, Trash2, Pencil, Search, Link2, X, Check, Layers, Tag, Users} from 'lucide-react'
 import {UserProfile} from '../../types'
+import {normalizePlate} from '../../utils/salaryAutofill'
 import CouplingCard from './CouplingCard';
 import DriverCard from './DriverCard';
 
@@ -50,13 +51,16 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   const [trailerBrands, setTrailerBrands] = useState<any[]>([]);
   const [tractors, setTractors] = useState<any[]>([]);
   const [statusTypes, setStatusTypes] = useState<any[]>([]);
+  // Номера авто из «Учёта выезда» (baza) для статуса «На базе / В рейса»
+  const [bazaCars, setBazaCars] = useState<string[]>([]);
 
   const [search, setSearch] = useState('');
+  const [focusIdx, setFocusIdx] = useState(-1);
   const [activeDisp, setActiveDisp] = useState<string>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<CouplingRow | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
-  const [viewCard, setViewCard] = useState<{ type: 'coupling' | 'driver'; carNumber?: string; driverId?: string; driverName?: string } | null>(null);
+  const [viewCard, setViewCard] = useState<{ type: 'coupling' | 'driver'; carNumber?: string; driverId?: string; driverName?: string; record?: any } | null>(null);
 
   // multi-select
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -90,7 +94,14 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
     const u6 = directoryService.getTrailerBrands((l: any[]) => setTrailerBrands(l || []));
     const u7 = directoryService.getStatusTypes((l: any[]) => setStatusTypes(l || []));
     const u8 = dbService.getTractors((l: any[]) => setTractors(l || []));
-    return () => { u1(); u2(); u3(); u4(); u5(); u6(); u7(); u8(); };
+    // Подписка на «Учёт выезда» (baza) для статуса «На базе / В рейса»
+    const u9 = (dbService as any).getBazaRecords
+      ? (dbService as any).getBazaRecords((list: any[]) => {
+          const plates = (list || []).map((c: any) => normalizePlate(c.carNumber || c.vehicleNumbers || '')).filter(Boolean);
+          setBazaCars(plates);
+        })
+      : () => {};
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); u7(); u8(); u9(); };
   }, []);
 
   const driverName = (id?: string) => {
@@ -199,12 +210,18 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   };
   const [bulkValue, setBulkValue] = useState('');
 
+  // Статус по «Учёту выезда»: номер в baza → На базе, иначе → В рейса
+  const getBazaStatusForCoupling = (c: CouplingRow): 'base' | 'trip' => {
+    const plate = normalizePlate(c.carNumber);
+    return plate && bazaCars.includes(plate) ? 'base' : 'trip';
+  };
+
   const stats = useMemo(() => {
     const total = couplings.length;
-    const base = couplings.filter(c => (c.status || 'base') === 'base').length;
-    const trip = couplings.filter(c => (c.status || 'base') === 'trip').length;
+    const base = couplings.filter(c => getBazaStatusForCoupling(c) === 'base').length;
+    const trip = couplings.filter(c => getBazaStatusForCoupling(c) === 'trip').length;
     return { total, base, trip };
-  }, [couplings]);
+  }, [couplings, bazaCars]);
 
   // initials for driver avatar
   const initials = (name?: string) => {
@@ -214,15 +231,15 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   };
 
   return (
-    <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-xl shadow-slate-900/5 flex flex-col space-y-6">
+    <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between pb-5 border-b border-slate-200/60">
         <div>
-          <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center">
-              <Truck className="h-4.5 w-4.5 text-blue-500" />
-            </div>
-            <span>База сцепок (Авто + Прицеп + Водитель)</span>
-          </h2>
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">
+            База сцепок
+          </span>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+            <Truck className="w-7 h-7 text-slate-800" /> База сцепок (Авто + Прицеп + Водитель)
+          </h1>
           <p className="text-[11px] text-slate-400 font-medium mt-1">
             Единая база: тягач, прицеп, марка, водитель, диспетчер и тариф. Связана со всеми модулями.
           </p>
@@ -333,12 +350,12 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100/80 text-xs text-slate-700 font-mono">
-            {filtered.map((c) => {
+            {filtered.map((c, i) => {
               const isSel = selected.has(c.id);
               const col = dispColor(c.dispatcher);
               return (
-              <tr key={c.id} onClick={() => isWritePermitted ? toggle(c.id) : setViewCard({ type: 'coupling', carNumber: c.carNumber })}
-                  className={`hover:bg-slate-50/60 cursor-pointer transition ${isSel ? 'bg-[#3765F6]/10' : ''}`}>
+              <tr key={c.id} data-nav-item onClick={() => setViewCard({ type: 'coupling', carNumber: c.carNumber })}
+                  className={`hover:bg-slate-50/60 cursor-pointer transition ${isSel ? 'bg-[#3765F6]/10' : ''} ${focusIdx === i ? 'ring-2 ring-[#3765F6]/40 ring-inset' : ''}`} onMouseEnter={() => setFocusIdx(i)}>
                 {isWritePermitted && (
                   <td className="px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={isSel} onChange={() => toggle(c.id)} className="accent-[#3765F6]" />
@@ -365,10 +382,14 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
                 </td>
                 <td className="px-4 py-2.5 text-slate-500">{rateName(c.rateGroupId)}</td>
                 <td className="px-4 py-2.5">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold"
-                    style={{ background: statusColor(c.status) + '22', color: statusColor(c.status) }}>
-                    {statusLabel(c.status)}
-                  </span>
+                  {(() => {
+                    const s = getBazaStatusForCoupling(c);
+                    return s === 'base' ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/50">На базе</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/50">В рейса</span>
+                    );
+                  })()}
                 </td>
                 {isWritePermitted && (
                   <td className="px-4 py-2.5 text-right">
@@ -470,6 +491,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
       {viewCard?.type === 'coupling' && viewCard.carNumber && createPortal(
         <CouplingCard
           carNumber={viewCard.carNumber}
+          bazaRec={filtered.find((r: any) => r.carNumber === viewCard.carNumber || r.id === viewCard.carNumber)}
           onClose={() => setViewCard(null)}
           onOpenDriver={(driverId, driverName) => setViewCard({ type: 'driver', driverId, driverName })}
         />,

@@ -36,5 +36,12 @@ export function useFleetUnit(carNumber: string): { unit: FleetUnit | null; loadi
   return { unit, loading };
 }
 
+const CYR_TO_LAT: Record<string, string> = {
+  'А':'A','В':'B','Е':'E','К':'K','М':'M','Н':'H','О':'O','Р':'P','С':'C','Т':'T','У':'Y','Х':'X',
+  'а':'a','в':'b','е':'e','к':'k','м':'m','н':'n','о':'o','р':'p','с':'c','т':'t','у':'y','х':'x',
+};
 const normStr = (s?: string): string =>
-  (s || '').toString().replace(/[^А-ЯA-Z0-9]/g, '').toUpperCase();
+  (s || '').toString()
+    .replace(/[^А-ЯA-Za-z0-9]/g, '')
+    .replace(/[А-Яа-я]/g, (ch: string) => CYR_TO_LAT[ch] || ch)
+    .toUpperCase();

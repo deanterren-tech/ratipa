@@ -2,7 +2,7 @@ import {useState, useEffect, useMemo, useRef} from 'react'
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
 import {directoryService} from '../../api'
-import {BookOpen, Trash2, Save, Plus, Search, Pencil, GripVertical, X} from 'lucide-react'
+import {BookOpen, Trash2, Save, Plus, Search, Pencil, X} from 'lucide-react'
 import {UserProfile} from '../../types'
 import DriverDirectoryBlock from './directories/DriverDirectoryBlock'
 import CurrencyDirectoryBlock from './directories/CurrencyDirectoryBlock'
@@ -13,7 +13,7 @@ interface DirectoriesModuleProps {
   user: UserProfile;
 }
 
-type DirKey = 'vehicleBrands' | 'trailerBrands' | 'dispatchers' | 'rateGroups' | 'statusTypes' | 'directions' | 'drivers' | 'currencies' | 'distances' | 'ferries';
+type DirKey = 'vehicleBrands' | 'trailerBrands' | 'rateGroups' | 'statusTypes' | 'directions' | 'currencies' | 'distances' | 'ferries';
 
 interface TabDef {
   key: DirKey;
@@ -30,11 +30,7 @@ const TABS: TabDef[] = [
     fields: [{ f: 'name', label: 'Название', ph: 'Mercedes' }] },
   { key: 'trailerBrands', label: 'Марки прицепов', idField: 'key', nameField: 'name',
     fields: [{ f: 'name', label: 'Название', ph: 'Kögel' }] },
-  { key: 'dispatchers', label: 'Диспетчеры', idField: 'id', nameField: 'name',
-    fields: [
-      { f: 'name', label: 'Имя', ph: 'Сергей' },
-      { f: 'color', label: 'Цвет (hex)', ph: '#70FC8E' },
-    ], searchable: true },
+  
   { key: 'rateGroups', label: 'Группы ставок', idField: 'id', nameField: 'name',
     fields: [
       { f: 'name', label: 'Название', ph: 'Стандарт' },
@@ -53,7 +49,6 @@ const TABS: TabDef[] = [
       { f: 'label', label: 'Название', ph: 'RUS-BY' },
       { f: 'coeff', label: 'Коэффициент', ph: '1.0', numeric: true },
     ], searchable: true },
-  { key: 'drivers', label: 'Водители', block: DriverDirectoryBlock },
   { key: 'currencies', label: 'Валюты', block: CurrencyDirectoryBlock },
   { key: 'distances', label: 'Расстояния', block: DistanceDirectoryBlock },
   { key: 'ferries', label: 'Паромы', block: FerryDirectoryBlock },
@@ -73,6 +68,7 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
   const tab = useMemo(() => TABS.find((t) => t.key === activeTab)!, [activeTab]);
 
   useEffect(() => {
+    setItems([]);
     if (tab.block) {
       setSearch('');
       setEditing(null);
@@ -81,11 +77,11 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
     const getter = {
       vehicleBrands: directoryService.getVehicleBrands,
       trailerBrands: directoryService.getTrailerBrands,
-      dispatchers: directoryService.getDispatchers,
       rateGroups: directoryService.getRateGroups,
       statusTypes: directoryService.getStatusTypes,
       directions: directoryService.getDirections,
     }[activeTab];
+    if (!getter) return;
     const unsub = getter((list: any[]) => setItems(list || []));
     setSearch('');
     setEditing(null);
@@ -109,8 +105,10 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
   const openEdit = (it: any) => {
     if (!tab.fields) return;
     const d: Record<string, string> = {};
+    if (it.dbKey != null) d.dbKey = String(it.dbKey);
+    if (it.id != null) d.id = String(it.id);
     tab.fields.forEach((f) => { d[f.f] = it[f.f] != null ? String(it[f.f]) : ''; });
-    if (tab.idField !== 'key' && it[tab.idField] != null) d[tab.idField] = String(it[tab.idField]);
+    if (it[tab.idField] != null) d[tab.idField] = String(it[tab.idField]);
     setDraft(d);
     setEditing(it);
   };
@@ -118,9 +116,14 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
   const handleSave = () => {
     if (!tab.fields) return;
     const rec: any = { ...draft };
-    if (tab.idField !== 'key' && draft[tab.idField]) rec[tab.idField] = draft[tab.idField];
+    if (draft.dbKey) { rec.dbKey = draft.dbKey; rec.id = draft.dbKey; }  // реальный ключ БД (приоритет)
+    else if (draft.id) rec.id = draft.id;
+    if (draft[tab.idField]) rec[tab.idField] = draft[tab.idField];
     tab.fields.forEach((f) => {
-      if (f.numeric) rec[f.f] = rec[f.f] === '' ? (f.f === 'perDiemRate' ? null : 0) : parseFloat(rec[f.f]);
+      if (f.numeric) {
+        const norm = String(rec[f.f] ?? '').replace(',', '.');
+        rec[f.f] = norm === '' ? (f.f === 'perDiemRate' ? null : 0) : parseFloat(norm);
+      }
     });
     if (tab.idField === 'key' && !rec.key) {
       rec.key = (rec.name || '').toString().toUpperCase().replace(/\s+/g, '_');
@@ -132,7 +135,7 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
   };
 
   const handleDelete = async (it: any) => {
-    const idv = it[tab.idField] || it.id;
+    const idv = it.dbKey || it.id || it[tab.idField] || it.key;
     if (await showConfirm(`Удалить «${it[tab.nameField] || idv}» из справочника?`)) {
       directoryService.deleteDirItem(tab.key, idv, user.name, user.role);
       toast('Удалено', 'success');
@@ -161,143 +164,152 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
   const cardColor = (it: any) => it.color || (tab.key === 'statusTypes' ? it.color : undefined);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 sm:p-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex items-center gap-2 mb-4">
-          <BookOpen className="w-5 h-5 text-[#3765F6]" />
-          <h1 className="text-lg font-bold text-slate-800">Справочники</h1>
-          <span className="ml-auto text-[11px] text-slate-400 font-mono">{items.length} записей</span>
-        </div>
+    <div key={activeTab} className="w-full space-y-6">
+      <div className="bg-white rounded-[2rem] p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-5">
 
-        {/* Tabs */}
-        <div className="flex flex-wrap gap-1.5 mb-4">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setActiveTab(t.key)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === t.key ? 'bg-[#3765F6] text-white shadow' : 'bg-white/70 text-slate-600 hover:bg-white'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+        {/* Header with title + tab segment */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+          <div>
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">
+              Справочники
+            </span>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+              <BookOpen className="w-5 h-5 text-slate-700" /> Справочники
+            </h1>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50 overflow-x-auto max-w-full items-center">
+              {TABS.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setActiveTab(t.key)}
+                  className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all whitespace-nowrap ${
+                    activeTab === t.key
+                      ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-[10px] text-slate-400 font-mono hidden sm:block">{items.length} записей</span>
+          </div>
         </div>
 
         {/* Toolbar: search + add */}
-        <div className="flex gap-2 mb-4">
+        <div className="flex gap-2">
           {tab.searchable && (
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <div className="flex items-center flex-1 min-w-0 bg-white border border-slate-200/60 rounded-xl px-3 py-1.5">
+              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 mr-2" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Поиск…"
-                className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-white/80 outline-none focus:border-[#3765F6]"
+                className="w-full bg-transparent text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400"
               />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  className="text-xs hover:bg-slate-100 p-1 rounded-lg text-slate-400 hover:text-slate-700 transition"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
             </div>
           )}
           <button
             onClick={openAdd}
-            className="inline-flex items-center gap-1.5 bg-[#3765F6] text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-[#2a4fd0] shrink-0"
+            className="px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 bg-slate-900 text-white hover:bg-slate-800 shadow-sm border border-slate-800 shrink-0"
           >
-            <Plus className="w-3.5 h-3.5" /> Добавить
+            <Plus className="w-4 h-4 shrink-0" /> Добавить
           </button>
         </div>
 
         {/* List */}
-        <div ref={listRef} className="bg-white/80 backdrop-blur rounded-2xl border border-slate-200/50 overflow-hidden shadow-sm">
-          <div className="divide-y divide-slate-100">
-            {filtered.length === 0 && (
-              <div className="p-6 text-center text-xs text-slate-400">Пусто</div>
-            )}
-            {filtered.map((it, idx) => (
-              <div
-                key={it[tab.idField] || it.id || idx}
-                draggable={tab.key === 'dispatchers'}
-                onDragStart={() => setDragIdx(idx)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => onDrop(idx)}
-                className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 group"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  {tab.key === 'dispatchers' && (
-                    <GripVertical className="w-4 h-4 text-slate-300 cursor-grab active:cursor-grabbing" />
-                  )}
-                  {cardColor(it) && (
-                    <span className="w-3.5 h-3.5 rounded-full shrink-0" style={{ background: cardColor(it) }} />
-                  )}
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-slate-800 truncate">
-                      {it[tab.nameField] || it[tab.idField]}
-                    </div>
-                    {tab.key === 'rateGroups' && (
-                      <div className="text-[10px] text-slate-400">
-                        €{it.rate}/км{it.perDiemRate ? ` · суточные €${it.perDiemRate}` : ''}
-                      </div>
-                    )}
-                    {tab.key === 'directions' && it.coeff != null && (
-                      <div className="text-[10px] text-slate-400">коэфф: {it.coeff}</div>
-                    )}
-                    {tab.key === 'statusTypes' && it.category && (
-                      <div className="text-[10px] text-slate-400">{it.category}</div>
-                    )}
+        <div ref={listRef} className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden shadow-sm divide-y divide-slate-100">
+          {filtered.length === 0 && (
+            <div className="p-6 text-center text-xs text-slate-400">Пусто</div>
+          )}
+          {filtered.map((it, idx) => (
+            <div
+              key={it[tab.idField] || it.id || idx}
+              data-nav-item
+              draggable={false}
+              onDragStart={() => setDragIdx(idx)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={() => onDrop(idx)}
+              className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 group"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                {cardColor(it) && (
+                  <span className="w-3 h-3 rounded-full shrink-0" style={{ background: cardColor(it) }} />
+                )}
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-800 truncate">
+                    {it[tab.nameField] || it[tab.idField]}
                   </div>
-                </div>
-                <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition">
-                  <button
-                    onClick={() => openEdit(it)}
-                    className="text-slate-400 hover:text-[#3765F6] p-1.5 rounded-lg hover:bg-blue-50"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(it)}
-                    className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {tab.key === 'rateGroups' && (
+                    <div className="text-[10px] text-slate-400">
+                      €{it.rate}/км{it.perDiemRate ? ` · суточные €${it.perDiemRate}` : ''}
+                    </div>
+                  )}
+                  {tab.key === 'directions' && it.coeff != null && (
+                    <div className="text-[10px] text-slate-400">коэфф: {it.coeff}</div>
+                  )}
+                  {tab.key === 'statusTypes' && it.category && (
+                    <div className="text-[10px] text-slate-400">{it.category}</div>
+                  )}
                 </div>
               </div>
-            ))}
-          </div>
+              <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition">
+                <button
+                  onClick={() => openEdit(it)}
+                  className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(it)}
+                  className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
-        {tab.block ? (
-          <tab.block user={user} />
-        ) : (
-          <>
-            {tab.key === 'dispatchers' && (
-              <p className="text-[10px] text-slate-400 mt-2 text-center">Перетащите запись за значок ☰ чтобы изменить порядок</p>
-            )}
-          </>
-        )}
+
+        {/* Block components */}
+        {tab.block && <tab.block user={user} />}
       </div>
 
       {/* Edit/Add Modal */}
       {editing && (
-        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setEditing(null)}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in" onClick={() => setEditing(null)}>
           <div
-            className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-md p-5 space-y-3"
+            className="bg-white/90 backdrop-blur-xl rounded-3xl w-full max-w-md shadow-2xl p-6 flex flex-col space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold text-slate-800">
                 {editing.__new ? 'Добавить в ' : 'Изменить · '}{tab.label}
               </h2>
-              <button onClick={() => setEditing(null)} className="text-slate-400 hover:text-slate-700">
+              <button onClick={() => setEditing(null)} className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {tab.fields.map((f) => (
               <div key={f.f}>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">{f.label}</label>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{f.label}</label>
                 <input
                   type={f.type || 'text'}
                   value={draft[f.f] || ''}
                   onChange={(e) => setDraft((d) => ({ ...d, [f.f]: e.target.value }))}
                   placeholder={f.ph}
-                  className="w-full mt-1 px-3 py-2 text-sm rounded-lg border border-slate-200 outline-none focus:border-[#3765F6]"
+                  className="w-full mt-1 px-3 py-2 text-sm rounded-lg border border-slate-200 outline-none focus:border-slate-400 bg-white/80 transition"
                 />
               </div>
             ))}
@@ -305,13 +317,13 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setEditing(null)}
-                className="px-3 py-2 text-xs font-bold text-slate-500 rounded-lg hover:bg-slate-100"
+                className="px-3 py-2 text-xs font-medium text-slate-500 rounded-lg hover:bg-slate-100 transition"
               >
                 Отмена
               </button>
               <button
                 onClick={handleSave}
-                className="inline-flex items-center gap-1.5 bg-[#3765F6] text-white text-xs font-bold px-3 py-2 rounded-lg hover:bg-[#2a4fd0]"
+                className="inline-flex items-center gap-1.5 bg-slate-900 text-white text-xs font-semibold px-3 py-2 rounded-lg hover:bg-slate-800 shadow-sm transition"
               >
                 <Save className="w-3.5 h-3.5" /> Сохранить
               </button>

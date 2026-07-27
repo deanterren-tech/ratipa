@@ -33,6 +33,7 @@ export interface UserPermissions {
 
 export interface UserProfile {
   uid: string;
+  isDispatcher?: boolean;
   name: string;
   email: string;
   role: UserRole;
@@ -481,6 +482,7 @@ export interface DirectionPreset {
 export interface Driver {
   id: string;
   name: string;
+  nameLat?: string;
   lastNameRu?: string;
   firstNameRu?: string;
   middleNameRu?: string;
@@ -490,8 +492,17 @@ export interface Driver {
   shortNameRu?: string;
   shortNameLat?: string;
   phone?: string;
+  phones?: Array<{id: string; isPrimary: boolean; number: string}>;
   license?: string;
+  licenseNumber?: string;
+  passport?: string;
+  personalId?: string;
+  passportStart?: string;
+  passportEnd?: string;
+  passportIssued?: string;
+  birthDate?: string;
   rateGroupId?: string;
+  dispatcher?: string;
   comment?: string;
 }
 

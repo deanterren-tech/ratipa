@@ -16,7 +16,8 @@ import {
   ChevronRight,
   User,
   Sliders,
-  Shield
+  Shield,
+  Users,
 } from "lucide-react";
 import {useToast} from '../ToastProvider'
 import {useDialog} from '../DialogProvider'
@@ -213,18 +214,18 @@ export default function UserManagementBlock({ user }: Props) {
   ];
 
   return (
-    <div className="bg-white/40 backdrop-blur-xl rounded-[2.5rem] border border-white/45 shadow-sm flex flex-col md:flex-row overflow-hidden min-h-[680px] mt-6 relative">
+    <div className="bg-white rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col md:flex-row overflow-hidden min-h-[680px] mt-6">
       {/* Left Pane */}
       <div className="w-full md:w-5/12 lg:w-4/12 border-r border-slate-200/40 flex flex-col bg-white/20 select-none">
         <div className="p-6 border-b border-slate-200/40 bg-white/10">
           <div className="flex justify-between items-center mb-4">
             <div>
-              <span className="bg-[#3765F6]/10 text-[#3765F6] border border-[#3765F6]/10 font-mono text-[9px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full mb-1 inline-block">
+              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">
                 Registry
               </span>
-              <h2 className="text-sm font-black text-slate-800 tracking-tight">
-                Доступ и Учетные записи
-              </h2>
+              <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+                <Users className="w-7 h-7 text-slate-800" /> Доступ и Учетные записи
+              </h1>
             </div>
             {canEditUsers && activeMainTab === "users" && (
               <button
@@ -358,7 +359,7 @@ export default function UserManagementBlock({ user }: Props) {
       </div>
 
       {/* Right Pane */}
-      <div className="w-full md:w-7/12 lg:w-8/12 flex flex-col bg-white/10 backdrop-blur-md">
+      <div className="w-full md:w-7/12 lg:w-8/12 flex flex-col bg-slate-50">
         
         {/* ADD USER FORM */}
         {isAdding && activeMainTab === "users" && (
@@ -548,6 +549,19 @@ export default function UserManagementBlock({ user }: Props) {
                     {Object.entries(ROLE_LABELS).map(([k, v]) => (user.role !== 'root_admin' && k === 'root_admin' ? null : <option key={k} value={k}>{v}</option>))}
                   </select>
                 </div>
+
+                <div className="bg-white/45 border border-white/60 rounded-2xl p-4.5 shadow-xs">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input type="checkbox" checked={!!(selectedUser as any).isDispatcher}
+                      disabled={!canEditSelectedUser}
+                      onChange={(e) => {
+                        dbService.saveUser({ ...selectedUser, isDispatcher: e.target.checked });
+                        toast(e.target.checked ? 'Диспетчер включен' : 'Диспетчер выключен', 'success');
+                      }}
+                      className="w-4 h-4 rounded border-slate-300 text-[#3765F6] accent-[#3765F6] focus:ring-[#3765F6] cursor-pointer disabled:opacity-40" />
+                    <span className="text-[11px] font-bold text-slate-700">Диспетчер (показывать в списках диспетчеров)</span>
+                  </label>
+                </div>
               </div>
 
               <div className="bg-white/45 border border-white/60 rounded-2xl p-4.5 shadow-xs">
@@ -569,8 +583,8 @@ export default function UserManagementBlock({ user }: Props) {
                 </div>
               </div>
 
-              <div className="bg-white/45 border border-white/60 rounded-2xl p-4.5 shadow-xs">
-                <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 font-mono mb-2 flex items-center gap-1.5 select-none">
+              <div className="bg-slate-50 rounded-2xl border border-slate-200/50 p-4">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
                   <ShieldCheck size={12} className="text-[#3765F6]" /> Права редактирования полей Учёта выезда
                 </label>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
@@ -601,7 +615,7 @@ export default function UserManagementBlock({ user }: Props) {
                 <Sliders size={13} className="text-[#3765F6]" />
                 Индивидуальные права доступа (переопределения)
               </h4>
-              <div className="bg-white/20 border border-slate-200/40 rounded-[1.8rem] p-4.5 space-y-3.5 max-h-[350px] overflow-y-auto custom-scrollbar shadow-inner">
+              <div className="bg-slate-50 border border-slate-200/50 rounded-[2rem] p-5 space-y-3 overflow-y-auto custom-scrollbar">
                 {MODULES_LIST.map((m) => {
                   const currentCustom = selectedUser.customPermissions?.[m.key] || "inherit";
                   const effectivePerm = selectedUser.permissions?.[m.key] || "none";

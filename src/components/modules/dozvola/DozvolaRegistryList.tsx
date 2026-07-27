@@ -81,7 +81,7 @@ const DozvolaRow = React.memo(({
       used: 'Сдан в ТИ', expired: 'Аннулирован', available: 'В наличии'
     };
     return (
-      <tr className={`border-b border-slate-100/70 hover:bg-slate-50/60 transition ${        item.isCopy && item.status !== 'office_return' && item.status !== 'used' && item.status !== 'expired'
+      <tr data-nav-item className={`border-b border-slate-100/70 hover:bg-slate-50/60 transition ${        item.isCopy && item.status !== 'office_return' && item.status !== 'used' && item.status !== 'expired'
           ? 'bg-amber-50/30' : ''}`}>
         <td className="px-3 py-2.5 align-middle">
           <input type="checkbox" className="w-4 h-4 rounded border-slate-200 text-[#3765F6] accent-[#3765F6] cursor-pointer" checked={isChecked} onChange={(e) => onCheckboxChange(e.target.checked)} />
