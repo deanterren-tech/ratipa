@@ -6,7 +6,7 @@
 //   FIREBASE_SERVICE_ACCOUNT  — JSON строкой (service-account key)
 //   либо по отдельности:
 //   FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY (с \n для переносов)
-//   FIREBASE_DATABASE_URL     — RTDB url (по умолчанию ratipa-panel-default-rtdb)
+//   FIREBASE_DATABASE_URL     — RTDB url (по умолчанию ratipa-portal-default-rtdb)
 //
 // Если ключ не задан — adminApp/adminDb = null, Agent API вернёт 503 с понятной ошибкой.
 
@@ -19,9 +19,9 @@ dotenvConfig();
 
 const DATABASE_URL =
   process.env.FIREBASE_DATABASE_URL ||
-  "https://ratipa-panel-default-rtdb.firebaseio.com";
+  "https://ratipa-portal-default-rtdb.firebaseio.com";
 
-const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "ratipa-panel";
+const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "ratipa-portal";
 
 function buildCredential(): any | null {
   // 1. Полный JSON в одной переменной

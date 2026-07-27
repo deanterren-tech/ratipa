@@ -1,7 +1,7 @@
 // Единый источник firebase-конфигурации.
 // Конфиг читается из Vite/env (.env / .env.local), без хардкода в коде.
-// Если env не задан — fallback на проект ratipa-panel (старое поведение fresh),
-// чтобы ничего не сломалось.
+// Если env не задан — fallback на проект ratipa-portal (основная база),
+// чтобы деплой/Vercel работал без явной настройки переменных окружения.
 //
 // Также сохраняется возможность override через localStorage
 // ("ratipa_custom_firebase_config") — для переключения проекта из UI.
@@ -27,13 +27,13 @@ const envConfig: FirebaseEnvConfig = {
 };
 
 const fallbackConfig: FirebaseEnvConfig = {
-  apiKey: "«redacted»",
-  authDomain: "ratipa-panel.firebaseapp.com",
-  databaseURL: "https://ratipa-panel-default-rtdb.firebaseio.com",
-  projectId: "ratipa-panel",
-  storageBucket: "ratipa-panel.firebasestorage.app",
-  messagingSenderId: "726344734944",
-  appId: "1:726344734944:web:10f511be867e03f9e71885",
+  apiKey: "AIzaSyCDIMbmyjjK_pdZVTa64dt6qmXHzMsNkEk",
+  authDomain: "ratipa-portal.firebaseapp.com",
+  databaseURL: "https://ratipa-portal-default-rtdb.firebaseio.com",
+  projectId: "ratipa-portal",
+  storageBucket: "ratipa-portal.firebasestorage.app",
+  messagingSenderId: "359074314449",
+  appId: "1:359074314449:web:917011dfb51998273aadf0",
 };
 
 export const isFirebaseEnvConfigured = Boolean(envConfig.apiKey) && Boolean(envConfig.databaseURL);
