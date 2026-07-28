@@ -27,11 +27,11 @@ import {
 } from 'lucide-react';
 import {dbService, database} from '../../api'
 import {pdService} from '../../api'
-import {getCouplingsFlat, getDriversFlat} from '../../services/fleetService'
+import {getCouplingsFlat, getDriversFlat, getFleetUnitsOnce} from '../../services/fleetService'
 import { ref, update } from 'firebase/database';
 import {UserProfile, AppSettings, PhoneNumber, Driver, CarRateGroup} from '../../types'
 import {formatDriverShortName} from '../../utils/driverSync'
-import {normalizePlate} from '../../utils/salaryAutofill'
+import {normalizePlate, formatPlate, formatCoupling} from '../../utils/salaryAutofill'
 import CouplingPicker from '../common/CouplingPicker';
 import { useToast } from '../ToastProvider';
 
@@ -83,7 +83,7 @@ const VehicleDriverCard = React.memo(({
       <div className="px-3.5 py-2.5 border-b border-slate-100/60 bg-slate-50/30 flex items-start justify-between gap-3">
         <div className="space-y-0.5 min-w-0 flex-1">
           <div className="text-xs font-bold text-[#3765F6] tracking-wide font-mono bg-[#3765F6]/5 border border-[#3765F6]/10 px-2 py-0.5 rounded-lg w-fit truncate">
-            {rec.coupling || `${rec.vehicleNumbers || ''}${rec.trailerNumber ? ' / ' + rec.trailerNumber : ''}`}
+            {formatCoupling(rec.coupling || `${rec.vehicleNumbers || ''}${rec.trailerNumber ? ' / ' + rec.trailerNumber : ''}`)}
           </div>
         </div>
         
@@ -213,7 +213,7 @@ const VehicleDriverCard = React.memo(({
               <span>{copiedId === rec.id ? 'Готово!' : 'Коп.'}</span>
             </button>
           </div>
-          <div className="select-all font-bold text-slate-800 leading-none mb-0.5">{rec.coupling || `${(rec.carNumber || rec.vehicleNumbers || '')} / ${(rec as any).trailerNumber || ''}`}</div>
+          <div className="select-all font-bold text-slate-800 leading-none mb-0.5">{formatCoupling(rec.coupling || `${(rec.carNumber || rec.vehicleNumbers || '')} / ${(rec as any).trailerNumber || ''}`)}</div>
           <div className="select-all truncate">Марки: {brandsText || '—'}</div>
           <div className="select-all truncate">Водитель: {(() => {
             const ru = rec.driverNameRu || (rec as any).driverName || '';
@@ -375,12 +375,37 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     // Fetch live vehicles data — getVehicleDriverData now reads the unified
     // base (vehicleFleet). Both `records` and `fleetVehicles` come from it,
     // and verifyFleet is just an alias of fleetVehicles (single source of truth).
-    const unsubData = getCouplingsFlat((list) => {
-      setRecords(list);
-      setFleetVehicles(list); // Combined: records and fleetVehicles are identical, eliminating duplicate listeners!
-      setVerifyFleet(list);   // verification queue reads the same unified base
+    // Однократное чтение — данные показываются сразу, без ожидания onValue
+    getFleetUnitsOnce((units) => {
+      const flat = units.map((u: any) => ({
+        id: u.couplingId,
+        couplingId: u.couplingId,
+        carNumber: u.tractor?.carNumber || u.couplingId,
+        vehicleNumbers: u.tractor?.carNumber || u.couplingId,
+        trailerNumber: u.trailer?.trailerNumber || '',
+        brandModel: u.tractor?.brandModel || u.tractor?.brandsRu || '',
+        brandsRu: u.tractor?.brandModel || u.tractor?.brandsRu || '',
+        brandsLat: u.trailer?.trailerBrand || '',
+        trailerMake: u.trailer?.trailerBrand || '',
+        driverId: u.raw.driverId || '',
+        driverNameRu: u.driver?.shortNameRu || u.driver?.name || '',
+        driverNameLat: u.driver?.nameLat || '',
+        dispatcher: u.dispatcher?.name || '',
+        dispatcherName: u.dispatcher?.name || '',
+        status: u.status,
+      }));
+      setRecords(flat as any);
+      setFleetVehicles(flat);
+      setVerifyFleet(flat);
       setIsDataLoaded(true);
     });
+
+    // Подписка на изменения в реальном времени
+        const unsubData = getCouplingsFlat((list) => {
+          setRecords(list);
+          setFleetVehicles(list);
+          setVerifyFleet(list);
+        });
 
     // Fetch rate groups
     const unsubCarRateGroups = dbService.getCarRateGroups ? dbService.getCarRateGroups(setCarRateGroups) : () => {};
@@ -806,7 +831,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     const brandsText = brandModel ? `${brandModel}${trailerMake ? ' / ' + trailerMake : ''}` : '';
     const driverNameText = rec.driverNameRu || (rec as any).driverName || '';
     const driverLatText = rec.driverNameLat || (rec as any).driverNameLat || '';
-    const couplingText = rec.coupling || `${(rec.carNumber || rec.vehicleNumbers || '')} / ${(rec as any).trailerNumber || ''}`;
+    const couplingText = formatCoupling(rec.coupling || `${(rec.carNumber || rec.vehicleNumbers || '')} / ${(rec as any).trailerNumber || ''}`);
     const driverLine = driverLatText
       ? `${driverNameText} (${driverLatText})`
       : driverNameText;
@@ -1300,7 +1325,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   </label>
                   <CouplingPicker
                     onSelect={(rec) => {
-                      if (rec) setVehicleNumbers((rec.carNumber || rec.vehicleNumbers || '').toUpperCase());
+                      if (rec) setVehicleNumbers(formatCoupling((rec.carNumber || rec.vehicleNumbers || '').toUpperCase()));
                     }}
                   />
                 </div>

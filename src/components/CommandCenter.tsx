@@ -93,7 +93,7 @@ export default function CommandCenter({ user, isOpen, onClose, onNavigate }: Com
                <div className="flex flex-col gap-1">
                  {results.map((r, i) => (
                     <div 
-                      key={i} 
+                      key={r.module + i} 
                       onClick={() => {
                         onNavigate(r.module);
                         onClose();

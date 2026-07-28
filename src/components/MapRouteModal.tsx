@@ -213,7 +213,7 @@ const MapRouteModal = ({
               ) : (
                 <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
                   {localWaypoints.map((wp, idx) => (
-                    <div key={idx} className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200">
+                    <div key={wp + idx} className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200">
                       <span className="text-[9px] font-bold text-slate-400 font-mono w-4 text-center">
                         {idx + 1}
                       </span>

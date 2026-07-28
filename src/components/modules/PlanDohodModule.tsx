@@ -18,6 +18,7 @@ import {calculateTripFinances} from '../../utils/financeCalculators'
 import {dbService, directoryService} from '../../api';
 import {pdService} from '../../api';
 import CouplingPicker from "../common/CouplingPicker";
+import {formatCoupling} from '../../utils/salaryAutofill'
 import {
   Plus,
   Trash2,
@@ -138,8 +139,12 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     });
     const unsubDisp = directoryService.getDispatchersObjects((list) => {
       const objs = list || [];
-      setDispatchers(objs.map((d) => d.name));
-      setDispatchersOrder(objs.map((d) => d.name));
+      const names = objs.map((d) => d.name);
+      // Гарантируем, что имя текущего пользователя присутствует среди диспетчеров,
+      // иначе его рейсы (dispatcher = user.name) не попадают ни в одну вкладку.
+      const withMe = names.includes(user.name) ? names : [...names, user.name];
+      setDispatchers(withMe);
+      setDispatchersOrder(withMe);
     });
     pdService.setPresence(user.name);
 
@@ -1786,7 +1791,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Автомобиль</label>
                         <CouplingPicker
                           onSelect={(rec) => {
-                            if (rec) handleCarNumberChange((rec.carNumber || rec.vehicleNumbers || '').toUpperCase());
+                            if (rec) handleCarNumberChange(formatCoupling((rec.carNumber || rec.vehicleNumbers || '').toUpperCase()));
                           }}
                         />
                       </div>
@@ -2674,12 +2679,17 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   };
 
   const activeTripsComputed = useMemo(() => {
+    const normTab = (activeDispatcherTab || '').toString().trim().toUpperCase().replace(/[^A-ZА-Я0-9]/g, '');
     let list = trips.filter((t) => !t.isArchived);
     if (activeDispatcherTab) {
-      if (activeDispatcherTab === "Все диспетчеры") {
-        list = list.filter((t) => filterDispatchers.includes(t.dispatcher));
-      } else if (activeDispatcherTab !== "All") {
-        list = list.filter((t) => t.dispatcher === activeDispatcherTab);
+      if (activeDispatcherTab === 'Все диспетчеры') {
+        // «Все диспетчеры» = показать ВСЕ записи (без фильтра по справочнику),
+        // иначе рейсы с dispatcher = user.name (не из справочника) невидимы.
+      } else if (activeDispatcherTab !== 'All') {
+        list = list.filter((t) => {
+          const td = (t.dispatcher || '').toString().trim().toUpperCase().replace(/[^A-ZА-Я0-9]/g, '');
+          return td === normTab;
+        });
       }
     }
     if (activeDirectionTab !== "All") {

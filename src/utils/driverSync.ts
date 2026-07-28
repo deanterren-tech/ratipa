@@ -21,8 +21,9 @@ export function formatDriverShortName(
     first = driverOrLastName.firstNameRu || '';
     middle = driverOrLastName.middleNameRu || '';
     // Fallback to parsing drv.name if parts are empty
-    if (!last && driverOrLastName.name) {
-      const parts = driverOrLastName.name.trim().split(/\s+/);
+    const srcName = driverOrLastName?.name || '';
+    if (!last && srcName) {
+      const parts = srcName.trim().split(/\s+/);
       last = parts[0] || '';
       first = parts[1] || '';
       middle = parts[2] || '';
@@ -186,8 +187,9 @@ export async function migrateExistingDriverNames(): Promise<{ migratedCount: num
         };
 
         // Split name if lastNameRu is missing
-        if (!parsedDriver.lastNameRu && parsedDriver.name) {
-          const parts = parsedDriver.name.trim().split(/\s+/);
+        const srcName = parsedDriver?.name || '';
+        if (!parsedDriver.lastNameRu && srcName) {
+          const parts = srcName.trim().split(/\s+/);
           parsedDriver.lastNameRu = parts[0] || '';
           parsedDriver.firstNameRu = parts[1] || '';
           parsedDriver.middleNameRu = parts[2] || '';

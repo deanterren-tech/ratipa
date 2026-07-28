@@ -38,12 +38,10 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
 
   const [drivers, setDrivers] = useState<DriverRow[]>([]);
   const [dispatchers, setDispatchers] = useState<any[]>([]);
-  const [rateGroups, setRateGroups] = useState<any[]>([]);
   const [couplings, setCouplings] = useState<any[]>([]);
 
   const [search, setSearch] = useState('');
   const [focusIdx, setFocusIdx] = useState(-1);
-  const [activeDisp, setActiveDisp] = useState<string>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<DriverRow | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
@@ -51,7 +49,7 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkField, setBulkField] = useState<'dispatcher' | 'rateGroupId' | null>(null);
+  const [bulkField, setBulkField] = useState<'dispatcher' | null>(null);
   const [bulkValue, setBulkValue] = useState('');
 
   useEffect(() => {
@@ -70,18 +68,13 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
       })));
     });
     const u2 = getDispatchersFlat((l: any[]) => setDispatchers(l || []));
-    const u3 = directoryService.getRateGroups((l: any[]) => setRateGroups(l || []));
     const u4 = getCouplingsFlat((l: any[]) => setCouplings(l || []));
-    return () => { u1(); u2(); u3(); u4(); };
+    return () => { u1(); u2(); u4(); };
   }, []);
 
   const dispName = (id?: string) => {
     const d = dispatchers.find((x) => (x.id || x.key) === id);
     return d ? d.name : (id || '—');
-  };
-  const rateName = (id?: string) => {
-    const g = rateGroups.find((x) => (x.id || x.key) === id);
-    return g ? `${g.name} (€${g.rate}/км)` : '—';
   };
   const couplingOf = (id?: string) => {
     const c = couplings.find((x) => x.driverId === id);
@@ -91,12 +84,11 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase().replace(/\s+/g, '');
     return drivers.filter((d) => {
-      if (activeDisp !== 'all' && d.dispatcher !== activeDisp) return false;
       if (!q) return true;
       return [d.name, d.phone, d.passport, d.personalId, dispName(d.dispatcher)]
         .join(' ').toLowerCase().replace(/\s+/g, '').includes(q);
     });
-  }, [search, drivers, dispatchers, activeDisp]);
+  }, [search, drivers, dispatchers]);
 
   const openAdd = () => {
     setEditing(null);
@@ -205,25 +197,6 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
         )}
       </div>
 
-      {/* TABS по диспетчерам */}
-      <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/60 max-w-max">
-        <button onClick={() => setActiveDisp('all')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${activeDisp === 'all' ? 'bg-[#3765F6] text-white shadow' : 'text-slate-600 hover:bg-white'}`}>
-          Все ({drivers.length})
-        </button>
-        {dispatchers.map((d) => {
-          const cnt = drivers.filter((x) => x.dispatcher === (d.id || d.key)).length;
-          const isActive = activeDisp === (d.id || d.key);
-          return (
-            <button key={d.id || d.key} onClick={() => setActiveDisp(d.id || d.key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${isActive ? 'bg-[#3765F6] text-white shadow' : 'text-slate-600 hover:bg-white'}`}>
-              {d.name}
-              <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-mono ${isActive ? 'bg-white/20' : 'bg-slate-200'}`}>{cnt}</span>
-            </button>
-          );
-        })}
-      </div>
-
       {/* SEARCH + multi-select */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 max-w-xs">
@@ -249,10 +222,6 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
       {isWritePermitted && selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl bg-[#3765F6]/5 border border-[#3765F6]/20">
           <span className="text-xs font-bold text-slate-700">Массово для {selected.size}:</span>
-          <button onClick={() => { setBulkField('rateGroupId'); setBulkValue(''); setBulkOpen(true); }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50">
-            <Tag className="w-3.5 h-3.5" /> Применить ставку
-          </button>
           <button onClick={() => { setBulkField('dispatcher'); setBulkValue(''); setBulkOpen(true); }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50">
             <User className="w-3.5 h-3.5" /> Назначить диспетчера
@@ -281,7 +250,6 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
               <th className="px-4 py-3 whitespace-nowrap">Телефон</th>
               <th className="px-4 py-3 whitespace-nowrap">Паспорт</th>
               <th className="px-4 py-3 whitespace-nowrap">Личный №</th>
-              <th className="px-4 py-3 whitespace-nowrap">Ставка</th>
               <th className="px-4 py-3 whitespace-nowrap">Машина</th>
               {isWritePermitted && <th className="px-4 py-3 text-right w-[80px]"></th>}
             </tr>
@@ -309,7 +277,6 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
                   <td className="px-4 py-2.5 text-slate-500">{d.phone || '—'}</td>
                   <td className="px-4 py-2.5 text-slate-500">{d.passport || '—'}</td>
                   <td className="px-4 py-2.5 text-slate-500">{d.personalId || '—'}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{rateName(d.rateGroupId)}</td>
                   <td className="px-4 py-2.5 text-slate-500">{couplingOf(d.id)}</td>
                   {isWritePermitted && (
                     <td className="px-4 py-2.5 text-right">
@@ -356,8 +323,6 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
                 <Field label="Дата рождения" value={form.birthDate} onChange={(v) => setForm({ ...form, birthDate: v })} placeholder="01.01.1980" />
                 <SelectField label="Диспетчер" value={form.dispatcher} onChange={(v) => setForm({ ...form, dispatcher: v })}
                   options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
-                <SelectField label="Группа ставок" value={form.rateGroupId} onChange={(v) => setForm({ ...form, rateGroupId: v })}
-                  options={rateGroups.map((g) => ({ v: g.id || g.key, l: `${g.name} (€${g.rate}/км)` }))} />
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 mt-5">
@@ -376,17 +341,12 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
                 <Layers className="w-4 h-4 text-[#3765F6]" />
-                {bulkField === 'rateGroupId' ? 'Применить ставку' : 'Назначить диспетчера'} ({selected.size})
+                Назначить диспетчера ({selected.size})
               </h3>
               <button onClick={() => setBulkOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
-            {bulkField === 'rateGroupId' ? (
-              <SelectField label="Группа ставок" value={bulkValue} onChange={setBulkValue}
-                options={rateGroups.map((g) => ({ v: g.id || g.key, l: `${g.name} (€${g.rate}/км)` }))} />
-            ) : (
-              <SelectField label="Диспетчер" value={bulkValue} onChange={setBulkValue}
-                options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
-            )}
+            <SelectField label="Диспетчер" value={bulkValue} onChange={setBulkValue}
+              options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
             <div className="flex items-center justify-end gap-2 mt-5">
               <button onClick={() => setBulkOpen(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl">Отмена</button>
               <button onClick={applyBulk} disabled={!bulkValue}

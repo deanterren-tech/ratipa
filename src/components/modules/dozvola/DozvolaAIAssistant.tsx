@@ -400,7 +400,8 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                 let logMsg = diffs.length > 0 ? diffs.join(' | ') : "Обновление параметров через парсер";
                 
                 if (useFirebase) {
-                    update(ref(database, `dozvolsRegistryV4/${item.id}`), { type: item.type, number: item.number, status: item.status, isCopy: item.isCopy, car: item.car, comment: item.comment || "" });
+                    update(ref(database, `dozvolsRegistryV4/${item.id}`), { type: item.type, number: item.number, status: item.status, isCopy: item.isCopy, car: item.car, comment: item.comment || "" })
+                        .catch((err) => console.warn("[DozvolaAIAssistant] Не удалось обновить дозвол", item.id, err));
                     logAction(item.type, item.number, "Обновление через парсер", logMsg);
                 }
             } else {

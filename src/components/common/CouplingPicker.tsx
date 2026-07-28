@@ -4,6 +4,7 @@ import {Search, Truck, X, MapPin} from 'lucide-react'
 import {dbService} from '../../api'
 import {getCouplingsFlat} from '../../services/fleetService'
 import {formatDriverShortName} from '../../utils/driverSync'
+import {formatCoupling} from '../../utils/salaryAutofill'
 
 interface CouplingPickerProps {
   value?: string;            // selected coupling id (or raw string for combined)
@@ -135,7 +136,7 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
     if (mode === 'combined') {
       const label = rec.carNumber || rec.tractor?.carNumber || rec.couplingId || '';
       const trail = rec.trailerNumber || rec.trailer?.trailerNumber || '';
-      setQuery(trail ? `${label} / ${trail}` : label);
+      setQuery(formatCoupling(trail ? `${label} / ${trail}` : label));
     } else {
       setQuery('');
     }
@@ -161,7 +162,7 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
     }
     const car = rec.carNumber || rec.tractor?.carNumber || rec.couplingId || '';
     const trail = rec.trailerNumber || rec.trailer?.trailerNumber || '';
-    return trail ? `${car} / ${trail}` : car;
+    return formatCoupling(trail ? `${car} / ${trail}` : car);
   };
   const displaySub = (rec: any) => {
     const car = rec.carNumber || rec.tractor?.carNumber || '';
@@ -223,6 +224,22 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
               </div>
             </button>
           ))}
+          {mode === 'coupling' && query.trim() && !couplingsFiltered.some((c) => {
+            const car = (c.carNumber || c.vehicleNumbers || '').toUpperCase().replace(/\s+/g, '');
+            return car === query.trim().toUpperCase().replace(/\s+/g, '');
+          }) && (
+            <button
+              key="__new__"
+              onClick={() => handlePick({ carNumber: query.trim().toUpperCase(), vehicleNumbers: query.trim().toUpperCase(), isNew: true })}
+              className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#3765F6]/5 text-left border-t border-slate-100 bg-slate-50/50"
+            >
+              <Truck className="w-4 h-4 text-emerald-500 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-emerald-600 font-mono truncate">+ Добавить: {query.trim().toUpperCase()}</div>
+                <div className="text-[10px] text-slate-500 truncate">новый автомобиль (не из базы сцепок)</div>
+              </div>
+            </button>
+          )}
           {locFiltered.length > 0 && (
             <div className="px-3 py-1 text-[9px] font-black uppercase text-slate-400 bg-slate-50">Локации</div>
           )}

@@ -13,7 +13,7 @@ interface DirectoriesModuleProps {
   user: UserProfile;
 }
 
-type DirKey = 'vehicleBrands' | 'trailerBrands' | 'rateGroups' | 'statusTypes' | 'directions' | 'currencies' | 'distances' | 'ferries';
+type DirKey = 'vehicleBrands' | 'trailerBrands' | 'rateGroups' | 'directions' | 'currencies' | 'distances' | 'ferries';
 
 interface TabDef {
   key: DirKey;
@@ -37,12 +37,6 @@ const TABS: TabDef[] = [
       { f: 'rate', label: 'Ставка €/км', ph: '0.125', numeric: true },
       { f: 'perDiemRate', label: 'Суточные €', ph: '35', numeric: true },
       { f: 'comment', label: 'Коммент', ph: '' },
-    ], searchable: true },
-  { key: 'statusTypes', label: 'Статусы', idField: 'id', nameField: 'label',
-    fields: [
-      { f: 'label', label: 'Название', ph: 'На базе' },
-      { f: 'color', label: 'Цвет', ph: '#22c55e' },
-      { f: 'category', label: 'Категория (park|trip|archive)', ph: 'park' },
     ], searchable: true },
   { key: 'directions', label: 'Направления', idField: 'id', nameField: 'label',
     fields: [
@@ -78,7 +72,6 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
       vehicleBrands: directoryService.getVehicleBrands,
       trailerBrands: directoryService.getTrailerBrands,
       rateGroups: directoryService.getRateGroups,
-      statusTypes: directoryService.getStatusTypes,
       directions: directoryService.getDirections,
     }[activeTab];
     if (!getter) return;
@@ -161,7 +154,7 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
     setDragIdx(null);
   };
 
-  const cardColor = (it: any) => it.color || (tab.key === 'statusTypes' ? it.color : undefined);
+  const cardColor = (it: any) => it.color;
 
   return (
     <div key={activeTab} className="w-full space-y-6">
@@ -257,9 +250,6 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
                   )}
                   {tab.key === 'directions' && it.coeff != null && (
                     <div className="text-[10px] text-slate-400">коэфф: {it.coeff}</div>
-                  )}
-                  {tab.key === 'statusTypes' && it.category && (
-                    <div className="text-[10px] text-slate-400">{it.category}</div>
                   )}
                 </div>
               </div>

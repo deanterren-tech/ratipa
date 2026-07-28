@@ -2070,7 +2070,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
           {/* Swipe Help Badge for Mobile */}
           
 
-          <div className="hidden lg:block w-full overflow-x-auto overflow-y-auto max-h-[500px] pb-4 custom-scrollbar">
+          <div className="hidden lg:block w-full overflow-x-auto pb-4 custom-scrollbar">
             <table className="w-full min-w-[1200px] border-collapse relative">
               <thead className="sticky top-0 bg-slate-50 z-20 shadow-[inset_0_-1px_0_rgba(226,232,240,0.4)]">
                 <tr>
@@ -3148,7 +3148,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
             })}
           </div>
 
-          <div className="overflow-y-auto pr-1 space-y-2 pb-4 custom-scrollbar max-h-[480px]">
+          <div className="pr-1 space-y-2 pb-4">
             {visibleHistory.map((calc) => (
               <CalculationCard
                 key={calc.id}

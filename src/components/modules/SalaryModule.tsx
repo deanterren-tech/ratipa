@@ -7,7 +7,7 @@ import {Wallet, Calculator, Send, Trash2, Edit, Copy} from 'lucide-react'
 import CalendarDaysCalculator from './CalendarDaysCalculator';
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
-import {normalizePlate, findCarByPlate, getDriverById, getDriverIdForCar} from '../../utils/salaryAutofill'
+import {normalizePlate, findCarByPlate, getDriverById, getDriverIdForCar, formatCoupling} from '../../utils/salaryAutofill'
 import {formatDriverShortName} from '../../utils/driverSync'
 import {CarConflictModal} from '../common/CarConflictModal'
 import {CarConflict} from '../../utils/carConflictHandler'
@@ -596,7 +596,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                         <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Номер авто</label>
                                         <CouplingPicker
                                           onSelect={(rec) => {
-                                            if (rec) handleCarNumberChange((rec.carNumber || rec.vehicleNumbers || '').toUpperCase());
+                                            if (rec) handleCarNumberChange(formatCoupling((rec.carNumber || rec.vehicleNumbers || '').toUpperCase()));
                                           }}
                                         />
 
@@ -947,7 +947,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                          <span className="hidden md:inline">Править</span>
                                      </button>
                                      <button 
-                                         onClick={async () => { if(await showConfirm('Удалить эту выплату?')) dbService.deleteSalary(rec.id, user.name, user.role); }} 
+                                         onClick={async () => { if(await showConfirm('Удалить эту выплату?')) dbService.deleteSalary(rec, user.name, user.role); }} 
                                          title="Удалить" 
                                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition border border-transparent hover:border-rose-100 cursor-pointer"
                                      >

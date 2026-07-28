@@ -55,7 +55,20 @@ export interface FleetUnit {
 }
 
 const norm = (s?: string): string =>
-  (s || '').toString().trim().toUpperCase().replace(/\s+/g, ' ');
+  (s || '').toString().trim().toUpperCase().replace(/[^A-ZА-Я0-9]/g, '');
+
+/** Резолв диспетчера из couplings.dispatcherName, который может быть либо именем,
+ *  либо UID (исторически писался uid). Возвращает объект {name} или null. */
+const resolveDispatcher = (dispatcherName: string | null | undefined, dispatchers: DispatcherRef[]): DispatcherRef | null => {
+  if (!dispatcherName) return null;
+  const byName = new Map<string, DispatcherRef>();
+  const byId = new Map<string, DispatcherRef>();
+  (dispatchers || []).forEach((d) => {
+    if (d.name) byName.set(norm(d.name), d);
+    if (d.id) byId.set(norm(d.id), d);
+  });
+  return byName.get(norm(dispatcherName)) || byId.get(norm(dispatcherName)) || { name: dispatcherName };
+};
 
 /**
  * Подписаться на единую базу сцепок. callback → FleetUnit[] с раскрытыми
@@ -81,7 +94,7 @@ export const subscribeFleetUnits = (callback: (units: FleetUnit[]) => void): (()
       const tractor = tractorId ? (tractors.find((t) => norm(t.id) === norm(tractorId)) || null) : null;
       const trailer = c.trailerId ? (trailerById.get(norm(c.trailerId)) || null) : null;
       const driver = c.driverId ? (driverById.get(norm(c.driverId)) || null) : null;
-      const dispatcher = c.dispatcherName ? (dispatcherByName.get(norm(c.dispatcherName)) || null) : null;
+      const dispatcher = c.dispatcherName ? (dispatcherByName.get(norm(c.dispatcherName)) || resolveDispatcher(c.dispatcherName, dispatchers)) : null;
       return {
         couplingId: c.id,
         tractor: tractor ? { id: tractor.id, carNumber: tractor.carNumber || tractor.id, ...tractor } : null,
@@ -128,7 +141,7 @@ export const getFleetUnitsOnce = (callback: (units: FleetUnit[]) => void): void 
       const tractor = c.tractorId ? (acc.tractors.find((t) => norm(t.id) === norm(c.tractorId)) || null) : null;
       const trailer = c.trailerId ? (trailerById.get(norm(c.trailerId)) || null) : null;
       const driver = c.driverId ? (driverById.get(norm(c.driverId)) || null) : null;
-      const dispatcher = c.dispatcherName ? (dispatcherByName.get(norm(c.dispatcherName)) || null) : null;
+      const dispatcher = c.dispatcherName ? (dispatcherByName.get(norm(c.dispatcherName)) || resolveDispatcher(c.dispatcherName, acc.dispatchers)) : null;
       return {
         couplingId: c.id,
         tractor: tractor ? { id: tractor.id, carNumber: tractor.carNumber || tractor.id, ...tractor } : null,
@@ -184,7 +197,8 @@ export const getCouplingsFlat = (cb: (list: any[]) => void): (() => void) =>
     trailerNumber: u.trailer?.trailerNumber || '',
     trailerId: u.raw.trailerId,
     brand: u.tractor?.brand || u.tractor?.brandModel || '',
-    brandModel: u.tractor?.brandModel || u.tractor?.brandsRu || u.tractor?.brand || '',
+    brandModel: u.tractor?.brandModel || u.tractor?.brands || u.tractor?.brand || '',
+    brandRu: u.tractor?.brandRu || '',
     brandsRu: u.tractor?.brandModel || u.tractor?.brandsRu || u.tractor?.brand || '',
     brandsLat: u.trailer?.trailerBrand || '',
     trailerBrand: u.trailer?.trailerBrand || '',
@@ -202,8 +216,8 @@ export const getCouplingsFlat = (cb: (list: any[]) => void): (() => void) =>
     passportIssuedBy: u.driver?.passportIssued || '',
     licenseNumber: u.driver?.licenseNumber || '',
     lastPassportVerificationYear: (u.tractor as any)?.lastPassportVerificationYear,
-    dispatcher: u.dispatcher?.name || '',
-    dispatcherName: u.dispatcher?.name || '',
+    dispatcher: u.dispatcher?.name || u.tractor?.dispatcherName || u.tractor?.dispatcher || '',
+    dispatcherName: u.dispatcher?.name || u.tractor?.dispatcherName || u.tractor?.dispatcher || '',
     status: u.status,
     year: u.tractor?.year,
     dimensions: u.tractor?.dimensions,

@@ -3,6 +3,7 @@ import React, {useState, useEffect, useRef} from 'react'
 import {UserProfile} from '../../types'
 import { dbService, directoryService, database, onValue } from '../../api';
 import {pdService} from '../../api'
+import {formatCoupling} from '../../utils/salaryAutofill'
 import {getCouplingsFlat} from '../../services/fleetService'
 import LossDeclarationEditor from "./LossDeclarationEditor";
 import { ref, set, remove, update } from 'firebase/database'
@@ -193,7 +194,7 @@ export default function DocumentsModule({ user }: Props) {
     const unsub = getCouplingsFlat((list: any[]) => {
       const src = list || [];
       const mapped: FerryCouple[] = src.map((rec: any) => {
-        const coupling = rec.coupling || rec.vehicleNumbers || rec.carNumber || '';
+        const coupling = formatCoupling(rec.coupling || rec.vehicleNumbers || rec.carNumber || '');
         return {
           id: rec.id,
           stateNumber: coupling ? `1) ${coupling}` : '',
@@ -302,7 +303,7 @@ export default function DocumentsModule({ user }: Props) {
   // Save current dynamic order fields under the selected couple
   const handleSaveFerryDataForCar = () => {
     if (!selectedCoupleId) {
-      alert("Сначала выберите или добавьте автомобиль!");
+    showAlert("Сначала выберите или добавьте автомобиль!");
       return;
     }
     const payload = {
@@ -315,10 +316,10 @@ export default function DocumentsModule({ user }: Props) {
     const cleanContact = ferryContactPerson.trim();
     if (cleanContact) {
       const contactKey = cleanContact.replace(/[^a-zA-Z0-9а-яА-Я]/g, '_');
-      set(ref(database, `ferryContacts/${contactKey}`), cleanContact)
+      update(ref(database, `ferryContacts/${contactKey}`), { value: cleanContact })
         .catch(e => console.warn("Contact save key failed", e));
     }
-    set(ref(database, `ferryOrdersData/${selectedCoupleId}`), payload)
+    update(ref(database, `ferryOrdersData/${selectedCoupleId}`), payload)
       .then(() => {
         setFerrySavedSuccess(true);
         dbService.logAction(user.name, user.role, "Документы паром", "Documents", selectedCoupleId, `Сохранил параметры поручения на паром для сцепки`);
@@ -326,7 +327,7 @@ export default function DocumentsModule({ user }: Props) {
       })
       .catch(err => {
         console.error("Ferry order save failed", err);
-        alert("Ошибка при сохранении параметров поручения.");
+        showAlert("Ошибка при сохранении параметров поручения.");
       });
   };
   const [isParsingCouple, setIsParsingCouple] = useState(false);
@@ -334,12 +335,18 @@ export default function DocumentsModule({ user }: Props) {
   const [coupleImageBase64, setCoupleImageBase64] = useState<string | null>(null);
   const handleImageUpload = (file: File) => {
     if (!file.type.startsWith("image/")) {
-      alert("Пожалуйста, выберите файл изображения (скриншот или фото).");
+      showAlert("Пожалуйста, выберите файл изображения (скриншот или фото).");
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
-      setCoupleImageBase64(reader.result as string);
+      if (reader.result && typeof reader.result === 'string') {
+        setCoupleImageBase64(reader.result);
+      }
+    };
+    reader.onerror = () => {
+      console.error("FileReader error:", reader.error);
+      showAlert("Ошибка чтения файла. Попробуйте другой файл.");
     };
     reader.readAsDataURL(file);
   };
@@ -357,7 +364,7 @@ export default function DocumentsModule({ user }: Props) {
   };
   const handleParseCouple = async () => {
     if (!coupleRawText.trim() && !coupleImageBase64) {
-      alert("Введите текст или добавьте скриншот/изображение для распознавания.");
+      showAlert("Введите текст или добавьте скриншот/изображение для распознавания.");
       return;
     }
     setIsParsingCouple(true);
@@ -389,7 +396,7 @@ export default function DocumentsModule({ user }: Props) {
       setCoupleRawText("");
       setCoupleImageBase64(null);
     } catch (e: unknown) {
-      alert("Ошибка при распознавании: " + (e instanceof Error ? e.message : String(e)));
+      showAlert("Ошибка при распознавании: " + (e instanceof Error ? e.message : String(e)));
       console.error(e);
     } finally {
       setIsParsingCouple(false);
@@ -398,22 +405,29 @@ export default function DocumentsModule({ user }: Props) {
   // Create or Update a Couple (1-block tractor-trailer couple) inside database
   const handleSaveCouple = () => {
     if (!coupleStateNumber.trim() || !coupleModel.trim()) {
-      alert("Заполните Госномер и Модель!");
+      showAlert("Заполните Госномер и Модель!");
       return;
     }
-    const coupleData = {
-      stateNumber: coupleStateNumber.trim(),
-      model: coupleModel.trim(),
-      modelRu: coupleModelRu.trim(),
+    // Маппинг плоских полей формы в структуру couplings/tractors
+    // (список ferryCouples — зеркало getCouplingsFlat, источник = couplings).
+    const id = editCoupleId || 'couple_' + Date.now();
+    const rec = {
+      id,
+      vehicleNumbers: coupleStateNumber.trim(),
+      carNumber: coupleStateNumber.trim(),
+      brandModel: coupleModel.trim(),
+      brand: coupleModel.trim(),
+      brandRu: coupleModelRu.trim(),
       vehicleType: coupleVehicleType.trim(),
       dimensions: coupleDimensions.trim(),
       weight: coupleWeight.trim(),
-      driver1: coupleDriver1.trim(),
+      driverName: coupleDriver1.trim(),
+      driverNameRu: coupleDriver1.trim(),
       driver2: coupleDriver2.trim(),
-      dispatcher: coupleDispatcher.trim()
+      dispatcher: coupleDispatcher.trim(),
+      dispatcherName: coupleDispatcher.trim(),
     };
-    const id = editCoupleId || 'couple_' + Date.now();
-    set(ref(database, `ferryCouples/${id}`), coupleData)
+    dbService.saveVehicleDriverRecord(rec, user.name, user.role)
       .then(() => {
         dbService.logAction(user.name, user.role, "Документы паром", "Documents", id, editCoupleId ? `Обновил сцепку ${coupleStateNumber}` : `Добавил новую сцепку ${coupleStateNumber}`);
         setSelectedCoupleId(id);
@@ -432,38 +446,36 @@ export default function DocumentsModule({ user }: Props) {
       })
       .catch(err => {
         console.error("Save couple failed", err);
-        alert("Ошибка при сохранении автомобиля в БД.");
+        showAlert("Ошибка при сохранении автомобиля в БД.");
       });
   };
   const handleDeleteCouple = async (id: string) => {
-    alert("Delete called for: " + id);
     if (!canWrite) {
-      alert("У вас нет прав на удаление записей.");
+      showAlert("У вас нет прав на удаление записей.");
       return;
     }
     if (ferryCouples.length <= 1) {
-      alert("Нельзя удалить единственный автомобиль в базе.");
+      showAlert("Нельзя удалить единственный автомобиль в базе.");
       return;
     }
     if (!(await showConfirm("Вы уверены, что хотите удалить этот автомобиль (сцепку) из базы?"))) return;
-    
-    
-    remove(ref(database, `ferryCouples/${id}`))
-      .then(() => {
-        dbService.logAction(user.name, user.role, "Документы паром", "Documents", id, `Удалил сцепку`);
-        if (selectedCoupleId === id) {
-          const remaining = ferryCouples.filter(c => c.id !== id);
-          if (remaining.length > 0) {
-            setSelectedCoupleId(remaining[0].id);
-          } else {
-            setSelectedCoupleId('couple_preset_1');
-          }
+
+    // Удаляем из couplings+tractors (источник списка ferryCouples).
+    // deleteVehicleDriverRecord сам делает remove и логирует.
+    try {
+      dbService.deleteVehicleDriverRecord(id, user.name, user.role);
+      if (selectedCoupleId === id) {
+        const remaining = ferryCouples.filter(c => c.id !== id);
+        if (remaining.length > 0) {
+          setSelectedCoupleId(remaining[0].id);
+        } else {
+          setSelectedCoupleId('couple_preset_1');
         }
-      })
-      .catch(err => {
-        console.error("Delete couple failed for id:", id, "Error:", err);
-        alert("Ошибка при удалении: " + err.message);
-      });
+      }
+    } catch (err: any) {
+      console.error("Delete couple failed for id:", id, "Error:", err);
+      showAlert("Ошибка при удалении: " + (err?.message || err));
+    }
   };
   const handleStartEditCouple = (coupleId?: string) => {
     const targetId = coupleId || selectedCoupleId;
@@ -496,7 +508,7 @@ export default function DocumentsModule({ user }: Props) {
   };
   // Select a couple from the MAIN reference directory and autofill the ferry order
   const handleSelectBaseCouple = (rec: any) => {
-    const coupling = rec.coupling || rec.vehicleNumbers || '';
+    const coupling = formatCoupling(rec.coupling || rec.vehicleNumbers || '');
     const model = rec.brands || rec.brandModel || rec.brandsRu || '';
     const modelRu = rec.brandsRu || '';
     const vehicleType = rec.vehicleType || '';
@@ -507,7 +519,8 @@ export default function DocumentsModule({ user }: Props) {
     const dispatcher = rec.dispatcher || rec.dispatcherName || '';
     const baseId = 'base_' + rec.id;
 
-    // Sync into ferryCouples so the active preview card shows the same data
+    // Данные для локального превью (источник ferryCouples — зеркало couplings,
+    // НЕ пишем в мёртвую ветку ferryCouples, чтобы не плодить мусор в БД)
     const coupleData: FerryCouple = {
       id: baseId,
       stateNumber: coupling ? `1) ${coupling}` : '',
@@ -520,8 +533,6 @@ export default function DocumentsModule({ user }: Props) {
       driver2,
       dispatcher
     };
-    set(ref(database, `ferryCouples/${baseId}`), coupleData).catch(() => {});
-    // Local update so the preview card shows the couple immediately (don't wait for onValue)
     setFerryCouples(prev => [...prev.filter(c => c.id !== baseId), coupleData]);
 
     // Directly autofill ferry order fields (used by the print layout)
@@ -913,7 +924,7 @@ export default function DocumentsModule({ user }: Props) {
       })
       .catch(err => {
         console.error("TIR save failed", err);
-        alert("Ошибка при сохранении.");
+        showAlert("Ошибка при сохранении.");
       });
   };
   const handlePrintTirLetter = () => {
@@ -1435,7 +1446,6 @@ export default function DocumentsModule({ user }: Props) {
                             src={coupleImageBase64} 
                             alt="Screenshot Preview" 
                             className="w-10 h-10 object-cover rounded border border-slate-200"
-                            referrerPolicy="no-referrer"
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-[10px] font-bold text-slate-700 truncate font-sans">Скриншот прикреплен</p>
@@ -1639,7 +1649,7 @@ export default function DocumentsModule({ user }: Props) {
                   />
                   <datalist id="ferry-contacts-dl">
                     {ferryContactsList.map((contact, idx) => (
-                      <option key={idx} value={contact} />
+                      <option key={contact} value={contact} />
                     ))}
                   </datalist>
                 </div>
@@ -2053,7 +2063,6 @@ export default function DocumentsModule({ user }: Props) {
                             src={coupleImageBase64} 
                             alt="Screenshot Preview" 
                             className="w-10 h-10 object-cover rounded border border-slate-200"
-                            referrerPolicy="no-referrer"
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-[9px] font-black text-slate-700 truncate">Изображение прикреплено</p>

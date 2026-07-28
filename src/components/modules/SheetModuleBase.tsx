@@ -90,8 +90,14 @@ export default function SheetModuleBase({
   const [gpsMin, setGpsMin] = useState(false);
   const [gpsTab, setGpsTab] = useState<GpsTab>("beltranssputnik");
 
-  const [gpsPos, setGpsPos] = useState<{ x: number; y: number }>({ x: 20, y: 100 });
-  const [gpsSize, setGpsSize] = useState<{ width: number; height: number }>({ width: 850, height: 580 });
+  const [gpsPos, setGpsPos] = useState<{ x: number; y: number }>(() => {
+    const saved = localStorage.getItem(`ratipa_gps_pos_${user.uid}_${moduleKey}`);
+    return saved ? JSON.parse(saved) : { x: 20, y: 100 };
+  });
+  const [gpsSize, setGpsSize] = useState<{ width: number; height: number }>(() => {
+    const saved = localStorage.getItem(`ratipa_gps_size_${user.uid}_${moduleKey}`);
+    return saved ? JSON.parse(saved) : { width: 850, height: 580 };
+  });
   const [isGpsDragging, setIsGpsDragging] = useState(false);
   const [isGpsResizing, setIsGpsResizing] = useState<string | false>(false);
   const [gpsDragOffset, setGpsDragOffset] = useState({ x: 0, y: 0 });
@@ -101,6 +107,8 @@ export default function SheetModuleBase({
   const gpsWindowRef = useRef<HTMLDivElement>(null);
   useEffect(() => { gpsPosRef.current = gpsPos; }, [gpsPos]);
   useEffect(() => { gpsSizeRef.current = gpsSize; }, [gpsSize]);
+  useEffect(() => { if (gpsPos) localStorage.setItem(`ratipa_gps_pos_${user.uid}_${moduleKey}`, JSON.stringify(gpsPos)); }, [gpsPos, user.uid, moduleKey]);
+  useEffect(() => { if (gpsSize) localStorage.setItem(`ratipa_gps_size_${user.uid}_${moduleKey}`, JSON.stringify(gpsSize)); }, [gpsSize, user.uid, moduleKey]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {

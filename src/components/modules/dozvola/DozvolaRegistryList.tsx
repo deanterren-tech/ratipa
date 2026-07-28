@@ -8,7 +8,7 @@ import DozvolaWidgets from "./DozvolaWidgets";
 import DozvolaAIAssistant from "./DozvolaAIAssistant";
 import CouplingPicker from "../../common/CouplingPicker";
 
-const DOZVOLA_TEST_MODE = true;
+const DOZVOLA_TEST_MODE = false;
 const canWriteRTDB = () => useFirebase && !DOZVOLA_TEST_MODE;
 
 const standardLocations = [
@@ -904,6 +904,16 @@ export default function DozvolaRegistryList({
     return sorted;
   }, [rawItems, currentSelectedTab, selectedCountryFilter, searchQuery, currentSortField, currentSortOrder]);
 
+  // Ленивая подгрузка: показываем порцию, кнопка «Показать ещё» догружает следующую.
+  const PAGE_SIZE = 50;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  // Сбрасываем видимое количество при смене фильтра/поиска/сортировки
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [currentSelectedTab, selectedCountryFilter, searchQuery, currentSortField, currentSortOrder]);
+  const visibleItems = items.slice(0, visibleCount);
+  const hasMore = visibleCount < items.length;
+
   const showTypeColumn =
     currentSelectedTab === "all" ||
     currentSelectedTab === "archive" ||
@@ -1109,7 +1119,7 @@ export default function DozvolaRegistryList({
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
+                {visibleItems.map((item) => (
                   <DozvolaRow
                     key={item.id}
                     item={item}
@@ -1157,7 +1167,7 @@ export default function DozvolaRegistryList({
 
           {/* CARD view for mobile */}
           <div className="md:hidden grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {items.map((item) => (
+            {visibleItems.map((item) => (
               <DozvolaRow
                 key={item.id}
                 item={item}
@@ -1195,6 +1205,16 @@ export default function DozvolaRegistryList({
               </div>
             )}
           </div>
+          {hasMore && (
+            <div className="flex justify-center mt-4">
+              <button
+                onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                className="px-5 py-2.5 rounded-xl bg-[#3765F6] hover:bg-[#2b51d4] text-white text-xs font-bold shadow-sm transition-colors"
+              >
+                Показать ещё {Math.min(PAGE_SIZE, items.length - visibleCount)} (осталось {items.length - visibleCount})
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

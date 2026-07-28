@@ -908,7 +908,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const tabList = [
     { id: 'fleet', label: 'Автопарк и Водители', icon: Truck, count: filteredKnownFleet.length + filteredDrivers.length },
     { id: 'drivers', label: 'База водителей', icon: Users, count: filteredDrivers.length },
-    { id: 'directories', label: 'Справочники', icon: BookOpen, count: 0 },
+    { id: 'directories', label: 'База данных', icon: BookOpen, count: 0 },
     { id: 'system', label: 'Системные Настройки', icon: Settings, count: 0 },
     { id: 'links', label: 'Ссылки и Порталы', icon: ExternalLink, count: (settings?.quickLinks?.length || 0) + (settings?.externalTabs?.length || 0) }
   ] as const;

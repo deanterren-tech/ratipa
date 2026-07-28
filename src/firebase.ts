@@ -308,7 +308,7 @@ export const directoryService = {
         const id = it.id || it.key;
         if (id) updates[`directories/${collection}/${id}`] = { ...it, id };
       });
-      update(ref(database, "."), updates);
+      update(ref(database, "."), updates).catch((err) => console.warn("directory reorder save failed", err));
     } else {
       setLocalStorageData(`ratipa_dir_${collection}`, orderedItems);
     }
@@ -685,7 +685,8 @@ export const dbService = {
       phone: phoneNum,
     };
     if (useFirebase) {
-      set(ref(database, `tractors/${vehicle.id}`), normalized).catch((err) => {
+      // update() вместо set() — не затирает поля трактора, которых нет в normalized
+      update(ref(database, `tractors/${vehicle.id}`), normalized).catch((err) => {
         console.warn("Live write vehicle Fleet failed:", err);
       });
     } else {
@@ -873,7 +874,7 @@ export const dbService = {
     role: string,
   ) => {
     if (useFirebase) {
-      update(ref(database, `calculationsHistory/${id}`), updates);
+      update(ref(database, `calculationsHistory/${id}`), updates).catch((err) => console.warn("calculations history update failed", err));
     } else {
       const local = getLocalStorageData<RouteCalculation[]>(
         "ratipa_calculations",
@@ -973,13 +974,19 @@ export const dbService = {
       const ym = getYearMonth(log);
       const dispatcher = sanitizeKey(log.logist || 'System');
 
+      // Firebase RTDB отвергает объекты с undefined-значениями — чистим перед записью
+      const cleanLog = sanitizeFirebaseObject(log);
+
       const updates: Record<string, any> = {
-        [`salaryHistory/flat/${logId}`]: log,
-        [`salaryHistory/months/${ym}/${logId}`]: log,
-        [`salaryHistory/byDispatcher/${dispatcher}/${logId}`]: log,
-        [`salaryHistory/${logId}`]: log
+        [`salaryHistory/flat/${logId}`]: cleanLog,
+        [`salaryHistory/months/${ym}/${logId}`]: cleanLog,
+        [`salaryHistory/byDispatcher/${dispatcher}/${logId}`]: cleanLog,
+        [`salaryHistory/${logId}`]: cleanLog
       };
-      update(ref(database), updates);
+      update(ref(database), updates).catch(err => {
+        console.error('[saveSalary] FAILED:', err);
+        alert('Ошибка сохранения выплаты: ' + (err?.message || err));
+      });
     } else {
       const local = getLocalStorageData<SalaryLog[]>("ratipa_salaries", []);
       local.push(log);
@@ -1031,13 +1038,13 @@ export const dbService = {
           [`salaryHistory/byDispatcher/${dispatcher}/${id}`]: null,
           [`salaryHistory/${id}`]: null
         };
-        update(ref(database), updates);
+        update(ref(database), updates).catch((err) => console.warn("salary delete (root_admin) failed", err));
       } else {
         const updates: Record<string, any> = {
           [`salaryHistory/${id}`]: null,
           [`salaryHistory/flat/${id}`]: null
         };
-        update(ref(database), updates);
+        update(ref(database), updates).catch((err) => console.warn("salary delete failed", err));
       }
     } else {
       const local = getLocalStorageData<SalaryLog[]>("ratipa_salaries", []);
@@ -1092,7 +1099,7 @@ export const dbService = {
         [`salaryHistory/byDispatcher/${dispatcher}/${id}`]: payload,
         [`salaryHistory/${id}`]: payload
       };
-      update(ref(database), dbUpdates);
+      update(ref(database), dbUpdates).catch((err) => console.warn("salary save (root_admin) failed", err));
     } else {
       const local = getLocalStorageData<SalaryLog[]>("ratipa_salaries", []);
       const idx = local.findIndex((s) => s.id === id);
@@ -1221,15 +1228,46 @@ export const dbService = {
       ...rec,
       carNumber: carNum,
       vehicleNumbers: carNum,
-      brandModel: brand,
-      brands: brand,
-      trailerMake: trailer,
-      dispatcherName: disp,
-      dispatcher: disp,
-      driverPhone: phoneNum,
-      phone: phoneNum,
+      brand: brand || null,
+      brandModel: brand || null,
+      brands: brand || null,
+      trailerMake: trailer || null,
+      dispatcherName: disp || null,
+      dispatcher: disp || null,
+      driverPhone: phoneNum || null,
+      phone: phoneNum || null,
       lastPassportVerificationYear: rec.lastPassportVerificationYear ?? null,
     };
+
+    // Полная запись сцепки (чтобы База сцепок видела авто даже без диспетчера).
+    // ВАЖНО: пишем ВСЕ поля сцепки, иначе при сохранении запись couplings
+    // «пустеет» (теряет марку/габариты/вес), т.к. couplingRec был урезанным.
+    const couplingRec: Record<string, any> = {
+      id: rec.id,
+      carNumber: carNum || null,
+      vehicleNumbers: carNum || null,
+      tractorId: rec.id,
+      trailerId: rec.trailerId || rec.trailerNumber || null,
+      trailerNumber: rec.trailerNumber || rec.trailerId || null,
+      driverId: rec.driverId || null,
+      driverName: rec.driverName || rec.driverNameRu || null,
+      driverNameRu: rec.driverNameRu || rec.driverName || null,
+      driver2: rec.driver2 || null,
+      dispatcher: disp || null,
+      dispatcherName: disp || null,
+      brand: rec.brand || rec.brandModel || null,
+      trailerBrand: rec.trailerBrand || rec.trailerMake || null,
+      brandRu: rec.brandRu || null,
+      vehicleType: rec.vehicleType || null,
+      dimensions: rec.dimensions || null,
+      weight: rec.weight || null,
+      status: rec.status || 'base',
+      rateGroupId: rec.rateGroupId || null,
+    };
+    // убираем undefined
+    for (const [k, v] of Object.entries(couplingRec)) {
+      if (v === undefined) couplingRec[k] = null;
+    }
 
     // Firebase RTDB не принимает undefined в объекте — set() падает целиком.
     // Убираем все undefined-поля (напр. пустые опц. поля: rate, dimensions, weight, year…).
@@ -1245,12 +1283,23 @@ export const dbService = {
       // перезаписывается вся ветка tractars/${id} и стираются поля тягача
       // (brand, trailerMake, year, rate, dimensions, weight…), что визуально
       // выглядит как «пропажа данных» в Базе водителей.
-      mainPromise = update(ref(database, `tractors/${rec.id}`), cleaned)
+      const safeId = String(rec.id || '').replace(/[.#$[\]]/g, '_');
+      // Доп. защита от невидимых дублей: если id содержит кириллицу/дефисы,
+      // приводим к латинице без спецсимволов (только для новых записей;
+      // существующие ключи БД не меняются, т.к. rec.id уже из БД).
+      const CYR_TO_LAT: Record<string, string> = {
+        А:"A",В:"B",Е:"E",К:"K",М:"M",Н:"H",О:"O",Р:"P",С:"C",Т:"T",У:"Y",Х:"X",
+        а:"a",в:"b",е:"e",к:"k",м:"m",н:"h",о:"o",р:"p",с:"c",т:"t",у:"y",х:"x",
+      };
+      const normSafeId = safeId.split('').map((ch: string) => CYR_TO_LAT[ch] ?? ch).join('').replace(/[^A-Z0-9]/g, '');
+      if (safeId !== normSafeId) {
+        console.warn('[saveVehicleDriverRecord] id нормализован:', safeId, '→', normSafeId);
+      }
+      mainPromise = update(ref(database, `tractors/${normSafeId || safeId}`), cleaned)
         .then(() => {
-          // Sync dispatcher to couplings branch (list читает оттуда)
-          if (disp) {
-            update(ref(database, `couplings/${rec.id}`), { dispatcherName: disp }).catch(() => {});
-          }
+          // ВСЕГДА пишем сцепку (иначе новое авто без диспетчера не появляется в Базе сцепок)
+          update(ref(database, `couplings/${safeId}`), couplingRec)
+            .catch((e) => console.warn('[saveVehicleDriverRecord] coupling update failed', e));
           // Sync dispatcher to the driver record (База водителей читает drivers)
           if (disp && rec.driverId) {
             update(ref(database, `drivers/${rec.driverId}`), { dispatcher: disp }).catch(() => {});
@@ -1258,13 +1307,13 @@ export const dbService = {
           // Save brand to master-nodes under directories/vehicleBrands / trailerBrands
           if (brand) {
             const brandKey = brand.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_');
-            if (brandKey) {
+            if (brandKey && !/^_+$/.test(brandKey)) {
               set(ref(database, `directories/vehicleBrands/${brandKey}`), brand.trim()).catch(() => {});
             }
           }
           if (trailer) {
             const trailerKey = trailer.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_');
-            if (trailerKey) {
+            if (trailerKey && !/^_+$/.test(trailerKey)) {
               set(ref(database, `directories/trailerBrands/${trailerKey}`), trailer.trim()).catch(() => {});
             }
           }

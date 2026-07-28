@@ -6,9 +6,16 @@ import {dbService, directoryService} from '../../api'
 import {getCouplingsFlat, getDriversFlat, getDispatchersFlat} from '../../services/fleetService'
 import {Truck, Plus, Trash2, Pencil, Search, Link2, X, Check, Layers, Tag, Users} from 'lucide-react'
 import {UserProfile} from '../../types'
-import {normalizePlate} from '../../utils/salaryAutofill'
+import {normalizePlate, formatPlate, formatCoupling} from '../../utils/salaryAutofill'
 import CouplingCard from './CouplingCard';
 import DriverCard from './DriverCard';
+
+// Дефолтные характеристики ТС (присваиваются каждому авто, пользователь может менять)
+const DEFAULT_VEHICLE = {
+  vehicleType: 'Тенты 90м3',
+  dimensions: '13,6м x 2,45м x 2,7м',
+  weight: '14,6т',
+};
 
 interface CouplingDirectoryEditorProps {
   user: UserProfile;
@@ -112,6 +119,11 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
     const d = dispatchers.find((x) => (x.id || x.key) === id);
     return d ? d.name : (id || '—');
   };
+  // Обратный маппинг: имя диспетчера → его id (для корректного выбора в SelectField)
+  const dispIdByName = (name?: string) => {
+    const d = dispatchers.find((x) => x.name === name);
+    return d ? (d.id || d.key) : (name || '');
+  };
   const rateName = (id?: string) => {
     const g = rateGroups.find((x) => (x.id || x.key) === id);
     return g ? `${g.name} (€${g.rate}/км)` : '—';
@@ -128,16 +140,30 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase().replace(/\s+/g, '');
     return couplings.filter((c) => {
-      if (activeDisp !== 'all' && c.dispatcher !== activeDisp) return false;
+      if (activeDisp !== 'all' && (c.dispatcher || '') !== activeDisp) return false;
       if (!q) return true;
       return [c.carNumber, c.trailerNumber, c.driverName, driverName(c.driverId), dispName(c.dispatcher)]
         .join(' ').toLowerCase().replace(/\s+/g, '').includes(q);
     });
   }, [search, couplings, drivers, dispatchers, activeDisp]);
 
+  // Вкладки диспетчеров: уникальные имена из самих записей (как колонка «Диспетчер»)
+  // + имена из справочника (чтобы показывать всех зарегистрированных, даже с 0 записей).
+  const dispTabs = useMemo(() => {
+    const set = new Set<string>();
+    couplings.forEach((c) => { if (c.dispatcher) set.add(c.dispatcher); });
+    dispatchers.forEach((d) => { if (d.name) set.add(d.name); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'ru'));
+  }, [couplings, dispatchers]);
+
   const openAdd = () => {
     setEditing(null);
-    setForm({ carNumber: '', trailerNumber: '', brand: '', trailerBrand: '', driverId: '', dispatcher: '', rateGroupId: '', status: 'base' });
+    setForm({
+      carNumber: '', trailerNumber: '', brand: '', trailerBrand: '', brandRu: '',
+      vehicleType: DEFAULT_VEHICLE.vehicleType, dimensions: DEFAULT_VEHICLE.dimensions, weight: DEFAULT_VEHICLE.weight,
+      driverId: '', driver2: '',
+      dispatcher: '', rateGroupId: '', status: 'base',
+    });
     setModalOpen(true);
   };
   const openEdit = (c: CouplingRow) => {
@@ -146,39 +172,79 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
       carNumber: c.carNumber, trailerNumber: c.trailerNumber || '', brand: c.brand || '',
       trailerBrand: c.trailerBrand || '', brandRu: c.brandRu || '', vehicleType: c.vehicleType || '',
       dimensions: c.dimensions || '', weight: c.weight || '', driverId: c.driverId || '',
-      driver2: c.driver2 || '', dispatcher: c.dispatcher || '',
+      driver2: c.driver2 || '', dispatcher: dispIdByName(c.dispatcher),
       rateGroupId: c.rateGroupId || '', status: c.status || 'base',
     });
     setModalOpen(true);
   };
 
   const handleSave = async () => {
-    if (!form.carNumber.trim()) {
+    const carNumber = (form.carNumber || '').toString().trim();
+    if (!carNumber) {
       toast('Укажите госномер тягача', 'error');
       return;
     }
-    const normPlate = form.carNumber.trim().toUpperCase().replace(/\s+/g, '');
+    const normPlate = carNumber.toUpperCase().replace(/[^A-ZА-Я0-9-]/g, '');
     const id = editing ? editing.id : normPlate;
+    const dispId = (form.dispatcher || '').toString();
+    const dispName = dispId ? (dispatchers.find((d) => (d.id || d.key) === dispId)?.name || dispId) : '';
+    const safe = (v: any) => (v ?? '').toString().trim();
     const rec: any = {
       id,
-      carNumber: form.carNumber.trim().toUpperCase(),
-      trailerNumber: form.trailerNumber.trim().toUpperCase(),
-      brand: form.brand.trim(),
-      trailerBrand: form.trailerBrand.trim(),
-      brandRu: form.brandRu.trim(),
-      vehicleType: form.vehicleType.trim(),
-      dimensions: form.dimensions.trim(),
-      weight: form.weight.trim(),
+      carNumber: carNumber.toUpperCase(),
+      trailerNumber: safe(form.trailerNumber).toUpperCase(),
+      brand: safe(form.brand),
+      trailerBrand: safe(form.trailerBrand),
+      brandRu: safe(form.brandRu),
+      vehicleType: safe(form.vehicleType) || DEFAULT_VEHICLE.vehicleType,
+      dimensions: safe(form.dimensions) || DEFAULT_VEHICLE.dimensions,
+      weight: safe(form.weight) || DEFAULT_VEHICLE.weight,
       driverId: form.driverId || null,
       driverNameRu: driverName(form.driverId) || null,
-      driver2: form.driver2.trim() || null,
-      dispatcher: form.dispatcher || '',
+      driver2: safe(form.driver2) || null,
+      dispatcher: dispName,
       rateGroupId: form.rateGroupId || null,
       status: form.status || 'base',
     };
-    await dbService.saveVehicleDriverRecord(rec, user.name, user.role);
-    toast(editing ? 'Сцепка обновлена' : 'Сцепка добавлена', 'success');
-    setModalOpen(false);
+    console.log('[handleSave] start', { carNumber: form.carNumber, dispatcher: form.dispatcher });
+    try {
+      await dbService.saveVehicleDriverRecord(rec, user.name, user.role);
+      console.log('[handleSave] saved ok');
+      toast(editing ? 'Сцепка обновлена' : 'Сцепка добавлена', 'success');
+      // Принудительно обновляем локальный список (на случай, если подписка lag-ит)
+      getCouplingsFlat((list: any[]) => {
+        console.log('[handleSave] got list len', (list || []).length);
+        const mapped = (list || []).map((c) => ({
+          id: c.id,
+          carNumber: c.carNumber || c.vehicleNumbers || '',
+          trailerNumber: c.trailerNumber || '',
+          brand: c.brand || c.brandModel || '',
+          trailerBrand: c.trailerBrand || '',
+          brandRu: c.brandRu || '',
+          vehicleType: c.vehicleType || '',
+          dimensions: c.dimensions || '',
+          weight: c.weight || '',
+          driverId: c.driverId || '',
+          driverName: c.driverNameRu || c.driverName || c.driverShortNameRu || '',
+          driver2: c.driver2 || '',
+          dispatcher: c.dispatcher || '',
+          rateGroupId: c.rateGroupId || '',
+          status: c.status || 'base',
+        }));
+        setCouplings(mapped);
+        // Проверяем, что запись реально попала в список
+        const found = mapped.find((c) => c.id === id);
+        if (!found) {
+          console.warn('[handleSave] запись не найдена в списке после сохранения', id);
+          toast('Внимание: запись сохранена, но не отображается в списке. Обновите страницу.', 'error');
+        }
+      });
+    } catch (err: any) {
+      console.error('[handleSave] saveVehicleDriverRecord failed:', err);
+      toast('Ошибка сохранения: ' + (err?.message || err), 'error');
+    } finally {
+      setModalOpen(false);
+    }
   };
 
   const handleDelete = async (c: CouplingRow) => {
@@ -204,7 +270,14 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   const applyBulk = async () => {
     if (!bulkField || !bulkValue) return;
     const ids = Array.from(selected);
-    await dbService.bulkUpdateCouplings(ids, { [bulkField]: bulkValue });
+    // Диспетчер хранится в couplings.dispatcherName как ИМЯ (не id). Резолвим id→имя.
+    const patch: Record<string, any> = { [bulkField]: bulkValue };
+    if (bulkField === 'dispatcher') {
+      const name = (dispatchers.find((d) => (d.id || d.key) === bulkValue)?.name) || bulkValue;
+      patch.dispatcher = name;
+      patch.dispatcherName = name;
+    }
+    await dbService.bulkUpdateCouplings(ids, patch);
     toast(`Обновлено ${ids.length} сцепок`, 'success');
     setBulkOpen(false); setBulkField(null); setBulkValue(''); setSelected(new Set());
   };
@@ -267,20 +340,21 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
         )}
         </div>
 
-      {/* TABS */}
+      {/* TABS — строим по именам диспетчеров из самих записей (как колонка «Диспетчер»),
+          чтобы фильтрация делила записи правильно и счётчики совпадали с таблицей */}
       <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/60 max-w-max">
         <button onClick={() => setActiveDisp('all')}
           className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${activeDisp === 'all' ? 'bg-[#3765F6] text-white shadow' : 'text-slate-600 hover:bg-white'}`}>
           Все ({couplings.length})
         </button>
-        {dispatchers.map((d) => {
-          const cnt = couplings.filter((c) => c.dispatcher === (d.id || d.key)).length;
-          const isActive = activeDisp === (d.id || d.key);
-          const col = dispColor(d.id || d.key);
+        {dispTabs.map((name) => {
+          const cnt = couplings.filter((c) => (c.dispatcher || '') === name).length;
+          const isActive = activeDisp === name;
+          const col = dispColor(name);
           return (
-            <button key={d.id || d.key} onClick={() => setActiveDisp(d.id || d.key)}
+            <button key={name} onClick={() => setActiveDisp(name)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${isActive ? 'bg-[#3765F6] text-white shadow' : 'text-slate-600 hover:bg-white'}`}>
-              {d.name}
+              {name}
               <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-mono ${isActive ? 'bg-white/20' : 'bg-slate-200'}`}>{cnt}</span>
             </button>
           );
@@ -345,7 +419,6 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
               <th className="px-4 py-3 whitespace-nowrap">Водитель</th>
               <th className="px-4 py-3 whitespace-nowrap">Диспетчер</th>
               <th className="px-4 py-3 whitespace-nowrap">Тариф</th>
-              <th className="px-4 py-3 whitespace-nowrap">Статус</th>
               {isWritePermitted && <th className="px-4 py-3 text-right w-[80px]"></th>}
             </tr>
           </thead>
@@ -362,8 +435,8 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
                   </td>
                 )}
                 <td className="px-4 py-2.5 font-mono">
-                  <span className="font-black text-slate-900">{c.carNumber}</span>
-                  {c.trailerNumber && <span className="text-slate-400"> / {c.trailerNumber}</span>}
+                  <span className="font-black text-slate-900">{formatPlate(c.carNumber)}</span>
+                  {c.trailerNumber && <span className="text-slate-400"> / {formatPlate(c.trailerNumber)}</span>}
                 </td>
                 <td className="px-4 py-2.5 text-slate-500">{[c.brand, c.trailerBrand].filter(Boolean).join(' / ') || '—'}</td>
                 <td className="px-4 py-2.5">
@@ -381,16 +454,6 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
                   </span>
                 </td>
                 <td className="px-4 py-2.5 text-slate-500">{rateName(c.rateGroupId)}</td>
-                <td className="px-4 py-2.5">
-                  {(() => {
-                    const s = getBazaStatusForCoupling(c);
-                    return s === 'base' ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/50">На базе</span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200/50">В рейсе</span>
-                    );
-                  })()}
-                </td>
                 {isWritePermitted && (
                   <td className="px-4 py-2.5 text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -407,7 +470,16 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
               );
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={isWritePermitted ? 9 : 8} className="px-4 py-8 text-center text-xs text-slate-400">Пусто</td></tr>
+              <tr>
+                <td colSpan={isWritePermitted ? 9 : 8} className="px-4 py-10 text-center">
+                  <div className="flex flex-col items-center gap-2 text-xs text-slate-400">
+                    <span>Нет данных</span>
+                    <button onClick={() => window.location.reload()} className="px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium">
+                      Обновить
+                    </button>
+                  </div>
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
@@ -428,8 +500,8 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
             </div>
             <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <SelectField label="Тягач *" value={form.carNumber} onChange={(v) => setForm({ ...form, carNumber: v })}
-                options={tractors.map((t: any) => ({ v: t.carNumber || t.id, l: t.carNumber || t.id }))} allowCustom />
+              <Field label="Тягач *" value={form.carNumber} onChange={(v) => setForm({ ...form, carNumber: v })} placeholder="AB 9271-7" />
+              <p className="text-[11px] text-amber-600 -mt-2 mb-2">Госномера тягача и прицепа вносите на латинице (напр. AB 9271-7, A 1635 E-7).</p>
               <Field label="Прицеп" value={form.trailerNumber} onChange={(v) => setForm({ ...form, trailerNumber: v })} placeholder="А 1635 Е-7" />
               <SelectField label="Марка тягача" value={form.brand} onChange={(v) => setForm({ ...form, brand: v })}
                 options={vehicleBrands.map((b) => ({ v: b.key || b.name, l: b.name }))} allowCustom />
@@ -446,13 +518,11 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
                 options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
               <SelectField label="Группа ставок" value={form.rateGroupId} onChange={(v) => setForm({ ...form, rateGroupId: v })}
                 options={rateGroups.map((g) => ({ v: g.id || g.key, l: `${g.name} (€${g.rate}/км)` }))} />
-              <SelectField label="Статус" value={form.status} onChange={(v) => setForm({ ...form, status: v })}
-                options={statusTypes.map((s) => ({ v: s.id || s.key, l: s.label }))} />
             </div>
             </div>
             <div className="flex items-center justify-end gap-2 mt-5">
               <button onClick={() => setModalOpen(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl">Отмена</button>
-              <button onClick={handleSave} className="px-4 py-2 text-xs font-bold text-white bg-[#3765F6] hover:bg-[#2a4fd0] rounded-xl shadow-sm">Сохранить</button>
+              <button type="button" onClick={handleSave} className="px-4 py-2 text-xs font-bold text-white bg-[#3765F6] hover:bg-[#2a4fd0] rounded-xl shadow-sm">Сохранить</button>
             </div>
           </div>
         </div>,

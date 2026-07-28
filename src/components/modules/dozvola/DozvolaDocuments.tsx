@@ -542,6 +542,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
 
   const getHtmlContent = () => {
     if (docType === "Заявление на получение разрешений") return buildPermitApplicationHtml();
+    if (docType === "Заявление на выдачу разрешений") return buildPermitApplicationHtml();
     if (docType === "Заявление по китайским копиям") return buildChinaCopyHtml();
     if (docType === "Реестр возврата разрешений") return buildReturnRegistryHtml();
     return "";
@@ -701,6 +702,9 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
         if (docType === "Заявление на получение разрешений" && permitRows.length === 0) {
             return alert("Нет строк заявления для генерации.");
         }
+        if (docType === "Заявление на выдачу разрешений" && permitRows.length === 0) {
+            return alert("Нет строк заявления для генерации.");
+        }
         if (docType === "Заявление по китайским копиям" && chinaRows.length === 0) {
             return alert("Нет строк заявления по копиям.");
         }
@@ -716,6 +720,9 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
         if (docType === "Заявление на получение разрешений") {
           blob = await buildPermitApplicationDocxBlob();
           filename = `Заявление_дозвола_${timestamp}.docx`;
+        } else if (docType === "Заявление на выдачу разрешений") {
+          blob = await buildPermitApplicationDocxBlob();
+          filename = `Заявление_выдача_дозвола_${timestamp}.docx`;
         } else if (docType === "Заявление по китайским копиям") {
           blob = await buildChinaCopyApplicationDocxBlob();
           filename = `Заявление_Китай_копии_${timestamp}.docx`;
@@ -767,6 +774,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
         const timestamp = formatApplicationDate(applicationDate).replace(/\./g, '-');
         let filename = `Document_${timestamp}.doc`;
         if (docType === "Заявление на получение разрешений") filename = `Заявление_дозвола_${timestamp}.doc`;
+        if (docType === "Заявление на выдачу разрешений") filename = `Заявление_выдача_дозвола_${timestamp}.doc`;
         if (docType === "Заявление по китайским копиям") filename = `Заявление_Китай_копии_${timestamp}.doc`;
         if (docType === "Реестр возврата разрешений") filename = `Реестр_сдачи_дозволов_${timestamp}.doc`;
         a.download = filename;
@@ -784,6 +792,9 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
   const handlePrintHTML = () => {
       try {
         if (docType === "Заявление на получение разрешений" && permitRows.length === 0) {
+            return alert("Нет строк заявления для печати.");
+        }
+        if (docType === "Заявление на выдачу разрешений" && permitRows.length === 0) {
             return alert("Нет строк заявления для печати.");
         }
         if (docType === "Заявление по китайским копиям" && chinaRows.length === 0) {
@@ -913,6 +924,9 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                 className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
               >
                 <option value="Заявление на получение разрешений">
+                  Заявление на получение разрешений
+                </option>
+                <option value="Заявление на выдачу разрешений">
                   Заявление на выдачу разрешений
                 </option>
                 <option value="Реестр возврата разрешений">
@@ -939,6 +953,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
             <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-200/50">
                 <p className="text-xs text-slate-500 font-semibold leading-relaxed">
                     {docType === "Заявление на получение разрешений" && "Документ формируется на основе активных заявок блока планерки."}
+                    {docType === "Заявление на выдачу разрешений" && "Документ формируется на основе активных заявок блока планерки."}
                     {docType === "Реестр возврата разрешений" && "В реестр возвращаемых бланков попадают бланки со статусом 'Сдан в офис'."}
                     {docType === "Заявление по китайским копиям" && "Собирается из китайских дозволов (CHN 2, CHN 3) со сданной копией."}
                 </p>
@@ -981,7 +996,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
       </div>
 
       {/* Dynamic item selectors and editable lists */}
-      {docType === "Заявление на получение разрешений" && (
+      {(docType === "Заявление на получение разрешений" || docType === "Заявление на выдачу разрешений") && (
         <div className="bg-white/85 backdrop-blur-xl rounded-3xl border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] p-6 space-y-6">
           <div className="space-y-3">
             <h3 className="text-sm font-bold text-slate-800">1. Выбор активных заявок планерки</h3>

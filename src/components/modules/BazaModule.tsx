@@ -92,13 +92,22 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   // РУЧНОЙ журнал (для "На базе"): baza + baza_cars (без archive/trip)
   const manualVehicles = useMemo(() => {
     const all = [...bazaLegacy, ...bazaCarsLegacy];
-    const unique: any[] = [];
-    const seen = new Set<string>();
+    // Дедупликация по госномеру: активная запись (не архив) имеет приоритет над архивной,
+    // чтобы авто, добавленное в контроль, показывалось независимо от наличия его в архиве.
+    const byPlate = new Map<string, any>();
     all.forEach(car => {
       const plate = normalizePlate(car.carNumber || car.vehicleNumbers || '');
-      if (!seen.has(plate)) { seen.add(plate); unique.push(car); }
+      const isArchived = car.status === 'archive' || car.isArchived === true;
+      const existing = byPlate.get(plate);
+      if (!existing) {
+        byPlate.set(plate, car);
+      } else {
+        const existingArchived = existing.status === 'archive' || existing.isArchived === true;
+        // Заменяем только если текущая запись активная, а сохранённая — архивная
+        if (existingArchived && !isArchived) byPlate.set(plate, car);
+      }
     });
-    return unique;
+    return Array.from(byPlate.values());
   }, [bazaLegacy, bazaCarsLegacy]);
 
   const cars = useMemo(() => {
@@ -108,14 +117,41 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 
   // АРХИВ (выехавшие): ТОЛЬКО ручной журнал (baza archive + ветка archive).
   // Центр (vehicleFleet/vehicle_driver_data) не имеет дат журнала → не показываем (пустые).
+  // НЕЗАВИСИМО от активных записей: авто может быть одновременно в архиве и на контроле.
+  // ОДНА машина может иметь несколько id (разные добавления в контроль + зеркало archive/).
+  // Дедуплицируем ПО ГОСНОМЕРУ, сохраняя самую свежую запись (по дате выезда/создания).
   const archiveCars = useMemo(() => {
-    const archived = allVehicles.filter(v =>
+    const all = [...bazaLegacy, ...bazaCarsLegacy, ...archiveLegacy, ...vehicleDriverLegacy];
+    const archived = all.filter(v =>
       v.status === 'archive' ||
       v.sourcePath === 'archive' ||
       v.isArchived === true
     );
-    return archived.map(rec => applySharedDriverToBazaRecord(applySharedCarToBazaRecord(rec, fleetVehicles), drivers));
-  }, [allVehicles, fleetVehicles, drivers]);
+    // Дедупликация архивных записей по госномеру (baza-архив и ветка archive дублируют друг друга)
+    const byPlate = new Map<string, any>();
+    archived.forEach(car => {
+      const plate = normalizePlate(car.carNumber || car.vehicleNumbers || '');
+      if (!plate) { byPlate.set('__' + (car.id || Math.random()), car); return; }
+      const existing = byPlate.get(plate);
+      if (!existing) {
+        byPlate.set(plate, car);
+      } else {
+        // При равенстве id (одна и та же машина) — выбираем активную (status !== 'archive')
+        const existingArchived = existing.status === 'archive' || existing.isArchived === true;
+        const curArchived = car.status === 'archive' || car.isArchived === true;
+        if (existingArchived && !curArchived) byPlate.set(plate, car);
+        else if (existingArchived === curArchived) {
+          // обе архивные (или обе активные) — берём ту, у которой свежее dateDeparture или id (больше = новее)
+          const dExisting = existing.dateDeparture || '';
+          const dCur = car.dateDeparture || '';
+          if (dCur > dExisting || (dCur === dExisting && String(car.id || '') > String(existing.id || ''))) {
+            byPlate.set(plate, car);
+          }
+        }
+      }
+    });
+    return Array.from(byPlate.values()).map(rec => applySharedDriverToBazaRecord(applySharedCarToBazaRecord(rec, fleetVehicles), drivers));
+  }, [bazaLegacy, bazaCarsLegacy, archiveLegacy, vehicleDriverLegacy, fleetVehicles, drivers]);
 
   // Local state
   const [selectedDispatcher, setSelectedDispatcher] = useState<string>("Все автомобили");
@@ -656,8 +692,12 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
       const nowStr = new Date().toISOString().split('T')[0];
       const updatedDeparture = modalData.dateDeparture || nowStr;
 
-      // Use the REAL record from the loaded list (more reliable than modalData spread)
-      const rec = (cars.find(c => c.id === modalData.id) || modalData) as any;
+      // Use the RAW record from the manual journal (bazaLegacy) — NOT the display-merged `cars`,
+      // whose carNumber is overwritten by the coupling's vehicleNumbers. Writing back the merged
+      // number would corrupt the plate and make dates/counters "drift".
+      const rec = (bazaLegacy || []).find(c => c.id === modalData.id)
+        || (bazaCarsLegacy || []).find(c => c.id === modalData.id)
+        || (cars.find(c => c.id === modalData.id) || modalData) as any;
 
       const archiveCarData = {
           ...rec,
@@ -675,10 +715,27 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
       // 2) Mirror into the dedicated 'archive' branch so the Archive tab always sees it
       writes[`archive/${rec.id}`] = { ...archiveCarData, sourcePath: 'archive' };
 
-      Promise.all([
-          set(ref(db, `${srcPath}/${rec.id}`), archiveCarData),
-          set(ref(db, `archive/${rec.id}`), { ...archiveCarData, sourcePath: 'archive' })
-      ]).then(() => {
+      // 3) Remove any STALE archive copies of the SAME plate (created by previous transfers with a different id)
+      //    — предотвращаем дубликаты в архиве при повторном переносе.
+      const normPlate = normalizePlate(archiveCarData.carNumber || '');
+      if (normPlate) {
+        const drops: any[] = [];
+        // baza-archive copies (status archive, другой id)
+        (bazaLegacy || []).forEach(c => {
+          if (c.id !== rec.id && normalizePlate(c.carNumber || '') === normPlate && (c.status === 'archive' || c.isArchived)) {
+            drops.push(`${srcPath}/${c.id}`);
+            drops.push(`archive/${c.id}`);
+          }
+        });
+        (archiveLegacy || []).forEach(c => {
+          if (c.id !== rec.id && normalizePlate(c.carNumber || '') === normPlate) {
+            drops.push(`archive/${c.id}`);
+          }
+        });
+        drops.forEach(p => { writes[p] = null; });
+      }
+
+      update(ref(db), writes).then(() => {
           logHistory(rec.id, srcPath, "Статус", "На базе", "Выехал в рейс (Перенесено в архив)", rec.carNumber);
           setIsCarModalOpen(false);
           toast("Автомобиль перемещён в Архив", 'success');
@@ -701,15 +758,30 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
           const sourceList = [...cars, ...archiveCars];
           const targetCar = sourceList.find(c => c.id === id);
           const branch = targetCar?.sourcePath || 'baza';
-          // Remove from the SAME branch the record lives in (baza / baza_cars / archive / vehicle_driver_data).
-          // The reference base (vehicleFleet) must NOT be modified — it's the single source of truth.
-          remove(ref(db, `${branch}/${id}`));
+          // Архивная запись живёт сразу в нескольких ветках (baza archive + archive/ + baza_cars).
+          // Удаляем ВСЕ копии по id и по госномеру, иначе запись «возвращается» из зеркала.
+          const pathsToRemove: string[] = [];
+          const normPlate = normalizePlate(carNumber || '');
+          const consider = [...bazaLegacy, ...bazaCarsLegacy, ...archiveLegacy, ...vehicleDriverLegacy];
+          const addByPlate = (src: string) => consider.forEach(c => {
+            if (c.id === id || (normPlate && normalizePlate(c.carNumber || '') === normPlate && (c.status === 'archive' || c.isArchived || c.sourcePath === 'archive'))) {
+              pathsToRemove.push(`${src}/${c.id}`);
+            }
+          });
+          addByPlate(branch);
+          addByPlate('archive');
+          addByPlate('baza');
+          addByPlate('baza_cars');
+          // Убираем дубли путей
+          const uniquePaths = Array.from(new Set(pathsToRemove));
+          const removeUpdates: Record<string, any> = {};
+          uniquePaths.forEach(p => { removeUpdates[p] = null; });
+          await update(ref(db), removeUpdates);
 
           // Auto-status: if this car is no longer in Учёт выезда → it's in trip.
           const cid = targetCar?.couplingId
             || (fleetVehicles.find(c => (c.carNumber || c.vehicleNumbers || '').replace(/[^А-ЯA-Z0-9]/g, '') === (carNumber || '').replace(/[^А-ЯA-Z0-9]/g, '')) || {}).id;
           if (cid) {
-            // check if any other baza record still references this car
             const stillInBaza = cars.some(c => c.id !== id && (c.couplingId === cid || (c.carNumber || '').replace(/[^А-ЯA-Z0-9]/g, '') === (carNumber || '').replace(/[^А-ЯA-Z0-9]/g, '')));
             if (!stillInBaza) {
               dbService.setVehicleStatus(cid, 'trip');
@@ -776,6 +848,16 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
         return (b.dateArrival||'0000').localeCompare(a.dateArrival||'0000');
      });
   }, [currentTab, cars, archiveCars, searchQuery, sortMode, selectedDispatcher]);
+
+  // Ленивая подгрузка списка (Учёт выезда): порция + «Показать ещё»,
+  // чтобы не рендерить сразу все записи (тормоза при большом объёме).
+  const BAZA_PAGE_SIZE = 50;
+  const [visibleBazaCount, setVisibleBazaCount] = useState(BAZA_PAGE_SIZE);
+  useEffect(() => {
+    setVisibleBazaCount(BAZA_PAGE_SIZE);
+  }, [currentTab, selectedDispatcher, searchQuery, sortMode]);
+  const visibleList = filteredList.slice(0, visibleBazaCount);
+  const hasMoreBaza = visibleBazaCount < filteredList.length;
 
   const dispatcherList = useMemo(() => {
      const set = new Set<string>();
@@ -1101,7 +1183,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
     </tr>
   </thead>
   <tbody>
-    {filteredList.map((v) => (
+    {visibleList.map((v) => (
       <tr key={`${v.id}-${normalizePlate(v.carNumber)}`} data-nav-item className="group cursor-pointer">
         <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 group-hover:bg-slate-50 transition duration-150">
           <span className="font-semibold text-sm text-slate-800 font-mono tracking-wider inline-block select-all">{v.carNumber}</span>
@@ -1156,7 +1238,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 
                  {/* Mobile Cards View */}
                  <div className="block lg:hidden space-y-3 pb-10">
-                   {filteredList.map(v => (
+                   {visibleList.map(v => (
                      <div 
                        key={`${v.id}-${normalizePlate(v.carNumber)}`} 
                        onClick={() => openCarModal(v)}
@@ -1211,13 +1293,23 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                          </div>
                        </div>
                      </div>
-                   ))}
-                   {filteredList.length === 0 && (
+                     ))}
+                     {filteredList.length === 0 && (
                      <div className="text-center p-8 text-slate-400 font-medium bg-slate-50 rounded-2xl border border-slate-200/50">
                        Нет записей
                      </div>
                    )}
-                 </div>
+                   {hasMoreBaza && (
+                     <div className="flex justify-center mt-4">
+                       <button
+                         onClick={() => setVisibleBazaCount((c) => c + BAZA_PAGE_SIZE)}
+                         className="px-5 py-2.5 rounded-xl bg-[#3765F6] hover:bg-[#2b51d4] text-white text-xs font-bold shadow-sm transition-colors"
+                       >
+                         Показать ещё {Math.min(BAZA_PAGE_SIZE, filteredList.length - visibleBazaCount)} (осталось {filteredList.length - visibleBazaCount})
+                       </button>
+                     </div>
+                   )}
+                   </div>
              </div>
           </div>
 

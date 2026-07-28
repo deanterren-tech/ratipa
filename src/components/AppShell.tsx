@@ -429,7 +429,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     if (useFirebase && user) {
       try {
         const currentReadState = userNotifState[id]?.isRead || false;
-        update(ref(database, `users/${user.uid}/notificationStates/${id}`), { isRead: !currentReadState });
+        update(ref(database, `users/${user.uid}/notificationStates/${id}`), { isRead: !currentReadState }).catch((err) => console.warn("Failed to mark read in firebase", err));
       } catch (err) {
         console.warn("Failed to mark read in firebase", err);
       }
@@ -446,7 +446,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           }
         });
         if (Object.keys(updates).length > 0) {
-          update(ref(database), updates);
+          update(ref(database), updates).catch((err) => console.warn("Failed to update notifications in firebase", err));
         }
       } catch (err) {
         console.warn("Failed to mark all read in firebase", err);
@@ -458,7 +458,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     e.stopPropagation();
     if (useFirebase && user) {
       try {
-        update(ref(database, `users/${user.uid}/notificationStates/${id}`), { isDeleted: true });
+        update(ref(database, `users/${user.uid}/notificationStates/${id}`), { isDeleted: true }).catch((err) => console.warn("Failed to mark deleted in firebase", err));
       } catch (err) {
         console.warn("Failed to mark deleted in firebase", err);
       }
@@ -473,7 +473,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           updates[`users/${user.uid}/notificationStates/${n.id}/isDeleted`] = true;
         });
         if (Object.keys(updates).length > 0) {
-          update(ref(database), updates);
+          update(ref(database), updates).catch((err) => console.warn("Failed to update notifications in firebase", err));
         }
       } catch (err) {
         console.warn("Failed to clear notifications in firebase", err);
@@ -717,7 +717,13 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
   const menuGroups = useMemo(() => {
     if (settings && settings.menuStructure && settings.menuStructure.length > 0) {
-      return settings.menuStructure;
+      // Fix: ensure g_settings uses appSettings (База данных), not settings (Справочники)
+      return settings.menuStructure.map((g: any) => {
+        if (g.subtabKeys) {
+          return { ...g, subtabKeys: g.subtabKeys.map((k: string) => k === 'settings' ? 'appSettings' : k) };
+        }
+        return g;
+      });
     }
     return [
       { id: 'g_home', label: 'Главная', isDropdown: false, singleModuleKey: 'dashboard' },
@@ -845,6 +851,11 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
   return (
     <div className={`min-h-screen ${activeModule === "admin" ? "bg-transparent" : "bg-slate-50"} flex flex-col font-sans transition-all duration-300`}>
+      {!useFirebase && (
+        <div className="bg-amber-500 text-white text-[11px] font-bold text-center py-1 px-3">
+          ⚠ Офлайн-режим: данные сохраняются только локально на этом устройстве и не синхронизируются с сервером.
+        </div>
+      )}
       
       {/* Modern Responsive Capsule Header - fully blended light premium top bar */}
       <header className="bg-white/45 backdrop-blur-lg text-slate-900 border-b border-slate-200/35 min-h-[3.5rem] py-1 md:py-0 md:h-14 flex items-center justify-between px-3 sm:px-8 shrink-0 sticky top-0 z-50 select-none gap-2 sm:gap-3 transition-colors duration-300">
