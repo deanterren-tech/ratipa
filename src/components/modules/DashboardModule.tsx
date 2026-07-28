@@ -832,15 +832,34 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                     <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
                       <span className="text-[9px] font-bold text-slate-400 uppercase mr-1">Быстрый выбор:</span>
                       {[
-                        { label: '🚚 В пути', url: 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?q=80&w=800&auto=format&fit=crop' },
-                        { label: '📦 Логистика', url: 'https://images.unsplash.com/photo-1553413077-190dd305871c?q=80&w=800&auto=format&fit=crop' },
-                        { label: '🗺️ Дорога', url: 'https://images.unsplash.com/photo-1502920917128-1aa500764cbd?q=80&w=800&auto=format&fit=crop' },
-                        { label: '📅 Офис', url: 'https://images.unsplash.com/photo-1497366754035-f200968a6e34?q=80&w=800&auto=format&fit=crop' },
+                        { label: '🚚 В пути', urls: [
+                          'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?q=80&w=800&auto=format&fit=crop',
+                          'https://images.unsplash.com/photo-1571068316344-75bc76f77890?q=80&w=800&auto=format&fit=crop',
+                          'https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?q=80&w=800&auto=format&fit=crop',
+                        ] },
+                        { label: '📦 Логистика', urls: [
+                          'https://images.unsplash.com/photo-1565891741441-64926e441838?q=80&w=800&auto=format&fit=crop',
+                          'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?q=80&w=800&auto=format&fit=crop',
+                          'https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?q=80&w=800&auto=format&fit=crop',
+                        ] },
+                        { label: '🛣️ Дорога', urls: [
+                          'https://images.unsplash.com/photo-1519003722824-194d4455a60c?q=80&w=800&auto=format&fit=crop',
+                          'https://images.unsplash.com/photo-1502920917128-1aa500764cbd?q=80&w=800&auto=format&fit=crop',
+                        ] },
+                        { label: '🏢 Офис', urls: [
+                          'https://images.unsplash.com/photo-1497366811353-6870744d04b2?q=80&w=800&auto=format&fit=crop',
+                          'https://images.unsplash.com/photo-1542744173-8e7e53415bb0?q=80&w=800&auto=format&fit=crop',
+                          'https://images.unsplash.com/photo-1531973576160-7125cd663d86?q=80&w=800&auto=format&fit=crop',
+                        ] },
                       ].map((preset) => (
                         <button
                           key={preset.label}
                           type="button"
-                          onClick={() => handleFieldChange('imageUrl', preset.url)}
+                          onClick={() => {
+                            const pool = preset.urls;
+                            const url = pool[Math.floor(Math.random() * pool.length)];
+                            handleFieldChange('imageUrl', url);
+                          }}
                           className="px-2.5 py-1 bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-950 hover:border-slate-300 rounded-lg text-[9px] font-bold transition cursor-pointer"
                         >
                           {preset.label}
