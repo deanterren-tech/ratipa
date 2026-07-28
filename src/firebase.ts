@@ -1900,30 +1900,36 @@ export const dbService = {
 
   saveSettings: (settings: AppSettings, user: string, role: string) => {
     const cleanSettings = sanitizeFirebaseObject(settings);
-    if (useFirebase) {
-      // MERGE with current appSettings so partial saves (from other modules)
-      // don't wipe fields like dispositionSheetUrl/planZagruzokSheetUrl/menuStructure.
-      firebaseGet(ref(database, "appSettings"))
-        .then((snap) => {
-          const base = (snap.val() as AppSettings) || ({} as AppSettings);
-          const merged = sanitizeFirebaseObject({ ...base, ...settings });
-          // Защита: не стирать menuStructure, если он есть в базе, но отсутствует в частичном сохранении
-          if (base.menuStructure && !settings.menuStructure) {
-            merged.menuStructure = base.menuStructure;
-          }
-          set(ref(database, "appSettings"), merged);
-          catalogCache.settings = merged;
-        })
-        .catch(() => {
-          set(ref(database, "appSettings"), cleanSettings);
-          catalogCache.settings = cleanSettings;
-        });
-    } else {
-      const local = getLocalStorageData<AppSettings>("ratipa_settings", {} as AppSettings);
-      const merged = sanitizeFirebaseObject({ ...local, ...settings });
-      setLocalStorageData("ratipa_settings", merged);
-      catalogCache.settings = merged;
-    }
+    // Возвращаем Promise, чтобы вызывающий код мог await'ить реальную запись.
+    return new Promise<void>((resolve, reject) => {
+      if (useFirebase) {
+        // MERGE with current appSettings so partial saves (from other modules)
+        // don't wipe fields like dispositionSheetUrl/planZagruzokSheetUrl/menuStructure.
+        firebaseGet(ref(database, "appSettings"))
+          .then((snap) => {
+            const base = (snap.val() as AppSettings) || ({} as AppSettings);
+            const merged = sanitizeFirebaseObject({ ...base, ...settings });
+            // Защита: не стирать menuStructure, если он есть в базе, но отсутствует в частичном сохранении
+            if (base.menuStructure && !settings.menuStructure) {
+              merged.menuStructure = base.menuStructure;
+            }
+            set(ref(database, "appSettings"), merged)
+              .then(() => { catalogCache.settings = merged; resolve(); })
+              .catch((e) => { console.warn("[saveSettings] set failed", e); reject(e); });
+          })
+          .catch(() => {
+            set(ref(database, "appSettings"), cleanSettings)
+              .then(() => { catalogCache.settings = cleanSettings; resolve(); })
+              .catch((e) => { console.warn("[saveSettings] fallback set failed", e); reject(e); });
+          });
+      } else {
+        const local = getLocalStorageData<AppSettings>("ratipa_settings", {} as AppSettings);
+        const merged = sanitizeFirebaseObject({ ...local, ...settings });
+        setLocalStorageData("ratipa_settings", merged);
+        catalogCache.settings = merged;
+        resolve();
+      }
+    });
     dbService.logAction(
       user,
       role,

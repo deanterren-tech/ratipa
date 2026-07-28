@@ -258,7 +258,16 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
         highlight: cleaned[0]
       };
 
-      await dbService.saveSettings(updatedSettings, user.name, user.role);
+      // Локально обновляем settings СРАЗУ, чтобы UI показал новое без перезагрузки
+      // (подписка getSettings может "не дёрнуться" мгновенно после записи).
+      setSettings(updatedSettings);
+      setEditHighlights(JSON.parse(JSON.stringify(cleaned)));
+
+      try {
+        await dbService.saveSettings(updatedSettings, user.name, user.role);
+      } catch (err: any) {
+        console.error('[saveHighlight] saveSettings failed:', err);
+      }
       setIsEditingHighlight(false);
       setActiveSlideIndex(0);
     }
