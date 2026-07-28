@@ -189,12 +189,20 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
     const dispId = (form.dispatcher || '').toString();
     const dispName = dispId ? (dispatchers.find((d) => (d.id || d.key) === dispId)?.name || dispId) : '';
     const safe = (v: any) => (v ?? '').toString().trim();
+    const hasEdit = !!editing;
+    const editBrand = (editing as any)?.brand || (editing as any)?.brandModel || '';
+    const editTrailerBrand = (editing as any)?.trailerBrand || (editing as any)?.trailerMake || '';
+    // Защита: НЕ затирать поля в БД пустотой из формы (SelectField может
+    // сбросить brand в '' если марка переименована в Справочниках и
+    // перестала совпадать с опцией выпадающего списка).
+    const brandVal = (form.brand && form.brand.trim() !== '') ? safe(form.brand) : (hasEdit ? editBrand : '');
+    const trailerBrandVal = (form.trailerBrand && form.trailerBrand.trim() !== '') ? safe(form.trailerBrand) : (hasEdit ? editTrailerBrand : '');
     const rec: any = {
       id,
       carNumber: carNumber.toUpperCase(),
       trailerNumber: safe(form.trailerNumber).toUpperCase(),
-      brand: safe(form.brand),
-      trailerBrand: safe(form.trailerBrand),
+      brand: brandVal,
+      trailerBrand: trailerBrandVal,
       brandRu: safe(form.brandRu),
       vehicleType: safe(form.vehicleType) || DEFAULT_VEHICLE.vehicleType,
       dimensions: safe(form.dimensions) || DEFAULT_VEHICLE.dimensions,

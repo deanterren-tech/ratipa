@@ -51,6 +51,20 @@ export interface FleetUnit {
     driverId?: string | null;
     dispatcherName?: string | null;
     status?: string;
+    // Ключевые поля дублируются в couplings (приоритетнее tractors,
+    // т.к. у 39 тракторов brand пустой, а в couplings он есть у всех 46)
+    brand?: string | null;
+    brandModel?: string | null;
+    brands?: string | null;
+    brandRu?: string | null;
+    trailerBrand?: string | null;
+    trailerMake?: string | null;
+    vehicleType?: string | null;
+    dimensions?: string | null;
+    weight?: string | null;
+    rateGroupId?: string | null;
+    driver2?: string | null;
+    dispatcherName2?: string | null;
   };
 }
 
@@ -108,6 +122,21 @@ export const subscribeFleetUnits = (callback: (units: FleetUnit[]) => void): (()
           driverId: c.driverId ?? null,
           dispatcherName: c.dispatcherName ?? null,
           status: c.status,
+          // Ключевые поля дублируются в couplings — они ПРИОРИТЕТНЕЕ
+          // tractors (у 39 тракторов brand пустой, а в couplings он есть у всех 46).
+          // Чтобы сцепка не "пустела" при правке марки в Справочниках.
+          brand: c.brand ?? null,
+          brandModel: c.brandModel ?? null,
+          brands: c.brands ?? null,
+          brandRu: c.brandRu ?? null,
+          trailerBrand: c.trailerBrand ?? null,
+          trailerMake: c.trailerMake ?? null,
+          vehicleType: c.vehicleType ?? null,
+          dimensions: c.dimensions ?? null,
+          weight: c.weight ?? null,
+          rateGroupId: c.rateGroupId ?? null,
+          driver2: c.driver2 ?? null,
+          dispatcherName2: c.dispatcherName2 ?? null,
         },
       };
     });
@@ -196,13 +225,13 @@ export const getCouplingsFlat = (cb: (list: any[]) => void): (() => void) =>
     tractorId: u.raw.tractorId,
     trailerNumber: u.trailer?.trailerNumber || '',
     trailerId: u.raw.trailerId,
-    brand: u.tractor?.brand || u.tractor?.brandModel || '',
-    brandModel: u.tractor?.brandModel || u.tractor?.brands || u.tractor?.brand || '',
-    brandRu: u.tractor?.brandRu || '',
-    brandsRu: u.tractor?.brandModel || u.tractor?.brandsRu || u.tractor?.brand || '',
+    brand: u.raw.brand || u.tractor?.brand || u.tractor?.brandModel || '',
+    brandModel: u.raw.brandModel || u.raw.brands || u.tractor?.brandModel || u.tractor?.brands || u.tractor?.brand || '',
+    brandRu: u.raw.brandRu || u.tractor?.brandRu || '',
+    brandsRu: u.raw.brandModel || u.raw.brands || u.tractor?.brandModel || u.tractor?.brands || u.tractor?.brand || '',
     brandsLat: u.trailer?.trailerBrand || '',
-    trailerBrand: u.trailer?.trailerBrand || '',
-    trailerMake: u.trailer?.trailerBrand || '',
+    trailerBrand: u.raw.trailerBrand || u.tractor?.trailerBrand || u.trailer?.trailerBrand || '',
+    trailerMake: u.raw.trailerMake || u.tractor?.trailerMake || u.trailer?.trailerBrand || '',
     driverId: u.raw.driverId || '',
     driverName: u.driver?.shortNameRu || u.driver?.name || '',
     driverNameRu: u.driver?.shortNameRu || '',
@@ -216,14 +245,14 @@ export const getCouplingsFlat = (cb: (list: any[]) => void): (() => void) =>
     passportIssuedBy: u.driver?.passportIssued || '',
     licenseNumber: u.driver?.licenseNumber || '',
     lastPassportVerificationYear: (u.tractor as any)?.lastPassportVerificationYear,
-    dispatcher: u.dispatcher?.name || u.tractor?.dispatcherName || u.tractor?.dispatcher || '',
-    dispatcherName: u.dispatcher?.name || u.tractor?.dispatcherName || u.tractor?.dispatcher || '',
+    dispatcher: u.dispatcher?.name || u.raw.dispatcherName || u.tractor?.dispatcherName || u.tractor?.dispatcher || '',
+    dispatcherName: u.dispatcher?.name || u.raw.dispatcherName || u.tractor?.dispatcherName || u.tractor?.dispatcher || '',
     status: u.status,
     year: u.tractor?.year,
-    dimensions: u.tractor?.dimensions,
-    weight: u.tractor?.weight,
+    dimensions: u.raw.dimensions || u.tractor?.dimensions,
+    weight: u.raw.weight || u.tractor?.weight,
     rate: u.tractor?.rate,
-    vehicleType: u.tractor?.vehicleType,
-    rateGroupId: (u.tractor as any)?.rateGroupId || (u.raw as any)?.rateGroupId || '',
-    driver2: (u.tractor as any)?.driver2 || '',
+    vehicleType: u.raw.vehicleType || u.tractor?.vehicleType,
+    rateGroupId: u.raw.rateGroupId || (u.tractor as any)?.rateGroupId || '',
+    driver2: u.raw.driver2 || (u.tractor as any)?.driver2 || '',
   }))));
