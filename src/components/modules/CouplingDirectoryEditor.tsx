@@ -240,18 +240,28 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
           status: c.status || 'base',
         }));
         setCouplings(mapped);
-        // Проверяем, что запись реально попала в список
-        const found = mapped.find((c) => c.id === id);
-        if (!found) {
-          console.warn('[handleSave] запись не найдена в списке после сохранения', id);
-          toast('Внимание: запись сохранена, но не отображается в списке. Обновите страницу.', 'error');
-        }
       });
     } catch (err: any) {
       console.error('[handleSave] saveVehicleDriverRecord failed:', err);
       toast('Ошибка сохранения: ' + (err?.message || err), 'error');
     } finally {
       setModalOpen(false);
+      // Проверяем один раз (не внутри подписки, чтобы не дублировать toasts).
+      // couplings пишется под НОРМАЛИЗОВАННЫМ ключом — сравниваем с ним.
+      const normId = String(id || '').toUpperCase().replace(/[^A-ZА-Я0-9-]/g, '');
+      setTimeout(() => {
+        setCouplings((prev) => {
+          const found = prev.find((c) => {
+            const cid = String(c.id || '').toUpperCase().replace(/[^A-ZА-Я0-9-]/g, '');
+            return cid === normId;
+          });
+          if (!found) {
+            console.warn('[handleSave] запись не найдена в списке после сохранения', id);
+            toast('Внимание: запись сохранена, но не отображается в списке. Обновите страницу.', 'error');
+          }
+          return prev;
+        });
+      }, 600);
     }
   };
 

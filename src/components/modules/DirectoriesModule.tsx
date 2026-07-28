@@ -119,12 +119,32 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
       }
     });
     if (tab.idField === 'key' && !rec.key) {
-      rec.key = (rec.name || '').toString().toUpperCase().replace(/\s+/g, '_');
+      rec.key = (rec.name || '').toString().toUpperCase().replace(/\\s+/g, '_');
     }
     if (!rec.id && !rec.key) rec.id = 'dir_' + Date.now().toString();
-    directoryService.saveDirItem(tab.key, rec, user.name, user.role);
-    toast('Сохранено в справочник', 'success');
-    setEditing(null);
+
+    // Нормализация ключа БД: транслит кириллицы + удаление недопустимых символов
+    // (.#$[]), иначе set(ref) падает синхронно и модалка не закрывается.
+    const CYR_TO_LAT: Record<string, string> = {
+      А:'A',В:'B',Е:'E',К:'K',М:'M',Н:'H',О:'O',Р:'P',С:'C',Т:'T',У:'Y',Х:'X',
+      а:'a',в:'b',е:'e',к:'k',м:'m',н:'h',о:'o',р:'p',с:'c',т:'t',у:'y',х:'x',
+    };
+    const normId = (s: string) =>
+      String(s || '').split('').map((ch) => CYR_TO_LAT[ch] ?? ch).join('')
+        .replace(/[.#$[\]]/g, '_').replace(/[^A-Z0-9_-]/g, '');
+    if (rec.id) rec.id = normId(rec.id);
+    if (rec.key) rec.key = normId(rec.key);
+    if (rec[tab.idField]) rec[tab.idField] = normId(rec[tab.idField]);
+
+    try {
+      directoryService.saveDirItem(tab.key, rec, user.name, user.role);
+      toast('Сохранено в справочник', 'success');
+    } catch (err: any) {
+      console.error('[DirectoriesModule] saveDirItem failed:', err);
+      toast('Ошибка сохранения: ' + (err?.message || err), 'error');
+    } finally {
+      setEditing(null);
+    }
   };
 
   const handleDelete = async (it: any) => {
