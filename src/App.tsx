@@ -111,6 +111,29 @@ export default function App() {
     window.location.reload();
   };
 
+  // ЖИВАЯ подписка на свой профиль: когда админ меняет права доступа
+  // (saveUser -> update users_list/${uid}), user.permissions обновляется в реальном времени,
+  // и allowedModules в AppShell пересчитывается (блок появляется сразу, без перелогина).
+  useEffect(() => {
+    if (!user || !user.uid) return;
+    const unsub = dbService.getUsers((users) => {
+      const me = (users || []).find((u) => u.uid === user.uid);
+      if (me) {
+        setUser((prev) => {
+          // Не трогаем, если права не изменились (избегаем лишних ре-рендеров)
+          if (prev && JSON.stringify(prev.permissions) === JSON.stringify(me.permissions) &&
+              prev.role === me.role && prev.customPermissions === me.customPermissions) {
+            return prev;
+          }
+          return ensurePermissions(me);
+        });
+      }
+    });
+    return () => { if (typeof unsub === 'function') unsub(); };
+  // Только при смене uid (логин/логаут) — не при каждом изменении user
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
+
   if (isSessionRestoring) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center font-sans">
