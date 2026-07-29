@@ -474,7 +474,11 @@ export const dbService = {
             let list = Object.keys(data).map((key) => ({
               uid: key,
               ...data[key],
-            }));
+            })).filter((u) => {
+              // Отбрасываем пустые/анонимные записи (например users_list/"" или legacy "Пользователь")
+              const name = (u.name || '').toString().trim();
+              return !!u.uid && u.uid !== '' && name !== '' && name.toLowerCase() !== 'пользователь' && name.toLowerCase() !== 'user';
+            });
             // Self-healing: Deduplicate "Сергей" entries to prevent multiple accounts in UI
             const sergeiList = list.filter((u) => u.name === "Сергей");
             if (sergeiList.length > 1) {
@@ -540,7 +544,11 @@ export const dbService = {
             let list = Object.keys(data).map((key) => ({
               uid: key,
               ...data[key],
-            }));
+            })).filter((u) => {
+              // Отбрасываем пустые/анонимные записи (например users_list/"" или legacy "Пользователь")
+              const name = (u.name || '').toString().trim();
+              return !!u.uid && u.uid !== '' && name !== '' && name.toLowerCase() !== 'пользователь' && name.toLowerCase() !== 'user';
+            });
             // Self-healing: Deduplicate "Сергей" entries to prevent multiple accounts in UI
             const sergeiList = list.filter((u) => u.name === "Сергей");
             if (sergeiList.length > 1) {
@@ -1751,12 +1759,14 @@ export const dbService = {
       set(pRef, item).catch((err) => {
         console.warn("Silent presence set fail:", err);
       });
-      // Also update persistent lastActive on user profile
-      update(ref(database, `users_list/${user.uid}`), {
-        lastActive: item.lastActive,
-      }).catch((err) => {
-        console.warn("UserProfile lastActive update fail:", err);
-      });
+      // Also update persistent lastActive on user profile (только если uid валиден — иначе создаётся users_list/"")
+      if (user.uid) {
+        update(ref(database, `users_list/${user.uid}`), {
+          lastActive: item.lastActive,
+        }).catch((err) => {
+          console.warn("UserProfile lastActive update fail:", err);
+        });
+      }
 
       // Cleanup of presence on unloading if possible
       const handleUnload = () => {

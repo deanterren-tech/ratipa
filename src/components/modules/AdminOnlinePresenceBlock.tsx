@@ -94,9 +94,23 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
       if (diffMin < 1) return 'Только что';
       if (diffMin < 60) return `${diffMin} мин. назад`;
       
-      const diffHours = Math.floor(diffMin / 60);
-      if (diffHours < 24) {
+      // Сравниваем по календарной дате (день), а не по 24-часовому окну
+      const isSameDay = date.getFullYear() === now.getFullYear() &&
+        date.getMonth() === now.getMonth() &&
+        date.getDate() === now.getDate();
+      
+      if (isSameDay) {
         return `Сегодня в ${date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+      }
+      
+      // Вчера?
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      const isYesterday = date.getFullYear() === yesterday.getFullYear() &&
+        date.getMonth() === yesterday.getMonth() &&
+        date.getDate() === yesterday.getDate();
+      if (isYesterday) {
+        return `Вчера в ${date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
       }
       
       return date.toLocaleString('ru-RU', {
