@@ -215,44 +215,106 @@ export const getCouplings = (cb: (list: FleetUnit[]) => void): (() => void) =>
 /**
  * Плоский список сцепок для UI-пикеров/редакторов (обратно-совместимый вид):
  * раскрывает вложенный FleetUnit в плоские поля carNumber/trailerNumber/driverName/...
+ * SHARED: один subscribeFleetUnits на всех подписчиков (важно — в таблицах может быть 50+ CouplingPicker).
  */
-export const getCouplingsFlat = (cb: (list: any[]) => void): (() => void) =>
-  subscribeFleetUnits((units) => cb(units.map((u) => ({
-    id: u.couplingId,
-    couplingId: u.couplingId,
-    carNumber: u.tractor?.carNumber || u.couplingId,
-    vehicleNumbers: u.tractor?.carNumber || u.couplingId,
-    tractorId: u.raw.tractorId,
-    trailerNumber: u.trailer?.trailerNumber || '',
-    trailerId: u.raw.trailerId,
-    brand: u.raw.brand || u.tractor?.brand || u.tractor?.brandModel || '',
-    brandModel: u.raw.brandModel || u.raw.brands || u.tractor?.brandModel || u.tractor?.brands || u.tractor?.brand || '',
-    brandRu: u.raw.brandRu || u.tractor?.brandRu || '',
-    brandsRu: u.raw.brandModel || u.raw.brands || u.tractor?.brandModel || u.tractor?.brands || u.tractor?.brand || '',
-    brandsLat: u.trailer?.trailerBrand || '',
-    trailerBrand: u.raw.trailerBrand || u.tractor?.trailerBrand || u.trailer?.trailerBrand || '',
-    trailerMake: u.raw.trailerMake || u.tractor?.trailerMake || u.trailer?.trailerBrand || '',
-    driverId: u.raw.driverId || '',
-    driverName: u.driver?.shortNameRu || u.driver?.name || '',
-    driverNameRu: u.driver?.shortNameRu || '',
-    driverNameLat: u.driver?.nameLat || '',
-    phones: u.driver?.phones || [],
-    passportNumber: u.driver?.passport || '',
-    personalId: u.driver?.personalId || '',
-    birthDate: u.driver?.birthDate || '',
-    passportStart: u.driver?.passportStart || '',
-    passportEnd: u.driver?.passportEnd || '',
-    passportIssuedBy: u.driver?.passportIssued || '',
-    licenseNumber: u.driver?.licenseNumber || '',
-    lastPassportVerificationYear: (u.tractor as any)?.lastPassportVerificationYear,
-    dispatcher: u.dispatcher?.name || u.raw.dispatcherName || u.tractor?.dispatcherName || u.tractor?.dispatcher || '',
-    dispatcherName: u.dispatcher?.name || u.raw.dispatcherName || u.tractor?.dispatcherName || u.tractor?.dispatcher || '',
-    status: u.status,
-    year: u.tractor?.year,
-    dimensions: u.raw.dimensions || u.tractor?.dimensions,
-    weight: u.raw.weight || u.tractor?.weight,
-    rate: u.tractor?.rate,
-    vehicleType: u.raw.vehicleType || u.tractor?.vehicleType,
-    rateGroupId: u.raw.rateGroupId || (u.tractor as any)?.rateGroupId || '',
-    driver2: u.raw.driver2 || (u.tractor as any)?.driver2 || '',
-  }))));
+let _couplingsFlatCache: any[] | null = null;
+const _couplingsFlatCallbacks = new Set<(list: any[]) => void>();
+let _couplingsFlatUnsub: (() => void) | null = null;
+
+const _mapUnitToFlat = (u: any) => ({
+  id: u.couplingId,
+  couplingId: u.couplingId,
+  carNumber: u.tractor?.carNumber || u.couplingId,
+  vehicleNumbers: u.tractor?.carNumber || u.couplingId,
+  tractorId: u.raw?.tractorId,
+  trailerNumber: u.trailer?.trailerNumber || '',
+  trailerId: u.raw?.trailerId,
+  brand: u.raw?.brand || u.tractor?.brand || u.tractor?.brandModel || '',
+  brandModel: u.raw?.brandModel || u.raw?.brands || u.tractor?.brandModel || u.tractor?.brands || u.tractor?.brand || '',
+  brandRu: u.raw?.brandRu || u.tractor?.brandRu || '',
+  brandsRu: u.raw?.brandModel || u.raw?.brands || u.tractor?.brandModel || u.tractor?.brands || u.tractor?.brand || '',
+  brandsLat: u.trailer?.trailerBrand || '',
+  trailerBrand: u.raw?.trailerBrand || u.tractor?.trailerBrand || u.trailer?.trailerBrand || '',
+  trailerMake: u.raw?.trailerMake || u.tractor?.trailerMake || u.trailer?.trailerBrand || '',
+  driverId: u.raw?.driverId || '',
+  driverName: u.driver?.shortNameRu || u.driver?.name || '',
+  driverNameRu: u.driver?.shortNameRu || '',
+  driverNameLat: u.driver?.nameLat || '',
+  phones: u.driver?.phones || [],
+  passportNumber: u.driver?.passport || '',
+  personalId: u.driver?.personalId || '',
+  birthDate: u.driver?.birthDate || '',
+  passportStart: u.driver?.passportStart || '',
+  passportEnd: u.driver?.passportEnd || '',
+  passportIssuedBy: u.driver?.passportIssued || '',
+  licenseNumber: u.driver?.licenseNumber || '',
+  lastPassportVerificationYear: (u.tractor as any)?.lastPassportVerificationYear,
+  dispatcher: u.dispatcher?.name || u.raw?.dispatcherName || u.tractor?.dispatcherName || u.tractor?.dispatcher || '',
+  dispatcherName: u.dispatcher?.name || u.raw?.dispatcherName || u.tractor?.dispatcherName || u.tractor?.dispatcher || '',
+  status: u.status,
+  year: u.tractor?.year,
+  dimensions: u.raw?.dimensions || u.tractor?.dimensions,
+  weight: u.raw?.weight || u.tractor?.weight,
+  rate: u.tractor?.rate,
+  vehicleType: u.raw?.vehicleType || u.tractor?.vehicleType,
+  rateGroupId: u.raw?.rateGroupId || (u.tractor as any)?.rateGroupId || '',
+  driver2: u.raw?.driver2 || (u.tractor as any)?.driver2 || '',
+});
+
+const _notifyCouplingsFlat = () => {
+  if (_couplingsFlatCache) {
+    _couplingsFlatCallbacks.forEach((cb) => cb(_couplingsFlatCache));
+  }
+};
+
+export const getCouplingsFlat = (cb: (list: any[]) => void): (() => void) => {
+  // Сразу отдаём кэш, если уже загружен
+  if (_couplingsFlatCache) cb(_couplingsFlatCache);
+  _couplingsFlatCallbacks.add(cb);
+
+  if (_couplingsFlatCallbacks.size === 1) {
+    // Первый подписчик — запускаем единую подписку
+    _couplingsFlatUnsub = subscribeFleetUnits((units) => {
+      if (units && units.length > 0) {
+        _couplingsFlatCache = units.map(_mapUnitToFlat);
+        _notifyCouplingsFlat();
+      } else {
+        // Fallback: читаем couplings напрямую (если subscribeFleetUnits пуст)
+        dbService.getCouplings((list: any[]) => {
+          if (list && list.length > 0) {
+            _couplingsFlatCache = list.map((c: any) => ({
+              id: c.id,
+              couplingId: c.id,
+              carNumber: c.carNumber || c.id,
+              vehicleNumbers: c.carNumber || c.id,
+              tractorId: c.tractorId ?? null,
+              trailerNumber: c.trailerNumber || '',
+              trailerId: c.trailerId ?? null,
+              brand: c.brand || '',
+              brandModel: c.brandModel || c.brands || '',
+              brandRu: c.brandRu || '',
+              trailerBrand: c.trailerBrand || '',
+              trailerMake: c.trailerMake || '',
+              driverId: c.driverId || '',
+              driverName: c.driverName || c.driverNameRu || '',
+              driverNameRu: c.driverNameRu || '',
+              dispatcher: c.dispatcherName || '',
+              dispatcherName: c.dispatcherName || '',
+              status: c.status || 'base',
+            }));
+            _notifyCouplingsFlat();
+          }
+        });
+      }
+    });
+  }
+
+  return () => {
+    _couplingsFlatCallbacks.delete(cb);
+    if (_couplingsFlatCallbacks.size === 0 && _couplingsFlatUnsub) {
+      _couplingsFlatUnsub();
+      _couplingsFlatUnsub = null;
+      _couplingsFlatCache = null;
+    }
+  };
+};

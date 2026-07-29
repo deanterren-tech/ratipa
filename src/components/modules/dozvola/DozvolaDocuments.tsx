@@ -169,10 +169,12 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
 
   // Initial rows construction
   useEffect(() => {
-    if (Object.keys(todoTasks).length > 0 && permitRows.length === 0) {
-      rebuildPermitRows();
+    if (docType === "Заявление на получение разрешений" || docType === "Заявление на выдачу разрешений") {
+      if (permitRows.length === 0) {
+        rebuildPermitRows();
+      }
     }
-  }, [todoTasks]);
+  }, [todoTasks, dozvolsData, docType]);
 
   useEffect(() => {
     const returnItems = getReturnItems();
@@ -202,6 +204,17 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
           totals[typeName] += qty;
         });
       });
+
+    // Fallback: если задач планёрки нет — собираем из реестра дозволов (dozvolsRegistryV4)
+    if (Object.keys(totals).length === 0 && dozvolsData && Object.keys(dozvolsData).length > 0) {
+      Object.values(dozvolsData).forEach((item: any) => {
+        if (!item || item.isCopy || item.status === 'expired') return;
+        const typeName = item.type || '';
+        if (!typeName) return;
+        if (!totals[typeName]) totals[typeName] = 0;
+        totals[typeName] += 1;
+      });
+    }
 
     const newRows = Object.entries(totals).map(([typeName, qty]) => {
       const map = getPermitPrintMapping(typeName);
