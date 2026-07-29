@@ -587,7 +587,10 @@ export const dbService = {
   saveUser: (user: UserProfile) => {
     catalogCache.users = null;
     if (useFirebase) {
-      set(ref(database, `users_list/${user.uid}`), user).catch((err) => {
+      // MERGE (update), а не полная перезапись (set):
+      // иначе при быстрой смене прав одного блока затираются права других блоков
+      // (selectedUser — старая копия, set перезаписывает весь профиль).
+      update(ref(database, `users_list/${user.uid}`), user as any).catch((err) => {
         console.warn("Failed live save user:", err);
         const users = getLocalStorageData<UserProfile[]>(
           "ratipa_users",
