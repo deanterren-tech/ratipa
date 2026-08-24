@@ -53,24 +53,28 @@ export function resolvePermission(user: UserProfile, key: string, rolePermission
     return "write";
   }
 
-  // Явное переопределение пользователя
+  // Определяем базовые права для роли (из settings.rolePermissions → DEFAULT_ROLE_PERMS)
+  const role = user.role;
+  const roleBase: Record<string, string> =
+    (rolePermissions && rolePermissions[role]) ||
+    DEFAULT_ROLE_PERMS[role] ||
+    DEFAULT_ROLE_PERMS["viewer"];
+
+  // Специальные случаи для admin/manager
+  if (role === "admin" || role === "manager") {
+    if (key === "admin") return role === "admin" ? "write" : "none";
+    // admin/manager получают write на всё кроме admin
+    const baseVal = roleBase[key] || "write";
+    return baseVal === "write" || baseVal === "read" ? baseVal : "none";
+  }
+
+  // Явное переопределение пользователя (customPermissions имеет приоритет)
   const custom = user.permissions?.[key];
   if (custom !== undefined && custom !== "inherit") {
     return custom === "write" || custom === "read" ? custom : "none";
   }
 
-  // Наследование через роль
-  const role = user.role;
-  if (role === "admin" || role === "manager") {
-    if (key === "admin") return role === "admin" ? "write" : "none";
-    return "write";
-  }
-
-  const roleBase =
-    (rolePermissions && rolePermissions[role]) ||
-    DEFAULT_ROLE_PERMS[role] ||
-    DEFAULT_ROLE_PERMS["viewer"];
-
+  // Наследование из базы роли (settings.rolePermissions → DEFAULT_ROLE_PERMS)
   const inherited = roleBase[key] || "none";
   return inherited === "write" || inherited === "read" ? inherited : "none";
 }

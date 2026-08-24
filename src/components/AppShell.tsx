@@ -6,6 +6,7 @@ import {motion, AnimatePresence} from 'motion/react'
 import CommandCenter from './CommandCenter';
 import TypingText from './TypingText';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts'
+import { resolvePermission } from '../utils/permissions';
 import { 
   LayoutDashboard, 
   Calculator, 
@@ -1264,7 +1265,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             const isSystemModule = ['dashboard', 'settings', 'appSettings', 'admin'].includes(mod.key);
             const isAllowed = isSystemModule
               ? true
-              : (user.role === 'mechanic' ? (mod.key === 'baza') : (user.role === 'root_admin' || (user.permissions && user.permissions[mod.permissionKey] && user.permissions[mod.permissionKey] !== 'none')));
+              : (user.role === 'mechanic' ? (mod.key === 'baza') : (user.role === 'root_admin' || resolvePermission(user, mod.permissionKey, settings?.rolePermissions) !== 'none'));
             if (!isAllowed) return null;
 
             const isActive = activeModule === mod.key;

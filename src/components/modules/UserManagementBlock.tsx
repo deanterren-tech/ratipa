@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import {useToast} from '../ToastProvider'
 import {useDialog} from '../DialogProvider'
+import { resolvePermission } from '../../utils/permissions';
 
 interface Props {
   user: UserProfile;
@@ -84,25 +85,10 @@ export default function UserManagementBlock({ user }: Props) {
     };
   }, []);
 
-  const computeEffectivePermissions = (role: string, customOverrides: any, rolePermsBase?: any) => {
-    const base = rolePermsBase?.[role] || settings?.rolePermissions?.[role] || DEFAULT_ROLE_PERMS[role] || DEFAULT_ROLE_PERMS['viewer'];
-    const effective = { ...base };
-    if (customOverrides) {
-      Object.keys(customOverrides).forEach(k => {
-        if (customOverrides[k] && customOverrides[k] !== 'inherit') {
-          effective[k] = customOverrides[k];
-        }
-      });
-    }
-    return effective;
-  };
-
   const handleRegisterUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUName.trim() || !newUPassword.trim() || !newURole) return;
 
-    const basePerms = settings?.rolePermissions?.[newURole] || DEFAULT_ROLE_PERMS[newURole] || DEFAULT_ROLE_PERMS['viewer'];
-    
     const newUser: UserProfile = {
       uid: "user_" + Date.now(),
       name: newUName.trim(),
@@ -110,7 +96,7 @@ export default function UserManagementBlock({ user }: Props) {
       createdAt: new Date().toISOString(),
       password: newUPassword.trim(),
       role: newURole as any,
-      permissions: { ...basePerms } as any,
+      permissions: {} as any,
       customPermissions: {} as any,
       lastActive: new Date().toISOString(),
     };
@@ -138,13 +124,15 @@ export default function UserManagementBlock({ user }: Props) {
     
     dbService.saveSettings({ ...settings, rolePermissions: newRolePermissions } as any, user.name, user.role);
     
-    // Optimistic Users update
+    // Сбрасываем permissions для всех пользователей этой роли — принуждаем resolvePermission
+    // использовать settings.rolePermissions как единый источник прав.
     const updates: Record<string, any> = {};
     setUsers(prev => prev.map(u => {
       if (u.role === roleKey) {
-        const newEffective = computeEffectivePermissions(roleKey, u.customPermissions || {}, newRolePermissions);
-        updates[`users_list/${u.uid}/permissions`] = newEffective;
-        return { ...u, permissions: newEffective as any };
+        // Сохраняем customPermissions (пользовательские переопределения), очищаем permissions
+        updates[`users_list/${u.uid}/permissions`] = {};
+        updates[`users_list/${u.uid}/customPermissions`] = u.customPermissions || {};
+        return { ...u, permissions: {} as any };
       }
       return u;
     }));
@@ -160,34 +148,33 @@ export default function UserManagementBlock({ user }: Props) {
     // иначе при быстрой смене прав разных модулей предыдущие слетают.
     const current = users.find((x) => x.uid === u.uid) || u;
     const newCustom = { ...(current.customPermissions || {}), [permKey]: val };
-    const newEffective = computeEffectivePermissions(current.role, newCustom);
     
-    // Optimistic UI update
+    // Optimistic UI update: customPermissions задаёт override, permissions пустые (resolvePermission)
     setUsers(prev => prev.map(user => 
       user.uid === u.uid 
-        ? { ...user, customPermissions: newCustom as any, permissions: newEffective as any } 
+        ? { ...user, customPermissions: newCustom as any, permissions: {} as any } 
         : user
     ));
     
-    dbService.saveUser({ ...current, customPermissions: newCustom as any, permissions: newEffective as any });
+    dbService.saveUser({ ...current, customPermissions: newCustom as any, permissions: {} as any } as any);
   };
 
   const handleUserRoleChange = (u: UserProfile, newRole: string) => {
     const current = users.find((x) => x.uid === u.uid) || u;
-    const newEffective = computeEffectivePermissions(newRole, current.customPermissions || {});
-    dbService.saveUser({ ...current, role: newRole as any, permissions: newEffective as any });
+    dbService.saveUser({ ...current, role: newRole as any, permissions: {} as any, customPermissions: current.customPermissions || {} } as any);
+    setUsers(prev => prev.map(user => 
+      user.uid === u.uid ? { ...user, role: newRole as any, permissions: {} as any } : user
+    ));
     toast("Роль сотрудника обновлена", "success");
   };
 
   // Поля учёта выезда (Прибыл/Готовность/Ремонт/Выезд/Комментарий/Водитель/Гос.номер):
-    // optimistic-update, чтобы saveUser (через update-merge) получал актуальный permissions
-    // и не затирал другие права блока при быстрой смене чекбоксов.
     const toggleBazaFieldPerm = (fKey: string, checked: boolean) => {
       if (!selectedUser) return;
       const current = users.find((x) => x.uid === selectedUser.uid) || selectedUser;
-      const newPerms = { ...(current.permissions || {}), [fKey]: checked ? "write" : "none" };
-      setUsers((prev) => prev.map((u) => (u.uid === selectedUser.uid ? ({ ...u, permissions: newPerms } as any) : u)));
-      dbService.saveUser({ ...current, permissions: newPerms } as any);
+      const newCustom = { ...(current.customPermissions || {}), [fKey]: checked ? "write" : "none" };
+      setUsers((prev) => prev.map((u) => (u.uid === selectedUser.uid ? ({ ...u, customPermissions: newCustom as any, permissions: {} as any }) : u)));
+      dbService.saveUser({ ...current, customPermissions: newCustom as any, permissions: {} as any } as any);
     };
 
     const filteredUsers = users.filter(
@@ -613,7 +600,7 @@ export default function UserManagementBlock({ user }: Props) {
                     { key: 'driverName', label: 'Водитель' },
                     { key: 'carNumber', label: 'Гос. номер' },
                   ].map((f) => {
-                    const checked = selectedUser.role === 'root_admin' || !!selectedUser.permissions?.[f.key];
+                    const checked = selectedUser.role === 'root_admin' || selectedUser.customPermissions?.[f.key] === "write";
                     return (
                       <label key={f.key} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[10px] font-semibold ${checked ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
                         <input disabled={selectedUser.role === 'root_admin'} type="checkbox" checked={checked} onChange={(e) => toggleBazaFieldPerm(f.key, e.target.checked)} className="accent-[#3765F6] h-3.5 w-3.5" />
@@ -633,7 +620,7 @@ export default function UserManagementBlock({ user }: Props) {
               <div className="bg-slate-50 border border-slate-200/50 rounded-[2rem] p-5 space-y-3 overflow-y-auto custom-scrollbar">
                 {MODULES_LIST.map((m) => {
                   const currentCustom = selectedUser.customPermissions?.[m.key] || "inherit";
-                  const effectivePerm = selectedUser.permissions?.[m.key] || "none";
+                  const effectivePerm = resolvePermission(selectedUser, m.key, settings?.rolePermissions);
                   const isExpanded = isModuleExpanded(m.key);
                   const toggleExpand = () => toggleModuleExpand(m.key);
 
@@ -677,7 +664,7 @@ export default function UserManagementBlock({ user }: Props) {
                             <div className="text-[10px] text-slate-400 font-mono py-1">Нет вкладок</div>
                           ) : m.subtabs.map((subItem) => {
                               const subCustom = selectedUser.customPermissions?.[subItem.key] || "inherit";
-                              const subEffective = selectedUser.permissions?.[subItem.key] || "none";
+                              const subEffective = resolvePermission(selectedUser, subItem.key, settings?.rolePermissions);
                               
                               return (
                                 <div key={subItem.key} className="flex flex-col sm:flex-row sm:items-center justify-between border rounded-xl p-2.5 gap-2.5 bg-slate-50/50">
