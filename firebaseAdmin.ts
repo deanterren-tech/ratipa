@@ -17,11 +17,17 @@ import { config as dotenvConfig } from "dotenv";
 
 dotenvConfig();
 
+// Определяем окружение: staging или prod
+const isStaging =
+  process.env.VITE_STAGING === 'true' || process.env.VITE_STAGING === '1';
+
 const DATABASE_URL =
   process.env.FIREBASE_DATABASE_URL ||
-  "https://ratipa-portal-default-rtdb.firebaseio.com";
+  (isStaging
+    ? "https://ratipa-staging-default-rtdb.firebaseio.com"
+    : "https://ratipa-portal-default-rtdb.firebaseio.com");
 
-const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "ratipa-portal";
+const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || (isStaging ? "ratipa-staging" : "ratipa-portal");
 
 function buildCredential(): any | null {
   // 1. Полный JSON в одной переменной
