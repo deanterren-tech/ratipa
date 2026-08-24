@@ -368,6 +368,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   // Passport Verification Modal queue state
   const [verificationQueue, setVerificationQueue] = useState<VehicleDriverRecord[]>([]);
   const [currentVerification, setCurrentVerification] = useState<VehicleDriverRecord | null>(null);
+  const [skippedVerificationIds, setSkippedVerificationIds] = useState<Set<string>>(new Set());
   const [verifyFleet, setVerifyFleet] = useState<any[]>([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
@@ -547,8 +548,11 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       const isAnniversaryPassed = today >= anniversaryDate;
       const needsVerification = rec.lastPassportVerificationYear !== currentYear;
 
-      // Показываем только диспетчеру этого авто (или админу)
-      if (rec.dispatcher && rec.dispatcher !== user.name && user.role !== 'root_admin') return false;
+      // Уже пропущено в этой сессии
+      if (skippedVerificationIds.has(rec.id)) return false;
+
+      // Показываем только диспетчеру этого авто
+      if (rec.dispatcher && rec.dispatcher !== user.name) return false;
 
       return isAnniversaryPassed && needsVerification;
     });
@@ -564,7 +568,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       });
       setCurrentVerification(prev => prev || (pendingVerifications[0] || null));
     }
-  }, [verifyFleet]);
+  }, [verifyFleet, skippedVerificationIds]);
 
   const handleVerifySuccess = async (rec: VehicleDriverRecord) => {
     const currentYear = new Date().getFullYear();
@@ -615,6 +619,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     // Just skip for this session
     const remaining = verificationQueue.filter(q => q.id !== rec.id);
     setVerificationQueue(remaining);
+    setSkippedVerificationIds(prev => new Set(prev).add(rec.id));
     if (remaining.length > 0) {
       setCurrentVerification(remaining[0]);
     } else {
@@ -964,7 +969,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       return false;
     })() : false;
     const needsVerificationThisYear = rec.lastPassportVerificationYear !== new Date().getFullYear();
-    const showVerificationIndicator = isAnniversaryPassed && needsVerificationThisYear && (user.role === 'root_admin' || !rec.dispatcher || rec.dispatcher === user.name);
+    const showVerificationIndicator = isAnniversaryPassed && needsVerificationThisYear && (!rec.dispatcher || rec.dispatcher === user.name);
 
     const { brandModel, trailerMake } = resolveBrandsForRecord(rec);
     const matchedTariff = resolveTariffForRecord(rec);
