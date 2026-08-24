@@ -57,6 +57,8 @@ try {
   signInAnonymously(auth)
     .then((cred) => {
       // signed in anonymously
+      // После успешной аутентификации сразу предзагружаем ключевые данные
+      preloadCoreData();
     })
     .catch((err) => {
       console.warn(
@@ -77,10 +79,14 @@ export const ensureAuth = (): Promise<any> => {
   if (!useFirebase || !auth) {
     return Promise.resolve(null);
   }
+  // Если аутентификация уже пройдена — возвращаем мгновенно
   if (auth.currentUser) {
     return Promise.resolve(auth.currentUser);
   }
+  // Если предыдущий промис уже зарезолвлен (или ждёт) — используем его
   if (authReadyPromise) {
+    // Если authReadyPromise уже resolved с пользователем — отлично
+    // Если нет — всё равно ждём (он либо получит юзера, либо timeout)
     return authReadyPromise;
   }
 
@@ -89,6 +95,8 @@ export const ensureAuth = (): Promise<any> => {
       if (user) {
         resolve(user);
         unsub();
+        // Триггерим предзагрузку данных
+        setTimeout(() => preloadCoreData(), 0);
       }
     });
     // Fallback to avoid blocking local experience if network is offline
@@ -236,6 +244,83 @@ const catalogCache: {
   drivers: null,
   users: null,
   settings: null,
+};
+
+// ===== ПРЕДЗАГРУЗКА ДАННЫХ (Preload) =====
+// Цель: после аутентификации сразу fetch'ить ключевые данные, чтобы
+// они были готовы до того, как React-компоненты попросят их через onValue.
+// А также хранить кэш в localStorage для мгновенного показа на холодном старте.
+
+const PRELOAD_CACHE_KEY = 'ratipa_preload_v2';
+const PRELOAD_CACHE_TIME_KEY = 'ratipa_preload_time_v2';
+const PRELOAD_TTL_MS = 5 * 60 * 1000; // 5 минут
+
+// Восстанавливаем кэш из localStorage при загрузке страницы (синхронно, до React)
+if (typeof localStorage !== 'undefined') {
+  try {
+    const cachedJson = localStorage.getItem(PRELOAD_CACHE_KEY);
+    const cachedTime = localStorage.getItem(PRELOAD_CACHE_TIME_KEY);
+    if (cachedJson && cachedTime && (Date.now() - Number(cachedTime)) < PRELOAD_TTL_MS) {
+      const cached: any = JSON.parse(cachedJson);
+      if (cached.settings) catalogCache.settings = cached.settings;
+      if (cached.users) catalogCache.users = cached.users;
+      if (cached.drivers) catalogCache.drivers = cached.drivers;
+    }
+  } catch (_e) {
+    // ignore cache restore failures
+  }
+}
+
+/** Предзагрузка ключевых данных сразу после анонимной аутентификации.
+ *  Параллельно fetch'ит settings, users, drivers → кладёт в catalogCache
+ *  и localStorage, чтобы следующие модули получили данные мгновенно. */
+const preloadCoreData = () => {
+  if (!useFirebase || !database) return;
+  const db = database;
+
+  Promise.all([
+    firebaseGet(ref(db, 'appSettings')).catch(() => null),
+    firebaseGet(ref(db, 'users_list')).catch(() => null),
+    firebaseGet(ref(db, 'drivers')).catch(() => null),
+  ]).then(([settingsSnap, usersSnap, driversSnap]) => {
+    const cache: any = {};
+
+    // Settings
+    if (settingsSnap?.val()) {
+      const data = settingsSnap.val();
+      catalogCache.settings = data;
+      cache.settings = data;
+    }
+
+    // Users
+    if (usersSnap?.val()) {
+      const list = Object.keys(usersSnap.val()).map((key) => ({
+        uid: key,
+        ...usersSnap.val()[key],
+      }));
+      catalogCache.users = list;
+      cache.users = list;
+    }
+
+    // Drivers
+    if (driversSnap?.val()) {
+      const list: any = [];
+      const raw = driversSnap.val();
+      Object.keys(raw).forEach((key) => {
+        list.push({ id: key, ...raw[key] });
+      });
+      catalogCache.drivers = list;
+      cache.drivers = list;
+    }
+
+    // Сохраняем в localStorage для холодного старта
+    if (cache.settings || cache.users || cache.drivers) {
+      try {
+        localStorage.setItem(PRELOAD_CACHE_KEY, JSON.stringify(cache));
+        localStorage.setItem(PRELOAD_CACHE_TIME_KEY, String(Date.now()));
+      } catch (_e) { /* storage full — не критично */ }
+    }
+  });
 };
 
 // Resilient memory & localstorage state
