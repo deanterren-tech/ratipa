@@ -46,7 +46,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const { toast: addToast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tableScale, setTableScale] = useState<number>(() => {
-    const saved = localStorage.getItem("pd_table_scale");
+    const saved = localStorage.getItem(`pd_table_scale_${user.uid}`);
     return saved ? Number(saved) : 100;
   });
   const [activeTab, setActiveTab] = useState<"active" | "archive" | "history">(
@@ -3416,7 +3416,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                   onClick={() => {
                     const newScale = Math.max(50, tableScale - 10);
                     setTableScale(newScale);
-                    localStorage.setItem("pd_table_scale", String(newScale));
+                    localStorage.setItem(`pd_table_scale_${user.uid}`, String(newScale));
                   }}
                   className="w-6 h-6 flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-600 rounded text-xs font-bold transition select-none cursor-pointer"
                   title="Уменьшить масштаб таблицы"
@@ -3428,7 +3428,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                   onClick={() => {
                     const newScale = Math.min(150, tableScale + 10);
                     setTableScale(newScale);
-                    localStorage.setItem("pd_table_scale", String(newScale));
+                    localStorage.setItem(`pd_table_scale_${user.uid}`, String(newScale));
                   }}
                   className="w-6 h-6 flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-600 rounded text-xs font-bold transition select-none cursor-pointer"
                   title="Увеличить масштаб таблицы"
@@ -3440,7 +3440,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 <button 
                   onClick={() => {
                     setTableScale(100);
-                    localStorage.setItem("pd_table_scale", "100");
+                    localStorage.setItem(`pd_table_scale_${user.uid}`, "100");
                   }}
                   className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 hover:underline pl-1 transition cursor-pointer"
                   title="Сбросить к 100%"

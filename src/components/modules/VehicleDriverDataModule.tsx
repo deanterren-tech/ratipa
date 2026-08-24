@@ -547,6 +547,9 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       const isAnniversaryPassed = today >= anniversaryDate;
       const needsVerification = rec.lastPassportVerificationYear !== currentYear;
 
+      // Показываем только диспетчеру этого авто (или админу)
+      if (rec.dispatcher && rec.dispatcher !== user.name && user.role !== 'root_admin') return false;
+
       return isAnniversaryPassed && needsVerification;
     });
 
@@ -961,7 +964,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       return false;
     })() : false;
     const needsVerificationThisYear = rec.lastPassportVerificationYear !== new Date().getFullYear();
-    const showVerificationIndicator = isAnniversaryPassed && needsVerificationThisYear;
+    const showVerificationIndicator = isAnniversaryPassed && needsVerificationThisYear && (user.role === 'root_admin' || !rec.dispatcher || rec.dispatcher === user.name);
 
     const { brandModel, trailerMake } = resolveBrandsForRecord(rec);
     const matchedTariff = resolveTariffForRecord(rec);

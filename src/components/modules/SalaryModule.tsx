@@ -558,16 +558,18 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   return (
     <div className="w-full space-y-6">
         {/* Header Block */}
-        <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col sm:flex-row justify-between gap-4 select-none items-center">
-            <div>
-                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">
-                  Модуль Зарплата
-                </span>
-                <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-                  <Wallet className="w-7 h-7 text-slate-800" /> Зарплата водителей
-                </h1>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="bg-white rounded-[2rem] p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                <div>
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">
+                      Модуль Зарплата
+                    </span>
+                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
+                      <Wallet className="w-7 h-7 text-slate-800" /> Зарплата водителей
+                    </h1>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                </div>
             </div>
         </div>
 
@@ -578,10 +580,10 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                     <div className="lg:col-span-3 bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] relative overflow-hidden flex flex-col gap-6">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-4">
-                            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Калькулятор рейса водителя</h2>
+                            <h2 className="text-sm font-semibold text-slate-800 tracking-tight">Калькулятор рейса водителя</h2>
                             <div className="flex gap-2">
                                  <button onClick={clearForm} className="bg-slate-100 hover:bg-slate-200/80 text-slate-600 font-bold px-4 py-2 rounded-xl text-xs transition active:scale-95 cursor-pointer shadow-3xs border border-slate-200/30">Очистить</button>
-                                 <button onClick={saveToHistory} className="bg-[#3765F6] hover:bg-[#2555E5] text-white font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wide flex items-center gap-2 transition hover:shadow-md hover:shadow-blue-500/10 active:scale-95 cursor-pointer">
+                                 <button onClick={saveToHistory} className="bg-slate-900 text-white hover:bg-slate-800 shadow-sm border border-slate-800 font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wide flex items-center gap-2 transition active:scale-95 cursor-pointer">
                                      Фиксировать выплату <Wallet className="h-4 w-4" />
                                  </button>
                             </div>
@@ -612,7 +614,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                         )}
 
                                         {autofillStatus.type === 'multiple' && autofillStatus.matchedCars && (
-                                          <div className="flex flex-wrap gap-1 mt-1.5 p-1.5 bg-blue-50 rounded-xl border border-blue-100">
+                                          <div className="flex flex-wrap gap-1 mt-1.5 p-1.5 bg-slate-50 rounded-xl border border-slate-200">
                                             {autofillStatus.matchedCars.slice(0, 5).map(car => {
                                               const plate = car.carNumber || car.vehicleNumbers || '';
                                               return (
@@ -624,7 +626,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                                     const matchedDriver = mDriverId ? getDriverById(mDriverId, drivers) : undefined;
                                                     applyCarAndDriverToForm(car, matchedDriver);
                                                   }}
-                                                  className="text-[10px] font-bold bg-white text-[#3765F6] border border-blue-200/60 hover:bg-[#3765F6] hover:text-white transition px-2 py-1 rounded-lg cursor-pointer active:scale-95"
+                                                  className="text-[10px] font-bold bg-white text-slate-800 border border-slate-200/60 hover:bg-slate-100 hover:text-slate-900 transition px-2 py-1 rounded-lg cursor-pointer active:scale-95"
                                                 >
                                                   {plate}
                                                 </button>
@@ -640,14 +642,14 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                     </div>
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Направление</label>
-                                        <select value={tripDirection} onChange={e => setTripDirection(e.target.value)} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition cursor-pointer appearance-none">
+                                        <select value={tripDirection} onChange={e => setTripDirection(e.target.value)} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all cursor-pointer appearance-none">
                                             <option value="Турция">Турция</option>
                                             <option value="Китай">Китай</option>
                                         </select>
                                     </div>
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Круги</label>
-                                        <select value={tripCircles} onChange={e => setTripCircles(e.target.value)} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition cursor-pointer appearance-none">
+                                        <select value={tripCircles} onChange={e => setTripCircles(e.target.value)} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all cursor-pointer appearance-none">
                                             <option value="">—</option>
                                             <option value="2 круга">2 круга</option>
                                             <option value="3 круга">3 круга</option>
@@ -655,11 +657,11 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                     </div>
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Общий пробег (км)</label>
-                                        <input type="number" value={totalKm} onChange={e => setTotalKm(Number(e.target.value))} placeholder="5500" className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition" />
+                                        <input type="number" value={totalKm} onChange={e => setTotalKm(Number(e.target.value))} placeholder="5500" className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                                     </div>
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Ставка за км (€)</label>
-                                        <input type="number" step="0.001" value={ratePerKm} onChange={e => setRatePerKm(Number(e.target.value))} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition" />
+                                        <input type="number" step="0.001" value={ratePerKm} onChange={e => setRatePerKm(Number(e.target.value))} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                                     </div>
                                 </div>
                             </div>
@@ -670,11 +672,11 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Дней простоя ({currentIdleRate} €/д)</label>
-                                        <input type="number" value={idleDays} onChange={e => setIdleDays(Number(e.target.value))} min="0" className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition" />
+                                        <input type="number" value={idleDays} onChange={e => setIdleDays(Number(e.target.value))} min="0" className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                                     </div>
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Дней в рейсе ({currentPerDiem} €/д)</label>
-                                        <input type="number" value={totalDays} onChange={e => setTotalDays(Number(e.target.value))} min="1" className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition" />
+                                        <input type="number" value={totalDays} onChange={e => setTotalDays(Number(e.target.value))} min="1" className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                                     </div>
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">Премия (€)</label>
@@ -702,7 +704,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                     </div>
                                     <div className="flex flex-col gap-1.5 sm:col-span-2">
                                         <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Комментарий к выплате</label>
-                                        <input type="text" value={comment} onChange={e => setComment(e.target.value)} placeholder="Опционально (штрафы, детали, премии...)" className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition" />
+                                        <input type="text" value={comment} onChange={e => setComment(e.target.value)} placeholder="Опционально (штрафы, детали, премии...)" className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                                     </div>
                                 </div>
                             </div>
@@ -740,12 +742,12 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                         <div className="text-xl font-bold text-amber-800 tracking-tight font-mono">{Math.round(bonus).toLocaleString('ru-RU')} €</div>
                     </div>
                     <div className="bg-white rounded-2xl p-5 border border-slate-200 flex flex-col justify-center shadow-sm">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-[#3765F6] mb-1">З/П за сутки</div>
-                        <div className="text-xl font-black text-[#3765F6] tracking-tight font-mono">{Math.round(salaryPerDay).toLocaleString('ru-RU')} €</div>
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-800 mb-1">З/П за сутки</div>
+                        <div className="text-xl font-black text-slate-800 tracking-tight font-mono">{Math.round(salaryPerDay).toLocaleString('ru-RU')} €</div>
                     </div>
-                    <div className="bg-white rounded-2xl p-5 border border-[#3765F6]/25 flex flex-col justify-center shadow-sm">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-[#3765F6] mb-1 font-sans">Итого водителю</div>
-                        <div className="text-2xl font-black text-[#3765F6] tracking-tight font-mono">{Math.round(totalSalary).toLocaleString('ru-RU')} €</div>
+                    <div className="bg-white rounded-2xl p-5 border border-slate-200 flex flex-col justify-center shadow-sm">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-800 mb-1 font-sans">Итого водителю</div>
+                        <div className="text-2xl font-black text-slate-800 tracking-tight font-mono">{Math.round(totalSalary).toLocaleString('ru-RU')} €</div>
                     </div>
                 </div>
 
@@ -753,8 +755,8 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
         {/* Global Statistics Grid (Full Width) */}
         <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
-            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-5 flex items-center gap-2 select-none">
-                <Calculator className="h-4 w-4 text-[#3765F6]" /> 
+            <h2 className="text-sm font-semibold text-slate-800 tracking-tight mb-5 flex items-center gap-2 select-none">
+                <Calculator className="h-4 w-4 text-slate-400" /> 
                 Статистика выплат ({activeTab === 'current' ? 'Текущий месяц' : activeTab === 'archive' ? 'За выбранный месяц' : 'По выбранному логисту'})
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -762,9 +764,9 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                     <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Выплат всего</div>
                     <div className="text-xl font-bold text-slate-800 font-mono">{logs.length}</div>
                 </div>
-                <div className="bg-white border border-[#3765F6]/25 rounded-2xl p-5 flex flex-col justify-center shadow-sm">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#3765F6] mb-1 font-sans">Сумма всех выплат</div>
-                    <div className="text-xl font-bold text-[#3765F6] font-mono">{Math.round(totalPaid).toLocaleString('ru-RU')} €</div>
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col justify-center shadow-sm">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-800 mb-1 font-sans">Сумма всех выплат</div>
+                    <div className="text-xl font-bold text-slate-800 font-mono">{Math.round(totalPaid).toLocaleString('ru-RU')} €</div>
                 </div>
                 <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col justify-center shadow-sm">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Средняя выплата</div>
@@ -784,7 +786,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
         {/* History Cards / Recent Logs (Full Width) */}
         <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                <h2 className="text-lg font-bold text-slate-900 uppercase tracking-wider">Журнал последних выплат</h2>
+                <h2 className="text-sm font-semibold text-slate-800 tracking-tight">Журнал последних выплат</h2>
                 
                 {/* Available Months or Dispatchers dropdown inside header */}
                 <div className="flex flex-wrap items-center gap-3">
@@ -794,7 +796,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                             <select
                                 value={selectedDispatcher}
                                 onChange={(e) => setSelectedDispatcher(e.target.value)}
-                                className="bg-white border border-slate-200 text-slate-850 text-xs font-bold px-3 py-1.5 rounded-xl outline-none focus:border-[#3765F6] transition cursor-pointer shadow-sm"
+                                className="bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-bold px-3 py-1.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all cursor-pointer shadow-sm"
                             >
                                 {availableDispatchers.length === 0 ? (
                                     <option value="">Нет данных</option>
@@ -812,33 +814,33 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
             </div>
 
             {/* Interactive Tabs Menu */}
-            <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl w-full sm:w-fit border border-slate-200 mb-6">
+            <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50 w-full sm:w-fit mb-6">
                 <button
                     onClick={() => setActiveTab('current')}
-                    className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                    className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
                         activeTab === 'current'
-                            ? 'bg-[#3765F6] text-white shadow-md shadow-blue-500/10'
-                            : 'text-slate-600 hover:text-slate-900'
+                            ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
                     }`}
                 >
                     Текущий месяц
                 </button>
                 <button
                     onClick={() => setActiveTab('archive')}
-                    className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                    className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
                         activeTab === 'archive'
-                            ? 'bg-[#3765F6] text-white shadow-md shadow-blue-500/10'
-                            : 'text-slate-600 hover:text-slate-900'
+                            ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
                     }`}
                 >
                     Архив месяцев
                 </button>
                 <button
                     onClick={() => setActiveTab('dispatcher')}
-                    className={`flex-1 sm:flex-none px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                    className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
                         activeTab === 'dispatcher'
-                            ? 'bg-[#3765F6] text-white shadow-md shadow-blue-500/10'
-                            : 'text-slate-600 hover:text-slate-900'
+                            ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
+                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
                     }`}
                 >
                     По диспетчерам
@@ -851,13 +853,13 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                     value={searchQuery} 
                     onChange={e => setSearchQuery(e.target.value)} 
                     placeholder="Поиск по водителю, логисту, транспортному средству..." 
-                    className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition"
+                    className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
                 />
             </div>
 
             {/* Подвкладки месяцев (Архив) / логистов (По диспетчерам) */}
             {activeTab === 'archive' && availableMonths.length > 0 && (
-                <div className="flex flex-wrap gap-2 p-1 bg-slate-100 rounded-2xl mb-6 border border-slate-200">
+                <div className="flex flex-wrap gap-1 p-1 bg-slate-100/80 rounded-xl mb-6 border border-slate-200/50">
                     {availableMonths.map((m) => {
                         const [year, month] = m.split('-');
                         const monthsNamesRu = [
@@ -871,10 +873,10 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                             <button
                                 key={m}
                                 onClick={() => setSelectedMonth(m)}
-                                className={`flex-1 min-w-[120px] px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                                className={`flex-1 min-w-[120px] px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
                                     isActive
-                                        ? 'bg-[#3765F6] text-white shadow-md shadow-blue-500/10'
-                                        : 'text-slate-600 hover:text-slate-900'
+                                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
+                                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
                                 }`}
                             >
                                 {humanLabel}
@@ -885,17 +887,17 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
             )}
 
             {activeTab === 'dispatcher' && availableDispatchers.length > 0 && (
-                <div className="flex flex-wrap gap-2 p-1 bg-slate-100 rounded-2xl mb-6 border border-slate-200">
+                <div className="flex flex-wrap gap-1 p-1 bg-slate-100/80 rounded-xl mb-6 border border-slate-200/50">
                     {availableDispatchers.map((d) => {
                         const isActive = selectedDispatcher === d;
                         return (
                             <button
                                 key={d}
                                 onClick={() => setSelectedDispatcher(d)}
-                                className={`flex-1 min-w-[120px] px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                                className={`flex-1 min-w-[120px] px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
                                     isActive
-                                        ? 'bg-[#3765F6] text-white shadow-md shadow-blue-500/10'
-                                        : 'text-slate-600 hover:text-slate-900'
+                                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
+                                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
                                 }`}
                             >
                                 {d}
@@ -913,7 +915,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                         <div key={rec.id} className={`bg-white border rounded-[2rem] p-6 flex flex-col group hover:shadow-[0_8px_30px_rgba(0,0,0,0.01)] transition-all duration-300 ${
                           (rec.mark || '').includes('2 круга') ? 'border-blue-300 bg-blue-50/30 hover:border-blue-400' :
                           (rec.mark || '').includes('3 круга') ? 'border-purple-300 bg-purple-50/30 hover:border-purple-400' :
-                          'border-slate-200 hover:border-[#3765F6]/40'
+                          'border-slate-200 hover:border-slate-300'
                         }`}>
                             
                             {/* Header Row */}
@@ -933,7 +935,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                      <button 
                                          onClick={() => copyHistoryToForm(rec)} 
                                          title="Дублировать в форму" 
-                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-[#3765F6] hover:bg-[#3765F6]/5 transition border border-transparent hover:border-[#3765F6]/10 cursor-pointer"
+                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition border border-slate-200/50 cursor-pointer"
                                      >
                                          <Copy className="w-3.5 h-3.5" />
                                          <span className="hidden md:inline">Дублировать</span>
@@ -941,7 +943,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                      <button 
                                          onClick={() => openEditModal(rec)} 
                                          title="Редактировать" 
-                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-[#3765F6] hover:bg-[#3765F6]/5 transition border border-transparent hover:border-[#3765F6]/10 cursor-pointer"
+                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition border border-slate-200/50 cursor-pointer"
                                      >
                                          <Edit className="w-3.5 h-3.5" />
                                          <span className="hidden md:inline">Править</span>
@@ -1034,9 +1036,9 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                             <span className="text-lg font-bold text-slate-800 font-mono tracking-tight">{Math.round((rec.totalSalary || 0) / rec.totalDays).toLocaleString('ru-RU')} €</span>
                                         </div>
                                     )}
-                                    <div className="flex flex-col bg-white border border-[#3765F6]/25 px-4 py-2 rounded-xl items-end shadow-sm min-w-[120px]">
-                                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#3765F6]/70 mb-0.5 font-sans">Итого к выплате</span>
-                                        <span className="text-lg font-black text-[#3765F6] font-mono tracking-tight">{Math.round(rec.totalSalary || 0).toLocaleString('ru-RU')} €</span>
+                                    <div className="flex flex-col bg-white border border-slate-200 px-4 py-2 rounded-xl items-end shadow-sm min-w-[120px]">
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5 font-sans">Итого к выплате</span>
+                                        <span className="text-lg font-black text-slate-800 font-mono tracking-tight">{Math.round(rec.totalSalary || 0).toLocaleString('ru-RU')} €</span>
                                     </div>
                                 </div>
                             </div>
@@ -1064,7 +1066,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                 <div className="bg-white rounded-[2rem] w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
                     <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-[2rem]">
                         <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                           <Edit className="w-5 h-5 text-[#3765F6]" /> Редактирование выплаты
+                           <Edit className="w-5 h-5 text-slate-400" /> Редактирование выплаты
                         </h3>
                         <button onClick={closeEditModal} className="text-slate-400 hover:text-slate-600 bg-white shadow-sm border border-slate-200 w-8 h-8 rounded-full flex items-center justify-center font-bold transition active:scale-90 cursor-pointer">×</button>
                     </div>
@@ -1093,7 +1095,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                          updatedData.driverId = '';
                                      }
                                      setEditingSalaryData(updatedData);
-                                 }} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition" />
+                                 }} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Транспорт</label>
@@ -1130,11 +1132,11 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                           updatedData.driverId = '';
                                       }
                                       setEditingSalaryData(updatedData);
-                                 }} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition uppercase" />
+                                 }} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all uppercase" />
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Направление</label>
-                                <select value={editDirection} onChange={e => setEditDirection(e.target.value)} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition cursor-pointer appearance-none">
+                                <select value={editDirection} onChange={e => setEditDirection(e.target.value)} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all cursor-pointer appearance-none">
                                     <option value="">—</option>
                                     <option value="Турция">Турция</option>
                                     <option value="Китай">Китай</option>
@@ -1142,7 +1144,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Круги</label>
-                                <select value={editCircles} onChange={e => setEditCircles(e.target.value)} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition cursor-pointer appearance-none">
+                                <select value={editCircles} onChange={e => setEditCircles(e.target.value)} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all cursor-pointer appearance-none">
                                     <option value="">—</option>
                                     <option value="2 круга">2 круга</option>
                                     <option value="3 круга">3 круга</option>
@@ -1150,19 +1152,19 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ставка (€/км)</label>
-                                <input type="number" step="0.001" value={editingSalaryData.rate || 0} onChange={e => setEditingSalaryData({...editingSalaryData, rate: Number(e.target.value)})} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition" />
+                                <input type="number" step="0.001" value={editingSalaryData.rate || 0} onChange={e => setEditingSalaryData({...editingSalaryData, rate: Number(e.target.value)})} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Пробег (км)</label>
-                                <input type="number" value={editingSalaryData.km || 0} onChange={e => setEditingSalaryData({...editingSalaryData, km: Number(e.target.value)})} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition" />
+                                <input type="number" value={editingSalaryData.km || 0} onChange={e => setEditingSalaryData({...editingSalaryData, km: Number(e.target.value)})} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Простой (дней)</label>
-                                <input type="number" value={editingSalaryData.idleDays || 0} onChange={e => setEditingSalaryData({...editingSalaryData, idleDays: Number(e.target.value)})} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition" />
+                                <input type="number" value={editingSalaryData.idleDays || 0} onChange={e => setEditingSalaryData({...editingSalaryData, idleDays: Number(e.target.value)})} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Дней в рейсе</label>
-                                <input type="number" value={editingSalaryData.totalDays || 1} onChange={e => setEditingSalaryData({...editingSalaryData, totalDays: Number(e.target.value)})} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition" />
+                                <input type="number" value={editingSalaryData.totalDays || 1} onChange={e => setEditingSalaryData({...editingSalaryData, totalDays: Number(e.target.value)})} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-amber-600">Премия (€)</label>
@@ -1170,11 +1172,11 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                             </div>
                             <div className="flex flex-col gap-1.5 col-span-2">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Комментарий</label>
-                                <input type="text" value={editingSalaryData.comment || ''} onChange={e => setEditingSalaryData({...editingSalaryData, comment: e.target.value})} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition" />
+                                <input type="text" value={editingSalaryData.comment || ''} onChange={e => setEditingSalaryData({...editingSalaryData, comment: e.target.value})} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                             </div>
                             <div className="flex flex-col gap-1.5 col-span-2">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Логист / Кто внёс</label>
-                                <input type="text" value={editingSalaryData.logist || ''} onChange={e => setEditingSalaryData({...editingSalaryData, logist: e.target.value})} className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition" />
+                                <input type="text" value={editingSalaryData.logist || ''} onChange={e => setEditingSalaryData({...editingSalaryData, logist: e.target.value})} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                             </div>
                             <div className="flex flex-col gap-1.5 col-span-2">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Дата</label>
@@ -1190,14 +1192,14 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                         const ru = parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : v;
                                         setEditingSalaryData({...editingSalaryData, datetime: ru});
                                     }}
-                                    className="w-full bg-white border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100 focus:bg-white transition" />
+                                    className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                             </div>
                         </div>
                     </div>
                     
                     <div className="p-6 border-t border-slate-200 flex justify-end gap-3 bg-slate-50 rounded-b-[2rem]">
                         <button onClick={closeEditModal} className="px-5 py-2.5 rounded-xl font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 transition cursor-pointer text-xs uppercase tracking-wider shadow-sm border border-slate-200">Отмена</button>
-                        <button onClick={saveEditModal} className="px-5 py-2.5 rounded-xl font-bold text-white bg-[#3765F6] hover:bg-[#2555E5] transition flex items-center justify-center gap-2 shadow-sm hover:shadow-md hover:shadow-blue-500/10 text-xs uppercase tracking-wider cursor-pointer">
+                        <button onClick={saveEditModal} className="px-5 py-2.5 rounded-xl font-bold text-white bg-slate-900 hover:bg-slate-800 shadow-sm border border-slate-800 transition flex items-center justify-center gap-2 text-xs uppercase tracking-wider cursor-pointer">
                             Сохранить изменения
                         </button>
                     </div>

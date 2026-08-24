@@ -91,10 +91,19 @@ export const ensureAuth = (): Promise<any> => {
         unsub();
       }
     });
-    // Fallback of 3.5 seconds to avoid blocking local experience if network is offline
+    // Fallback to avoid blocking local experience if network is offline
+    // Увеличено с 3.5с до 8с, чтобы signInAnonymously успевал на медленных сетях
     setTimeout(() => {
-      resolve(auth.currentUser || null);
-    }, 3500);
+      unsub();
+      const u = auth.currentUser;
+      if (u) {
+        resolve(u);
+      } else {
+        // Не кешируем null — сбрасываем promise, чтобы повторный вызов мог дождаться auth
+        authReadyPromise = null;
+        resolve(null);
+      }
+    }, 8000);
   });
 
   return authReadyPromise;
@@ -140,7 +149,8 @@ export const onValue = (
         callback(snap);
       },
       (err: any) => {
-        // If auth was not ready yet, wait for it then resubscribe exactly ONCE.
+        // If auth was not ready yet, wait for it then resubscribe.
+        // Исправлено: не выходим при null user — повторяем попытку через таймаут
         const msg = (err && (err.message || "")) + "";
         if (err && /permission|auth/i.test(msg) && !resubscribeAttempted) {
           resubscribeAttempted = true;
@@ -148,11 +158,23 @@ export const onValue = (
             activeUnsubscribe();
             activeUnsubscribe = null;
           }
-          ensureAuth().then((user) => {
+          // Пробуем переподписаться после ожидания auth (до 8с)
+          ensureAuth().then(() => {
             if (isCancelled) return;
-            if (!user) return;
+            // Подписываемся в любом случае — Firebase сам применит auth когда будет готов
             subscribe();
           });
+        } else if (err && !resubscribeAttempted) {
+          // Не-auth ошибка — тоже пробуем переподписаться один раз с задержкой
+          resubscribeAttempted = true;
+          setTimeout(() => {
+            if (isCancelled) return;
+            if (activeUnsubscribe) {
+              activeUnsubscribe();
+              activeUnsubscribe = null;
+            }
+            subscribe();
+          }, 2000);
         }
         if (errorCallback) errorCallback(err);
       },

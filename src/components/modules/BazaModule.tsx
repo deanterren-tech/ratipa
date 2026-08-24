@@ -481,7 +481,9 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
        // Auto-status: car now appears in Учёт выезда → it's on base.
        if (couplingId) {
          dbService.setVehicleStatus(couplingId, 'base');
-         set(ref(db, `vehicleFleet/${couplingId}/status`), 'base').catch(() => {});
+         set(ref(db, `vehicleFleet/${couplingId}/status`), 'base').catch((err) => {
+              console.warn('[Baza] set vehicleFleet status=base failed:', err);
+            });
        }
        setFormData({ carNumber: '', driverName: '', dateArrival: '', dateLoading: '', dateRepairStart: '', dateRepairEnd: '', dateDeparture: '', comment: '' });
     });
@@ -785,7 +787,9 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
             const stillInBaza = cars.some(c => c.id !== id && (c.couplingId === cid || (c.carNumber || '').replace(/[^А-ЯA-Z0-9]/g, '') === (carNumber || '').replace(/[^А-ЯA-Z0-9]/g, '')));
             if (!stillInBaza) {
               dbService.setVehicleStatus(cid, 'trip');
-              set(ref(db, `vehicleFleet/${cid}/status`), 'trip').catch(() => {});
+              set(ref(db, `vehicleFleet/${cid}/status`), 'trip').catch((err) => {
+                    console.warn('[Baza] set vehicleFleet status=trip failed:', err);
+                  });
             }
           }
 
