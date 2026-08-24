@@ -185,7 +185,7 @@ export default function UserManagementBlock({ user }: Props) {
     const toggleBazaFieldPerm = (fKey: string, checked: boolean) => {
       if (!selectedUser) return;
       const current = users.find((x) => x.uid === selectedUser.uid) || selectedUser;
-      const newPerms = { ...(current.permissions || {}), [fKey]: checked };
+      const newPerms = { ...(current.permissions || {}), [fKey]: checked ? "write" : "none" };
       setUsers((prev) => prev.map((u) => (u.uid === selectedUser.uid ? ({ ...u, permissions: newPerms } as any) : u)));
       dbService.saveUser({ ...current, permissions: newPerms } as any);
     };

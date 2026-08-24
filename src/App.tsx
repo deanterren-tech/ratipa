@@ -97,7 +97,7 @@ export default function App() {
     setUser(prof);
     localStorage.setItem('ratipa_user_session', JSON.stringify(prof));
     // Синхронизируем baseline версии сессии (читаем актуальную с сервера)
-    dbService.getSettings((s) => {
+    dbService.getSettingsOnce((s) => {
       const v = Number(s?.globalSessionVersion || 0);
       localStorage.setItem(SESSION_VERSION_KEY, String(v));
     });

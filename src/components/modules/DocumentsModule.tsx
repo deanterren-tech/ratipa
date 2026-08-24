@@ -176,7 +176,7 @@ export default function DocumentsModule({ user }: Props) {
   // --- FERRY CONTACTS STATE & DATABASE ---
   const [ferryContactsList, setFerryContactsList] = useState<string[]>([]);
   const [ferryDispatchers, setFerryDispatchers] = useState<string[]>([]);
-  const canWrite = user.role === 'root_admin' || user.permissions.documents === 'write';
+  const canWrite = user.role === 'root_admin' || user.permissions?.documents === 'write';
   useEffect(() => {
     return directoryService.getDispatchersFlat((disp) => {
       setFerryDispatchers(disp);

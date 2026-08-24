@@ -114,7 +114,7 @@ export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryPro
             <p className="text-xs text-slate-400 mt-0.5 font-medium">Реестр типов для вкладки и автозаполнения документов</p>
         </div>
 
-        {user.permissions.dozvola === "write" && (
+        {user.permissions?.dozvola === "write" && (
             <button 
               onClick={() => openEditor('')} 
               className="flex items-center gap-2 bg-[#3765F6] hover:bg-[#2555E5] text-white px-4 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm hover:shadow-md active:scale-95"

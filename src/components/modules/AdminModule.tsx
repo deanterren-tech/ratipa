@@ -60,6 +60,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
   const [userListCount, setUserListCount] = useState(0);
   const [dispatchersCount, setDispatchersCount] = useState(0);
   const [customPhrasesText, setCustomPhrasesText] = useState('');
+  const [activeTab, setActiveTab] = useState<'users' | 'system' | 'welcome' | 'push' | 'agent'>('users');
   useEffect(() => {
     if (settings?.customPhrases) setCustomPhrasesText(settings.customPhrases.join('\n'));
   }, [settings?.customPhrases]);
@@ -152,8 +153,6 @@ export default function AdminModule({ user }: AdminModuleProps) {
       </div>
     );
   }
-
-  const [activeTab, setActiveTab] = useState<'users' | 'system' | 'welcome' | 'push' | 'agent'>('users');
 
   const tabsList = [
     { id: 'users', label: 'Пользователи и Сессии', icon: Users, count: userListCount },
