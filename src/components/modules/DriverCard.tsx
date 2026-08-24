@@ -111,7 +111,6 @@ export default function DriverCard({ driverId, driverName, onClose, onOpenCoupli
               <Field label="Паспорт" value={src.passportNumber || '—'} />
               <Field label="Телефон" value={(src.phones && src.phones[0]?.number) || src.phone || src.driverPhone || '—'} />
               <Field label="Вод. удостоверение" value={src.license || '—'} />
-              <Field label="Группа ставок" value={src.rateGroupId || src.rateGroup || '—'} />
               <Field label="Комментарий" value={src.comment || '—'} />
             </div>
           </div>
