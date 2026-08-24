@@ -647,34 +647,20 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   ];
 
   // Filter modules based on user's permission (not 'none' and matching admin fields)
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+
   const allowedModules = useMemo(() => {
     if (user.role === 'mechanic') {
       return allModules.filter(mod => mod.key === 'baza');
     }
     return allModules.filter(mod => {
-      // Allow root admin OR user named 'Сергей Root' OR specific email completely
+      // Root admin gets everything
       if (user.role === 'root_admin' || user.name.includes('Сергей Root') || user.email === 'r98ratipaby@gmail.com') return true;
       
-      // If explicit permission is set in user.permissions, use it
-      if (user.permissions && user.permissions[mod.permissionKey] !== undefined) {
-        return user.permissions[mod.permissionKey] !== 'none';
-      }
-      
-      // Fallback to default permissions based on role if missing in user.permissions
-      const role = user.role;
-      if (role === 'admin' || role === 'manager') {
-        if (mod.permissionKey === 'admin') return role === 'admin';
-        return true;
-      }
-      
-      // Default fallback (dispatcher or others)
-      const defaultReads = ['planDohod', 'planZagruzok', 'baza', 'vehicleDriverData', 'dozvola', 'disposition'];
-      const defaultWrites = ['dohod', 'salary', 'documents'];
-      return defaultWrites.includes(mod.permissionKey) || defaultReads.includes(mod.permissionKey);
+      // Единая проверка через resolvePermission
+      return resolvePermission(user, mod.permissionKey, settings?.rolePermissions) !== 'none';
     });
-  }, [user.role, user.permissions]);
-
-  const [settings, setSettings] = useState<AppSettings | null>(null);
+  }, [user.role, user.name, user.email, user.permissions, settings?.rolePermissions]);
 
   const filteredNotifications = useMemo(() => {
     if (!user) return [];
