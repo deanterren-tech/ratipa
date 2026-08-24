@@ -1426,13 +1426,13 @@ export const dbService = {
           if (brand) {
             const brandKey = brand.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_');
             if (brandKey && !/^_+$/.test(brandKey)) {
-              set(ref(database, `directories/vehicleBrands/${brandKey}`), brand.trim()).catch(() => {});
+              set(ref(database, `directories/vehicleBrands/${brandKey}`), { name: brand.trim(), key: brandKey }).catch(() => {});
             }
           }
           if (trailer) {
             const trailerKey = trailer.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_');
             if (trailerKey && !/^_+$/.test(trailerKey)) {
-              set(ref(database, `directories/trailerBrands/${trailerKey}`), trailer.trim()).catch(() => {});
+              set(ref(database, `directories/trailerBrands/${trailerKey}`), { name: trailer.trim(), key: trailerKey }).catch(() => {});
             }
           }
         });

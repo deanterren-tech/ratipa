@@ -261,7 +261,7 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
                 )}
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-slate-800 truncate">
-                    {it[tab.nameField] || it[tab.idField]}
+                    {it[tab.nameField] || it[tab.idField] || it.id || it.dbKey || '—'}
                   </div>
                   {tab.key === 'rateGroups' && (
                     <div className="text-[10px] text-slate-400">

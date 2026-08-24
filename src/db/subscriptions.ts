@@ -474,7 +474,14 @@ function createDirSub<T>(path: string) {
       return onValue(ref(database, path), (snap) => {
         const val = snap.val();
         if (!val) { onData([] as any); return; }
-        const list = Object.keys(val).map((k) => ({ ...val[k], id: val[k].id || k, dbKey: k }));
+        const list = Object.keys(val).map((k) => {
+          const entry = val[k];
+          // Если в БД сохранена строка (legacy от saveVehicleDriverRecord) — оборачиваем в объект
+          if (typeof entry === 'string') {
+            return { name: entry, key: k, id: k, dbKey: k };
+          }
+          return { ...entry, id: entry.id || k, dbKey: k };
+        });
         onData(list as any);
       }, () => onError && onError(null));
     },
