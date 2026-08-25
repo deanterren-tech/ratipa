@@ -1,4 +1,4 @@
-import {useState, useEffect} from 'react'
+import {useState, useEffect, useRef} from 'react'
 import {UserProfile} from '../../types'
 import {dbService} from '../../api'
 import {Clock, Compass, RefreshCw, History} from 'lucide-react'
@@ -47,9 +47,9 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const prevOnlineRef = useRef<string>('');
 
   useEffect(() => {
-    setLoading(true);
     let unsubAll = () => {};
     let unsubOnline = () => {};
 
@@ -64,12 +64,17 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
     try {
       unsubOnline = dbService.getOnlineUsers((users) => {
         const now = new Date().getTime();
-        // Only keep users active in the last 5 minutes to reflect actual presence
         const activeUsers = users.filter((u: any) => {
           const t = new Date(u.lastActive).getTime();
           return (now - t) < 5 * 60 * 1000;
-        });
-        setOnlineUsers(activeUsers as OnlineUser[]);
+        }) as OnlineUser[];
+
+        // Стабилизация: не обновляем состояние, если список не изменился
+        const key = activeUsers.map(u => u.uid + ':' + u.currentModule + ':' + u.lastActive).join('|');
+        if (key !== prevOnlineRef.current) {
+          prevOnlineRef.current = key;
+          setOnlineUsers(activeUsers);
+        }
         setLoading(false);
       });
     } catch (e) {
