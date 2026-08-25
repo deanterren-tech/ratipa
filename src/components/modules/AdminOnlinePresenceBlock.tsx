@@ -45,11 +45,23 @@ const ROLE_LABELS: Record<string, string> = {
 
 export default function AdminOnlinePresenceBlock({ user }: Props) {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const prevOnlineRef = useRef<string>('');
 
   useEffect(() => {
     let unsubOnline = () => {};
+
+    // Однократная загрузка списка пользователей (не подписка — не рябит)
+    if ((dbService as any).getUsersOnce) {
+      (dbService as any).getUsersOnce((usersList: UserProfile[]) => {
+        setAllUsers(usersList || []);
+      });
+    } else {
+      dbService.getUsers((usersList) => {
+        setAllUsers(usersList || []);
+      });
+    }
 
     try {
       unsubOnline = dbService.getOnlineUsers((users) => {
@@ -133,8 +145,22 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
   };
 
   // Divide users into online and offline
-  const onlineList = onlineUsers.map(u => ({ user: u, session: u }));
-  const offlineList: any[] = [];
+  const onlineUids = new Set(onlineUsers.map(o => o.uid));
+  
+  const onlineList = allUsers
+    .filter(u => onlineUids.has(u.uid))
+    .map(u => {
+      const session = onlineUsers.find(o => o.uid === u.uid);
+      return { user: u, session: session as any };
+    });
+
+  const offlineList = allUsers
+    .filter(u => !onlineUids.has(u.uid))
+    .sort((a, b) => {
+      const timeA = new Date(a.lastActive || a.createdAt || 0).getTime();
+      const timeB = new Date(b.lastActive || b.createdAt || 0).getTime();
+      return timeB - timeA;
+    });
 
   return (
     <div id="admin-presence-block" className="bg-white/40 backdrop-blur-xl rounded-[1.8rem] p-6 lg:p-8 border border-white/45 shadow-sm space-y-8 select-none">
