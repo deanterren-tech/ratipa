@@ -45,21 +45,11 @@ const ROLE_LABELS: Record<string, string> = {
 
 export default function AdminOnlinePresenceBlock({ user }: Props) {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
-  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const prevOnlineRef = useRef<string>('');
 
   useEffect(() => {
-    let unsubAll = () => {};
     let unsubOnline = () => {};
-
-    try {
-      unsubAll = dbService.getUsers((usersList) => {
-        setAllUsers(usersList || []);
-      });
-    } catch (e) {
-      console.warn("Failed to subscribe users", e);
-    }
 
     try {
       unsubOnline = dbService.getOnlineUsers((users) => {
@@ -84,7 +74,6 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
 
     return () => {
       if (typeof unsubOnline === 'function') unsubOnline();
-      if (typeof unsubAll === 'function') unsubAll();
     };
   }, []);
 
@@ -144,22 +133,8 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
   };
 
   // Divide users into online and offline
-  const onlineUids = new Set(onlineUsers.map(o => o.uid));
-  
-  const onlineList = allUsers
-    .filter(u => onlineUids.has(u.uid))
-    .map(u => {
-      const session = onlineUsers.find(o => o.uid === u.uid);
-      return { user: u, session };
-    });
-
-  const offlineList = allUsers
-    .filter(u => !onlineUids.has(u.uid))
-    .sort((a, b) => {
-      const timeA = new Date(a.lastActive || a.createdAt || 0).getTime();
-      const timeB = new Date(b.lastActive || b.createdAt || 0).getTime();
-      return timeB - timeA;
-    });
+  const onlineList = onlineUsers.map(u => ({ user: u, session: u }));
+  const offlineList: any[] = [];
 
   return (
     <div id="admin-presence-block" className="bg-white/40 backdrop-blur-xl rounded-[1.8rem] p-6 lg:p-8 border border-white/45 shadow-sm space-y-8 select-none">
