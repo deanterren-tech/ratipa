@@ -1836,6 +1836,10 @@ export const dbService = {
     }
   },
 
+  // Throttle для trackPresence
+  _lastPresenceWrite: 0,
+  PRESENCE_THROTTLE_MS: 30000,
+
   // PRESENCE
   trackPresence: (user: UserProfile | null, currentModule: string) => {
     if (!user) return () => {};
@@ -1855,6 +1859,7 @@ export const dbService = {
       sessionLoginTime = new Date().toISOString();
     }
 
+    const now = Date.now();
     const item = {
       uid: user.uid,
       name: user.name,
@@ -1866,16 +1871,20 @@ export const dbService = {
 
     if (useFirebase) {
       const pRef = ref(database, `ratipapresence/${presenceId}`);
-      set(pRef, item).catch((err) => {
-        console.warn("Silent presence set fail:", err);
-      });
-      // Also update persistent lastActive on user profile (только если uid валиден — иначе создаётся users_list/"")
-      if (user.uid) {
-        update(ref(database, `users_list/${user.uid}`), {
-          lastActive: item.lastActive,
-        }).catch((err) => {
-          console.warn("UserProfile lastActive update fail:", err);
+
+      // Throttle: пишем в Firebase не чаще PRESENCE_THROTTLE_MS
+      if (now - (this as any)._lastPresenceWrite > (this as any).PRESENCE_THROTTLE_MS) {
+        (this as any)._lastPresenceWrite = now;
+        set(pRef, item).catch((err) => {
+          console.warn("Silent presence set fail:", err);
         });
+        if (user.uid) {
+          update(ref(database, `users_list/${user.uid}`), {
+            lastActive: item.lastActive,
+          }).catch((err) => {
+            console.warn("UserProfile lastActive update fail:", err);
+          });
+        }
       }
 
       // Cleanup of presence on unloading if possible
