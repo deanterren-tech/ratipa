@@ -48,6 +48,7 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const prevOnlineRef = useRef<string>('');
+  const onlineDebounceRef = useRef<any>(null);
 
   useEffect(() => {
     let unsubOnline = () => {};
@@ -75,7 +76,11 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
         const key = activeUsers.map(u => u.uid + ':' + u.currentModule + ':' + u.lastActive).join('|');
         if (key !== prevOnlineRef.current) {
           prevOnlineRef.current = key;
-          setOnlineUsers(activeUsers);
+          // Debounce: отложенное обновление, чтобы сгладить каскад onValue
+          if (onlineDebounceRef.current) clearTimeout(onlineDebounceRef.current);
+          onlineDebounceRef.current = setTimeout(() => {
+            setOnlineUsers(activeUsers);
+          }, 2000);
         }
         setLoading(false);
       });
@@ -86,6 +91,7 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
 
     return () => {
       if (typeof unsubOnline === 'function') unsubOnline();
+      if (onlineDebounceRef.current) clearTimeout(onlineDebounceRef.current);
     };
   }, []);
 

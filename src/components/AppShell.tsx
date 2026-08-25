@@ -211,6 +211,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const [isDbOnline, setIsDbOnline] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
   const prevOnlineUsersRef = useRef<string>('');
+  const onlineUsersTimeoutRef = useRef<any>(null);
 
   // Real-time broadcast push notifications state & sync
   const [broadcastNotifications, setBroadcastNotifications] = useState<any[]>([]);
@@ -617,7 +618,11 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       const key = activeUsers.map((u: any) => u.uid + ':' + u.currentModule + ':' + u.lastActive).join('|');
       if (key !== prevOnlineUsersRef.current) {
         prevOnlineUsersRef.current = key;
-        setOnlineUsers(activeUsers);
+        // Debounce: отложенное обновление, чтобы сгладить каскад onValue
+        if (onlineUsersTimeoutRef.current) clearTimeout(onlineUsersTimeoutRef.current);
+        onlineUsersTimeoutRef.current = setTimeout(() => {
+          setOnlineUsers(activeUsers);
+        }, 2000);
       }
     });
 
@@ -626,6 +631,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       if (typeof unsubscribeOnline === 'function') {
          unsubscribeOnline();
       }
+      if (onlineUsersTimeoutRef.current) clearTimeout(onlineUsersTimeoutRef.current);
     };
   }, [activeModule, user]);
 
