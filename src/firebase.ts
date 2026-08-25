@@ -487,6 +487,10 @@ export const directoryService = {
 };
 
 // Database Services mapping with robust localized fallbacks and error handling helpers
+// Throttle для trackPresence (live-обновление блока онлайна не чаще 30с)
+let __lastPresenceWrite = 0;
+const __PRESENCE_THROTTLE_MS = 30000;
+
 export const dbService = {
   // Test/Connectivity state
   isOnline: () => useFirebase,
@@ -1836,10 +1840,6 @@ export const dbService = {
     }
   },
 
-  // Throttle для trackPresence
-  _lastPresenceWrite: 0,
-  PRESENCE_THROTTLE_MS: 30000,
-
   // PRESENCE
   trackPresence: (user: UserProfile | null, currentModule: string) => {
     if (!user) return () => {};
@@ -1872,9 +1872,9 @@ export const dbService = {
     if (useFirebase) {
       const pRef = ref(database, `ratipapresence/${presenceId}`);
 
-      // Throttle: пишем в Firebase не чаще PRESENCE_THROTTLE_MS
-      if (now - (this as any)._lastPresenceWrite > (this as any).PRESENCE_THROTTLE_MS) {
-        (this as any)._lastPresenceWrite = now;
+      // Throttle: пишем в Firebase не чаще __PRESENCE_THROTTLE_MS
+      if (now - __lastPresenceWrite > __PRESENCE_THROTTLE_MS) {
+        __lastPresenceWrite = now;
         set(pRef, item).catch((err) => {
           console.warn("Silent presence set fail:", err);
         });
