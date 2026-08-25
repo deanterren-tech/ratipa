@@ -1878,13 +1878,6 @@ export const dbService = {
         set(pRef, item).catch((err) => {
           console.warn("Silent presence set fail:", err);
         });
-        if (user.uid) {
-          update(ref(database, `users_list/${user.uid}`), {
-            lastActive: item.lastActive,
-          }).catch((err) => {
-            console.warn("UserProfile lastActive update fail:", err);
-          });
-        }
       }
 
       // Cleanup of presence on unloading if possible
