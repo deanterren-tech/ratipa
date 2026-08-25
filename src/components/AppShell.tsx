@@ -210,6 +210,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   }, []);
   const [isDbOnline, setIsDbOnline] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
+  const prevOnlineUsersRef = useRef<string>('');
 
   // Real-time broadcast push notifications state & sync
   const [broadcastNotifications, setBroadcastNotifications] = useState<any[]>([]);
@@ -612,7 +613,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
          const t = new Date(u.lastActive).getTime();
          return (now - t) < 5 * 60 * 1000;
       });
-      setOnlineUsers(activeUsers);
+      // Стабилизация: не обновляем, если список не изменился
+      const key = activeUsers.map((u: any) => u.uid + ':' + u.currentModule + ':' + u.lastActive).join('|');
+      if (key !== prevOnlineUsersRef.current) {
+        prevOnlineUsersRef.current = key;
+        setOnlineUsers(activeUsers);
+      }
     });
 
     return () => {
