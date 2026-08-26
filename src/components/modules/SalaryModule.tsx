@@ -679,8 +679,8 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                         <input type="number" value={totalDays} onChange={e => setTotalDays(Number(e.target.value))} min="1" className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                                     </div>
                                     <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">Премия (€)</label>
-                                        <input type="number" value={bonus} onChange={e => setBonus(Number(e.target.value))} min="0" className="w-full bg-white border border-amber-200 text-amber-900 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 focus:bg-white transition" placeholder="0" />
+                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Премия (€)</label>
+                                        <input type="number" value={bonus} onChange={e => setBonus(Number(e.target.value))} min="0" className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" placeholder="0" />
                                     </div>
                                 </div>
                             </div>
@@ -729,25 +729,25 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
                 {/* Totals Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                    <div className="bg-white rounded-2xl p-5 border border-slate-200 flex flex-col justify-center shadow-sm">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">За километраж</div>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-center">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">За километраж</div>
                         <div className="text-xl font-bold text-slate-800 tracking-tight font-mono">{Math.round(kmMoney).toLocaleString('ru-RU')} €</div>
                     </div>
-                    <div className="bg-white rounded-2xl p-5 border border-slate-200 flex flex-col justify-center shadow-sm">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Простой + Суточные</div>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-center">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Простой + Суточные</div>
                         <div className="text-xl font-bold text-slate-800 tracking-tight font-mono">{Math.round(idleMoney + daysMoney).toLocaleString('ru-RU')} €</div>
                     </div>
-                    <div className="bg-amber-50 rounded-2xl p-5 border border-amber-200 flex flex-col justify-center shadow-sm">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-amber-600 mb-1">Премия</div>
-                        <div className="text-xl font-bold text-amber-800 tracking-tight font-mono">{Math.round(bonus).toLocaleString('ru-RU')} €</div>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-center">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Премия</div>
+                        <div className="text-xl font-bold text-slate-800 tracking-tight font-mono">{Math.round(bonus).toLocaleString('ru-RU')} €</div>
                     </div>
-                    <div className="bg-white rounded-2xl p-5 border border-slate-200 flex flex-col justify-center shadow-sm">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-800 mb-1">З/П за сутки</div>
-                        <div className="text-xl font-black text-slate-800 tracking-tight font-mono">{Math.round(salaryPerDay).toLocaleString('ru-RU')} €</div>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-center">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">З/П за сутки</div>
+                        <div className="text-xl font-bold text-slate-800 tracking-tight font-mono">{Math.round(salaryPerDay).toLocaleString('ru-RU')} €</div>
                     </div>
-                    <div className="bg-white rounded-2xl p-5 border border-slate-200 flex flex-col justify-center shadow-sm">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-800 mb-1 font-sans">Итого водителю</div>
-                        <div className="text-2xl font-black text-slate-800 tracking-tight font-mono">{Math.round(totalSalary).toLocaleString('ru-RU')} €</div>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-center">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1 font-sans">Итого водителю</div>
+                        <div className="text-2xl font-bold text-slate-800 tracking-tight font-mono">{Math.round(totalSalary).toLocaleString('ru-RU')} €</div>
                     </div>
                 </div>
 
@@ -760,24 +760,24 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                 Статистика выплат ({activeTab === 'current' ? 'Текущий месяц' : activeTab === 'archive' ? 'За выбранный месяц' : 'По выбранному логисту'})
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                 <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col justify-center shadow-sm">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Выплат всего</div>
+                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-center">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Выплат всего</div>
                     <div className="text-xl font-bold text-slate-800 font-mono">{logs.length}</div>
                 </div>
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col justify-center shadow-sm">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-800 mb-1 font-sans">Сумма всех выплат</div>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-center">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1 font-sans">Сумма всех выплат</div>
                     <div className="text-xl font-bold text-slate-800 font-mono">{Math.round(totalPaid).toLocaleString('ru-RU')} €</div>
                 </div>
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col justify-center shadow-sm">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Средняя выплата</div>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-center">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Средняя выплата</div>
                     <div className="text-xl font-bold text-slate-800 font-mono">{Math.round(avgPaid).toLocaleString('ru-RU')} €</div>
                 </div>
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col justify-center shadow-sm">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Максимальная</div>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-center">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Максимальная</div>
                     <div className="text-xl font-bold text-slate-800 font-mono">{Math.round(maxPaid).toLocaleString('ru-RU')} €</div>
                 </div>
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col justify-center shadow-sm">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Уникальных водителей</div>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-center">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Уникальных водителей</div>
                     <div className="text-xl font-bold text-slate-800 font-mono">{uniqueDrivers}</div>
                 </div>
             </div>
@@ -909,7 +909,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
             <div className="space-y-4">
                 {filteredHistory.length === 0 ? (
-                    <div className="text-center py-12 text-slate-400 font-bold text-xs bg-white rounded-2xl border border-slate-200 italic">История пустая</div>
+                    <div className="text-center py-12 text-slate-400 font-medium text-xs bg-slate-50 rounded-xl border border-slate-200">История пустая</div>
                 ) : (
                     filteredHistory.slice(0, logsLimit).map((rec) => (
                         <div key={rec.id} className={`bg-white border rounded-[2rem] p-6 flex flex-col group hover:shadow-[0_8px_30px_rgba(0,0,0,0.01)] transition-all duration-300 ${
@@ -1023,22 +1023,22 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                     </div>
                                     )}
                                     {(rec.bonus || 0) > 0 && (
-                                    <div className="flex flex-col px-2.5 py-0.5 bg-amber-50 rounded-lg border border-amber-200">
-                                        <span className="text-[9px] font-bold uppercase tracking-wider text-amber-600 mb-0.5">Премия</span>
-                                        <span className="text-sm font-bold text-amber-700 font-mono">+{Math.round(rec.bonus || 0)} €</span>
+                                    <div className="flex flex-col px-2.5 py-0.5 bg-slate-50 rounded-lg border border-slate-200">
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Премия</span>
+                                        <span className="text-sm font-bold text-slate-700 font-mono">+{Math.round(rec.bonus || 0)} €</span>
                                     </div>
                                     )}
                                 </div>
                                 <div className="flex gap-3 w-full md:w-auto self-end md:self-auto justify-end">
                                     {(rec.totalDays || 0) > 0 && (
-                                        <div className="flex flex-col bg-white border border-slate-200 px-4 py-2 rounded-xl items-end shadow-sm min-w-[110px]">
-                                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5 font-sans">З/П в день</span>
+                                        <div className="flex flex-col bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl items-end min-w-[110px]">
+                                            <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5 font-sans">З/П в день</span>
                                             <span className="text-lg font-bold text-slate-800 font-mono tracking-tight">{Math.round((rec.totalSalary || 0) / rec.totalDays).toLocaleString('ru-RU')} €</span>
                                         </div>
                                     )}
-                                    <div className="flex flex-col bg-white border border-slate-200 px-4 py-2 rounded-xl items-end shadow-sm min-w-[120px]">
-                                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-0.5 font-sans">Итого к выплате</span>
-                                        <span className="text-lg font-black text-slate-800 font-mono tracking-tight">{Math.round(rec.totalSalary || 0).toLocaleString('ru-RU')} €</span>
+                                    <div className="flex flex-col bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl items-end min-w-[120px]">
+                                        <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5 font-sans">Итого к выплате</span>
+                                        <span className="text-lg font-bold text-slate-800 font-mono tracking-tight">{Math.round(rec.totalSalary || 0).toLocaleString('ru-RU')} €</span>
                                     </div>
                                 </div>
                             </div>
@@ -1054,7 +1054,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                 )}
                 {filteredHistory.length > logsLimit && (
                   <button onClick={() => setLogsLimit(prev => prev + 10)}
-                    className="w-full py-3 border border-dashed border-slate-200 hover:border-slate-400 text-slate-500 hover:text-slate-700 font-bold text-xs rounded-2xl transition bg-white hover:bg-slate-50 cursor-pointer text-center font-sans shadow-sm block mt-4">
+                    className="w-full py-3 border border-dashed border-slate-200 hover:border-slate-400 text-slate-500 hover:text-slate-700 font-semibold text-xs rounded-xl transition bg-slate-50 hover:bg-slate-100 cursor-pointer text-center block mt-4">
                     Показать еще (+10)
                   </button>
                 )}
@@ -1167,8 +1167,8 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                 <input type="number" value={editingSalaryData.totalDays || 1} onChange={e => setEditingSalaryData({...editingSalaryData, totalDays: Number(e.target.value)})} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                             </div>
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-amber-600">Премия (€)</label>
-                                <input type="number" value={editingSalaryData.bonus || 0} onChange={e => setEditingSalaryData({...editingSalaryData, bonus: Number(e.target.value)})} className="w-full bg-white border border-amber-200 text-amber-900 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 focus:bg-white transition" />
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Премия (€)</label>
+                                <input type="number" value={editingSalaryData.bonus || 0} onChange={e => setEditingSalaryData({...editingSalaryData, bonus: Number(e.target.value)})} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
                             </div>
                             <div className="flex flex-col gap-1.5 col-span-2">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Комментарий</label>
