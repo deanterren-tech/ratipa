@@ -94,8 +94,11 @@ export const subscribeFleetUnits = (callback: (units: FleetUnit[]) => void): (()
   let drivers: Driver[] = [];
   let couplings: any[] = [];
   let dispatchers: DispatcherRef[] = [];
+  let subscriptionsReady = 0;
+  const REQUIRED_COUNT = 5;
 
-  const emit = () => {
+  const maybeEmit = () => {
+    if (subscriptionsReady < REQUIRED_COUNT) return; // Ждём ВСЕ 5 источников
     const driverById = new Map<string, Driver>();
     drivers.forEach((d) => driverById.set(norm(d.id), d));
     const trailerById = new Map<string, any>();
@@ -143,13 +146,13 @@ export const subscribeFleetUnits = (callback: (units: FleetUnit[]) => void): (()
     callback(units);
   };
 
-  const u1 = dbService.getTractors((list) => { tractors = list || []; emit(); });
-  const u2 = dbService.getTrailers((list) => { trailers = list || []; emit(); });
-  const u3 = dbService.getDrivers((list) => { drivers = list || []; emit(); });
-  const u4 = dbService.getCouplings((list) => { couplings = list || []; emit(); });
+  const u1 = dbService.getTractors((list) => { tractors = list || []; subscriptionsReady++; maybeEmit(); });
+  const u2 = dbService.getTrailers((list) => { trailers = list || []; subscriptionsReady++; maybeEmit(); });
+  const u3 = dbService.getDrivers((list) => { drivers = list || []; subscriptionsReady++; maybeEmit(); });
+  const u4 = dbService.getCouplings((list) => { couplings = list || []; subscriptionsReady++; maybeEmit(); });
   const u5 = directoryService.getDispatchers((list) => {
     dispatchers = (list || []).map((d: any) => ({ id: d.id, name: d.name, color: d.color }));
-    emit();
+    subscriptionsReady++; maybeEmit();
   });
 
   return () => { u1(); u2(); u3(); u4(); u5(); };
