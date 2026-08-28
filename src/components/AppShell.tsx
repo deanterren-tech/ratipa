@@ -1353,7 +1353,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       </div>
 
       {/* Mobile bottom navigation (small screens only) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200 flex items-stretch justify-around px-1 py-1.5 select-none">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200 flex items-stretch justify-around px-1 py-1.5 select-none" style={{paddingBottom: 'calc(0.375rem + env(safe-area-inset-bottom, 0px))'}}>
         {[
           { key: 'dashboard', label: 'Home', icon: Home },
           { key: 'planZagruzok', label: 'План загрузок', icon: FileSpreadsheet },
@@ -1365,7 +1365,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             <button
               key={item.key}
               onClick={() => { setIsMobileMenuOpen(false); handleNavigate(item.key); }}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 rounded-xl transition ${active ? 'text-slate-900' : 'text-slate-400'}`}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 rounded-xl transition-all duration-150 ${active ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
             >
               <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 2} />
               <span className="text-[9px] font-semibold leading-none text-center">{item.label}</span>
@@ -1374,7 +1374,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         })}
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 rounded-xl transition ${isMobileMenuOpen ? 'text-slate-900' : 'text-slate-400'}`}
+          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 rounded-xl transition-all duration-150 ${isMobileMenuOpen ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
         >
           <Menu className="h-5 w-5" strokeWidth={isMobileMenuOpen ? 2.5 : 2} />
           <span className="text-[9px] font-semibold leading-none">Меню</span>
@@ -1383,10 +1383,15 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
       {/* Mobile "all tools" panel (small screens only) */}
       {isMobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-xs" onClick={() => setIsMobileMenuOpen(false)}>
-          <div className="absolute bottom-[3.75rem] left-0 right-0 bg-white rounded-t-3xl border-t border-slate-200 max-h-[70vh] overflow-y-auto p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mb-3 px-1">Все инструменты</div>
-            <div className="grid grid-cols-3 gap-2">
+        <div className="md:hidden fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}>
+          <div className="absolute bottom-[3.75rem] left-2 right-2 bg-white rounded-[1.75rem] border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.08)] max-h-[70vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4 px-1">
+              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Все инструменты</span>
+              <button onClick={() => setIsMobileMenuOpen(false)} className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 transition cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2.5">
               {allowedModules.map((mod) => {
                 const Icon = mod.icon || Calendar;
                 const active = activeModule === mod.key;
@@ -1394,7 +1399,11 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                   <button
                     key={mod.key}
                     onClick={() => { setIsMobileMenuOpen(false); handleNavigate(mod.key); }}
-                    className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl transition ${active ? 'bg-[#3765F6]/10 text-[#3765F6]' : 'bg-slate-50 text-slate-600'}`}
+                    className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl transition-all duration-150 active:scale-95 ${
+                      active 
+                        ? 'bg-slate-900 text-white shadow-sm border border-slate-800' 
+                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
+                    }`}
                   >
                     <Icon className="h-5 w-5" />
                     <span className="text-[10px] font-semibold leading-tight text-center">{mod.label}</span>
@@ -1402,16 +1411,16 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                 );
               })}
             </div>
-            <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-100">
+            <div className="grid grid-cols-2 gap-2.5 mt-4 pt-4 border-t border-slate-100">
               <button
                 onClick={() => window.location.reload()}
-                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition text-slate-700 font-bold text-xs"
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition text-slate-700 font-semibold text-xs active:scale-95 cursor-pointer"
               >
                 <RefreshCw className="h-4 w-4" /> Обновить
               </button>
               <button
                 onClick={() => { setIsMobileMenuOpen(false); handleLogoutSequence(); }}
-                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 transition text-white font-bold text-xs"
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-rose-100 hover:bg-rose-200 transition text-rose-600 font-semibold text-xs active:scale-95 cursor-pointer"
               >
                 <LogOut className="h-4 w-4" /> Выход
               </button>
