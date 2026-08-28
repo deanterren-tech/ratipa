@@ -158,8 +158,8 @@ export const subscribeFleetUnits = (callback: (units: FleetUnit[]) => void): (()
   return () => { u1(); u2(); u3(); u4(); u5(); };
 };
 
-/** Разово получить все сцепки (без подписки). */
-export const getFleetUnitsOnce = (callback: (units: FleetUnit[]) => void): void => {
+/** Разово получить все сцепки (без подписки) — в плоском формате. */
+export const getFleetUnitsOnce = (callback: (units: any[]) => void): void => {
   let done = 0;
   const acc = { tractors: [] as any[], trailers: [] as any[], drivers: [] as Driver[], couplings: [] as any[], dispatchers: [] as DispatcherRef[] };
   const finish = () => {
@@ -184,7 +184,7 @@ export const getFleetUnitsOnce = (callback: (units: FleetUnit[]) => void): void 
         raw: { tractorId: c.tractorId ?? null, trailerId: c.trailerId ?? null, driverId: c.driverId ?? null, dispatcherName: c.dispatcherName ?? null, status: c.status },
       };
     });
-    callback(units);
+    callback(units.map(_mapUnitToFlat));
   };
   dbService.getTractors((l) => { acc.tractors = l || []; if (++done === 5) finish(); });
   dbService.getTrailers((l) => { acc.trailers = l || []; if (++done === 5) finish(); });

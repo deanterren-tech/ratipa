@@ -378,26 +378,10 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     // and verifyFleet is just an alias of fleetVehicles (single source of truth).
     // Однократное чтение — данные показываются сразу, без ожидания onValue
     getFleetUnitsOnce((units) => {
-      const flat = units.map((u: any) => ({
-        id: u.couplingId,
-        couplingId: u.couplingId,
-        carNumber: u.tractor?.carNumber || u.couplingId,
-        vehicleNumbers: u.tractor?.carNumber || u.couplingId,
-        trailerNumber: u.trailer?.trailerNumber || '',
-        brandModel: u.tractor?.brandModel || u.tractor?.brandsRu || '',
-        brandsRu: u.tractor?.brandModel || u.tractor?.brandsRu || '',
-        brandsLat: u.trailer?.trailerBrand || '',
-        trailerMake: u.trailer?.trailerBrand || '',
-        driverId: u.raw.driverId || '',
-        driverNameRu: u.driver?.shortNameRu || u.driver?.name || '',
-        driverNameLat: u.driver?.nameLat || '',
-        dispatcher: u.dispatcher?.name || '',
-        dispatcherName: u.dispatcher?.name || '',
-        status: u.status,
-      }));
-      setRecords(flat as any);
-      setFleetVehicles(flat);
-      setVerifyFleet(flat);
+      // units уже в плоском формате (через _mapUnitToFlat) — все поля на месте
+      setRecords(units as any);
+      setFleetVehicles(units);
+      setVerifyFleet(units);
       setIsDataLoaded(true);
     });
 
