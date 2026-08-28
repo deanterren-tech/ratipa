@@ -1317,7 +1317,24 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   </label>
                   <CouplingPicker
                     onSelect={(rec) => {
-                      if (rec) setVehicleNumbers(formatCoupling((rec.carNumber || rec.vehicleNumbers || '').toUpperCase()));
+                      if (!rec) return;
+                      setVehicleNumbers(formatCoupling((rec.carNumber || rec.vehicleNumbers || '').toUpperCase()));
+                      // Подставляем марки, водителя, паспорт и телефоны из выбранного авто
+                      if (rec.brandModel) setFormBrandModel(rec.brandModel);
+                      if (rec.trailerMake) setFormTrailerMake(rec.trailerMake);
+                      if (rec.driverNameRu) setDriverNameRu(rec.driverNameRu);
+                      if (rec.driverNameLat) setDriverNameLat(rec.driverNameLat);
+                      if (rec.birthDate) setBirthDate(rec.birthDate);
+                      if (rec.passportNumber) setPassportNumber(rec.passportNumber);
+                      if (rec.personalId) setPersonalId(rec.personalId);
+                      if (rec.passportStart) setPassportStart(rec.passportStart);
+                      if (rec.passportEnd) setPassportEnd(rec.passportEnd);
+                      if (rec.passportIssuedBy) setPassportIssuedBy(rec.passportIssuedBy);
+                      if (rec.phones && rec.phones.length > 0) setPhones(rec.phones);
+                      if (rec.dispatcher) setDispatcher(rec.dispatcher);
+                      if (rec.trailerNumber) setTrailerNumber(rec.trailerNumber);
+                      // Сброс ошибки после выбора
+                      setSaveError('');
                     }}
                   />
                 </div>

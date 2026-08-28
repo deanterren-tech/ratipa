@@ -1422,6 +1422,29 @@ export const dbService = {
           // ВСЕГДА пишем сцепку (иначе новое авто без диспетчера не появляется в Базе сцепок)
           update(ref(database, `couplings/${safeId}`), couplingRec)
             .catch((e) => console.warn('[saveVehicleDriverRecord] coupling update failed', e));
+          // Синхронизируем данные водителя в таблицу drivers (чтобы карточки видели паспорт, телефоны, дату рождения)
+          const driverId = rec.driverId || safeId;
+          const driverData: Record<string, any> = {
+            id: driverId,
+            name: rec.driverNameRu || rec.driverName || null,
+            shortNameRu: rec.driverNameRu || rec.driverName || null,
+            nameLat: rec.driverNameLat || null,
+            dispatcher: disp || null,
+            phone: rec.phone || rec.driverPhone || null,
+            phones: Array.isArray(rec.phones) ? rec.phones : (rec.phone || rec.driverPhone ? [{ id: 'phone_1', number: rec.phone || rec.driverPhone, isPrimary: true }] : []),
+            passport: rec.passportNumber || null,
+            personalId: rec.personalId || null,
+            birthDate: rec.birthDate || null,
+            passportStart: rec.passportStart || null,
+            passportEnd: rec.passportEnd || null,
+            passportIssued: rec.passportIssuedBy || null,
+            licenseNumber: rec.licenseNumber || null,
+          };
+          for (const [k, v] of Object.entries(driverData)) {
+            if (v === undefined) driverData[k] = null;
+          }
+          update(ref(database, `drivers/${driverId}`), driverData)
+            .catch((e) => console.warn('[saveVehicleDriverRecord] drivers update failed', e));
           // Sync dispatcher to the driver record (База водителей читает drivers)
           if (disp && rec.driverId) {
             update(ref(database, `drivers/${rec.driverId}`), { dispatcher: disp }).catch(() => {});
