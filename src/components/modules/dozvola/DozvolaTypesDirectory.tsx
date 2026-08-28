@@ -61,6 +61,7 @@ export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryPro
       if (!typeName.trim()) return;
 
       const tName = typeName.trim();
+      const oldName = editingId ? types[editingId]?.name : '';
       let newId = editingId;
       if (!newId) {
           newId = push(ref(database, 'dozvolsTypesV4')).key || Date.now().toString();
@@ -69,9 +70,11 @@ export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryPro
               set(ref(database, 'dozvolsTypesOrderV4'), [...typesOrder, newId]);
           }
       } else {
-          const oldName = types[newId]?.name;
           if (useFirebase && oldName && oldName !== tName) {
+              // Меняем имя в справочнике типов
               set(ref(database, `dozvolsTypesV4/${newId}/name`), tName);
+              // Удаляем СТАРЫЙ маппинг, чтобы не плодить записи
+              remove(ref(database, `dozvolsPermitPrintMappingsV1/${oldName}`));
           }
       }
 

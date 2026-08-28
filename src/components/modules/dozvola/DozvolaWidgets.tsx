@@ -102,48 +102,30 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
     const calculatedLimit = useQuarter ? quarterLimit : percentLimit;
 
     let receivedCount = 0;
-    let inTripCount = 0;
-
-    const now = new Date();
-    const quarter = Math.floor(now.getMonth() / 3);
-    const start = new Date(now.getFullYear(), quarter * 3, 1).getTime();
-    const end = new Date(
-      now.getFullYear(),
-      quarter * 3 + 3,
-      0,
-      23,
-      59,
-      59,
-      999,
-    ).getTime();
-
+    let usedCount = 0;
     Object.values(dozvolsData).forEach((i: any) => {
-      if (i.type === typeName) {
-        if (!i.isCopy && (i.status === "hand" || i.status === "office_return"))
-          inTripCount++;
-        if (i.status !== "used" && i.status !== "expired" && !i.isCopy) {
-          if (useQuarter) {
-            const date = i.issueDate ? new Date(i.issueDate).getTime() : 0;
-            if (date >= start && date <= end) receivedCount++;
-          } else {
-            receivedCount++;
-          }
+      if (i.type === typeName && !i.isCopy) {
+        if (i.status !== "used" && i.status !== "expired") {
+          receivedCount++;
+          if (i.status === "office_return") usedCount++;
         }
       }
     });
 
+    const inWork = receivedCount - usedCount;
     const unlimited = calculatedLimit <= 0;
+    const remaining = unlimited
+      ? 999999
+      : Math.max(0, calculatedLimit - inWork);
+
     return {
       percent: currentPercent,
-      quarterLabel: useQuarter
-        ? `${quarter + 1} квартал ${now.getFullYear()}`
-        : "",
+      quarterLabel: "",
       limit: calculatedLimit,
       received: receivedCount,
-      inTrip: inTripCount,
-      remaining: unlimited
-        ? 999999
-        : Math.max(0, calculatedLimit - receivedCount),
+      used: usedCount,
+      inWork,
+      remaining,
       unlimited,
     };
   };
@@ -396,36 +378,37 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
             </div>
             <div className="bg-slate-50/70 p-3 rounded-xl border border-slate-200 text-xs font-semibold leading-relaxed mt-2">
               <div className="flex justify-between mb-1">
-                <span>Лимит квоты по штату:</span>
+                <span>Лимит квоты:</span>
                 <span className="font-bold text-[#3765F6]">
                   {getPermitQuotaInfo(currentSelectedTab).limit} шт.
                 </span>
               </div>
               <div className="flex justify-between mb-1">
-                <span>Выдано / на руках (не сдано в ТИ):</span>
+                <span>Всего получено:</span>
                 <span className="font-bold text-slate-800">
-                  {getPermitQuotaInfo(currentSelectedTab).inTrip} шт.
+                  {getPermitQuotaInfo(currentSelectedTab).received} шт.
                 </span>
               </div>
-              <div className="flex justify-between text-emerald-600 mb-1">
+              <div className="flex justify-between mb-1">
+                <span>Из них использовано (сдано):</span>
+                <span className="font-bold text-amber-600">
+                  {getPermitQuotaInfo(currentSelectedTab).used} шт.
+                </span>
+              </div>
+              <div className="flex justify-between mb-1">
+                <span>В работе:</span>
+                <span className="font-bold text-blue-600">
+                  {getPermitQuotaInfo(currentSelectedTab).inWork} шт.
+                </span>
+              </div>
+              <div className="flex justify-between text-emerald-700 bg-emerald-50/50 px-2 py-1.5 rounded-xl font-bold">
                 <span>Можно получить еще:</span>
                 <span className="font-bold">
                   {getPermitQuotaInfo(currentSelectedTab).unlimited
                     ? "без лимита"
-                    : getPermitQuotaInfo(currentSelectedTab).remaining}
+                    : getPermitQuotaInfo(currentSelectedTab).remaining + " шт"}
                 </span>
               </div>
-              {getPermitQuotaInfo(currentSelectedTab).limit > 0 ? (
-                <div className="text-[10px] text-slate-500 border-t border-slate-200/50 pt-2 mt-2 border-dashed">
-                  Примечание: учтено{" "}
-                  {getPermitQuotaInfo(currentSelectedTab).received} из{" "}
-                  {getPermitQuotaInfo(currentSelectedTab).limit} шт.
-                </div>
-              ) : (
-                <div className="text-[10px] text-slate-400 italic">
-                  Укажите количество водителей и % лимита.
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -636,8 +619,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
                     {info.unlimited
                       ? "Квота не ограничена"
                       : `Квота: ${info.limit}`}{" "}
-                    · получено: {info.received} · у машин / не сданы:{" "}
-                    {info.inTrip}
+                    · получено: {info.received} · в работе: {info.inWork} · использовано: {info.used}
                   </span>
                 </div>
                 <input

@@ -77,7 +77,7 @@ const DozvolaRow = React.memo(({
   const resolvedLocations = useMemo(() => [...standardLocations, ...Object.values(locationsDB || {}).map((l: any) => l.name).filter(Boolean)], [locationsDB]);
   if (variant === 'table') {
     const statusLabel: Record<string, string> = {
-      office: 'В офисе', hand: 'В рейсе', office_return: 'Сдан в офис',
+      office: 'В офисе', hand: 'В рейсе', office_return: 'Использован',
       used: 'Сдан в ТИ', expired: 'Аннулирован', available: 'В наличии'
     };
     return (
@@ -142,7 +142,7 @@ const DozvolaRow = React.memo(({
               <option value="">Действие...</option>
               <option value="office">В офис</option>
               <option value="hand">Выдать в рейс</option>
-              <option value="office_return">Сдан в офис</option>
+              <option value="office_return">Использован</option>
               <option value="used">Сдан в ТИ</option>
               <option value="expired">Аннулировать</option>
             </select>
@@ -192,7 +192,7 @@ const DozvolaRow = React.memo(({
             <span className="bg-blue-50 text-blue-600 border border-blue-100/50 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">В рейсе</span>
           )}
           {item.status === "office_return" && (
-            <span className="bg-amber-50 text-amber-600 border border-amber-100/50 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">Сдан в офис</span>
+            <span className="bg-amber-50 text-amber-600 border border-amber-100/50 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">Использован</span>
           )}
           {item.status === "used" && (
             <span className="bg-[#fef3c7]/60 text-[#b45309] border border-amber-200/50 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">Сдан в ТИ</span>
@@ -300,7 +300,7 @@ const DozvolaRow = React.memo(({
           <option value="">Действие...</option>
           <option value="office">В офис</option>
           <option value="hand">Выдать в рейс</option>
-          <option value="office_return">Сдан в офис</option>
+          <option value="office_return">Использован</option>
           <option value="used">Сдан в ТИ</option>
           <option value="expired">Аннулировать</option>
         </select>
@@ -466,7 +466,7 @@ export default function DozvolaRegistryList({
       office: "В офисе",
       available: "В наличии",
       hand: "В рейсе / на руках",
-      office_return: "Сдан в офис",
+      office_return: "Использован",
       used: "Сдан в транспортную инспекцию",
       expired: "Аннулирован",
     };
@@ -1042,7 +1042,7 @@ export default function DozvolaRegistryList({
                   : "hover:bg-slate-100/50 hover:!text-slate-750")
               }
             >
-              🟡 Сданы в офис
+              🟡 Использован
             </button>
           </div>
         </div>
@@ -1075,7 +1075,7 @@ export default function DozvolaRegistryList({
                       <option value="">Действие ({selectedItems.size} шт)</option>
                       <option value="office">В офис</option>
                       <option value="hand">Выдать в рейс</option>
-                      <option value="office_return">Сдан в офис</option>
+                      <option value="office_return">Использован</option>
                       <option value="used">Сдан в ТИ</option>
                       <option value="expired">Аннулировать</option>
                     </select>
@@ -1091,7 +1091,7 @@ export default function DozvolaRegistryList({
                   <option value="all">Все статусы</option>
                   <option value="office">В офисе</option>
                   <option value="hand">В рейсе у машин</option>
-                  <option value="office_return">Сданы в офис</option>
+                  <option value="office_return">Использованы</option>
                   <option value="copy_yes">Сдана копия (CHN 2/3)</option>
                   <option value="copy_no">Нет копии (CHN 2/3)</option>
                 </select>
@@ -1357,7 +1357,7 @@ export default function DozvolaRegistryList({
                     >
                       <option value="office">В офисе</option>
                       <option value="hand">В рейсе</option>
-                      <option value="office_return">Сдан в офис</option>
+                      <option value="office_return">Использован</option>
                       <option value="used">Сдан в ИТ</option>
                       <option value="expired">Аннулирован</option>
                       <option value="available">В наличии</option>

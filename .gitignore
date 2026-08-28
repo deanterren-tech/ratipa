@@ -14,3 +14,4 @@ parse_pasted_plan.py
 .env.portal
 .env.*.local
 vehicles.seed.json
+.vercel
