@@ -976,14 +976,14 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
             <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs mx-auto">
               <button
                 onClick={handlePrintHTML}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-xl text-xs transition cursor-pointer border border-slate-200 shadow-sm"
+                className="flex-1 flex items-center justify-center gap-2 px-4 min-h-[44px] py-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-xl text-xs transition cursor-pointer border border-slate-200 shadow-sm"
               >
                 <Printer className="h-4 w-4 text-slate-400" />
                 Печать
               </button>
               <button
                 onClick={generateDocx}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold rounded-xl text-xs transition cursor-pointer shadow-sm shadow-blue-500/10"
+                className="flex-1 flex items-center justify-center gap-2 px-4 min-h-[44px] py-3 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold rounded-xl text-xs transition cursor-pointer shadow-sm shadow-blue-500/10"
               >
                 <Download className="h-4 w-4" />
                 Word (doc)
@@ -999,9 +999,9 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
           <div className="space-y-3">
             <h3 className="text-sm font-bold text-slate-800">1. Выбор активных заявок планерки</h3>
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={() => setAllPermitsChecked(true)} className="px-3.5 py-2 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Выбрать все</button>
-              <button onClick={() => setAllPermitsChecked(false)} className="px-3.5 py-2 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Снять все</button>
-              <button onClick={rebuildPermitRows} className="px-3.5 py-2 bg-[#3765F6] hover:bg-[#2555E5] shadow-sm shadow-blue-500/10 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по выбранным</button>
+              <button onClick={() => setAllPermitsChecked(true)} className="px-3.5 min-h-[44px] py-2 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Выбрать все</button>
+              <button onClick={() => setAllPermitsChecked(false)} className="px-3.5 min-h-[44px] py-2 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Снять все</button>
+              <button onClick={rebuildPermitRows} className="px-3.5 min-h-[44px] py-2 bg-[#3765F6] hover:bg-[#2555E5] shadow-sm shadow-blue-500/10 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по выбранным</button>
               <div className="flex-1 min-w-[200px]">
                 <input
                   type="text"
@@ -1042,7 +1042,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
           <div className="space-y-3 pt-4 border-t border-slate-100">
             <div className="flex justify-between items-center">
               <h3 className="text-sm font-bold text-slate-800">2. Содержимое заявления (Редактируемые строки)</h3>
-              <button onClick={addPermitRow} className="flex items-center gap-1 bg-[#3765F6] hover:bg-[#2555E5] text-white px-3 py-1.5 rounded-xl text-[10px] font-semibold transition cursor-pointer">+ Добавить строку</button>
+              <button onClick={addPermitRow} className="flex items-center gap-1 bg-[#3765F6] hover:bg-[#2555E5] text-white px-3 min-h-[44px] py-2 rounded-xl text-[10px] font-semibold transition cursor-pointer">+ Добавить строку</button>
             </div>
 
             <div className="table-responsive select-none overflow-x-auto custom-scrollbar border border-slate-200/50 rounded-2xl bg-white">
@@ -1088,8 +1088,8 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
               <button onClick={() => setAllReturnsChecked(true)} className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Выбрать все</button>
               <button onClick={() => setAllReturnsChecked(false)} className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Снять все</button>
               <button onClick={rebuildReturnRows} className="px-3 py-1.5 bg-[#3765F6] hover:bg-[#2555E5] shadow-sm shadow-blue-500/10 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по выбранным</button>
-              <button onClick={loadLastAssembledStatement} className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по предыдущим</button>
-              <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-600 bg-slate-100 px-3.5 py-2 rounded-xl cursor-pointer">
+              <button onClick={loadLastAssembledStatement} className="px-3 min-h-[44px] py-2 bg-white border border-slate-200 hover:bg-slate-50 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по предыдущим</button>
+              <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-600 bg-slate-100 px-3.5 min-h-[44px] py-2 rounded-xl cursor-pointer">
                 <input type="checkbox" checked={showArchiveReturns} onChange={(e) => setShowArchiveReturns(e.target.checked)} className="accent-[#3765F6]" />
                 Включить уже сданные в ТИ (Архив)
               </label>
@@ -1134,11 +1134,11 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
               <h3 className="text-sm font-bold text-slate-800">2. Содержимое реестра (Редактируемые строки)</h3>
               <div className="flex gap-2">
                 {user.role === 'root_admin' && (
-                  <button onClick={markCheckedOfficeReturnsAsUsed} className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-[10px] font-semibold transition cursor-pointer shadow-xs">
+                  <button onClick={markCheckedOfficeReturnsAsUsed} className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-3 min-h-[44px] py-2 rounded-xl text-[10px] font-semibold transition cursor-pointer shadow-xs">
                     <CheckCircle className="h-3.5 w-3.5" /> Списать (Сданы в инспекцию ТИ)
                   </button>
                 )}
-                <button onClick={addReturnRow} className="flex items-center gap-1 bg-[#3765F6] hover:bg-[#2555E5] text-white px-3 py-1.5 rounded-xl text-[10px] font-semibold transition cursor-pointer">+ Добавить строку</button>
+                <button onClick={addReturnRow} className="flex items-center gap-1 bg-[#3765F6] hover:bg-[#2555E5] text-white px-3 min-h-[44px] py-2 rounded-xl text-[10px] font-semibold transition cursor-pointer">+ Добавить строку</button>
               </div>
             </div>
 
@@ -1187,12 +1187,12 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
               <button onClick={() => setAllChinaChecked(true)} className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Выбрать все</button>
               <button onClick={() => setAllChinaChecked(false)} className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Снять все</button>
               <button onClick={rebuildChinaRows} className="px-3 py-1.5 bg-[#3765F6] hover:bg-[#2555E5] shadow-sm shadow-blue-500/10 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по выбранным</button>
-              <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 shadow-sm px-3.5 py-1.5 rounded-xl cursor-pointer transition">
+              <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 shadow-sm px-3.5 min-h-[44px] py-2 rounded-xl cursor-pointer transition">
                 <input type="checkbox" checked={showArchiveChina} onChange={(e) => setShowArchiveChina(e.target.checked)} className="accent-[#3765F6]" />
                 Включить уже сданные в ТИ (Архив)
               </label>
-              <button onClick={() => markSelectedChinaCopiesAsSubmitted(true)} className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Пометить как отправленные в ТИ</button>
-              <button onClick={() => markSelectedChinaCopiesAsSubmitted(false)} className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Сбросить отметку сдачи</button>
+              <button onClick={() => markSelectedChinaCopiesAsSubmitted(true)} className="px-3.5 min-h-[44px] py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Пометить как отправленные в ТИ</button>
+              <button onClick={() => markSelectedChinaCopiesAsSubmitted(false)} className="px-3.5 min-h-[44px] py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Сбросить отметку сдачи</button>
               <div className="flex-1 min-w-[200px]">
                 <input
                   type="text"
@@ -1237,7 +1237,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
           <div className="space-y-3 pt-4 border-t border-slate-100">
             <div className="flex justify-between items-center">
               <h3 className="text-sm font-bold text-slate-800">2. Содержимое заявления по копиям (Редактируемые строки)</h3>
-              <button onClick={addChinaRow} className="flex items-center gap-1 bg-[#3765F6] hover:bg-[#2555E5] text-white px-3 py-1.5 rounded-xl text-[10px] font-semibold transition cursor-pointer">+ Добавить строку</button>
+              <button onClick={addChinaRow} className="flex items-center gap-1 bg-[#3765F6] hover:bg-[#2555E5] text-white px-3 min-h-[44px] py-2 rounded-xl text-[10px] font-semibold transition cursor-pointer">+ Добавить строку</button>
             </div>
 
             <div className="table-responsive select-none overflow-x-auto custom-scrollbar border border-slate-200/50 rounded-2xl bg-white">

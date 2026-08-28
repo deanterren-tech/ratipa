@@ -318,7 +318,7 @@ export default function UserManagementBlock({ user }: Props) {
                           if (selectedUid === u.uid) setSelectedUid(null);
                         }
                       }}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                      className="opacity-0 sm:opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                     >
                       <Trash2 size={13} />
                     </div>
@@ -589,7 +589,7 @@ export default function UserManagementBlock({ user }: Props) {
                 <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
                   <ShieldCheck size={12} className="text-[#3765F6]" /> Права редактирования полей Учёта выезда
                 </label>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                   {[
                     { key: 'dateArrival', label: 'Прибыл' },
                     { key: 'dateLoading', label: 'Готовность' },

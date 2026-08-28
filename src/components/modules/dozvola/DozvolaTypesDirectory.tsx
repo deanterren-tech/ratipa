@@ -120,7 +120,7 @@ export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryPro
         {user.permissions?.dozvola === "write" && (
             <button 
               onClick={() => openEditor('')} 
-              className="flex items-center gap-2 bg-[#3765F6] hover:bg-[#2555E5] text-white px-4 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm hover:shadow-md active:scale-95"
+              className="flex items-center gap-2 bg-[#3765F6] hover:bg-[#2555E5] text-white px-4 min-h-[44px] py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm hover:shadow-md active:scale-95"
             >
                 <Plus className="h-4 w-4" />
                 <span>Создать вид</span>

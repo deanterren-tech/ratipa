@@ -942,7 +942,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
           <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50">
             <button 
               onClick={() => setCurrentTab('base')} 
-              className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
+              className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer min-h-[44px] ${
                 currentTab === 'base' 
                   ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
                   : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
@@ -952,7 +952,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
             </button>
             <button 
               onClick={() => setCurrentTab('archive')} 
-              className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
+              className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer min-h-[44px] ${
                 currentTab === 'archive' 
                   ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
                   : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
@@ -962,7 +962,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
             </button>
             <button 
               onClick={() => setCurrentTab('history')} 
-              className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
+              className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer min-h-[44px] ${
                 currentTab === 'history' 
                   ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
                   : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
@@ -1110,7 +1110,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                      <button 
                        type="submit" 
                        disabled={!allFields.some(f => canEditField(f))} 
-                       className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold px-4 py-2.5 transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-40 mt-2"
+                       className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold px-4 py-2.5 transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-40 mt-2 min-h-[44px]"
                      >
                         Добавить в контроль
                      </button>
@@ -1170,7 +1170,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                  {/* Swipe Help Badge for Mobile */}
                  
 
-                 <div className="hidden lg:block overflow-x-auto custom-scrollbar">
+                 <div className="overflow-x-auto custom-scrollbar">
                      
 <table className="w-full text-left border-separate border-spacing-y-2">
   <thead>
@@ -1219,7 +1219,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
           <div className="flex gap-1.5 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
             <button 
               onClick={(e) => { e.stopPropagation(); openCarModal(v); }} 
-              className="p-1.5 text-slate-400 hover:text-[#3765F6] bg-white hover:bg-[#3765F6]/5 border border-slate-200/60 hover:border-[#3765F6]/20 rounded-lg shadow-3xs transition-all active:scale-90 cursor-pointer" 
+              className="p-1.5 text-slate-400 hover:text-[#3765F6] bg-white hover:bg-[#3765F6]/5 border border-slate-200/60 hover:border-[#3765F6]/20 rounded-lg shadow-3xs transition-all active:scale-90 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center" 
               title="Редактировать"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
@@ -1227,7 +1227,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
             <button 
               disabled={isMechanic}
               onClick={(e) => { e.stopPropagation(); deleteCarRecord(v.id, v.carNumber, e); }} 
-              className="p-1.5 text-slate-400 hover:text-rose-600 bg-white hover:bg-rose-50 border border-slate-200/60 hover:border-rose-200 rounded-lg shadow-3xs transition-all active:scale-90 disabled:opacity-30 cursor-pointer" 
+              className="p-1.5 text-slate-400 hover:text-rose-600 bg-white hover:bg-rose-50 border border-slate-200/60 hover:border-rose-200 rounded-lg shadow-3xs transition-all active:scale-90 disabled:opacity-30 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center" 
               title="Удалить"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -1241,7 +1241,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                  </div>
 
                  {/* Mobile Cards View */}
-                 <div className="block lg:hidden space-y-3 pb-10">
+                 <div className="hidden">{/* mobile cards removed — table with scroll covers all sizes */}
                    {visibleList.map(v => (
                      <div 
                        key={`${v.id}-${normalizePlate(v.carNumber)}`} 
@@ -1307,7 +1307,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                      <div className="flex justify-center mt-4">
                        <button
                          onClick={() => setVisibleBazaCount((c) => c + BAZA_PAGE_SIZE)}
-                         className="px-5 py-2.5 rounded-xl bg-[#3765F6] hover:bg-[#2b51d4] text-white text-xs font-bold shadow-sm transition-colors"
+                         className="px-5 py-2.5 rounded-xl bg-[#3765F6] hover:bg-[#2b51d4] text-white text-xs font-bold shadow-sm transition-colors min-h-[44px]"
                        >
                          Показать ещё {Math.min(BAZA_PAGE_SIZE, filteredList.length - visibleBazaCount)} (осталось {filteredList.length - visibleBazaCount})
                        </button>
@@ -1347,7 +1347,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     {globalHistory.length > historyLimit && (
                        <button 
                           onClick={() => setHistoryLimit(prev => prev + 100)}
-                          className="w-full py-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl transition-all cursor-pointer text-center tracking-tight border border-slate-200/50 active:scale-95 shadow-sm"
+                          className="w-full py-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl transition-all cursor-pointer text-center tracking-tight border border-slate-200/50 active:scale-95 shadow-sm min-h-[44px]"
                        >
                           Загрузить еще (Показано {historyLimit} из {globalHistory.length})
                        </button>
@@ -1364,7 +1364,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
       <AnimatePresence>
         {isCarModalOpen && (
            <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
-              <motion.div initial={{y:30, scale:0.96}} animate={{y:0, scale:1}} exit={{y:20, opacity:0, scale:0.96}} className="bg-white text-slate-900 rounded-[2rem] w-full max-w-4xl max-h-[92vh] flex flex-col shadow-[0_8px_30px_rgba(0,0,0,0.01)] border border-slate-200/50 overflow-hidden">
+              <motion.div initial={{y:30, scale:0.96}} animate={{y:0, scale:1}} exit={{y:20, opacity:0, scale:0.96}} className="bg-white text-slate-900 rounded-[2rem] w-full max-w-full md:max-w-4xl mx-4 max-h-[92vh] flex flex-col shadow-[0_8px_30px_rgba(0,0,0,0.01)] border border-slate-200/50 overflow-hidden">
                  <div className="p-5 border-b border-slate-200/50 flex justify-between items-center bg-white shrink-0">
                     <div className="flex items-center gap-3">
                        <h2 className="text-sm font-semibold text-slate-800 tracking-tight">Карточка автомобиля</h2>
@@ -1379,7 +1379,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     </div>
                     <button 
                       onClick={() => setIsCarModalOpen(false)} 
-                      className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition duration-150 cursor-pointer"
+                      className="p-2 md:p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition duration-150 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
                       title="Закрыть"
                     >
                       <X size={18} />
@@ -1534,14 +1534,14 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     {currentTab === 'base' && !isMechanic && (
                       <button 
                         onClick={moveCarToArchive} 
-                        className="bg-[#3765F6] hover:bg-[#2555E5] text-white rounded-xl text-xs font-semibold px-4 py-2.5 transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
+                        className="bg-[#3765F6] hover:bg-[#2555E5] text-white rounded-xl text-xs font-semibold px-4 py-2.5 transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5 min-h-[44px]"
                       >
                          Выехал в рейс
                       </button>
                     )}
                     <button 
                       onClick={saveCarModal} 
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold px-4 py-2.5 transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold px-4 py-2.5 transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5 min-h-[44px]"
                     >
                        Сохранить
                     </button>

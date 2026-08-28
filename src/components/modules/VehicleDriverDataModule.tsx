@@ -112,7 +112,7 @@ const VehicleDriverCard = React.memo(({
               <User className="w-3 h-3 text-[#3765F6]" />
               <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Водитель</span>
             </div>
-            <div className="text-[11px] font-bold text-slate-800 truncate" title={rec.driverNameRu}>
+            <div className="text-[11px] font-bold text-slate-800" title={rec.driverNameRu}>
               {formatDriverShortName(rec.driverNameRu || (rec as any).driverName)}
             </div>
           </div>
@@ -125,7 +125,7 @@ const VehicleDriverCard = React.memo(({
             </div>
             <div className="text-[10px] font-bold text-slate-700 font-mono leading-none space-y-0.5">
               {(rec.phones || []).slice(0, 2).map((p) => (
-                <div key={p.id} className={p.isPrimary ? "text-[#3765F6] truncate" : "truncate"}>
+                <div key={p.id} className={p.isPrimary ? "text-[#3765F6]" : ""}>
                   {p.number} {p.isPrimary && "★"}
                 </div>
               ))}
@@ -148,7 +148,7 @@ const VehicleDriverCard = React.memo(({
             <span className="text-slate-400 font-medium mr-1">Д.Рожд:</span>
             <span className="font-bold text-slate-700 font-mono">{rec.birthDate || '—'}</span>
           </div>
-          <div className="col-span-2 truncate" title={rec.personalId}>
+          <div className="col-span-2" title={rec.personalId}>
             <span className="text-slate-400 font-medium mr-1">Личный №:</span>
             <span className="font-bold text-slate-700 font-mono tracking-tight text-[9.5px]">{rec.personalId || '—'}</span>
           </div>
@@ -156,7 +156,7 @@ const VehicleDriverCard = React.memo(({
             <span className="text-slate-400 font-medium mr-1">Срок действия:</span>
             <span className="font-bold text-slate-700 font-mono text-[9.5px]">{rec.passportStart || '—'} — {rec.passportEnd || '—'}</span>
           </div>
-          <div className="col-span-2 truncate" title={rec.passportIssuedBy}>
+          <div className="col-span-2" title={rec.passportIssuedBy}>
             <span className="text-slate-400 font-medium mr-1">Выдан:</span>
             <span className="font-semibold text-slate-600 text-[9.5px]">{rec.passportIssuedBy || '—'}</span>
           </div>
@@ -206,7 +206,7 @@ const VehicleDriverCard = React.memo(({
             <span className="text-[#3765F6] font-extrabold">ДЛЯ БУФЕРА ОБМЕНА</span>
             <button
               onClick={() => copyToClipboard(rec)}
-              className="text-[#3765F6] hover:text-white hover:bg-[#3765F6] transition-all flex items-center gap-1 py-0.5 px-2 cursor-pointer bg-white rounded-md border border-slate-200 shadow-sm font-sans text-[8.5px] font-bold active:scale-95"
+              className="text-[#3765F6] hover:text-white hover:bg-[#3765F6] transition-all flex items-center gap-1 py-0.5 px-2 cursor-pointer bg-white rounded-md border border-slate-200 shadow-sm font-sans text-[8.5px] font-bold active:scale-95 min-h-[44px]"
               title="Скопировать весь блок"
             >
               {copiedId === rec.id ? <ClipboardCheck className="w-2.5 h-2.5 text-emerald-500" /> : <Copy className="w-2.5 h-2.5" />}
@@ -233,14 +233,14 @@ const VehicleDriverCard = React.memo(({
       <div className="px-3.5 py-2 border-t border-slate-100 bg-white flex justify-between gap-2 font-sans">
         <button
           onClick={() => openEdit(rec)}
-          className="flex-1 py-1.5 px-2.5 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200 hover:border-slate-300 font-bold text-[10px] rounded-lg transition duration-150 flex items-center justify-center gap-1 cursor-pointer font-sans active:scale-95 shadow-sm"
+          className="flex-1 py-1.5 px-2.5 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200 hover:border-slate-300 font-bold text-[10px] rounded-lg transition duration-150 flex items-center justify-center gap-1 cursor-pointer font-sans active:scale-95 shadow-sm min-h-[44px]"
         >
           <Edit2 className="w-3 h-3 text-slate-400" />
           <span>Редактировать</span>
         </button>
         <button
           onClick={() => handleDelete(rec)}
-          className="py-1.5 px-2 bg-white text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg transition duration-150 flex items-center justify-center cursor-pointer active:scale-95 shadow-sm"
+          className="py-1.5 px-2 bg-white text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg transition duration-150 flex items-center justify-center cursor-pointer active:scale-95 shadow-sm min-h-[44px] min-w-[44px]"
           title="Удалить"
         >
           <Trash2 className="w-3.5 h-3.5" />
@@ -1023,7 +1023,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                 setIsDriveOpen(nextState);
                 localStorage.setItem('ratipa_driver_drive_visible', nextState.toString());
               }}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all duration-150 border flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 ${
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all duration-150 border flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 min-h-[44px] ${
                 isDriveOpen
                   ? 'bg-[#3765F6]/10 text-[#3765F6] border-[#3765F6]/20'
                   : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200/60'
@@ -1036,7 +1036,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
             <button
               id="btn-add-driver-record"
               onClick={handleOpenAdd}
-              className="px-4 py-2.5 bg-[#3765F6] hover:bg-[#2555E5] text-white font-bold text-xs rounded-xl transition-all duration-150 border border-transparent flex items-center gap-2 cursor-pointer shadow-sm active:scale-95"
+              className="px-4 py-2.5 bg-[#3765F6] hover:bg-[#2555E5] text-white font-bold text-xs rounded-xl transition-all duration-150 border border-transparent flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 min-h-[44px]"
             >
               <Plus className="w-4 h-4" />
               <span>Добавить данные</span>
@@ -1132,7 +1132,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
               </div>
             ) : (
               <div className="space-y-6">
-                <div className={`grid grid-cols-2 ${isDriveOpen ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-6 pr-1 custom-scrollbar`}>
+                <div className={`grid grid-cols-1 sm:grid-cols-2 ${isDriveOpen ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-6 pr-1 custom-scrollbar`}>
                   {filteredRecords.slice(0, carsLimit).map(renderCard)}
                 </div>
 
@@ -1140,7 +1140,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   <button
                     id="load-more-records"
                     onClick={() => setCarsLimit(prev => prev + 30)}
-                    className="w-full py-3 border border-dashed border-slate-200 hover:border-slate-400 text-slate-500 hover:text-slate-700 font-bold text-xs rounded-2xl transition bg-white hover:bg-slate-50 cursor-pointer text-center font-sans shadow-sm block"
+                    className="w-full py-3 border border-dashed border-slate-200 hover:border-slate-400 text-slate-500 hover:text-slate-700 font-bold text-xs rounded-2xl transition bg-white hover:bg-slate-50 cursor-pointer text-center font-sans shadow-sm block min-h-[44px]"
                   >
                     Показать еще (+30)
                   </button>
@@ -1238,7 +1238,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       {/* Annual Passport Verification Pop-up Prompt */}
       {currentVerification && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/50 animate-fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-6 border border-slate-200 flex flex-col gap-5 text-center font-sans">
+          <div className="bg-white rounded-3xl w-full max-w-full md:max-w-md mx-4 shadow-2xl p-6 border border-slate-200 flex flex-col gap-5 text-center font-sans">
             <div className="mx-auto bg-amber-50 text-amber-500 p-3.5 rounded-full shadow-2xs w-max">
               <AlertTriangle className="w-8 h-8 animate-bounce" />
             </div>
@@ -1262,7 +1262,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
             <div className="flex flex-col gap-2 pt-2">
               <button
                 onClick={() => handleVerifySuccess(currentVerification)}
-                className="w-full py-3 bg-[#3765F6] hover:bg-[#2555E5] text-white font-bold text-xs rounded-xl transition border border-transparent cursor-pointer shadow-sm"
+                className="w-full py-3 bg-[#3765F6] hover:bg-[#2555E5] text-white font-bold text-xs rounded-xl transition border border-transparent cursor-pointer shadow-sm min-h-[44px]"
               >
                 Да, данные актуальны
               </button>
@@ -1270,13 +1270,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
               <div className="flex gap-2">
                 <button
                   onClick={() => handleVerifyEdit(currentVerification)}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-xl transition cursor-pointer border border-slate-200/60 shadow-sm"
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-xl transition cursor-pointer border border-slate-200/60 shadow-sm min-h-[44px]"
                 >
                   Нет, редактировать
                 </button>
                 <button
                   onClick={() => handleVerifySkip(currentVerification)}
-                  className="flex-1 py-2.5 bg-white hover:bg-slate-50 text-slate-500 font-bold text-[11px] rounded-xl transition cursor-pointer border border-slate-200 shadow-sm"
+                  className="flex-1 py-2.5 bg-white hover:bg-slate-50 text-slate-500 font-bold text-[11px] rounded-xl transition cursor-pointer border border-slate-200 shadow-sm min-h-[44px]"
                 >
                   Пропустить
                 </button>
@@ -1289,7 +1289,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       {/* Edit / Add Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/50 overflow-y-auto animate-fade-in font-sans">
-          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col pt-1 my-8 border border-slate-200/60">
+          <div className="bg-white rounded-3xl w-full max-w-full md:max-w-2xl mx-4 shadow-2xl overflow-hidden flex flex-col pt-1 my-8 border border-slate-200/60">
             {/* Modal Header */}
             <div className="px-6 py-4.5 border-b border-slate-100 flex items-center justify-between bg-white">
               <div className="flex items-center gap-2">
@@ -1300,7 +1300,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
               </div>
               <button
                 onClick={() => setModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-white border border-slate-200 hover:bg-slate-50 flex items-center justify-center transition text-slate-500 font-bold text-lg cursor-pointer active:scale-95 shadow-sm"
+                className="w-8 h-8 md:w-8 md:h-8 rounded-full bg-white border border-slate-200 hover:bg-slate-50 flex items-center justify-center transition text-slate-500 font-bold text-lg cursor-pointer active:scale-95 shadow-sm min-h-[44px] min-w-[44px]"
               >
                 ×
               </button>
@@ -1503,7 +1503,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     <button
                       type="button"
                       onClick={addPhoneField}
-                      className="text-[10px] font-bold text-white bg-[#3765F6] hover:bg-[#2555E5] px-2.5 py-1 rounded-lg flex items-center gap-1 transition shadow-sm cursor-pointer active:scale-95"
+                      className="text-[10px] font-bold text-white bg-[#3765F6] hover:bg-[#2555E5] px-2.5 py-1 rounded-lg flex items-center gap-1 transition shadow-sm cursor-pointer active:scale-95 min-h-[44px]"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Добавить телефон</span>
@@ -1528,7 +1528,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                           <button
                             type="button"
                             onClick={() => setPrimaryPhone(p.id)}
-                            className={`px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold transition cursor-pointer shrink-0 ${
+                            className={`px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold transition cursor-pointer shrink-0 min-h-[44px] ${
                               p.isPrimary 
                                 ? "bg-[#3765F6]/15 text-[#3765F6] border border-[#3765F6]/25" 
                                 : "bg-slate-100 text-slate-500 border border-slate-200/60 hover:bg-slate-200/80"
@@ -1539,7 +1539,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                           <button
                             type="button"
                             onClick={() => removePhoneField(p.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition shrink-0 cursor-pointer"
+                            className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition shrink-0 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
                             title="Удалить телефон"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -1616,14 +1616,14 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
               <button
                 onClick={() => setModalOpen(false)}
                 disabled={isSaving}
-                className="px-6 py-2.5 rounded-xl font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition text-xs font-sans cursor-pointer shadow-sm disabled:opacity-50"
+                className="px-6 py-2.5 rounded-xl font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition text-xs font-sans cursor-pointer shadow-sm disabled:opacity-50 min-h-[44px]"
               >
                 Отмена
               </button>
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="px-6 py-2.5 rounded-xl font-bold text-white bg-[#3765F6] hover:bg-[#2555E5] transition shadow-sm text-xs font-sans cursor-pointer active:scale-95 flex items-center justify-center gap-1.5 min-w-[150px] disabled:bg-slate-400 disabled:cursor-not-allowed"
+                className="px-6 py-2.5 rounded-xl font-bold text-white bg-[#3765F6] hover:bg-[#2555E5] transition shadow-sm text-xs font-sans cursor-pointer active:scale-95 flex items-center justify-center gap-1.5 min-w-[150px] disabled:bg-slate-400 disabled:cursor-not-allowed min-h-[44px]"
               >
                 {isSaving ? (
                   <>

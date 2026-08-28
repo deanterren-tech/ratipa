@@ -560,7 +560,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 15 }}
               transition={{ type: "spring", duration: 0.4 }}
-              className="w-full max-w-4xl bg-slate-900/80 border border-slate-800 rounded-[2.5rem] p-6 md:p-8 shadow-2xl relative max-h-[85vh] overflow-y-auto flex flex-col custom-scrollbar"
+              className="w-full max-w-4xl bg-slate-900/80 border border-slate-800 rounded-[2.5rem] p-4 sm:p-6 md:p-8 shadow-2xl relative max-h-[85vh] overflow-y-auto flex flex-col custom-scrollbar"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Close controls */}
@@ -733,7 +733,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
               initial={{ scale: 0.95, y: 15 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 15 }}
-              className="w-full max-w-2xl bg-white border border-slate-200 rounded-[2.5rem] p-6 md:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto flex flex-col custom-scrollbar"
+              className="w-full max-w-2xl bg-white border border-slate-200 rounded-[2.5rem] p-4 sm:p-6 md:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto flex flex-col custom-scrollbar"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}

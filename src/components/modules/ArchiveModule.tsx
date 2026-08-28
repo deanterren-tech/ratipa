@@ -151,7 +151,7 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
           {/* TAP 1: VEHICLES */}
           {activeTab === 'vehicles' && (
             <div className="table-scroll">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
                 <thead>
                   <tr className="border-b border-slate-200/40 text-[10px] uppercase font-mono font-black text-slate-400">
                     <th className="p-3.5 pl-4">Госномер</th>
@@ -226,7 +226,7 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
           {/* TAB 3: SALARIES */}
           {activeTab === 'salaries' && (
             <div className="table-scroll">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
                 <thead>
                   <tr className="border-b border-slate-200/40 text-[10px] uppercase font-mono font-black text-slate-400">
                     <th className="p-3.5 pl-4">Дата</th>

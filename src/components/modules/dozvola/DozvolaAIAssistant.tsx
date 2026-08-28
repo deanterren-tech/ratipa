@@ -444,7 +444,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                 <button 
                     onClick={handleProcess}
                     disabled={isParsing}
-                    className="bg-[#3765F6] hover:bg-[#2555E5] disabled:opacity-70 text-white px-5 py-2.5 rounded-xl text-xs font-semibold transition shadow-xs cursor-pointer flex items-center gap-2"
+                    className="bg-[#3765F6] hover:bg-[#2555E5] disabled:opacity-70 text-white px-5 min-h-[44px] py-2.5 rounded-xl text-xs font-semibold transition shadow-xs cursor-pointer flex items-center gap-2"
                 >
                     {isParsing ? <><Loader2 className="w-4 h-4 animate-spin" /> Обработка...</> : "Распознать текст ⚡"}
                 </button>
@@ -456,7 +456,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                         <span>Подтверждение операций:</span>
                         <button 
                             onClick={() => setTempBatchItems([])}
-                            className="bg-rose-50 text-rose-600 hover:bg-rose-100 px-3 py-1.5 rounded-lg text-[10px] font-semibold cursor-pointer transition"
+                            className="bg-rose-50 text-rose-600 hover:bg-rose-100 px-3 min-h-[44px] py-2 rounded-lg text-[10px] font-semibold cursor-pointer transition"
                         >
                             Сбросить
                         </button>
@@ -495,7 +495,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                                                 comment: item.comment,
                                                                 isCopy: item.isCopy
                                                             })}
-                                                            className="text-white bg-[#3765F6] hover:bg-[#2555E5] px-2 py-1.5 rounded-lg text-[10px] font-semibold cursor-pointer shadow-xs transition"
+                                                            className="text-white bg-[#3765F6] hover:bg-[#2555E5] px-2 min-h-[44px] py-2 rounded-lg text-[10px] font-semibold cursor-pointer shadow-xs transition"
                                                             title="Открыть подробное окно редактирования"
                                                         >
                                                             Редактировать

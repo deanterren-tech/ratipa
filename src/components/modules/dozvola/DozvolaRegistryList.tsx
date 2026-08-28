@@ -306,12 +306,12 @@ const DozvolaRow = React.memo(({
         </select>
         <div className="flex items-center gap-1.5">
           {canWrite && (
-            <button onClick={onEdit} className="w-8 h-8 flex items-center justify-center text-[#3765F6] hover:bg-blue-50 rounded-xl transition cursor-pointer" title="Редактировать параметры бланка">
+            <button onClick={onEdit} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[#3765F6] hover:bg-blue-50 rounded-xl transition cursor-pointer" title="Редактировать параметры бланка">
               <Edit className="h-4 w-4" />
             </button>
           )}
           {(isRootAdmin || canWrite) && (
-            <button onClick={onDelete} className="w-8 h-8 flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer" title="Удалить">
+            <button onClick={onDelete} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer" title="Удалить">
               <Trash2 className="h-4 w-4" />
             </button>
           )}
@@ -974,7 +974,7 @@ export default function DozvolaRegistryList({
             {user.permissions.dozvola === "write" && (
               <button
                 onClick={() => setIsBatchCreatorOpen(true)}
-                className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-4 py-2.5 rounded-xl transition cursor-pointer"
+                className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-4 min-h-[44px] py-2.5 rounded-xl transition cursor-pointer"
               >
                 Массовый ввод
               </button>
@@ -982,7 +982,7 @@ export default function DozvolaRegistryList({
             {user.permissions.dozvola === "write" && (
               <button
                 onClick={() => setIsCreatorOpen(true)}
-                className="flex items-center gap-1.5 bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition cursor-pointer shadow-sm"
+                className="flex items-center gap-1.5 bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold px-4 min-h-[44px] py-2.5 rounded-xl transition cursor-pointer shadow-sm"
               >
                 <Plus className="h-4 w-4" />
                 Зарегистрировать
@@ -996,7 +996,7 @@ export default function DozvolaRegistryList({
             <button
               onClick={() => setCurrentSelectedTab("all")}
               className={
-                "px-4 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer " +
+                "px-4 min-h-[44px] py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer " +
                 (currentSelectedTab === "all"
                   ? "bg-white text-slate-850 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
                   : "text-slate-500 hover:bg-slate-100/50 hover:text-slate-700")
@@ -1012,7 +1012,7 @@ export default function DozvolaRegistryList({
                   key={id}
                   onClick={() => setCurrentSelectedTab(t.name)}
                   className={
-                    "px-4 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer " +
+                    "px-4 min-h-[44px] py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer " +
                     (currentSelectedTab === t.name
                       ? "bg-white text-slate-850 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
                       : "text-slate-500 hover:bg-slate-100/50 hover:text-slate-700")
@@ -1025,7 +1025,7 @@ export default function DozvolaRegistryList({
             <button
               onClick={() => setCurrentSelectedTab("archive")}
               className={
-                "px-4 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer text-slate-400 " +
+                "px-4 min-h-[44px] py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer text-slate-400 " +
                 (currentSelectedTab === "archive"
                   ? "bg-white !text-slate-850 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
                   : "hover:bg-slate-100/50 hover:!text-slate-650")
@@ -1036,7 +1036,7 @@ export default function DozvolaRegistryList({
             <button
               onClick={() => setCurrentSelectedTab("office_returns")}
               className={
-                "px-4 py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer text-amber-600 " +
+                "px-4 min-h-[44px] py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer text-amber-600 " +
                 (currentSelectedTab === "office_returns"
                   ? "bg-white !text-slate-850 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
                   : "hover:bg-slate-100/50 hover:!text-slate-750")
@@ -1209,7 +1209,7 @@ export default function DozvolaRegistryList({
             <div className="flex justify-center mt-4">
               <button
                 onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-                className="px-5 py-2.5 rounded-xl bg-[#3765F6] hover:bg-[#2b51d4] text-white text-xs font-bold shadow-sm transition-colors"
+                className="px-5 min-h-[44px] py-2.5 rounded-xl bg-[#3765F6] hover:bg-[#2b51d4] text-white text-xs font-bold shadow-sm transition-colors"
               >
                 Показать ещё {Math.min(PAGE_SIZE, items.length - visibleCount)} (осталось {items.length - visibleCount})
               </button>
@@ -1260,7 +1260,7 @@ export default function DozvolaRegistryList({
                   setEditingItem(null);
                   setIsCreatorOpen(false);
                 }}
-                className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 text-xs font-semibold flex items-center justify-center cursor-pointer transition"
+                className="min-h-[44px] min-w-[44px] rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 text-xs font-semibold flex items-center justify-center cursor-pointer transition"
               >
                 ✕
               </button>
@@ -1424,13 +1424,13 @@ export default function DozvolaRegistryList({
                     setEditingItem(null);
                     setIsCreatorOpen(false);
                   }}
-                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-semibold text-slate-600 bg-white transition cursor-pointer"
+                  className="px-4 min-h-[44px] py-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-semibold text-slate-600 bg-white transition cursor-pointer"
                 >
                   Отмена
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold rounded-xl text-xs transition shadow-sm cursor-pointer"
+                  className="px-5 min-h-[44px] py-2 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold rounded-xl text-xs transition shadow-sm cursor-pointer"
                 >
                   Сохранить
                 </button>
@@ -1454,7 +1454,7 @@ export default function DozvolaRegistryList({
               </div>
               <button
                 onClick={() => setIsBatchCreatorOpen(false)}
-                className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 text-xs font-semibold flex items-center justify-center cursor-pointer transition"
+                className="min-h-[44px] min-w-[44px] rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 text-xs font-semibold flex items-center justify-center cursor-pointer transition"
               >
                 ✕
               </button>
@@ -1499,13 +1499,13 @@ export default function DozvolaRegistryList({
                 <button
                   type="button"
                   onClick={() => setIsBatchCreatorOpen(false)}
-                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-semibold text-slate-600 bg-white transition cursor-pointer"
+                  className="px-4 min-h-[44px] py-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-semibold text-slate-600 bg-white transition cursor-pointer"
                 >
                   Отмена
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold rounded-xl text-xs transition shadow-sm cursor-pointer"
+                  className="px-5 min-h-[44px] py-2 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold rounded-xl text-xs transition shadow-sm cursor-pointer"
                 >
                   Загрузить
                 </button>

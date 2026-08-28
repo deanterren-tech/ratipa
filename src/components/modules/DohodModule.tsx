@@ -807,7 +807,7 @@ const CalculationCard = React.memo(({
       </div>
 
       {/* Accented metrics block (bento style) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <div className="bg-emerald-500/5 border border-emerald-500/10 p-3 rounded-2xl flex flex-col justify-between min-h-[64px]">
           <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-600 block mb-1">
             Доход (Чистый)
@@ -2057,7 +2057,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
             <select
               value={globalDirection}
               onChange={handleGlobalDirectionChange}
-              className="ml-4 px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none w-48 shadow-sm focus:border-[#3765F6] focus:bg-white"
+              className="ml-4 px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none w-48 shadow-sm focus:border-[#3765F6] focus:bg-white min-h-[44px]"
             >
               {directions.map((d) => (
                 <option key={d.id} value={d.name}>
@@ -2571,7 +2571,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
             {user.permissions.dohod === "write" && (
               <button
                 onClick={saveCalculation}
-                className="flex items-center justify-center gap-2 bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold px-5 py-2.5 rounded-xl transition cursor-pointer shadow-sm shadow-blue-500/20"
+                className="flex items-center justify-center gap-2 bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold px-5 py-2.5 rounded-xl transition cursor-pointer shadow-sm shadow-blue-500/20 min-h-[44px]"
               >
                 <Save className="h-4 w-4" /> Сохранить расчет
               </button>
@@ -2683,7 +2683,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         type="date"
                         value={tripStartDate}
                         onChange={(e) => setTripStartDate(e.target.value)}
-                        className="w-full bg-white/60 text-slate-800 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-[#3765F6] transition cursor-pointer shadow-2xs"
+                        className="w-full bg-white/60 text-slate-800 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-[#3765F6] transition cursor-pointer shadow-2xs min-h-[44px]"
                       />
                     </div>
                     
@@ -2693,7 +2693,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         type="date"
                         value={tripEndDate}
                         onChange={(e) => setTripEndDate(e.target.value)}
-                        className="w-full bg-white/60 text-slate-800 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-[#3765F6] transition cursor-pointer shadow-2xs"
+                        className="w-full bg-white/60 text-slate-800 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-[#3765F6] transition cursor-pointer shadow-2xs min-h-[44px]"
                       />
                     </div>
                   </div>
@@ -2735,7 +2735,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         min="0"
                         value={additionalExpenses}
                         onChange={(e) => setAdditionalExpenses(Number(e.target.value))}
-                        className="w-24 bg-white border border-slate-200/50 rounded-lg px-2.5 py-1 text-sm font-bold text-rose-600 outline-none focus:border-rose-400 transition text-right shadow-2xs"
+                        className="w-24 bg-white border border-slate-200/50 rounded-lg px-2.5 py-1 text-sm font-bold text-rose-600 outline-none focus:border-rose-400 transition text-right shadow-2xs min-h-[44px]"
                       />
                       <span className="text-xs font-bold text-slate-400">€</span>
                     </div>
@@ -2767,7 +2767,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                               setExpenseItems(next);
                               setAdditionalExpenses(next.reduce((a, x) => a + Number(x.amount || 0), 0));
                             }}
-                            className="w-24 bg-white border border-slate-200/50 rounded-lg px-2.5 py-1 text-sm font-bold text-rose-600 outline-none focus:border-rose-400 transition text-right shadow-2xs"
+                            className="w-24 bg-white border border-slate-200/50 rounded-lg px-2.5 py-1 text-sm font-bold text-rose-600 outline-none focus:border-rose-400 transition text-right shadow-2xs min-h-[44px]"
                           />
                           <span className="text-xs font-bold text-slate-400">€</span>
                           <button
@@ -2793,7 +2793,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       const next = [...expenseItems, { label: "", amount: 0 }];
                       setExpenseItems(next);
                     }}
-                    className="flex items-center justify-center gap-1.5 py-2 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs font-medium hover:bg-white/40 hover:text-[#3765F6] hover:border-[#3765F6]/40 transition"
+                    className="flex items-center justify-center gap-1.5 py-2 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs font-medium hover:bg-white/40 hover:text-[#3765F6] hover:border-[#3765F6]/40 transition min-h-[44px]"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Добавить статью расхода
@@ -2986,7 +2986,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 placeholder="Поиск по названию..."
                 value={routeSearch}
                 onChange={(e) => setRouteSearch(e.target.value)}
-                className="text-xs px-4 pl-9 py-2 bg-white/45 border border-slate-200/50 rounded-xl outline-none font-semibold text-slate-800 focus:bg-white focus:border-[#3765F6] transition shadow-2xs w-full sm:w-64"
+                className="text-xs px-4 pl-9 py-2 bg-white/45 border border-slate-200/50 rounded-xl outline-none font-semibold text-slate-800 focus:bg-white focus:border-[#3765F6] transition shadow-2xs w-full sm:w-64 min-h-[44px]"
               />
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             </div>
@@ -3042,7 +3042,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => loadTemplate(t)}
-                            className="bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold py-2 px-3.5 rounded-xl transition shadow-sm cursor-pointer active:scale-95"
+                            className="bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold py-2 px-3.5 rounded-xl transition shadow-sm cursor-pointer active:scale-95 min-h-[44px]"
                           >
                             Развернуть ↵
                           </button>
@@ -3112,7 +3112,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 placeholder="Поиск по направлениям, дате, логисту..."
                 value={historySearch}
                 onChange={(e) => setHistorySearch(e.target.value)}
-                className="text-xs px-4 pl-9 py-2.5 w-full bg-white/45 border border-slate-200/50 rounded-xl outline-none font-semibold text-slate-800 focus:bg-white focus:border-[#3765F6] transition shadow-2xs"
+                className="text-xs px-4 pl-9 py-2.5 w-full bg-white/45 border border-slate-200/50 rounded-xl outline-none font-semibold text-slate-800 focus:bg-white focus:border-[#3765F6] transition shadow-2xs min-h-[44px]"
               />
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             </div>
@@ -3167,7 +3167,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
               <button
                 type="button"
                 onClick={() => setHistoryPage((p) => p + 10)}
-                className="w-full py-2.5 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs font-semibold hover:bg-white/40 hover:text-[#3765F6] hover:border-[#3765F6]/40 transition"
+                className="w-full py-2.5 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs font-semibold hover:bg-white/40 hover:text-[#3765F6] hover:border-[#3765F6]/40 transition min-h-[44px]"
               >
                 Показать ещё 10
                 <span className="text-slate-400 font-normal">
@@ -3180,8 +3180,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
       </div>
 
       {conversionDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 animate-fade-in">
-          <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl border border-slate-200 p-6 lg:p-8 space-y-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 animate-fade-in">
+          <div className="bg-white rounded-[2rem] w-full max-w-full sm:max-w-md mx-2 sm:mx-4 shadow-2xl border border-slate-200 p-6 lg:p-8 space-y-6">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#3765F6]">
                 <Sparkles className="h-6 w-6" />
@@ -3238,13 +3238,13 @@ export default function DohodModule({ user }: DohodModuleProps) {
             <div className="flex gap-2.5 pt-2">
               <button
                 onClick={dismissConversion}
-                className="flex-1 py-2.5 px-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl transition cursor-pointer shadow-sm"
+                className="flex-1 py-2.5 px-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl transition cursor-pointer shadow-sm min-h-[44px]"
               >
                 Пропустить
               </button>
               <button
                 onClick={applyConversion}
-                className="flex-1 py-2.5 px-4 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold text-xs rounded-xl transition shadow-sm shadow-blue-500/20 cursor-pointer flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 px-4 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold text-xs rounded-xl transition shadow-sm shadow-blue-500/20 cursor-pointer flex items-center justify-center gap-1.5 min-h-[44px]"
               >
                 Применить
               </button>
@@ -3503,8 +3503,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
       )}
 
       {editingCalcId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 animate-fade-in">
-          <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl border border-slate-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 animate-fade-in">
+          <div className="bg-white rounded-[2rem] w-full max-w-full sm:max-w-lg mx-2 sm:mx-4 shadow-2xl border border-slate-200">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-[2rem]">
               <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
                 <Edit className="w-5 h-5 text-[#3765F6]" /> Редактирование
@@ -3626,13 +3626,13 @@ export default function DohodModule({ user }: DohodModuleProps) {
             <div className="p-6 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50 rounded-b-[2rem]">
               <button
                 onClick={closeEditCalcModal}
-                className="px-6 py-3 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition cursor-pointer text-sm font-mono uppercase tracking-widest shadow-sm"
+                className="px-6 py-3 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition cursor-pointer text-sm font-mono uppercase tracking-widest shadow-sm min-h-[44px]"
               >
                 Отмена
               </button>
               <button
                 onClick={saveEditCalcModal}
-                className="px-6 py-3 rounded-xl font-semibold text-white bg-[#3765F6] hover:bg-[#2555E5] transition flex items-center justify-center gap-2 shadow-sm shadow-blue-500/20 text-sm cursor-pointer"
+                className="px-6 py-3 rounded-xl font-semibold text-white bg-[#3765F6] hover:bg-[#2555E5] transition flex items-center justify-center gap-2 shadow-sm shadow-blue-500/20 text-sm cursor-pointer min-h-[44px]"
               >
                 Сохранить
               </button>

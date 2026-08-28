@@ -1353,11 +1353,11 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       </div>
 
       {/* Mobile bottom navigation (small screens only) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200 flex items-stretch justify-around px-1 py-1.5 select-none" style={{paddingBottom: 'calc(0.375rem + env(safe-area-inset-bottom, 0px))'}}>
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200 flex items-stretch justify-around px-2 py-1.5 select-none" style={{paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))'}}>
         {[
-          { key: 'dashboard', label: 'Home', icon: Home },
-          { key: 'planZagruzok', label: 'План загрузок', icon: FileSpreadsheet },
-          { key: 'dohod', label: 'Калькуляция', icon: Calculator },
+          { key: 'dashboard', label: 'Главная', icon: Home },
+          { key: 'planZagruzok', label: 'Загрузки', icon: FileSpreadsheet },
+          { key: 'dohod', label: 'Доход', icon: Calculator },
         ].map((item) => {
           const Icon = item.icon;
           const active = activeModule === item.key;
@@ -1368,7 +1368,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
               className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 rounded-xl transition-all duration-150 ${active ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
             >
               <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 2} />
-              <span className="text-[9px] font-semibold leading-none text-center">{item.label}</span>
+              <span className="text-[9px] font-medium leading-none text-center">{item.label}</span>
             </button>
           );
         })}
@@ -1377,7 +1377,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 rounded-xl transition-all duration-150 ${isMobileMenuOpen ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
         >
           <Menu className="h-5 w-5" strokeWidth={isMobileMenuOpen ? 2.5 : 2} />
-          <span className="text-[9px] font-semibold leading-none">Меню</span>
+          <span className="text-[9px] font-medium leading-none">Меню</span>
         </button>
       </nav>
 

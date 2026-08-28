@@ -476,7 +476,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
           <button 
             onClick={handleAddLocation}
-            className="flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 py-2 rounded-xl transition cursor-pointer"
+            className="flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 min-h-[44px] py-2 rounded-xl transition cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             Добавить точку
@@ -488,7 +488,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
               if (firstLoc) setDelivFrom(firstLoc);
               setShowDeliveryForm(true);
             }}
-            className="flex items-center gap-1 bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-500/10"
+            className="flex items-center gap-1 bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold px-3.5 min-h-[44px] py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-500/10"
           >
             <Truck className="w-3.5 h-3.5" />
             Оформить отправку
@@ -772,7 +772,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                     {d.status === 'sent' && (
                        <button 
                          onClick={() => handleReceiveDelivery(d)} 
-                         className="mt-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/50 text-xs py-2 rounded-xl font-semibold transition flex items-center justify-center gap-1 cursor-pointer shadow-sm shadow-emerald-500/5"
+                         className="mt-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/50 text-xs min-h-[44px] py-2 rounded-xl font-semibold transition flex items-center justify-center gap-1 cursor-pointer shadow-sm shadow-emerald-500/5"
                        >
                          <Truck className="w-3.5 h-3.5" />
                          <span>Получить в {activeToLocName}</span>
@@ -1044,7 +1044,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                      setDelivFrom(loc.id);
                      setShowDeliveryForm(true);
                    }}
-                   className="w-full py-2 bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm shadow-blue-500/10"
+                   className="w-full min-h-[44px] py-2 bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm shadow-blue-500/10"
                  >
                    <Truck className="w-3.5 h-3.5" />
                    Оформить отправку
@@ -1058,7 +1058,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                      setEditNotes(loc.notes || '');
                      setEditCountry(loc.country || 'Беларусь');
                    }}
-                   className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200/50 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+                   className="w-full min-h-[44px] py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200/50 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
                  >
                    <Edit className="w-3.5 h-3.5" />
                    Редактировать точку
@@ -1263,14 +1263,14 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                   setDelivSentAt('');
                   setDelivSearchQuery('');
                 }}
-                className="px-4 py-2 rounded-xl text-xs text-slate-500 hover:bg-slate-100 transition"
+                className="px-4 min-h-[44px] py-2 rounded-xl text-xs text-slate-500 hover:bg-slate-100 transition"
               >
                 Отмена
               </button>
               <button 
                 onClick={handleSaveDelivery}
                 disabled={!delivFrom || delivRoute.filter(r => r.trim().length > 0).length === 0 || delivDozvols.length === 0 || !delivSentAt}
-                className="px-4 py-2 rounded-xl text-xs text-white bg-[#3765F6] hover:bg-[#2555E5] transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-blue-500/10"
+                className="px-4 min-h-[44px] py-2 rounded-xl text-xs text-white bg-[#3765F6] hover:bg-[#2555E5] transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-blue-500/10"
               >
                 Оформить отправку
               </button>

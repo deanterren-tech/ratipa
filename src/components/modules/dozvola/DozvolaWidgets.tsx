@@ -569,7 +569,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
           Планерка: заказы дозволов
         </div>
 
-        <div className="flex items-end gap-3 w-full">
+        <div className="flex flex-col sm:flex-row sm:items-end gap-3 w-full">
           <div className="flex-1">
             <label className="text-[10px] font-semibold text-slate-500 mb-1 block">
               Машина
@@ -588,7 +588,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
               ))}
             </datalist>
           </div>
-          <div className="w-[100px]">
+          <div className="w-full sm:w-[100px]">
             <label className="text-[10px] font-semibold text-slate-500 mb-1 block">
               Цена (BYN)
             </label>
@@ -690,7 +690,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
 
         <button
           onClick={handleAddTodoTask}
-          className="w-full mt-1 px-5 py-3 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold rounded-xl text-xs transition shadow-xs cursor-pointer"
+          className="w-full mt-1 px-5 min-h-[44px] py-3 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold rounded-xl text-xs transition shadow-xs cursor-pointer"
         >
           Добавить заявку в планерку
         </button>
@@ -759,7 +759,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
                 />
               </div>
               <button
-                className="h-6 w-6 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center cursor-pointer flex-shrink-0"
+                className="min-h-[44px] min-w-[44px] rounded-full bg-rose-50 text-rose-500 flex items-center justify-center cursor-pointer flex-shrink-0"
                 onClick={() => {
                   if (useFirebase) {
                     remove(ref(database, `dozvolsTodoTasksV4/${t.id}`));

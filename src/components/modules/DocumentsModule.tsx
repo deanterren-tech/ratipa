@@ -1306,7 +1306,7 @@ export default function DocumentsModule({ user }: Props) {
           <button
             type="button"
             onClick={() => setActiveTab('ferry')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${
+            className={`flex items-center gap-2 px-4 min-h-[44px] py-2 rounded-lg text-xs font-medium transition-all ${
               activeTab === 'ferry' 
                 ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40' 
                 : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
@@ -1318,7 +1318,7 @@ export default function DocumentsModule({ user }: Props) {
           <button
             type="button"
             onClick={() => setActiveTab('bamap_tir')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${
+            className={`flex items-center gap-2 px-4 min-h-[44px] py-2 rounded-lg text-xs font-medium transition-all ${
               activeTab === 'bamap_tir' 
                 ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40' 
                 : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
@@ -1375,7 +1375,7 @@ export default function DocumentsModule({ user }: Props) {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg text-[9px] font-semibold uppercase tracking-wider shrink-0 border border-slate-200/60">
+                  <div className="flex items-center gap-1 bg-slate-100 text-slate-600 px-2.5 min-h-[44px] py-2 rounded-lg text-[9px] font-semibold uppercase tracking-wider shrink-0 border border-slate-200/60">
                     Выбрать авто <Search size={10} />
                   </div>
                 </button>
@@ -1414,7 +1414,7 @@ export default function DocumentsModule({ user }: Props) {
                         <button
                           onClick={handleParseCouple}
                           disabled={isParsingCouple || (!coupleRawText.trim() && !coupleImageBase64)}
-                          className="bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white px-3.5 rounded-xl text-xs font-semibold transition shrink-0 flex items-center justify-center gap-1 cursor-pointer"
+                          className="bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white px-3.5 min-h-[44px] rounded-xl text-xs font-semibold transition shrink-0 flex items-center justify-center gap-1 cursor-pointer"
                         >
                           {isParsingCouple ? (
                             <span className="">Обработка...</span>
@@ -1564,13 +1564,13 @@ export default function DocumentsModule({ user }: Props) {
                   <div className="flex gap-2.5 justify-end pt-1.5">
                     <button
                       onClick={() => setShowCoupleEditor(false)}
-                      className="px-4 py-2 bg-slate-100/80 border border-slate-200 text-slate-700 text-[11px] font-medium rounded-xl cursor-pointer transition hover:bg-slate-200/60"
+                      className="px-4 min-h-[44px] py-2 bg-slate-100/80 border border-slate-200 text-slate-700 text-[11px] font-medium rounded-xl cursor-pointer transition hover:bg-slate-200/60"
                     >
                       Отмена
                     </button>
                     <button
                       onClick={handleSaveCouple}
-                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-semibold rounded-xl cursor-pointer transition shadow-sm border border-slate-800"
+                      className="px-4 min-h-[44px] py-2 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-semibold rounded-xl cursor-pointer transition shadow-sm border border-slate-800"
                     >
                       Сохранить в базу
                     </button>
@@ -1704,7 +1704,7 @@ export default function DocumentsModule({ user }: Props) {
             <div className="pt-4 border-t border-slate-200/80 flex flex-col sm:flex-row gap-3">
               <button
                 onClick={handleSaveFerryDataForCar}
-                className="flex-1 bg-slate-100/80 border border-slate-200 hover:bg-slate-200/60 text-slate-700 text-xs font-medium py-3 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
+                className="flex-1 bg-slate-100/80 border border-slate-200 hover:bg-slate-200/60 text-slate-700 text-xs font-medium min-h-[44px] py-3 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer"
               >
                 {ferrySavedSuccess ? (
                   <>
@@ -1720,7 +1720,7 @@ export default function DocumentsModule({ user }: Props) {
               </button>
               <button
                 onClick={handlePrintFerryOrder}
-                className="flex-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold py-3 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95 border border-slate-800 shadow-sm cursor-pointer"
+                className="flex-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold min-h-[44px] py-3 rounded-xl flex items-center justify-center gap-1.5 transition active:scale-95 border border-slate-800 shadow-sm cursor-pointer"
               >
                 <Printer className="h-4 w-4" />
                 Распечатать поручение
@@ -1981,7 +1981,7 @@ export default function DocumentsModule({ user }: Props) {
                   setShowVehicleModal(false);
                   setShowCoupleEditor(false);
                 }}
-                className="text-slate-400 hover:text-slate-600 transition p-1 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 transition min-h-[44px] min-w-[44px] p-2 bg-slate-100 hover:bg-slate-200 rounded-xl cursor-pointer flex items-center justify-center"
               >
                 <X size={18} />
               </button>
@@ -2032,7 +2032,7 @@ export default function DocumentsModule({ user }: Props) {
                         <button
                           onClick={handleParseCouple}
                           disabled={isParsingCouple || (!coupleRawText.trim() && !coupleImageBase64)}
-                          className="bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white px-5 rounded-xl text-xs font-semibold transition shrink-0 flex items-center justify-center gap-1 cursor-pointer"
+                          className="bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white px-5 min-h-[44px] rounded-xl text-xs font-semibold transition shrink-0 flex items-center justify-center gap-1 cursor-pointer"
                         >
                           {isParsingCouple ? (
                             <span className="">Обработка...</span>
@@ -2178,13 +2178,13 @@ export default function DocumentsModule({ user }: Props) {
                   <div className="flex gap-2.5 justify-end pt-3 border-t border-slate-100">
                     <button
                       onClick={() => setShowCoupleEditor(false)}
-                      className="px-4 py-2 bg-slate-100/80 border border-slate-200 text-slate-700 text-xs font-medium rounded-xl transition cursor-pointer hover:bg-slate-200/60"
+                      className="px-4 min-h-[44px] py-2 bg-slate-100/80 border border-slate-200 text-slate-700 text-xs font-medium rounded-xl transition cursor-pointer hover:bg-slate-200/60"
                     >
                       Отмена
                     </button>
                     <button
                       onClick={handleSaveCouple}
-                      className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition shadow-sm border border-slate-800 cursor-pointer"
+                      className="px-5 min-h-[44px] py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl transition shadow-sm border border-slate-800 cursor-pointer"
                     >
                       Сохранить в базу
                     </button>
@@ -2219,7 +2219,7 @@ export default function DocumentsModule({ user }: Props) {
                   <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-200/50 pb-2">
                     <button
                       onClick={() => setDispatcherFilter('all')}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+                      className={`px-3.5 min-h-[44px] py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                         dispatcherFilter === 'all'
                           ? 'bg-slate-900 text-white'
                           : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/60'
@@ -2233,7 +2233,7 @@ export default function DocumentsModule({ user }: Props) {
                       <button
                         key={disp}
                         onClick={() => setDispatcherFilter(disp)}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+                        className={`px-3.5 min-h-[44px] py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                           dispatcherFilter === disp
                             ? 'bg-slate-900 text-white'
                             : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/60'
@@ -2247,7 +2247,7 @@ export default function DocumentsModule({ user }: Props) {
                     {ferryCouples.some(c => !c.dispatcher) && (
                       <button
                         onClick={() => setDispatcherFilter('none')}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer ${
+                        className={`px-3.5 min-h-[44px] py-2 rounded-xl text-xs font-medium transition cursor-pointer ${
                           dispatcherFilter === 'none'
                             ? 'bg-slate-900 text-white'
                             : 'bg-white hover:bg-slate-50 text-slate-600 border border-slate-200/60'
@@ -2316,7 +2316,7 @@ export default function DocumentsModule({ user }: Props) {
                                 <button
                                   type="button"
                                   onClick={() => handleStartEditCouple(couple.id)}
-                                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                                  className="min-h-[44px] min-w-[44px] flex items-center justify-center p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer"
                                   title="Редактировать сцепку"
                                 >
                                   <Edit3 size={13} />
@@ -2324,7 +2324,7 @@ export default function DocumentsModule({ user }: Props) {
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteCouple(couple.id)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                  className="min-h-[44px] min-w-[44px] flex items-center justify-center p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
                                   title="Удалить сцепку"
                                 >
                                   <Trash2 size={13} />
@@ -2336,7 +2336,7 @@ export default function DocumentsModule({ user }: Props) {
                                   setSelectedCoupleId(couple.id);
                                   setShowVehicleModal(false);
                                 }}
-                                className={`text-[10px] font-medium px-3.5 py-1.5 rounded-xl transition cursor-pointer ${
+                                className={`text-[10px] font-medium px-3.5 min-h-[44px] py-2 rounded-xl transition cursor-pointer ${
                                   isCurrentlySelected
                                     ? 'bg-slate-100 text-slate-600 border border-slate-200 cursor-default'
                                     : 'bg-slate-900 hover:bg-slate-800 text-white'

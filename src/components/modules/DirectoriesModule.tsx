@@ -299,7 +299,7 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
       {editing && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in" onClick={() => setEditing(null)}>
           <div
-            className="bg-white/90 backdrop-blur-xl rounded-3xl w-full max-w-md shadow-2xl p-6 flex flex-col space-y-4"
+            className="bg-white/90 backdrop-blur-xl rounded-3xl w-full max-w-md shadow-2xl p-4 sm:p-6 flex flex-col space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">

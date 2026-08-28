@@ -1723,8 +1723,8 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     const profitPerDayPlan = Math.round(rawProfitPerDayPlan);
 
     return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-        <div className="bg-white/90 backdrop-blur-xl rounded-3xl w-full max-w-[1400px] shadow-2xl overflow-hidden flex flex-col relative m-2 sm:m-4 h-[calc(100vh-1rem)] sm:h-[calc(100vh-2rem)]">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+        <div className="bg-white/90 backdrop-blur-xl rounded-3xl w-full max-w-full sm:max-w-[1400px] mx-2 sm:mx-4 shadow-2xl overflow-hidden flex flex-col relative h-[calc(100vh-1rem)] sm:h-[calc(100vh-2rem)]">
           
           {/* Header */}
           <div className="bg-white px-6 py-4 flex flex-col md:flex-row md:items-center justify-between sticky top-0 z-10 border-b border-slate-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
@@ -1800,7 +1800,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         <select
                           value={direction}
                           onChange={(e) => handleDirChange(e.target.value)}
-                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all appearance-none"
+                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all appearance-none min-h-[44px]"
                         >
                           {Object.keys(directions).map((d) => (
                             <option key={d} value={d}>{d}</option>
@@ -1812,7 +1812,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         <select
                           value={dispatcher}
                           onChange={(e) => setDispatcher(e.target.value)}
-                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all appearance-none"
+                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all appearance-none min-h-[44px]"
                         >
                           <option value="">Не выбран</option>
                           {dispatchers.map((d) => (
@@ -1826,7 +1826,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                           type="date"
                           value={dateStart}
                           onChange={(e) => setDateStart(e.target.value)}
-                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all min-h-[44px]"
                         />
                       </div>
                       <div>
@@ -1835,7 +1835,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                           type="date"
                           value={dateEnd}
                           onChange={(e) => setDateEnd(e.target.value)}
-                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all min-h-[44px]"
                         />
                       </div>
                     </div>
@@ -2862,7 +2862,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
     const renderKpiSummary = (isBottom: boolean) => {
       return (
-        <div className={`grid grid-cols-2 lg:grid-cols-5 gap-6 bg-slate-50/40 border border-slate-200/50 rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.01)] ${isBottom ? "mt-4" : "mb-2"}`}>
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6 bg-slate-50/40 border border-slate-200/50 rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.01)] ${isBottom ? "mt-4" : "mb-2"}`}>
           <div className="flex flex-col">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
               Общая прибыль
@@ -3132,7 +3132,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 </div>
 
                 {/* Aligned Grid for Metrics & Finances - aligned EXACTLY with table headers */}
-                <div className="grid grid-cols-3 xl:flex xl:items-center gap-4 w-full xl:w-[480px] xl:pl-6 justify-between xl:justify-end border-t xl:border-t-0 border-slate-100 pt-3.5 xl:pt-0 shrink-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:flex xl:items-center gap-4 w-full xl:w-[480px] xl:pl-6 justify-between xl:justify-end border-t xl:border-t-0 border-slate-100 pt-3.5 xl:pt-0 shrink-0">
                   <div className="flex flex-col gap-0.5 w-20 xl:text-right">
                     <span className="text-[10px] font-medium text-slate-400">Км</span>
                     <span className="text-xs font-semibold text-slate-700 font-mono tabular-nums whitespace-nowrap">
@@ -3258,26 +3258,26 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50 overflow-x-auto max-w-full custom-scrollbar items-center">
               <button
                 onClick={() => setActiveTab("active")}
-                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${activeTab === "active" ? "bg-white text-slate-900 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/30"}`}
+                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${activeTab === "active" ? "bg-white text-slate-900 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/30"} min-h-[44px]`}
               >
                 <Calculator className="w-3.5 h-3.5 text-slate-400" /> Активные
               </button>
               <button
                 onClick={() => setActiveTab("archive")}
-                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${activeTab === "archive" ? "bg-white text-slate-900 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/30"}`}
+                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${activeTab === "archive" ? "bg-white text-slate-900 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/30"} min-h-[44px]`}
               >
                 <Archive className="w-3.5 h-3.5 text-slate-400" /> Архив
               </button>
               <button
                 type="button"
                 onClick={toggleNotebook}
-                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 border ${isNotebookOpen ? "bg-amber-50 text-amber-900 border-amber-200/30 shadow-xs" : "text-slate-500 border-transparent hover:text-slate-900 hover:bg-slate-200/30"}`}
+                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 border ${isNotebookOpen ? "bg-amber-50 text-amber-900 border-amber-200/30 shadow-xs" : "text-slate-500 border-transparent hover:text-slate-900 hover:bg-slate-200/30"} min-h-[44px]`}
               >
                 <BookOpen className="w-3.5 h-3.5 text-amber-500" /> Блокнот
               </button>
               <button
                 onClick={() => setActiveTab("history")}
-                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 border hidden md:flex ${activeTab === "history" ? "bg-white text-slate-900 shadow-xs border border-slate-200/40" : "text-slate-500 border-transparent hover:text-slate-900 hover:bg-slate-200/30"}`}
+                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 border ${activeTab === "history" ? "bg-white text-slate-900 shadow-xs border border-slate-200/40" : "text-slate-500 border-transparent hover:text-slate-900 hover:bg-slate-200/30"} min-h-[44px]`}
               >
                 <History className="w-3.5 h-3.5 text-slate-400" /> История
               </button>
@@ -3288,7 +3288,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 resetForm();
                 setIsModalOpen(true);
               }}
-              className="px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 bg-slate-900 text-white hover:bg-slate-800 shadow-sm border border-slate-800"
+              className="px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 bg-slate-900 text-white hover:bg-slate-800 shadow-sm border border-slate-800 min-h-[44px]"
             >
               <Plus className="w-4 h-4 shrink-0" /> Новый план
             </button>
@@ -3397,7 +3397,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 placeholder="Быстрый поиск автомобиля по номеру в таблице..."
                 value={searchCarQuery}
                 onChange={(e) => setSearchCarQuery(e.target.value)}
-                className="w-full bg-transparent text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400"
+                className="w-full bg-transparent text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400 min-h-[44px]"
               />
               {searchCarQuery && (
                 <button

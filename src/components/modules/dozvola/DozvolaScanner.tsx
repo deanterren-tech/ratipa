@@ -208,7 +208,7 @@ export default function DozvolaScanner({ user, customTypesKeys, customTypesMap }
                         <span className="text-xs font-black uppercase text-slate-500">Выбрано файлов: {previewUrls.length}</span>
                         <button 
                             onClick={processImages}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-xs font-black tracking-wide shadow-sm flex items-center gap-2 transition"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 min-h-[44px] py-2.5 rounded-xl text-xs font-black tracking-wide shadow-sm flex items-center gap-2 transition"
                         >
                             <Sparkles className="w-4 h-4" /> Анализировать ИИ
                         </button>
@@ -236,7 +236,7 @@ export default function DozvolaScanner({ user, customTypesKeys, customTypesMap }
                         <span>📋 ПОДТВЕРЖДЕНИЕ СКАНИРОВАНИЯ:</span>
                         <button 
                             onClick={() => setResults([])}
-                            className="bg-rose-50 text-rose-500 hover:bg-rose-100 px-3 py-1.5 rounded-lg text-[10px] uppercase cursor-pointer"
+                            className="bg-rose-50 text-rose-500 hover:bg-rose-100 px-3 min-h-[44px] py-2 rounded-lg text-[10px] uppercase cursor-pointer"
                         >
                             Очистить
                         </button>

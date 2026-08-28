@@ -582,8 +582,8 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-4">
                             <h2 className="text-sm font-semibold text-slate-800 tracking-tight">Калькулятор рейса водителя</h2>
                             <div className="flex gap-2">
-                                 <button onClick={clearForm} className="bg-slate-100 hover:bg-slate-200/80 text-slate-600 font-bold px-4 py-2 rounded-xl text-xs transition active:scale-95 cursor-pointer shadow-3xs border border-slate-200/30">Очистить</button>
-                                 <button onClick={saveToHistory} className="bg-slate-900 text-white hover:bg-slate-800 shadow-sm border border-slate-800 font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wide flex items-center gap-2 transition active:scale-95 cursor-pointer">
+                                 <button onClick={clearForm} className="bg-slate-100 hover:bg-slate-200/80 text-slate-600 font-bold px-4 min-h-[44px] py-2 rounded-xl text-xs transition active:scale-95 cursor-pointer shadow-3xs border border-slate-200/30">Очистить</button>
+                                 <button onClick={saveToHistory} className="bg-slate-900 text-white hover:bg-slate-800 shadow-sm border border-slate-800 font-bold px-4 min-h-[44px] py-2 rounded-xl text-xs uppercase tracking-wide flex items-center gap-2 transition active:scale-95 cursor-pointer">
                                      Фиксировать выплату <Wallet className="h-4 w-4" />
                                  </button>
                             </div>
@@ -817,7 +817,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
             <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50 w-full sm:w-fit mb-6">
                 <button
                     onClick={() => setActiveTab('current')}
-                    className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                    className={`flex-1 sm:flex-none px-4 min-h-[44px] py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
                         activeTab === 'current'
                             ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
                             : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
@@ -827,7 +827,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                 </button>
                 <button
                     onClick={() => setActiveTab('archive')}
-                    className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                    className={`flex-1 sm:flex-none px-4 min-h-[44px] py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
                         activeTab === 'archive'
                             ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
                             : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
@@ -837,7 +837,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                 </button>
                 <button
                     onClick={() => setActiveTab('dispatcher')}
-                    className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                    className={`flex-1 sm:flex-none px-4 min-h-[44px] py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
                         activeTab === 'dispatcher'
                             ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
                             : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
@@ -873,7 +873,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                             <button
                                 key={m}
                                 onClick={() => setSelectedMonth(m)}
-                                className={`flex-1 min-w-[120px] px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                                className={`flex-1 min-w-[120px] px-3 min-h-[44px] py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
                                     isActive
                                         ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
                                         : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
@@ -894,7 +894,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                             <button
                                 key={d}
                                 onClick={() => setSelectedDispatcher(d)}
-                                className={`flex-1 min-w-[120px] px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                                className={`flex-1 min-w-[120px] px-3 min-h-[44px] py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
                                     isActive
                                         ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
                                         : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
@@ -935,7 +935,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                      <button 
                                          onClick={() => copyHistoryToForm(rec)} 
                                          title="Дублировать в форму" 
-                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition border border-slate-200/50 cursor-pointer"
+                                         className="flex items-center gap-1.5 px-3 min-h-[44px] py-2 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition border border-slate-200/50 cursor-pointer"
                                      >
                                          <Copy className="w-3.5 h-3.5" />
                                          <span className="hidden md:inline">Дублировать</span>
@@ -943,7 +943,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                      <button 
                                          onClick={() => openEditModal(rec)} 
                                          title="Редактировать" 
-                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition border border-slate-200/50 cursor-pointer"
+                                         className="flex items-center gap-1.5 px-3 min-h-[44px] py-2 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition border border-slate-200/50 cursor-pointer"
                                      >
                                          <Edit className="w-3.5 h-3.5" />
                                          <span className="hidden md:inline">Править</span>
@@ -951,7 +951,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                                      <button 
                                          onClick={async () => { if(await showConfirm('Удалить эту выплату?')) dbService.deleteSalary(rec, user.name, user.role); }} 
                                          title="Удалить" 
-                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition border border-transparent hover:border-rose-100 cursor-pointer"
+                                         className="flex items-center gap-1.5 px-3 min-h-[44px] py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition border border-transparent hover:border-rose-100 cursor-pointer"
                                      >
                                          <Trash2 className="w-3.5 h-3.5" />
                                          <span className="hidden md:inline">Удалить</span>
@@ -1198,8 +1198,8 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                     </div>
                     
                     <div className="p-6 border-t border-slate-200 flex justify-end gap-3 bg-slate-50 rounded-b-[2rem]">
-                        <button onClick={closeEditModal} className="px-5 py-2.5 rounded-xl font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 transition cursor-pointer text-xs uppercase tracking-wider shadow-sm border border-slate-200">Отмена</button>
-                        <button onClick={saveEditModal} className="px-5 py-2.5 rounded-xl font-bold text-white bg-slate-900 hover:bg-slate-800 shadow-sm border border-slate-800 transition flex items-center justify-center gap-2 text-xs uppercase tracking-wider cursor-pointer">
+                        <button onClick={closeEditModal} className="px-5 min-h-[44px] py-2.5 rounded-xl font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 transition cursor-pointer text-xs uppercase tracking-wider shadow-sm border border-slate-200">Отмена</button>
+                        <button onClick={saveEditModal} className="px-5 min-h-[44px] py-2.5 rounded-xl font-bold text-white bg-slate-900 hover:bg-slate-800 shadow-sm border border-slate-800 transition flex items-center justify-center gap-2 text-xs uppercase tracking-wider cursor-pointer">
                             Сохранить изменения
                         </button>
                     </div>
