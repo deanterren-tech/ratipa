@@ -230,7 +230,15 @@ let _couplingsFlatCache: any[] | null = null;
 const _couplingsFlatCallbacks = new Set<(list: any[]) => void>();
 let _couplingsFlatUnsub: (() => void) | null = null;
 
-const _mapUnitToFlat = (u: any) => ({
+const _mapUnitToFlat = (u: any) => {
+  // Helper: try driver first, then tractor/raw (legacy data stored in tractors before drivers table sync)
+  const drv = (field: string, altField?: string) => {
+    const fromDriver = u.driver?.[field];
+    const fromTractor = u.tractor?.[field] || u.tractor?.[altField];
+    const fromRaw = u.raw?.[field] || u.raw?.[altField];
+    return fromDriver || fromTractor || fromRaw || '';
+  };
+  return ({
   id: u.couplingId,
   couplingId: u.couplingId,
   carNumber: u.tractor?.carNumber || u.couplingId,
@@ -246,17 +254,17 @@ const _mapUnitToFlat = (u: any) => ({
   trailerBrand: u.raw?.trailerBrand || u.tractor?.trailerBrand || u.trailer?.trailerBrand || '',
   trailerMake: u.raw?.trailerMake || u.tractor?.trailerMake || u.trailer?.trailerBrand || '',
   driverId: u.raw?.driverId || '',
-  driverName: u.driver?.shortNameRu || u.driver?.name || '',
-  driverNameRu: u.driver?.shortNameRu || '',
-  driverNameLat: u.driver?.nameLat || '',
-  phones: u.driver?.phones || [],
-  passportNumber: u.driver?.passport || '',
-  personalId: u.driver?.personalId || '',
-  birthDate: u.driver?.birthDate || '',
-  passportStart: u.driver?.passportStart || '',
-  passportEnd: u.driver?.passportEnd || '',
-  passportIssuedBy: u.driver?.passportIssued || '',
-  licenseNumber: u.driver?.licenseNumber || '',
+  driverName: u.driver?.shortNameRu || u.driver?.name || u.tractor?.driverName || u.tractor?.driverNameRu || '',
+  driverNameRu: u.driver?.shortNameRu || u.tractor?.driverNameRu || u.tractor?.driverName || '',
+  driverNameLat: u.driver?.nameLat || u.tractor?.driverNameLat || '',
+  phones: u.driver?.phones || u.tractor?.phones || [],
+  passportNumber: drv('passport', 'passportNumber'),
+  personalId: drv('personalId'),
+  birthDate: drv('birthDate'),
+  passportStart: drv('passportStart'),
+  passportEnd: drv('passportEnd'),
+  passportIssuedBy: drv('passportIssued', 'passportIssuedBy'),
+  licenseNumber: drv('licenseNumber'),
   lastPassportVerificationYear: (u.tractor as any)?.lastPassportVerificationYear,
   dispatcher: u.dispatcher?.name || u.raw?.dispatcherName || u.tractor?.dispatcherName || u.tractor?.dispatcher || '',
   dispatcherName: u.dispatcher?.name || u.raw?.dispatcherName || u.tractor?.dispatcherName || u.tractor?.dispatcher || '',
@@ -268,7 +276,7 @@ const _mapUnitToFlat = (u: any) => ({
   vehicleType: u.raw?.vehicleType || u.tractor?.vehicleType,
   rateGroupId: u.raw?.rateGroupId || (u.tractor as any)?.rateGroupId || '',
   driver2: u.raw?.driver2 || (u.tractor as any)?.driver2 || '',
-});
+});};
 
 const _notifyCouplingsFlat = () => {
   if (_couplingsFlatCache) {
