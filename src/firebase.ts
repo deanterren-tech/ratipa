@@ -1419,9 +1419,6 @@ export const dbService = {
       }
       mainPromise = update(ref(database, `tractors/${normSafeId || safeId}`), cleaned)
         .then(() => {
-          // ВСЕГДА пишем сцепку (иначе новое авто без диспетчера не появляется в Базе сцепок)
-          update(ref(database, `couplings/${safeId}`), couplingRec)
-            .catch((e) => console.warn('[saveVehicleDriverRecord] coupling update failed', e));
           // Синхронизируем данные водителя в таблицу drivers (чтобы карточки видели паспорт, телефоны, дату рождения)
           const driverId = rec.driverId || safeId;
           const driverData: Record<string, any> = {
@@ -1445,10 +1442,11 @@ export const dbService = {
           }
           update(ref(database, `drivers/${driverId}`), driverData)
             .catch((e) => console.warn('[saveVehicleDriverRecord] drivers update failed', e));
-          // Sync dispatcher to the driver record (База водителей читает drivers)
-          if (disp && rec.driverId) {
-            update(ref(database, `drivers/${rec.driverId}`), { dispatcher: disp }).catch(() => {});
-          }
+          // ВСЕГДА пишем сцепку (иначе новое авто без диспетчера не появляется в Базе сцепок)
+          // ВАЖНО: обновляем couplingRec.driverId = driverId, чтобы сцепка ссылалась на водителя
+          const couplingRecWithDriver = { ...couplingRec, driverId };
+          update(ref(database, `couplings/${safeId}`), couplingRecWithDriver)
+            .catch((e) => console.warn('[saveVehicleDriverRecord] coupling update failed', e));
           // Save brand to master-nodes under directories/vehicleBrands / trailerBrands
           if (brand) {
             const brandKey = brand.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_');
