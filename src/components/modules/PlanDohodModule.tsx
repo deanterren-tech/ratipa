@@ -1724,7 +1724,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-        <div className="bg-white/90 backdrop-blur-xl rounded-3xl w-full max-w-full sm:max-w-[1400px] mx-2 sm:mx-4 shadow-2xl overflow-hidden flex flex-col relative h-[calc(100vh-1rem)] sm:h-[calc(100vh-2rem)]">
+        <div className="bg-white/90 backdrop-blur-xl rounded-3xl w-full max-w-full sm:max-w-[1400px] mx-2 sm:mx-4 shadow-2xl overflow-hidden flex flex-col relative max-h-[90vh] sm:max-h-[calc(100vh-2rem)]">
           
           {/* Header */}
           <div className="bg-white px-6 py-4 flex flex-col md:flex-row md:items-center justify-between sticky top-0 z-10 border-b border-slate-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
@@ -1769,7 +1769,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-800 transition"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-800 transition"
               >
                 <X className="w-4 h-4" />
               </button>

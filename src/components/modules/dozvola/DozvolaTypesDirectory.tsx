@@ -207,7 +207,7 @@ export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryPro
                 </div>
                 <button
                   onClick={() => setIsEditingType(false)}
-                  className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 flex items-center justify-center cursor-pointer transition active:scale-95"
+                  className="min-h-[44px] min-w-[44px] rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 flex items-center justify-center cursor-pointer transition active:scale-95"
                 >
                   <X className="w-4 h-4" />
                 </button>

@@ -1090,7 +1090,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                   setDelivSentAt('');
                   setDelivSearchQuery('');
                 }} 
-                className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition cursor-pointer"
+                className="min-h-[44px] min-w-[44px] rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>

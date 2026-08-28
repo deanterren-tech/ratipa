@@ -1062,13 +1062,13 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
         </div>
 
         {editingSalaryId && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 animate-fade-in">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 animate-fade-in">
                 <div className="bg-white rounded-[2rem] w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
                     <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-[2rem]">
                         <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
                            <Edit className="w-5 h-5 text-slate-400" /> Редактирование выплаты
                         </h3>
-                        <button onClick={closeEditModal} className="text-slate-400 hover:text-slate-600 bg-white shadow-sm border border-slate-200 w-8 h-8 rounded-full flex items-center justify-center font-bold transition active:scale-90 cursor-pointer">×</button>
+                        <button onClick={closeEditModal} className="min-h-[44px] min-w-[44px] text-slate-400 hover:text-slate-600 bg-white shadow-sm border border-slate-200 rounded-full flex items-center justify-center font-bold transition active:scale-90 cursor-pointer">×</button>
                     </div>
                     
                     <div className="p-6 space-y-4">

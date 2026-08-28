@@ -3512,7 +3512,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
               </h3>
               <button
                 onClick={closeEditCalcModal}
-                className="text-slate-400 hover:text-slate-600 bg-white shadow-sm border border-slate-200 w-8 h-8 rounded-full flex items-center justify-center font-bold"
+                className="min-h-[44px] min-w-[44px] text-slate-400 hover:text-slate-600 bg-white shadow-sm border border-slate-200 rounded-full flex items-center justify-center font-bold"
               >
                 ×
               </button>

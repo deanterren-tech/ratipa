@@ -309,7 +309,7 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
                 <User className="w-4 h-4 text-[#3765F6]" />
                 {editing ? 'Редактировать водителя' : 'Новый водитель'}
               </h3>
-              <button onClick={() => setModalOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
+              <button onClick={() => setModalOpen(false)} className="min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-100 text-slate-400 flex items-center justify-center">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -343,7 +343,7 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
                 <Layers className="w-4 h-4 text-[#3765F6]" />
                 Назначить диспетчера ({selected.size})
               </h3>
-              <button onClick={() => setBulkOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
+              <button onClick={() => setBulkOpen(false)} className="min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-100 text-slate-400 flex items-center justify-center"><X className="w-4 h-4" /></button>
             </div>
             <SelectField label="Диспетчер" value={bulkValue} onChange={setBulkValue}
               options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />

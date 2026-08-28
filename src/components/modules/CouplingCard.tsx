@@ -72,7 +72,7 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
               </div>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-100 text-slate-400 flex items-center justify-center"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">

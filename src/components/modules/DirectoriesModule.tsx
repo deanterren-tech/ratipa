@@ -297,7 +297,7 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
 
       {/* Edit/Add Modal */}
       {editing && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in" onClick={() => setEditing(null)}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in" onClick={() => setEditing(null)}>
           <div
             className="bg-white/90 backdrop-blur-xl rounded-3xl w-full max-w-md shadow-2xl p-4 sm:p-6 flex flex-col space-y-4"
             onClick={(e) => e.stopPropagation()}
@@ -306,7 +306,7 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
               <h2 className="text-sm font-bold text-slate-800">
                 {editing.__new ? 'Добавить в ' : 'Изменить · '}{tab.label}
               </h2>
-              <button onClick={() => setEditing(null)} className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition">
+              <button onClick={() => setEditing(null)} className="min-h-[44px] min-w-[44px] text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition flex items-center justify-center">
                 <X className="w-4 h-4" />
               </button>
             </div>

@@ -512,7 +512,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
                 <Link2 className="w-4 h-4 text-[#3765F6]" />
                 {editing ? 'Редактировать сцепку' : 'Новая сцепка'}
               </h3>
-              <button onClick={() => setModalOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
+              <button onClick={() => setModalOpen(false)} className="min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-100 text-slate-400 flex items-center justify-center">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -556,7 +556,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
                 <Layers className="w-4 h-4 text-[#3765F6]" />
                 {bulkField === 'rateGroupId' ? 'Применить ставку' : 'Назначить диспетчера'} ({selected.size})
               </h3>
-              <button onClick={() => setBulkOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
+              <button onClick={() => setBulkOpen(false)} className="min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-100 text-slate-400 flex items-center justify-center"><X className="w-4 h-4" /></button>
             </div>
             {bulkField === 'rateGroupId' ? (
               <SelectField label="Группа ставок" value={bulkValue} onChange={setBulkValue}
