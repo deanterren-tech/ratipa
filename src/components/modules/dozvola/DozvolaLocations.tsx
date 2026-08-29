@@ -1072,8 +1072,8 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
       {/* FORM MODAL FOR SENDING PERMITS (GLASSMORPHIC DIALOG) */}
       {showDeliveryForm && (
-        <div className="fixed inset-0 z-[1000] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/50 p-6 w-[620px] max-w-full flex flex-col gap-4 max-h-[90vh] overflow-hidden">
+        <div className="fixed inset-0 z-[1000] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/50 p-6 w-[620px] max-w-full flex flex-col gap-4 my-4">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100">
               <h2 className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
                 <Route className="w-4 h-4 text-[#3765F6]" />

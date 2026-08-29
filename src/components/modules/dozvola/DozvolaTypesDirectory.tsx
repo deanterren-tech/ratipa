@@ -194,8 +194,8 @@ export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryPro
       </div>
 
       {isEditingType && (
-          <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-md flex justify-center items-center p-4">
-            <div className="bg-white/95 backdrop-blur-xl rounded-[2rem] max-w-md w-full shadow-2xl border border-white/50 overflow-hidden">
+          <div className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-md flex justify-center items-center p-4 overflow-y-auto">
+            <div className="bg-white/95 backdrop-blur-xl rounded-[2rem] max-w-md w-full shadow-2xl border border-white/50 my-4">
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <div>
                   <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block font-mono">

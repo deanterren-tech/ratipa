@@ -1723,11 +1723,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     const profitPerDayPlan = Math.round(rawProfitPerDayPlan);
 
     return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
-        <div className="bg-white/90 backdrop-blur-xl rounded-3xl w-full max-w-full sm:max-w-[1400px] mx-2 sm:mx-4 shadow-2xl overflow-hidden flex flex-col relative max-h-[90vh] sm:max-h-[calc(100vh-2rem)]">
+      <div className="fixed inset-0 z-[100] flex items-start md:items-center justify-center p-2 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
+        <div className="bg-white/90 backdrop-blur-xl rounded-3xl w-full max-w-full sm:max-w-[1400px] mx-2 sm:mx-4 shadow-2xl overflow-visible flex flex-col relative max-h-none">
           
           {/* Header */}
-          <div className="bg-white px-6 py-4 flex flex-col md:flex-row md:items-center justify-between sticky top-0 z-10 border-b border-slate-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
+          <div className="bg-white px-4 md:px-6 py-3 md:py-4 flex flex-col md:flex-row md:items-center justify-between sticky top-0 z-10 border-b border-slate-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
             <div className="flex flex-col">
               <div className="flex items-center gap-3">
                 <Calculator className="w-5 h-5 text-slate-400" />
@@ -1776,7 +1776,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 lg:p-8 space-y-6">
+          <div className="flex-1 md:overflow-y-auto custom-scrollbar p-4 sm:p-6 lg:p-8 space-y-6">
             {modalTab === "main" ? (
               <>
                 <div className="grid grid-cols-1 gap-6">
@@ -1999,7 +1999,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                   </div>
 
                   {/* Mobile Cards View for Legs */}
-                  <div className="block lg:hidden space-y-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-1 pb-4">
+                  <div className="block lg:hidden space-y-4 pr-1 pb-4">
                     {legs.map((leg, idx) => (
                       <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-4 relative shadow-sm">
                         <div className="flex justify-between items-center pb-2 border-b border-slate-100">
@@ -2545,7 +2545,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             ) : null}
           </div>
           {/* UNIFIED STICKY FOOTER: stats + actions, always visible */}
-          <div className="shrink-0 bg-white border-t border-slate-200/60 shadow-[0_-4px_20px_rgba(0,0,0,0.04)] z-20">
+          <div className="shrink-0 bg-white border-t border-slate-200/60 shadow-[0_-4px_20px_rgba(0,0,0,0.04)] z-20 sticky bottom-0 md:static">
             {/* Light stats block — single layer, app style */}
             <div className="px-4 sm:px-6 lg:px-8 py-4 bg-slate-50/40">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -2603,7 +2603,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             </div>
 
             {/* Action buttons row */}
-            <div className="bg-white px-6 py-3 flex items-center justify-between">
+            <div className="bg-white px-3 md:px-6 py-2 md:py-3 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 {isEditing && currentEditingTrip && (
                   <button

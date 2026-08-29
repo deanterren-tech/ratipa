@@ -560,7 +560,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 15 }}
               transition={{ type: "spring", duration: 0.4 }}
-              className="w-full max-w-4xl bg-slate-900/80 border border-slate-800 rounded-[2.5rem] p-4 sm:p-6 md:p-8 shadow-2xl relative max-h-[85vh] overflow-y-auto flex flex-col custom-scrollbar"
+              className="w-full max-w-4xl bg-slate-900/80 border border-slate-800 rounded-[2.5rem] p-4 sm:p-6 md:p-8 shadow-2xl relative flex flex-col custom-scrollbar"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Close controls */}
@@ -653,54 +653,68 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[1000] flex items-center justify-center p-4 select-none"
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[1000] flex items-end sm:items-center justify-center p-0 sm:p-4 select-none overflow-y-auto"
             onClick={() => setSelectedPreviewHighlight(null)}
           >
             <motion.div 
-              initial={{ scale: 0.95, y: 15 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 15 }}
-              className="w-full max-w-lg bg-white border border-slate-200 rounded-[2.5rem] overflow-hidden shadow-2xl relative select-text"
+              initial={{ y: '100%', opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: '100%', opacity: 0 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              className="w-full sm:max-w-lg sm:mx-4 bg-white sm:border sm:border-slate-200 rounded-t-[2rem] sm:rounded-[2.5rem] shadow-2xl relative select-text mt-auto sm:mt-0"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Cover Image */}
-              <div className="h-56 w-full overflow-hidden relative bg-slate-100">
-                <img 
-                  src={selectedPreviewHighlight.imageUrl || 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?q=80&w=800&auto=format&fit=crop'} 
-                  alt={selectedPreviewHighlight.title}
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent" />
-                <button 
-                  onClick={() => setSelectedPreviewHighlight(null)}
-                  className="absolute top-4 right-4 p-2.5 bg-white/90 hover:bg-white border border-slate-200/50 rounded-full text-slate-700 hover:text-slate-900 shadow-md transition cursor-pointer select-none"
-                >
-                  <X size={14} className="stroke-[2.5]" />
-                </button>
+              {/* Close button */}
+              <button 
+                onClick={() => setSelectedPreviewHighlight(null)}
+                className="absolute top-3 right-3 z-20 w-11 h-11 bg-white/90 hover:bg-white border border-slate-200/50 rounded-full text-slate-700 hover:text-slate-900 shadow-md transition cursor-pointer select-none flex items-center justify-center"
+              >
+                <X size={16} className="stroke-[2.5]" />
+              </button>
 
-                <div className="absolute bottom-4 left-6 flex items-center gap-1.5 bg-red-600 text-white font-sans font-black uppercase tracking-wider text-[8px] px-2.5 py-1 rounded-lg shadow-sm">
+              {/* Cover Image */}
+              <div className="relative w-full bg-slate-100 rounded-t-[2rem] sm:rounded-t-[2.5rem] overflow-hidden">
+                <div className="aspect-[16/6] w-full overflow-hidden">
+                  <img 
+                    src={selectedPreviewHighlight.imageUrl || 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?q=80&w=800&auto=format&fit=crop'} 
+                    alt={selectedPreviewHighlight.title}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      if (!target.dataset.fallbackAttempted) {
+                        target.dataset.fallbackAttempted = 'true';
+                        target.src = 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?q=80&w=800&auto=format&fit=crop';
+                      }
+                    }}
+                  />
+                </div>
+                <div className="absolute inset-0 bg-gradient-to-t from-white/80 via-transparent to-transparent pointer-events-none" />
+                <div className="absolute bottom-3 left-4 flex items-center gap-1.5 bg-red-600 text-white font-sans font-bold text-[9px] px-2.5 py-1 rounded-lg shadow-sm">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span>
+                  </span>
                   <span>{selectedPreviewHighlight.isImportant ? 'СРОЧНО' : 'НОВОСТЬ'}</span>
                 </div>
               </div>
 
               {/* Content Zone */}
-              <div className="p-6 md:p-8">
-                <h4 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mb-4">
+              <div className="p-4 sm:p-6">
+                <h4 className="text-base sm:text-xl font-bold text-slate-900 tracking-tight mb-2 leading-snug">
                   {selectedPreviewHighlight.title}
                 </h4>
-                <div className="text-slate-600 text-xs sm:text-sm leading-relaxed max-h-48 overflow-y-auto pr-1 font-medium font-sans custom-scrollbar">
+                <div className="text-slate-600 text-xs sm:text-sm leading-relaxed">
                   {selectedPreviewHighlight.text}
                 </div>
                 
-                {/* Optional CTA Link */}
                 {selectedPreviewHighlight.linkUrl && (
-                  <div className="mt-6">
+                  <div className="mt-3">
                     <a 
                       href={selectedPreviewHighlight.linkUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-xs font-black text-[#3765F6] hover:text-blue-700 uppercase tracking-widest transition"
+                      className="inline-flex items-center gap-2 text-xs font-bold text-[#3765F6] hover:text-blue-700 transition"
                     >
                       <span>Читать подробнее</span>
                       <ExternalLink size={12} />
@@ -708,10 +722,9 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                   </div>
                 )}
 
-                {/* Meta details */}
-                <div className="mt-8 pt-4 border-t border-slate-100 flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase tracking-wider select-none">
-                  <span>Автор: {selectedPreviewHighlight.author || "Редакция"}</span>
-                  <span>{formatDateToRu(selectedPreviewHighlight.date)}</span>
+                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+                  <span className="font-medium">{selectedPreviewHighlight.author || "Редакция"}</span>
+                  <span className="font-mono">{formatDateToRu(selectedPreviewHighlight.date)}</span>
                 </div>
               </div>
             </motion.div>
@@ -726,14 +739,14 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[1001] flex items-center justify-center p-4 select-text"
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[1001] flex items-center justify-center p-4 select-text overflow-y-auto"
             onClick={() => setIsEditingHighlight(false)}
           >
             <motion.div 
               initial={{ scale: 0.95, y: 15 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 15 }}
-              className="w-full max-w-2xl bg-white border border-slate-200 rounded-[2.5rem] p-4 sm:p-6 md:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto flex flex-col custom-scrollbar"
+              className="w-full max-w-2xl bg-white border border-slate-200 rounded-[2.5rem] p-4 sm:p-6 md:p-8 shadow-2xl relative flex flex-col custom-scrollbar"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}

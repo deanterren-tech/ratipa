@@ -1237,8 +1237,8 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
 
       {/* Annual Passport Verification Pop-up Prompt */}
       {currentVerification && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/50 animate-fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-full md:max-w-md mx-4 shadow-2xl p-6 border border-slate-200 flex flex-col gap-5 text-center font-sans">
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/50 animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-full md:max-w-md mx-4 shadow-2xl p-6 border border-slate-200 flex flex-col gap-5 text-center font-sans my-4">
             <div className="mx-auto bg-amber-50 text-amber-500 p-3.5 rounded-full shadow-2xs w-max">
               <AlertTriangle className="w-8 h-8 animate-bounce" />
             </div>
@@ -1289,7 +1289,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       {/* Edit / Add Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/50 overflow-y-auto animate-fade-in font-sans">
-          <div className="bg-white rounded-3xl w-full max-w-full md:max-w-2xl mx-4 shadow-2xl overflow-hidden flex flex-col pt-1 my-8 border border-slate-200/60">
+          <div className="bg-white rounded-3xl w-full max-w-full md:max-w-2xl mx-4 shadow-2xl flex flex-col pt-1 my-4 border border-slate-200/60">
             {/* Modal Header */}
             <div className="px-6 py-4.5 border-b border-slate-100 flex items-center justify-between bg-white">
               <div className="flex items-center gap-2">
@@ -1308,7 +1308,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
 
 
             {/* Form Fields */}
-            <div className="p-6 overflow-y-auto max-h-[50vh] space-y-4">
+            <div className="p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* 1. Номера ТС */}
                 <div className="space-y-1">

@@ -12,7 +12,7 @@ export const CarConflictModal: React.FC<Props> = ({ isOpen, conflicts, onResolve
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full">
         <h2 className="text-xl font-semibold mb-4">Обнаружен конфликт данных</h2>
         <div className="mb-4">

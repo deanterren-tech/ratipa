@@ -140,8 +140,8 @@ const MapRouteModal = ({
   const totalMileageNum = parseFloat(manualDistanceKm) || 0;
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center p-0 md:p-4 bg-slate-900/60 backdrop-blur-sm overflow-hidden">
-      <div className="bg-white w-full h-full md:h-[95vh] md:max-w-[98vw] md:rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row border border-slate-200 animate-fade-in">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-0 md:p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white w-full h-full md:h-[95vh] md:max-w-[98vw] md:rounded-3xl shadow-2xl flex flex-col md:flex-row border border-slate-200 animate-fade-in">
         
         {/* Sidebar Controls - Compact, Elegant & Ultra-Clean */}
         <div className="w-full md:w-[350px] flex flex-col border-b md:border-b-0 md:border-r border-slate-200 bg-white h-[45%] md:h-full overflow-hidden shrink-0">

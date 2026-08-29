@@ -1363,8 +1363,8 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
       {/* Car Editor Modal */}
       <AnimatePresence>
         {isCarModalOpen && (
-           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-2 sm:p-4 md:p-6">
-              <motion.div initial={{y:30, scale:0.96}} animate={{y:0, scale:1}} exit={{y:20, opacity:0, scale:0.96}} className="bg-white text-slate-900 rounded-[2rem] w-full max-w-full md:max-w-4xl mx-4 max-h-[92vh] flex flex-col shadow-[0_8px_30px_rgba(0,0,0,0.01)] border border-slate-200/50 overflow-hidden">
+           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
+              <motion.div initial={{y:30, scale:0.96}} animate={{y:0, scale:1}} exit={{y:20, opacity:0, scale:0.96}} className="bg-white text-slate-900 rounded-[2rem] w-full max-w-full md:max-w-4xl mx-4 flex flex-col shadow-[0_8px_30px_rgba(0,0,0,0.01)] border border-slate-200/50 my-4">
                  <div className="p-5 border-b border-slate-200/50 flex justify-between items-center bg-white shrink-0">
                     <div className="flex items-center gap-3">
                        <h2 className="text-sm font-semibold text-slate-800 tracking-tight">Карточка автомобиля</h2>

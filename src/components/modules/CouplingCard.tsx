@@ -54,8 +54,8 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
   const dispatcherName = dispatcher?.name || bazaRecord?.dispatcher || '—';
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto" onClick={onClose}>
+      <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl my-4" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-[#3765F6]/10 to-transparent border-b border-slate-100">
           <div className="flex items-center gap-3">
@@ -75,7 +75,7 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
           <button onClick={onClose} className="min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-100 text-slate-400 flex items-center justify-center"><X className="w-4 h-4" /></button>
         </div>
 
-        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="p-5 space-y-4">
           {/* Location status */}
           <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50">
             <MapPin className={`w-5 h-5 ${inBaza ? 'text-emerald-500' : 'text-slate-300'}`} />

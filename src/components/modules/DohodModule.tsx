@@ -3180,8 +3180,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
       </div>
 
       {conversionDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 animate-fade-in">
-          <div className="bg-white rounded-[2rem] w-full max-w-full sm:max-w-md mx-2 sm:mx-4 shadow-2xl border border-slate-200 p-6 lg:p-8 space-y-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-[2rem] w-full max-w-full sm:max-w-md mx-2 sm:mx-4 shadow-2xl border border-slate-200 p-6 lg:p-8 space-y-6 my-4">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#3765F6]">
                 <Sparkles className="h-6 w-6" />
@@ -3503,8 +3503,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
       )}
 
       {editingCalcId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 animate-fade-in">
-          <div className="bg-white rounded-[2rem] w-full max-w-full sm:max-w-lg mx-2 sm:mx-4 shadow-2xl border border-slate-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-[2rem] w-full max-w-full sm:max-w-lg mx-2 sm:mx-4 shadow-2xl border border-slate-200 my-4">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-[2rem]">
               <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
                 <Edit className="w-5 h-5 text-[#3765F6]" /> Редактирование

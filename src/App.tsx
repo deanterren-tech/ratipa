@@ -14,6 +14,23 @@ export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isSessionRestoring, setIsSessionRestoring] = useState(true);
 
+  // Глобальный блокировщик скролла body при открытии модальных окон
+  useEffect(() => {
+    const checkModals = () => {
+      const modals = document.querySelectorAll('.fixed.inset-0');
+      const hasModal = modals.length > 0;
+      if (hasModal) {
+        document.body.style.overflow = 'hidden';
+      } else {
+        document.body.style.overflow = '';
+      }
+    };
+    checkModals();
+    const observer = new MutationObserver(checkModals);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    return () => { observer.disconnect(); document.body.style.overflow = ''; };
+  }, []);
+
   useEffect(() => {
     if (!user) {
       document.title = 'Ratipa | Вход в систему';

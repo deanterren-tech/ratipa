@@ -1242,8 +1242,8 @@ export default function DozvolaRegistryList({
       </div>
 
       {isCreatorOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-md flex justify-center items-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200/50 overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-md flex justify-center items-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200/50 my-4">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between select-none">
               <div>
                 <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest block">
@@ -1441,8 +1441,8 @@ export default function DozvolaRegistryList({
       )}
 
       {isBatchCreatorOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-md flex justify-center items-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200/50 overflow-hidden">
+        <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-md flex justify-center items-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200/50 my-4">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between select-none">
               <div>
                 <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest block">

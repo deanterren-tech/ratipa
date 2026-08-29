@@ -1383,15 +1383,16 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
       {/* Mobile "all tools" panel (small screens only) */}
       {isMobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}>
-          <div className="absolute bottom-[3.75rem] left-2 right-2 bg-white rounded-[1.75rem] border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.08)] max-h-[70vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4 px-1">
-              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Все инструменты</span>
-              <button onClick={() => setIsMobileMenuOpen(false)} className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 transition cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="grid grid-cols-3 gap-2.5">
+        <div className="md:hidden fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-sm overflow-y-auto" onClick={() => setIsMobileMenuOpen(false)}>
+          <div className="min-h-full flex items-end justify-center p-2" onClick={(e) => e.stopPropagation()}>
+            <div className="w-full bg-white rounded-[1.75rem] border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.08)] p-5">
+              <div className="flex items-center justify-between mb-4 px-1">
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Все инструменты</span>
+                <button onClick={() => setIsMobileMenuOpen(false)} className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 transition cursor-pointer">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2.5">
               {allowedModules.map((mod) => {
                 const Icon = mod.icon || Calendar;
                 const active = activeModule === mod.key;
@@ -1427,6 +1428,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             </div>
           </div>
         </div>
+      </div>
       )}
 
       <CommandCenter 

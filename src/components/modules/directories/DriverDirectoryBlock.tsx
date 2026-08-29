@@ -302,8 +302,8 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
 
       {/* MODAL add/edit */}
       {modalOpen && createPortal(
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" onClick={() => setModalOpen(false)}>
-          <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto" onClick={() => setModalOpen(false)}>
+          <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 my-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
                 <User className="w-4 h-4 text-[#3765F6]" />
@@ -336,8 +336,8 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
 
       {/* BULK modal */}
       {bulkOpen && createPortal(
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" onClick={() => setBulkOpen(false)}>
-          <div className="w-full max-w-sm bg-white rounded-3xl border border-slate-200 shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto" onClick={() => setBulkOpen(false)}>
+          <div className="w-full max-w-sm bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 my-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
                 <Layers className="w-4 h-4 text-[#3765F6]" />

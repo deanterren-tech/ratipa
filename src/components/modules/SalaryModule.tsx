@@ -1062,8 +1062,8 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
         </div>
 
         {editingSalaryId && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 animate-fade-in">
-                <div className="bg-white rounded-[2rem] w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 animate-fade-in overflow-y-auto">
+                <div className="bg-white rounded-[2rem] w-full max-w-2xl shadow-2xl border border-slate-200 my-4">
                     <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-[2rem]">
                         <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
                            <Edit className="w-5 h-5 text-slate-400" /> Редактирование выплаты

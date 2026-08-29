@@ -1965,8 +1965,8 @@ export default function DocumentsModule({ user }: Props) {
 
       {/* VEHICLE DATABASE MODAL (Менеджер сцепок) */}
       {showVehicleModal && (
-        <div className="fixed inset-0 bg-slate-900/30 flex items-center justify-center z-[9999] p-4">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl border border-slate-200/80 overflow-hidden">
+        <div className="fixed inset-0 bg-slate-900/30 flex items-start justify-center z-[9999] p-4 overflow-y-auto pt-8">
+          <div className="bg-white rounded-2xl w-full max-w-4xl flex flex-col shadow-2xl border border-slate-200/80 my-4">
             {/* Header */}
             <div className="bg-slate-50 border-b border-slate-200/40 px-6 py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
