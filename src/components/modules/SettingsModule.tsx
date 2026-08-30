@@ -51,7 +51,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const [pdSettings, setPdSettings] = useState<any>({ useDistanceLookup: false, googleMapsApiKey: '' });
   
   // Navigation Tab State
-  const [activeTab, setActiveTab] = useState<'fleet' | 'drivers' | 'system' | 'links' | 'directories'>('fleet');
+  const [activeTab, setActiveTab] = useState<'fleet' | 'drivers' | 'system' | 'integrations' | 'directories'>('fleet');
 
   // Search states for directories
   const [carSearch, setCarSearch] = useState('');
@@ -97,7 +97,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   // Modal for adding vehicle
   const [addingVehicleGroup, setAddingVehicleGroup] = useState<CarRateGroup | null>(null);
   const [newVehiclePlate, setNewVehiclePlate] = useState('');
-
+  
   // Directions & coefficients list
   const [directions, setDirections] = useState<Record<string, number>>({});
   // Local Form states (Directions)
@@ -910,7 +910,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     { id: 'drivers', label: 'База водителей', icon: Users, count: filteredDrivers.length },
     { id: 'directories', label: 'База данных', icon: BookOpen, count: 0 },
     { id: 'system', label: 'Системные Настройки', icon: Settings, count: 0 },
-    { id: 'links', label: 'Ссылки и Порталы', icon: ExternalLink, count: (settings?.quickLinks?.length || 0) + (settings?.externalTabs?.length || 0) }
+    { id: 'integrations', label: 'Интеграции', icon: ExternalLink, count: 0 }
   ] as const;
 
   return (
@@ -1030,7 +1030,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       )}
 
       {/* TAB CONTENT 4: EXTERNAL PORTALS & PORTAL LINKS */}
-      {activeTab === 'links' && (
+      {activeTab === 'integrations' && (
         <div className="space-y-6">
           
           {/* Iframe Tables Links & GPS Providers */}
@@ -1147,195 +1147,6 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
 
               </div>
             )}
-          </div>
-
-          {/* DYNAMIC QUICK LINKS & MENU TABS SECTION */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
-            
-            {/* Custom Dashboard useful bookmarks */}
-            <div className="bg-white rounded-2xl p-5 lg:p-6 border border-slate-200/50 shadow-sm space-y-4 flex flex-col">
-              <div>
-                <h3 className="text-xs font-bold uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
-                  <Link className="h-4 w-4 text-blue-500" />
-                  <span>Полезные Экспресс-ссылки на Dashboard</span>
-                </h3>
-                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase mt-1">Виджет быстрого клика на главной панели</span>
-              </div>
-
-              {isWritePermitted && (
-                <form onSubmit={handleAddQuickLink} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50/50 p-2.5 rounded-xl border border-slate-200 select-none">
-                  <input
-                    type="text"
-                    placeholder="Название службы"
-                    required
-                    value={linkTitle}
-                    onChange={(e) => setLinkTitle(e.target.value)}
-                    className="px-3.5 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/10 font-bold text-slate-800 transition"
-                  />
-                  <input
-                    type="url"
-                    placeholder="https://..."
-                    required
-                    value={linkUrl}
-                    onChange={(e) => setLinkUrl(e.target.value)}
-                    className="px-3.5 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/10 font-bold text-slate-800 font-mono text-[10px] transition"
-                  />
-                  <button type="submit" className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95 py-2.5">
-                    Вывести
-                  </button>
-                </form>
-              )}
-
-              <div className="space-y-1.5 max-h-[250px] overflow-y-auto pr-1 custom-scrollbar flex-1">
-                {settings?.quickLinks?.map((li) => {
-                  const isEditing = editingLinkId === li.id;
-                  if (isEditing) {
-                    return (
-                      <form 
-                        key={li.id} 
-                        onSubmit={handleSaveEditQuickLink} 
-                        className="flex flex-col sm:flex-row gap-1.5 bg-slate-100 p-2 rounded-xl border border-slate-300"
-                      >
-                        <input
-                          type="text"
-                          value={editingLinkTitle}
-                          onChange={(e) => setEditingLinkTitle(e.target.value)}
-                          required
-                          className="p-1.5 bg-white text-xs rounded border border-slate-200 font-bold flex-1"
-                        />
-                        <input
-                          type="url"
-                          value={editingLinkUrl}
-                          onChange={(e) => setEditingLinkUrl(e.target.value)}
-                          required
-                          className="p-1.5 bg-white text-xs rounded border border-slate-200 font-mono text-[10px] flex-1"
-                        />
-                        <div className="flex gap-1 justify-end">
-                          <button type="submit" className="text-emerald-600 p-1 hover:bg-emerald-50 rounded">
-                            <Check className="h-4 w-4" />
-                          </button>
-                          <button type="button" onClick={() => setEditingLinkId(null)} className="text-slate-400 p-1 hover:bg-slate-50 rounded">
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </form>
-                    );
-                  }
-
-                  return (
-                    <div key={li.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl text-xs font-bold border border-slate-100 group transition">
-                      <span className="text-slate-800 uppercase font-mono">{li.title}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] text-slate-400 font-mono truncate max-w-[150px]">{li.url}</span>
-                        {isWritePermitted && (
-                          <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition">
-                            <button onClick={() => handleStartEditQuickLink(li)} className="text-indigo-600 hover:text-indigo-800 p-1 bg-white border border-slate-200 rounded">
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </button>
-                            <button onClick={() => handleDeleteQuickLink(li.id)} className="text-rose-500 hover:text-rose-700 p-1 bg-white border border-slate-200 rounded">
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Custom Top Navigation Bar Menu Links */}
-            <div className="bg-white rounded-2xl p-5 lg:p-6 border border-slate-200/50 shadow-sm space-y-4 flex flex-col">
-              <div>
-                <h3 className="text-xs font-bold uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
-                  <ExternalLink className="h-4 w-4 text-blue-500" />
-                  <span>Кастомные меню-вкладки на внешние сайты</span>
-                </h3>
-                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase mt-1">Отображаются в верхнем навигационном меню RATIPA</span>
-              </div>
-
-              {isWritePermitted && (
-                <form onSubmit={handleAddExternalTab} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50/50 p-2.5 rounded-xl border border-slate-200 select-none">
-                  <input
-                    type="text"
-                    placeholder="Название"
-                    required
-                    value={extTitle}
-                    onChange={(e) => setExtTitle(e.target.value)}
-                    className="px-3.5 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/10 font-bold text-slate-800 transition"
-                  />
-                  <input
-                    type="url"
-                    placeholder="https://..."
-                    required
-                    value={extUrl}
-                    onChange={(e) => setExtUrl(e.target.value)}
-                    className="px-3.5 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/10 font-bold text-slate-800 font-mono text-[10px] transition"
-                  />
-                  <button type="submit" className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95 py-2.5">
-                    Добавить
-                  </button>
-                </form>
-              )}
-
-              <div className="space-y-1.5 max-h-[250px] overflow-y-auto pr-1 custom-scrollbar flex-1">
-                {(settings?.externalTabs || []).map((t) => {
-                  const isEditing = editingExtId === t.id;
-                  if (isEditing) {
-                    return (
-                      <form 
-                        key={t.id} 
-                        onSubmit={handleSaveEditExternalTab} 
-                        className="flex flex-col sm:flex-row gap-1.5 bg-slate-100 p-2 rounded-xl border border-slate-300"
-                      >
-                        <input
-                          type="text"
-                          value={editingExtTitle}
-                          onChange={(e) => setEditingExtTitle(e.target.value)}
-                          required
-                          className="p-1.5 bg-white text-xs rounded border border-slate-200 font-bold flex-1"
-                        />
-                        <input
-                          type="url"
-                          value={editingExtUrl}
-                          onChange={(e) => setEditingExtUrl(e.target.value)}
-                          required
-                          className="p-1.5 bg-white text-xs rounded border border-slate-200 font-mono text-[10px] flex-1"
-                        />
-                        <div className="flex gap-1 justify-end">
-                          <button type="submit" className="text-emerald-600 p-1 hover:bg-emerald-50 rounded">
-                            <Check className="h-4 w-4" />
-                          </button>
-                          <button type="button" onClick={() => setEditingExtId(null)} className="text-slate-400 p-1 hover:bg-slate-50 rounded">
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </form>
-                    );
-                  }
-
-                  return (
-                    <div key={t.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl text-xs font-bold border border-slate-100 group transition">
-                      <span className="text-slate-800 uppercase font-mono">{t.title}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] text-slate-400 font-mono truncate max-w-[150px]">{t.url}</span>
-                        {isWritePermitted && (
-                          <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition">
-                            <button onClick={() => handleStartEditExternalTab(t)} className="text-indigo-600 hover:text-indigo-800 p-1 bg-white border border-slate-200 rounded">
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </button>
-                            <button onClick={() => handleDeleteExternalTab(t.id)} className="text-rose-500 hover:text-rose-700 p-1 bg-white border border-slate-200 rounded">
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
           </div>
 
           {/* Planning Blocks — из Администрирования */}

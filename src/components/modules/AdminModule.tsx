@@ -35,6 +35,7 @@ import {
   Settings,
   LogOut,
   Shield,
+  Link,
 } from 'lucide-react';
 import UserManagementBlock from './UserManagementBlock';
 import AdminOnlinePresenceBlock from './AdminOnlinePresenceBlock';
@@ -43,6 +44,7 @@ import AdminFirebaseConfigBlock from './AdminFirebaseConfigBlock';
 import AdminAgentBlock from './AdminAgentBlock';
 import AdminAuditLogsBlock from './AdminAuditLogsBlock';
 import AdminWelcomePhrasesBlock from './AdminWelcomePhrasesBlock';
+import AdminLinksBlock from './AdminLinksBlock';
 import {pdService} from '../../api';
 
 interface AdminModuleProps {
@@ -60,7 +62,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
   const [userListCount, setUserListCount] = useState(0);
   const [dispatchersCount, setDispatchersCount] = useState(0);
   const [customPhrasesText, setCustomPhrasesText] = useState('');
-  const [activeTab, setActiveTab] = useState<'users' | 'system' | 'welcome' | 'push' | 'agent'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'system' | 'welcome' | 'links' | 'agent'>('users');
   useEffect(() => {
     if (settings?.customPhrases) setCustomPhrasesText(settings.customPhrases.join('\n'));
   }, [settings?.customPhrases]);
@@ -156,8 +158,8 @@ export default function AdminModule({ user }: AdminModuleProps) {
 
   const tabsList = [
     { id: 'users', label: 'Пользователи и Сессии', icon: Users, count: userListCount },
-
     { id: 'welcome', label: 'Бегущая строка', icon: Sparkles, count: settings?.customPhrases?.length || 0 },
+    { id: 'links', label: 'Ссылки и порталы', icon: Link, count: settings?.quickLinks?.length || 0 },
     { id: 'system', label: 'Система и Настройки', icon: Settings, count: 0 },
     { id: 'agent', label: 'Агент (API)', icon: Sparkles, count: 0 },
   ] as const;
@@ -202,11 +204,11 @@ export default function AdminModule({ user }: AdminModuleProps) {
                       : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/50'
                   }`}
                 >
-                  <IconComp className={`w-3.5 h-3.5 transition-transform duration-150 ${isActive ? 'text-[#3765F6]' : 'text-slate-400'}`} />
+                  <IconComp className={`w-3.5 h-3.5 transition-transform duration-150 ${isActive ? 'text-slate-900' : 'text-slate-400'}`} />
                   <span>{t.label}</span>
                   {t.count > 0 && (
                     <span className={`text-[8.5px] px-1.5 py-0.5 rounded-full font-mono font-bold leading-none transition-colors ${
-                      isActive ? 'bg-[#3765F6]/10 text-[#3765F6] font-bold' : 'bg-slate-900/5 text-slate-500 border border-slate-200/60 font-bold'
+                      isActive ? 'bg-slate-900/10 text-slate-800 font-bold' : 'bg-slate-900/5 text-slate-500 border border-slate-200/60 font-bold'
                     }`}>
                       {t.count}
                     </span>
@@ -268,6 +270,10 @@ export default function AdminModule({ user }: AdminModuleProps) {
 
           <div className={activeTab === 'welcome' ? 'space-y-6' : 'hidden'}>
             <AdminWelcomePhrasesBlock settings={settings} onSave={saveSettings} />
+          </div>
+
+          <div className={activeTab === 'links' ? 'space-y-6' : 'hidden'}>
+            <AdminLinksBlock user={user} settings={settings} onSave={saveSettings} />
           </div>
 
           <div className={activeTab === 'agent' ? 'space-y-6' : 'hidden'}>
