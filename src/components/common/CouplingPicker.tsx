@@ -41,13 +41,15 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
   }, []);
 
   useEffect(() => {
-    if (value && all.length) {
-      const found = all.find((c) => c.id === value)
+    if (value) {
+      const found = all.length > 0 ? (
+        all.find((c) => c.id === value)
         || all.find((c) => {
             const v = (value || '').toUpperCase().replace(/\s+/g, '').replace(/\//g, '');
             const car = (c.carNumber || c.vehicleNumbers || '').toUpperCase().replace(/\s+/g, '').replace(/\//g, '');
             return v === car || v.startsWith(car) || car.startsWith(v);
-          });
+          })
+      ) : null;
       if (found) {
         setSelected(found);
         if (mode === 'combined') {
@@ -58,6 +60,9 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
       } else if (mode === 'combined' && locations.indexOf(value) !== -1) {
         setSelected({ carNumber: value, isLocation: true });
         setQuery(value);
+      } else {
+        // Fallback: show the raw value as text even if no match in DB
+        setSelected({ carNumber: value, vehicleNumbers: value, id: value });
       }
     }
     // NOTE: intentionally NOT depending on `locations` (it's a fresh array each render)
@@ -186,7 +191,7 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
             <div className="text-xs font-bold text-[#3765F6] font-mono truncate">{displayLabel(selected)}</div>
             <div className="text-[10px] text-slate-500 truncate">{displaySub(selected)}</div>
           </div>
-          <button onClick={() => { setSelected(null); onSelect(null); }} className="text-slate-400 hover:text-rose-500 p-1">
+          <button onClick={() => { setSelected(null); onSelect(null); }} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-rose-500 transition cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>

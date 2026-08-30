@@ -239,8 +239,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const [isConverterOpen, setIsConverterOpen] = useState(false);
   const [isEditingCurrencies, setIsEditingCurrencies] = useState(false);
   const [isRatesLoading, setIsRatesLoading] = useState(false);
-  const [activeCurrency, setActiveCurrency] = useState<string>('USD');
-  const [activeValue, setActiveValue] = useState<string>('100');
+  const [activeCurrency, setActiveCurrency] = useState<string>(() => localStorage.getItem('ratipa_converter_currency') || 'USD');
+  const [activeValue, setActiveValue] = useState<string>(() => localStorage.getItem('ratipa_converter_value') || '100');
   const [availableCurrencies, setAvailableCurrencies] = useState<any[]>([]);
   
   const [selectedCurrencyCodes, setSelectedCurrencyCodes] = useState<string[]>(() => {
@@ -272,6 +272,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     };
   });
   const converterRef = useRef<HTMLDivElement>(null);
+  const converterDesktopRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     return dbService.getCurrencies((list) => {
@@ -282,6 +283,14 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   useEffect(() => {
     localStorage.setItem('ratipa_selected_currencies', JSON.stringify(selectedCurrencyCodes));
   }, [selectedCurrencyCodes]);
+
+  useEffect(() => {
+    localStorage.setItem('ratipa_converter_currency', activeCurrency);
+  }, [activeCurrency]);
+
+  useEffect(() => {
+    localStorage.setItem('ratipa_converter_value', activeValue);
+  }, [activeValue]);
 
   const fetchNbrbRates = async () => {
     setIsRatesLoading(true);
@@ -353,7 +362,10 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
         setIsNotifOpen(false);
       }
-      if (converterRef.current && !converterRef.current.contains(event.target as Node)) {
+      const isConverterClick = 
+        (converterRef.current && converterRef.current.contains(event.target as Node)) ||
+        (converterDesktopRef.current && converterDesktopRef.current.contains(event.target as Node));
+      if (!isConverterClick) {
         setIsConverterOpen(false);
       }
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
@@ -859,14 +871,31 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       {/* Modern Responsive Capsule Header - fully blended light premium top bar */}
       <header className="bg-white/45 backdrop-blur-lg text-slate-900 border-b border-slate-200/35 min-h-[3.5rem] py-1 md:py-0 md:h-14 flex items-center justify-between px-3 sm:px-8 shrink-0 sticky top-0 z-50 select-none gap-2 sm:gap-3 transition-colors duration-300">
         
-        {/* Left Aligned Section combining Brand Area & Nav Menu close to it */}
+        {/* Left: Currency Converter on mobile */}
+        <div className="md:hidden flex items-center shrink-0">
+          <div className="relative font-sans" ref={converterRef}>
+            <button
+              type="button"
+              onClick={() => setIsConverterOpen(!isConverterOpen)}
+              className={`relative p-2 rounded-xl border transition-all duration-200 active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs ${
+                isConverterOpen 
+                  ? 'bg-[#3765F6]/10 text-[#3765F6] border-[#3765F6]/25 shadow-xs' 
+                  : 'bg-white/60 text-slate-500 hover:text-slate-900 hover:bg-white border-slate-200/40'
+              }`}
+              title="Конвертер валют"
+            >
+              <DollarSign size={16} />
+            </button>
+          </div>
+        </div>
+
         <div className="flex items-center gap-2 sm:gap-6 flex-1 min-w-0">
           {/* Left Brand Area */}
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-3 shrink-0 flex-1 md:flex-none justify-center md:justify-start">
             
             <div className="flex items-center gap-3 cursor-pointer group" onClick={() => handleNavigate(user.role === 'mechanic' ? 'baza' : 'dashboard')}>
               <div className="flex items-baseline gap-1.5 font-sans">
-                <span className="font-black tracking-tight text-sm md:text-base uppercase text-slate-900 leading-none group-hover:text-[#3765F6] transition-colors duration-200">
+                <span className="font-medium tracking-tight text-sm md:text-base uppercase text-slate-900 leading-none group-hover:text-[#3765F6] transition-colors duration-200">
                   RATIPA PORTAL
                 </span>
               </div>
@@ -1046,8 +1075,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             )}
           </div>
 
-          {/* Currency Converter Widget */}
-          <div className="relative font-sans" ref={converterRef}>
+          {/* Currency Converter Widget - desktop only */}
+          <div className="hidden md:block relative font-sans" ref={converterDesktopRef}>
             <button
               type="button"
               onClick={() => setIsConverterOpen(!isConverterOpen)}
@@ -1060,6 +1089,36 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             >
               <DollarSign size={16} />
             </button>
+          </div>
+
+          {/* Fully featured Notifications Center dropdown */}
+
+          {/* Live indicator badge */}
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-white/60 rounded-xl border border-slate-200/40 shadow-2xs">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+            </span>
+            <span className="text-[11px] font-bold text-slate-500 font-sans">
+              Активна
+            </span>
+          </div>
+
+          {/* User Badge Profile info */}
+          <div className="flex items-center gap-2.5 pl-1.5 sm:pl-2.5">
+            <div className="h-7.5 w-7.5 rounded-xl bg-[#3765F6]/10 text-[#3765F6] border border-[#3765F6]/20 flex items-center justify-center text-[11px] font-black shadow-3xs select-none">
+              {user.name.substring(0, 2).toUpperCase()}
+            </div>
+            <div className="hidden xl:block text-left text-xs leading-none">
+              <div className="font-extrabold text-slate-900 tracking-tight">{user.name}</div>
+              <span className="text-[9.5px] font-bold text-slate-400 block mt-0.5 uppercase tracking-wider">
+                {user.role === 'root_admin' ? 'Админ' : 'Сотрудник'}
+              </span>
+            </div>
+          </div>
+
+
+        </div>
 
             <AnimatePresence>
               {isConverterOpen && (
@@ -1203,44 +1262,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
-
-          {/* Fully featured Notifications Center dropdown */}
-
-          {/* Live indicator badge */}
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-white/60 rounded-xl border border-slate-200/40 shadow-2xs">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-            </span>
-            <span className="text-[11px] font-bold text-slate-500 font-sans">
-              Активна
-            </span>
-          </div>
-
-          {/* User Badge Profile info */}
-          <div className="flex items-center gap-2.5 pl-1.5 sm:pl-2.5 border-l border-slate-200/40">
-            <div className="h-7.5 w-7.5 rounded-xl bg-[#3765F6]/10 text-[#3765F6] border border-[#3765F6]/20 flex items-center justify-center text-[11px] font-black shadow-3xs select-none">
-              {user.name.substring(0, 2).toUpperCase()}
-            </div>
-            <div className="hidden xl:block text-left text-xs leading-none">
-              <div className="font-extrabold text-slate-900 tracking-tight">{user.name}</div>
-              <span className="text-[9.5px] font-bold text-slate-400 block mt-0.5 uppercase tracking-wider">
-                {user.role === 'root_admin' ? 'Админ' : 'Сотрудник'}
-              </span>
-            </div>
-          </div>
-
-          {/* Logout Action Button */}
-          <button
-            onClick={handleLogoutSequence}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent transition-colors duration-200 cursor-pointer"
-            title="Завершить сессию"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
-
-        </div>
       </header>
 
       {/* Main Container workspace */}
@@ -1357,7 +1378,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         {[
           { key: 'dashboard', label: 'Главная', icon: Home },
           { key: 'planZagruzok', label: 'Загрузки', icon: FileSpreadsheet },
-          { key: 'dohod', label: 'Доход', icon: Calculator },
+          { key: 'dohod', label: 'Калькуляция', icon: Calculator },
         ].map((item) => {
           const Icon = item.icon;
           const active = activeModule === item.key;
@@ -1367,7 +1388,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
               onClick={() => { setIsMobileMenuOpen(false); handleNavigate(item.key); }}
               className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 rounded-xl transition-all duration-150 ${active ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
             >
-              <Icon className="h-5 w-5" strokeWidth={active ? 2.5 : 2} />
+              <Icon className="h-5 w-5" strokeWidth={active ? 2 : 1.5} />
               <span className="text-[9px] font-medium leading-none text-center">{item.label}</span>
             </button>
           );
@@ -1376,7 +1397,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 rounded-xl transition-all duration-150 ${isMobileMenuOpen ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
         >
-          <Menu className="h-5 w-5" strokeWidth={isMobileMenuOpen ? 2.5 : 2} />
+          <Menu className="h-5 w-5" strokeWidth={isMobileMenuOpen ? 2 : 1.5} />
           <span className="text-[9px] font-medium leading-none">Меню</span>
         </button>
       </nav>
@@ -1384,7 +1405,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       {/* Mobile "all tools" panel (small screens only) */}
       {isMobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-sm overflow-y-auto" onClick={() => setIsMobileMenuOpen(false)}>
-          <div className="min-h-full flex items-end justify-center p-2" onClick={(e) => e.stopPropagation()}>
+          <div className="min-h-full flex items-end justify-center px-2 pt-2 pb-20" onClick={(e) => e.stopPropagation()}>
             <div className="w-full bg-white rounded-[1.75rem] border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.08)] p-5">
               <div className="flex items-center justify-between mb-4 px-1">
                 <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Все инструменты</span>
@@ -1407,7 +1428,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                     }`}
                   >
                     <Icon className="h-5 w-5" />
-                    <span className="text-[10px] font-semibold leading-tight text-center">{mod.label}</span>
+                    <span className="text-[10px] font-medium leading-tight text-center">{mod.label}</span>
                   </button>
                 );
               })}

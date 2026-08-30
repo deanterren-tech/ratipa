@@ -19,7 +19,6 @@ import {
   Save,
   MapPin,
   Calculator,
-  MessageSquare,
   Sparkles,
   Info,
   Ship,
@@ -31,13 +30,11 @@ import {
   Copy,
   X,
   Check,
-  ChevronUp,
-  ChevronDown,
-  GripVertical,
   Search,
   FolderOpen,
   Clock,
   CreditCard,
+  Landmark,
   Receipt,
   Map,
 } from "lucide-react";
@@ -778,14 +775,14 @@ const CalculationCard = React.memo(({
           <button
             title="Дублировать в форму"
             onClick={() => copyHistoryToForm(calc)}
-            className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 border border-slate-200/40 hover:border-emerald-200/50 bg-white/85 shadow-2xs hover:shadow-xs transition duration-150 cursor-pointer"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 border border-slate-200/40 hover:border-emerald-200/50 bg-white/85 shadow-2xs hover:shadow-xs transition duration-150 cursor-pointer"
           >
             <Copy className="h-4 w-4" />
           </button>
           <button
             title="Изменить"
             onClick={() => openEditCalcModal(calc)}
-            className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-[#3765F6] hover:bg-blue-50 border border-slate-200/40 hover:border-blue-200/50 bg-white/85 shadow-2xs hover:shadow-xs transition duration-150 cursor-pointer"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-[#3765F6] hover:bg-blue-50 border border-slate-200/40 hover:border-blue-200/50 bg-white/85 shadow-2xs hover:shadow-xs transition duration-150 cursor-pointer"
           >
             <Edit className="h-4 w-4" />
           </button>
@@ -798,7 +795,7 @@ const CalculationCard = React.memo(({
                   user.role,
                 )
               }
-              className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/40 hover:border-rose-200/50 bg-white/85 shadow-2xs hover:shadow-xs transition duration-150 cursor-pointer"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/40 hover:border-rose-200/50 bg-white/85 shadow-2xs hover:shadow-xs transition duration-150 cursor-pointer"
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -865,7 +862,7 @@ const CalculationCard = React.memo(({
                   {i + 1}
                 </span>
                 <span
-                  className="text-slate-900 uppercase font-extrabold tracking-tight text-xs truncate max-w-[280px]"
+                  className="text-slate-900 uppercase font-extrabold tracking-tight text-xs truncate max-w-[200px]"
                   title={`${l.from || "?"} ➔ ${l.to || "?"}`}
                 >
                   {l.from || "?"} &rarr; {l.to || "?"}
@@ -945,8 +942,6 @@ export default function DohodModule({ user }: DohodModuleProps) {
   });
   const [mapModalOpen, setMapModalOpen] = useState(false);
   const [mapLegIndex, setMapLegIndex] = useState<number | null>(null);
-  const [mapOrigin, setMapOrigin] = useState("");
-  const [mapDestination, setMapDestination] = useState("");
   const [mapKmResult, setMapKmResult] = useState<number>(0);
   const [saveToDirectoryChecked, setSaveToDirectoryChecked] = useState(false);
   const [mapAvoidTolls, setMapAvoidTolls] = useState(false);
@@ -955,14 +950,6 @@ export default function DohodModule({ user }: DohodModuleProps) {
   const [mapVehicleType, setMapVehicleType] = useState("TRUCK");
   const [mapAvoidKeywords, setMapAvoidKeywords] = useState("");
   const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
-
-  const handleMoveWaypoint = (fromIndex: number, toIndex: number) => {
-    if (toIndex < 0 || toIndex >= mapWaypoints.length) return;
-    const updated = [...mapWaypoints];
-    const [removed] = updated.splice(fromIndex, 1);
-    updated.splice(toIndex, 0, removed);
-    setMapWaypoints(updated);
-  };
 
   const [mapAvoidedStatus, setMapAvoidedStatus] = useState<{
     attempted: boolean;
@@ -1004,9 +991,6 @@ export default function DohodModule({ user }: DohodModuleProps) {
   ]);
   const [legsBackup, setLegsBackup] = useState<Omit<Leg, "id">[] | null>(null);
 
-  const [aiSuggestions, setAiSuggestions] = useState<string>(
-    "Вставьте рабочий текст вроде «Минск — Стамбул 4300 евро». Система добавит плечи и найдет километраж.",
-  );
   const [routeSearch, setRouteSearch] = useState("");
   const [historySearch, setHistorySearch] = useState("");
   const [activeHistoryDirectionTab, setActiveHistoryDirectionTab] =
@@ -1697,326 +1681,6 @@ export default function DohodModule({ user }: DohodModuleProps) {
     return null;
   };
 
-  // AI PARSER logic ported from dohod-7.html and heavily upgraded
-  const parseRouteMessage = (text: string) => {
-    const parsedLegs: any[] = [];
-    const originalText = (text || "")
-      .replace(/[→➔➡]/g, " ")
-      .replace(/[—–]/g, "-");
-
-    const normalizeCityName = (name: string) =>
-      (name || "")
-        .trim()
-        .replace(/\s+/g, " ")
-        .split(" ")
-        .map((p) =>
-          p ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : "",
-        )
-        .join(" ");
-
-    // Продвинутый маппинг валют
-    const mapCurrency = (raw: string) => {
-      const v = (raw || "")
-        .toLowerCase()
-        .trim()
-        .replace(/[^a-zа-яё0-9$€₽.]/g, "");
-      if (!v) return "EUR";
-      if (
-        ["€", "eur", "евро", "euro", "эур", "евр"].some((x) => v.includes(x)) ||
-        v.includes("€")
-      )
-        return "EUR";
-      if (
-        [
-          "₽",
-          "rub",
-          "руб",
-          "рубль",
-          "рублей",
-          "рос",
-          "росруб",
-          "рр",
-          "росс",
-          "рубли",
-        ].some((x) => v.includes(x)) ||
-        v.includes("₽") ||
-        v === "рр"
-      )
-        return "RUB";
-      if (
-        ["byn", "бел", "белруб", "рб", "by", "белорус"].some((x) =>
-          v.includes(x),
-        )
-      )
-        return "BYN";
-      if (
-        [
-          "usd",
-          "$",
-          "долл",
-          "доллар",
-          "доллара",
-          "долларов",
-          "уе",
-          "бакс",
-          "баксов",
-          "dollars",
-          "y.e",
-          "ye",
-        ].some((x) => v.includes(x)) ||
-        v.includes("$")
-      )
-        return "USD";
-      return "USD";
-    };
-
-    // Продвинутый парсинг стоимости (учитывает тыс., к, пробелы, запятые)
-    const extractRate = (chunk: string) => {
-      const matches = [];
-      // В регулярном выражении для валют ищем словосочетания с пробелами, такие как рос руб
-      const rateRegex =
-        /(\d[\d\s]*(?:[.,]\d+)?)\s*(тыс|тысяч|тыс\.|тысячи|к|k)?\s*(евро|eur|euro|эур|€|долл|доллар|доллара|долларов|usd|\$|у\.е|уе|руб(?:лей|ль|ля|и|ов)?|rub|₽|byn|бел(?:рус|руб(?:лей)?)?|рос\.?\s*руб(?:лей|ля|ь)?|росруб|рр)/gi;
-      let match;
-      while ((match = rateRegex.exec(chunk)) !== null) {
-        const after = chunk
-          .slice(
-            match.index + match[0].length,
-            match.index + match[0].length + 8,
-          )
-          .toLowerCase();
-        if (/^\s*(км|km)/.test(after)) continue;
-        let amount =
-          parseFloat(match[1].replace(/\s+/g, "").replace(",", ".")) || 0;
-        const multiplier = match[2] ? match[2].toLowerCase() : "";
-        if (
-          ["тыс", "тысяч", "тыс.", "тысячи", "к", "k"].some((m) =>
-            multiplier.includes(m),
-          )
-        ) {
-          amount *= 1000;
-        }
-        if (amount > 0) {
-          matches.push({
-            amount,
-            currency: mapCurrency(match[3]),
-            hasCurrency: Boolean(match[3]),
-          });
-        }
-      }
-      return (
-        matches.find((i) => i.hasCurrency) ||
-        matches[matches.length - 1] || { amount: 0, currency: "EUR" }
-      );
-    };
-
-    // Нормализация падежей для fallback-режима
-    const cleanCityName = (city: string) => {
-      let name = city.trim();
-      if (name.length <= 2) return name;
-      const low = name.toLowerCase();
-      if (low.endsWith("ска")) return name.slice(0, -1); // Минска -> Минск
-      if (low.endsWith("ске")) return name.slice(0, -1); // Минске -> ...
-      if (low.endsWith("ску")) return name.slice(0, -1) + "к"; // Минску -> Минск
-      if (low.endsWith("кву")) return name.slice(0, -1) + "а"; // Москву -> Москва
-      if (low.endsWith("квы")) return name.slice(0, -1) + "а"; // Москвы -> Москва
-      if (low.endsWith("кве")) return name.slice(0, -1) + "а"; // Москве -> Москва
-      if (low.endsWith("бурга")) return name.slice(0, -1); // ...
-      if (low.endsWith("бурге")) return name.slice(0, -1); // ...
-      if (low.endsWith("града")) return name.slice(0, -1);
-      if (low.endsWith("граде")) return name.slice(0, -1);
-      if (low.endsWith("тера")) return name.slice(0, -1) + "р"; // Питера -> Питер
-      if (low.endsWith("тере")) return name.slice(0, -1) + "р"; // Питере -> Питер
-      if (low.endsWith("ова")) return name.slice(0, -1); // Ростова -> Ростов
-      if (low.endsWith("ове")) return name.slice(0, -1); // Ростове ->  Ростов
-      return name;
-    };
-
-    // Автогенерация базовых словоформ для городов из пресетов distances
-    const getCityForms = (cityName: string): string[] => {
-      const lower = cityName.toLowerCase().trim();
-      const forms = [lower];
-
-      if (
-        lower.includes("санкт-петербург") ||
-        lower === "питер" ||
-        lower === "спб"
-      ) {
-        forms.push(
-          "санкт-петербург",
-          "санкт-петербурга",
-          "санкт-петербурге",
-          "питер",
-          "питера",
-          "питере",
-          "спб",
-        );
-      }
-      if (lower === "нижний новгород") {
-        forms.push(
-          "нижний новгород",
-          "нижнего новгорода",
-          "нижнем новгороде",
-          "нн",
-          "нижнем",
-        );
-      }
-      if (lower.includes("ростов-на-дону")) {
-        forms.push(
-          "ростов-на-дону",
-          "ростове-на-дону",
-          "ростова-на-дону",
-          "ростов",
-        );
-      }
-
-      if (lower.length > 3) {
-        if (lower.endsWith("а") || lower.endsWith("ы")) {
-          forms.push(lower.slice(0, -1)); // Москва -> москв
-        } else if (lower.endsWith("о") || lower.endsWith("е")) {
-          forms.push(lower.slice(0, -1)); // ...
-        } else if (lower.endsWith("ий") || lower.endsWith("ый")) {
-          forms.push(lower.slice(0, -2));
-        } else if (lower.endsWith("ь")) {
-          forms.push(lower.slice(0, -1)); // Гомель -> гомел
-        }
-      }
-
-      return Array.from(new Set(forms))
-        .filter((f) => f.length > 2)
-        .sort((a, b) => b.length - a.length);
-    };
-
-    const citiesDataset = Array.from(
-      new Set(
-        distances.flatMap((item) => [item.from, item.to]).filter(Boolean),
-      ),
-    )
-      .map((city) => String(city).trim())
-      .filter((city) => city.length > 1);
-
-    const lowerSource = originalText.toLowerCase();
-    const mentions: any[] = [];
-
-    citiesDataset.forEach((city) => {
-      const forms = getCityForms(city);
-      forms.forEach((form) => {
-        let index = lowerSource.indexOf(form);
-        while (index !== -1) {
-          const bBefore = lowerSource[index - 1] || " ";
-          const bAfter = lowerSource[index + form.length] || " ";
-          const hasCleanBoundary =
-            !/[а-яёa-z0-9]/i.test(bBefore) && !/[а-яёa-z0-9]/i.test(bAfter);
-          const overlaps = mentions.some(
-            (m) => index < m.end && index + form.length > m.index,
-          );
-          if (hasCleanBoundary && !overlaps) {
-            mentions.push({
-              city: city, // Используем правильное (официальное) имя города из пресетов
-              matchedText: originalText.slice(index, index + form.length),
-              index,
-              end: index + form.length,
-            });
-          }
-          index = lowerSource.indexOf(form, index + 1);
-        }
-      });
-    });
-
-    mentions.sort((a, b) => a.index - b.index);
-
-    if (mentions.length >= 2) {
-      for (let i = 0; i < mentions.length - 1; i++) {
-        const from = mentions[i].city;
-        const to = mentions[i + 1].city;
-        if (from.toLowerCase() === to.toLowerCase()) continue;
-        const nextBoundary = mentions[i + 2]
-          ? mentions[i + 2].index
-          : originalText.length;
-        const rateChunk = originalText.slice(mentions[i + 1].end, nextBoundary);
-        const rate = extractRate(rateChunk);
-        parsedLegs.push({
-          from,
-          to,
-          eurRate: rate.currency === "EUR" ? rate.amount : 0,
-          infoRate: rate.currency !== "EUR" ? rate.amount : 0,
-          infoCurrency: rate.currency,
-        });
-      }
-      return parsedLegs;
-    }
-
-    // fallback
-    const tokens = originalText
-      .replace(/[,.;:()]/g, " ")
-      .replace(/-/g, " ")
-      .split(/\s+/)
-      .filter((t) => t.length > 0);
-    const noiseWords = [
-      "в",
-      "во",
-      "из",
-      "с",
-      "со",
-      "от",
-      "на",
-      "до",
-      "по",
-      "потом",
-      "далее",
-      "через",
-      "едем",
-      "рейс",
-      "маршрут",
-      "ставка",
-      "фрахт",
-      "цена",
-      "за",
-      "евро",
-      "eur",
-      "euro",
-      "€",
-      "долл",
-      "usd",
-      "$",
-      "руб",
-      "rub",
-      "₽",
-      "byn",
-      "бел",
-      "дней",
-      "дн",
-      "дней",
-      "суток",
-      "сут",
-      "дня",
-      "день",
-      "сутки",
-    ];
-    const cityItems: string[] = [];
-
-    tokens.forEach((token) => {
-      if (noiseWords.includes(token.toLowerCase()) || /^\d/.test(token)) return;
-      cityItems.push(normalizeCityName(cleanCityName(token)));
-    });
-
-    for (let i = 0; i < cityItems.length - 1; i++) {
-      const rateChunk = originalText
-        .split(cityItems[i + 1])
-        .slice(1)
-        .join(cityItems[i + 1]);
-      const rate = extractRate(rateChunk);
-      parsedLegs.push({
-        from: cityItems[i],
-        to: cityItems[i + 1],
-        eurRate: rate.currency === "EUR" ? rate.amount : 0,
-        infoRate: rate.currency !== "EUR" ? rate.amount : 0,
-        infoCurrency: rate.currency,
-      });
-    }
-    return parsedLegs;
-  };
-
-
   const loadCitiesDatalist = () => {
     const set = new Set<string>();
     distances.forEach((d) => {
@@ -2067,11 +1731,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
             </select>
           </h2>
 
-          {/* Swipe Help Badge for Mobile */}
-          
-
           <div className="hidden lg:block w-full overflow-x-auto pb-4 custom-scrollbar">
-            <table className="w-full min-w-[1200px] border-collapse relative">
+            <table className="w-full border-collapse relative">
               <thead className="sticky top-0 bg-slate-50 z-20 shadow-[inset_0_-1px_0_rgba(226,232,240,0.4)]">
                 <tr>
                   <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-left rounded-tl-xl w-8">
@@ -2317,14 +1978,15 @@ export default function DohodModule({ user }: DohodModuleProps) {
                     <td className="p-2 text-right space-x-1.5 whitespace-nowrap">
                       <button
                         onClick={() => addLegRowAfter(idx)}
-                        className="w-8 h-8 inline-flex items-center justify-center rounded-xl bg-blue-50/50 hover:bg-blue-100 text-blue-600 border border-blue-100/30 hover:border-blue-200/50 transition cursor-pointer"
+                        className="w-9 h-9 inline-flex items-center justify-center rounded-xl bg-blue-50/50 hover:bg-blue-100 text-blue-600 border border-blue-100/30 hover:border-blue-200/50 transition cursor-pointer min-h-[44px] min-w-[44px]"
                       >
                         <Plus className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => removeLeg(idx)}
                         disabled={legs.length <= 1}
-                        className="w-8 h-8 inline-flex items-center justify-center rounded-xl bg-rose-50/50 hover:bg-rose-100 text-rose-600 border border-rose-100/30 hover:border-rose-200/50 transition disabled:opacity-30 cursor-pointer"
+                        className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl bg-rose-50/50 hover:bg-rose-100 text-rose-600 border border-rose-100/30 hover:border-rose-200/50 transition disabled:opacity-30 cursor-pointer"
+
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -2336,7 +1998,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
           </div>
 
           {/* Mobile Cards View */}
-          <div className="block lg:hidden space-y-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-1 pb-4">
+          <div className="block lg:hidden space-y-4 pr-1 pb-4">
             {legs.map((leg, idx) => (
               <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-4 relative shadow-sm">
                 <div className="flex justify-between items-center pb-2 border-b border-slate-100">
@@ -2344,14 +2006,14 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => addLegRowAfter(idx)}
-                      className="w-8 h-8 inline-flex items-center justify-center rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 transition cursor-pointer"
+                      className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 transition cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => removeLeg(idx)}
                       disabled={legs.length <= 1}
-                      className="w-8 h-8 inline-flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 transition disabled:opacity-30 cursor-pointer"
+                      className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 transition disabled:opacity-30 cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -2558,13 +2220,13 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   },
                 ])
               }
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition"
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition min-h-[44px]"
             >
               Сбросить
             </button>
             <button
               onClick={saveCurrentAsTemplate}
-              className="text-[10px] font-black uppercase text-slate-500 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 transition"
+              className="text-[10px] font-black uppercase text-slate-500 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 transition min-h-[44px]"
             >
               <Save className="h-3 w-3" /> Шаблонизировать текущий вид
             </button>
@@ -2580,11 +2242,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
         </div>
 
         {/* Total Stats Banner - Full Width Layout Panel */}
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 text-slate-900 shadow-[0_8px_30px_rgba(0,0,0,0.01)] border border-slate-200/50 flex flex-col">
-          <h2 className="text-sm font-bold text-slate-900 tracking-tight pb-4 border-b border-slate-200/40 mb-6 flex items-center justify-between">
+        <div className="bg-white rounded-[2rem] md:rounded-[2rem] p-4 md:p-6 lg:p-8 text-slate-900 shadow-[0_8px_30px_rgba(0,0,0,0.01)] border border-slate-200/50 flex flex-col">
+          <h2 className="text-sm font-bold text-slate-900 tracking-tight pb-4 border-b border-slate-200/40 mb-4 md:mb-6 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-slate-900">
-              <TrendingUp className="h-5 w-5 text-[#3765F6]" />{" "}
-              Экономика и доходность рейса
+              <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-[#3765F6]" />{" "}
+              Экономика рейса
             </span>
           </h2>
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -2811,18 +2473,18 @@ export default function DohodModule({ user }: DohodModuleProps) {
         {/* Custom Currency Converter Widget */}
         <div
           id="nbrb-converter-widget"
-          className="bg-white rounded-[2rem] p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] relative overflow-hidden"
+          className="bg-white rounded-[2rem] p-4 md:p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] relative overflow-hidden"
         >
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4 select-none">
-            <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              🏦 Конвертер валют НБ РБ
+            <h2 className="text-sm md:text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <Landmark className="w-4 h-4 text-[#3765F6]" /> Конвертер валют НБ РБ
             </h2>
-            <span className="text-xs font-semibold tracking-wider text-[#3765F6] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+            <span className="text-[10px] md:text-xs font-semibold tracking-wider text-[#3765F6] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
               API NBRB.BY
             </span>
           </div>
 
-          <div className="flex overflow-x-auto custom-scrollbar items-center gap-3 mb-4 bg-slate-50/50 border border-slate-200/60 p-3 rounded-2xl text-xs select-none whitespace-nowrap shadow-sm">
+          <div className="flex flex-wrap items-center gap-2 mb-4 bg-slate-50/50 border border-slate-200/60 p-3 rounded-2xl text-xs select-none shadow-sm">
             <span className="text-slate-500 font-semibold shrink-0 mr-2">
               Курсы НБ РБ:
             </span>
@@ -2843,7 +2505,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
             </span>
           </div>
 
-          <div className="w-full bg-slate-50/50 rounded-2xl p-5 border border-slate-200/60 flex flex-col gap-3 h-[450px] overflow-y-auto custom-scrollbar">
+          <div className="w-full bg-slate-50/50 rounded-2xl p-4 md:p-5 border border-slate-200/60 flex flex-col gap-3 max-h-[400px] md:max-h-[450px] overflow-y-auto custom-scrollbar">
             {[
               "BYN",
               "USD",
@@ -3074,9 +2736,9 @@ export default function DohodModule({ user }: DohodModuleProps) {
                               <span className="text-slate-300 font-bold text-[11px] select-none px-0.5">&rarr;</span>
                             )}
                             <span className="bg-white/75 px-3 py-1.5 rounded-xl border border-slate-200/40 text-[10px] sm:text-[11px] font-bold text-slate-800 flex items-center gap-2 shadow-2xs hover:border-[#3765F6] hover:shadow-xs transition duration-150">
-                              <span className="truncate max-w-[100px] sm:max-w-[140px] text-slate-900" title={l.from}>{l.from || "?"}</span>
+                              <span className="truncate max-w-[140px] text-slate-900" title={l.from}>{l.from || "?"}</span>
                               <span className="text-slate-300 font-normal select-none">&bull;</span>
-                              <span className="truncate max-w-[100px] sm:max-w-[140px] text-slate-700" title={l.to}>{l.to || "?"}</span>
+                              <span className="truncate max-w-[140px] text-slate-700" title={l.to}>{l.to || "?"}</span>
                               <span className="text-[9px] text-[#3765F6] font-bold bg-blue-50/50 px-1.5 py-0.5 rounded-md border border-blue-100/30 ml-1 shrink-0">
                                 {Number(l.dist || l.distance || 0).toLocaleString("ru-RU")} км
                               </span>
@@ -3180,78 +2842,54 @@ export default function DohodModule({ user }: DohodModuleProps) {
       </div>
 
       {conversionDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 animate-fade-in overflow-y-auto">
-          <div className="bg-white rounded-[2rem] w-full max-w-full sm:max-w-md mx-2 sm:mx-4 shadow-2xl border border-slate-200 p-6 lg:p-8 space-y-6 my-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#3765F6]">
-                <Sparkles className="h-6 w-6" />
+              <div className="fixed inset-0 z-50 flex flex-col md:items-center md:justify-center bg-slate-900/40 animate-fade-in">
+                <div className="bg-white w-full h-full md:h-auto md:rounded-[2rem] md:w-full md:max-w-md mx-0 md:mx-4 shadow-2xl border border-slate-200 md:my-4 flex flex-col">
+                  <div className="p-4 md:p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#3765F6] shrink-0">
+                        <Sparkles className="h-4 w-4 md:h-5 md:w-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-xs md:text-sm font-black uppercase tracking-wider text-slate-800">Автоконвертация НБ РБ</h3>
+                        <p className="text-[9px] md:text-[10px] text-slate-400 font-bold uppercase mt-0.5">Курсы валют в реальном времени</p>
+                      </div>
+                    </div>
+                    <button onClick={dismissConversion} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 border border-slate-200 transition shadow-sm cursor-pointer">
+                      <X className="w-5 h-5" strokeWidth={2.5} />
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+                    <p className="text-xs md:text-sm text-slate-700 font-semibold leading-relaxed">
+                      Вы указали инфо-ставку <span className="text-slate-900 underline font-black">{conversionDialog.infoRate} {conversionDialog.infoCurrency}</span>. Хотите автоматически сконвертировать её в евро для «Ставки €» плеча #{conversionDialog.index + 1}?
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200/60 font-mono text-center">
+                      <div className="border-r border-slate-200">
+                        <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest">Инфо Ставка</span>
+                        <span className="text-sm font-black text-slate-700 mt-1 block">{conversionDialog.infoRate} {conversionDialog.infoCurrency}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[8px] font-black text-emerald-500 uppercase tracking-widest">Результат (€)</span>
+                        <span className="text-sm font-black text-emerald-600 mt-1 block">{conversionDialog.proposedFreight} €</span>
+                      </div>
+                    </div>
+                    <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between px-1">
+                      <span>Курс {conversionDialog.infoCurrency}/EUR (НБ РБ):</span>
+                      <span className="font-extrabold text-slate-600">
+                        {(nbrbRates[conversionDialog.infoCurrency]?.rate / nbrbRates[conversionDialog.infoCurrency]?.scale / (nbrbRates["EUR"]?.rate || 1)).toFixed(5)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-4 md:p-6 border-t border-slate-100 flex gap-2.5 shrink-0">
+                    <button onClick={dismissConversion} className="flex-1 py-2.5 px-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl transition cursor-pointer shadow-sm min-h-[44px]">
+                      Пропустить
+                    </button>
+                    <button onClick={applyConversion} className="flex-1 py-2.5 px-4 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold text-xs rounded-xl transition shadow-sm shadow-blue-500/20 cursor-pointer flex items-center justify-center gap-1.5 min-h-[44px]">
+                      Применить
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 font-mono">
-                  Автоконвертация НБ РБ
-                </h3>
-                <p className="text-[10px] text-slate-400 font-mono font-bold uppercase mt-0.5">
-                  Курсы валют в реальном времени
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 font-extrabold leading-relaxed">
-              Вы указали инфо-ставку{" "}
-              <span className="text-slate-900 underline font-black">
-                {conversionDialog.infoRate} {conversionDialog.infoCurrency}
-              </span>
-              . Хотите автоматически сконвертировать её в евро для «Ставки €»
-              плеча #{conversionDialog.index + 1}?
-            </p>
-
-            <div className="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200/60 font-mono text-center">
-              <div className="border-r border-slate-200">
-                <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest">
-                  Инфо Ставка
-                </span>
-                <span className="text-sm font-black text-slate-700 mt-1 block">
-                  {conversionDialog.infoRate} {conversionDialog.infoCurrency}
-                </span>
-              </div>
-              <div>
-                <span className="block text-[8px] font-black text-emerald-500 uppercase tracking-widest">
-                  Результат (€)
-                </span>
-                <span className="text-sm font-black text-emerald-600 mt-1 block">
-                  {conversionDialog.proposedFreight} €
-                </span>
-              </div>
-            </div>
-
-            <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between px-1">
-              <span>Курс {conversionDialog.infoCurrency}/EUR (НБ РБ):</span>
-              <span className="font-extrabold text-slate-600">
-                {(
-                  nbrbRates[conversionDialog.infoCurrency]?.rate /
-                  nbrbRates[conversionDialog.infoCurrency]?.scale /
-                  (nbrbRates["EUR"]?.rate || 1)
-                ).toFixed(5)}
-              </span>
-            </div>
-
-            <div className="flex gap-2.5 pt-2">
-              <button
-                onClick={dismissConversion}
-                className="flex-1 py-2.5 px-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl transition cursor-pointer shadow-sm min-h-[44px]"
-              >
-                Пропустить
-              </button>
-              <button
-                onClick={applyConversion}
-                className="flex-1 py-2.5 px-4 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold text-xs rounded-xl transition shadow-sm shadow-blue-500/20 cursor-pointer flex items-center justify-center gap-1.5 min-h-[44px]"
-              >
-                Применить
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            )}
 
       <MapRouteModal
         isOpen={mapModalOpen}
@@ -3271,254 +2909,18 @@ export default function DohodModule({ user }: DohodModuleProps) {
         onApply={applyMapRoute}
       />
 
-      {false && mapModalOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 animate-fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col pt-1">
-            <div className="px-6 py-5 border-b border-slate-100 flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-blue-50 text-blue-600 p-2 rounded-xl">
-                    <MapPin className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">
-                      Интерактивный Расчет Маршрута
-                    </h3>
-                    <div className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-widest">
-                      Проверка расстояния с авто-калькуляцией
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setMapModalOpen(false)}
-                  className="w-10 h-10 rounded-full bg-slate-50 text-slate-500 hover:bg-slate-100 flex items-center justify-center transition"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-
-              {/* Intermediate Waypoints */}
-              <div className="mt-3 bg-slate-50/50 p-4 rounded-2xl border border-dashed border-slate-200/80 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase text-slate-400 font-mono tracking-wider">
-                    Промежуточные точки{" "}
-                    {mapWaypoints.length > 0 ? `(${mapWaypoints.length})` : ""}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setMapWaypoints([...mapWaypoints, ""])}
-                    className="text-[10px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 transition cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Добавить точку</span>
-                  </button>
-                </div>
-
-                {mapWaypoints.length > 0 && (
-                  <div className="space-y-2 mt-1">
-                    {mapWaypoints.map((wp, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center gap-2 animate-fade-in group bg-white p-1.5 rounded-xl border border-slate-100"
-                        draggable={true}
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData(
-                            "text/plain",
-                            index.toString(),
-                          );
-                        }}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const fromIndex = parseInt(
-                            e.dataTransfer.getData("text/plain"),
-                            10,
-                          );
-                          if (!isNaN(fromIndex) && fromIndex !== index) {
-                            handleMoveWaypoint(fromIndex, index);
-                          }
-                        }}
-                      >
-                        <div
-                          className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600 p-1 transition"
-                          title="Перетащить"
-                        >
-                          <GripVertical className="w-3.5 h-3.5" />
-                        </div>
-                        <span className="text-[10px] font-bold text-slate-400 font-mono min-w-[15px]">
-                          {index + 1}.
-                        </span>
-                        <input
-                          type="text"
-                          value={wp}
-                          onChange={(e) => {
-                            const newWps = [...mapWaypoints];
-                            newWps[index] = e.target.value;
-                            setMapWaypoints(newWps);
-                          }}
-                          placeholder="Введите населённый пункт..."
-                          className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] font-bold text-slate-700 outline-none focus:border-blue-500 transition"
-                        />
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newWps = [...mapWaypoints];
-                              newWps.splice(index + 1, 0, "");
-                              setMapWaypoints(newWps);
-                            }}
-                            className="p-1 text-blue-500 hover:text-blue-700 transition cursor-pointer"
-                            title="Добавить точку после этой"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={index === 0}
-                            onClick={() => handleMoveWaypoint(index, index - 1)}
-                            className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-30 transition cursor-pointer"
-                            title="Переместить вверх"
-                          >
-                            <ChevronUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={index === mapWaypoints.length - 1}
-                            onClick={() => handleMoveWaypoint(index, index + 1)}
-                            className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-30 transition cursor-pointer"
-                            title="Переместить вниз"
-                          >
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newWps = mapWaypoints.filter(
-                                (_, idx) => idx !== index,
-                              );
-                              setMapWaypoints(newWps);
-                            }}
-                            className="p-1 text-[#3765F6] bg-slate-100 border border-slate-200/60 hover:bg-white transition rounded-lg hover:text-slate-700 cursor-pointer ml-1"
-                            title="Удалить"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                    Пункт Отправления (Откуда)
-                  </label>
-                  <input
-                    type="text"
-                    value={mapOrigin}
-                    onChange={(e) => setMapOrigin(e.target.value)}
-                    className="w-full bg-slate-50 text-slate-800 font-bold border border-slate-200 rounded-xl px-4 py-2.5 text-xs outline-none focus:border-blue-500 focus:bg-white transition"
-                    placeholder="Начните вводить город..."
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                    Пункт Назначения (Куда)
-                  </label>
-                  <input
-                    type="text"
-                    value={mapDestination}
-                    onChange={(e) => setMapDestination(e.target.value)}
-                    className="w-full bg-slate-50 text-slate-800 font-bold border border-slate-200 rounded-xl px-4 py-2.5 text-xs outline-none focus:border-blue-500 focus:bg-white transition"
-                    placeholder="Начните вводить город..."
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="relative h-[380px] md:h-[450px] w-full bg-slate-100 border-b border-slate-100">
-              {mapOrigin && mapDestination ? (
-                <div className="absolute inset-0 flex items-center justify-center text-slate-400 font-bold text-xs uppercase tracking-wider">
-                  Карта загружается...
-                </div>
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-slate-400 font-bold text-xs uppercase tracking-wider">
-                  Введите пункты отправления и назначения для прокладки маршрута
-                </div>
-              )}
-            </div>
-
-            <div className="p-6 bg-slate-50 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-              <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono">
-                    Расстояние маршрута:
-                  </span>
-                  <span
-                    className={`text-xl font-black ${mapKmResult > 0 ? "text-blue-600" : "text-slate-400"}`}
-                  >
-                    {mapKmResult > 0
-                      ? `${mapKmResult} км`
-                      : "Рассчитывается..."}
-                  </span>
-                </div>
-
-                <label className="flex items-center gap-2 cursor-pointer select-none border border-slate-200 rounded-xl px-3.5 py-2.5 bg-white shadow-xs hover:bg-slate-100 transition">
-                  <input
-                    type="checkbox"
-                    checked={saveToDirectoryChecked}
-                    onChange={(e) =>
-                      setSaveToDirectoryChecked(e.target.checked)
-                    }
-                    className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500"
-                  />
-                  <span className="text-xs font-black text-slate-700">
-                    Сохранить также в справочник
-                  </span>
-                </label>
-              </div>
-
-              <div className="flex gap-2 justify-end">
-                <button
-                  onClick={() => setMapModalOpen(false)}
-                  className="px-6 py-3 rounded-xl font-black text-xs uppercase text-slate-500 hover:bg-slate-200 transition"
-                >
-                  Отмена
-                </button>
-                <button
-                  onClick={applyMapRoute}
-                  disabled={mapKmResult === 0}
-                  className={`px-8 py-3 rounded-xl font-black text-xs uppercase transition shadow-sm ${mapKmResult > 0 ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-400 cursor-not-allowed"}`}
-                >
-                  Применить пробег
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {editingCalcId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/40 animate-fade-in overflow-y-auto">
-          <div className="bg-white rounded-[2rem] w-full max-w-full sm:max-w-lg mx-2 sm:mx-4 shadow-2xl border border-slate-200 my-4">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-[2rem]">
-              <h3 className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                <Edit className="w-5 h-5 text-[#3765F6]" /> Редактирование
-                Калькуляция
+        <div className="fixed inset-0 z-50 flex flex-col md:items-center md:justify-center bg-slate-900/40 animate-fade-in">
+          <div className="bg-white w-full h-full md:h-auto md:rounded-[2rem] md:w-full md:max-w-lg mx-0 md:mx-4 shadow-2xl border border-slate-200 md:my-4 flex flex-col">
+            <div className="p-4 md:p-6 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
+              <h3 className="text-xs md:text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                <Edit className="w-4 h-4 md:w-5 md:h-5 text-[#3765F6]" /> Редактирование калькуляции
               </h3>
-              <button
-                onClick={closeEditCalcModal}
-                className="min-h-[44px] min-w-[44px] text-slate-400 hover:text-slate-600 bg-white shadow-sm border border-slate-200 rounded-full flex items-center justify-center font-bold"
-              >
-                ×
+              <button onClick={closeEditCalcModal} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 border border-slate-200 transition shadow-sm cursor-pointer">
+                <X className="w-5 h-5" strokeWidth={2.5} />
               </button>
             </div>
-
-            <div className="p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                   Направление
@@ -3623,17 +3025,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
               </div>
             </div>
 
-            <div className="p-6 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50 rounded-b-[2rem]">
-              <button
-                onClick={closeEditCalcModal}
-                className="px-6 py-3 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition cursor-pointer text-sm font-mono uppercase tracking-widest shadow-sm min-h-[44px]"
-              >
+            <div className="p-4 md:p-6 border-t border-slate-100 flex justify-end gap-3 bg-white md:bg-slate-50/50 shrink-0">
+              <button onClick={closeEditCalcModal} className="px-4 md:px-6 py-2.5 md:py-3 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition cursor-pointer text-xs md:text-sm font-mono uppercase tracking-widest shadow-sm min-h-[44px]">
                 Отмена
               </button>
-              <button
-                onClick={saveEditCalcModal}
-                className="px-6 py-3 rounded-xl font-semibold text-white bg-[#3765F6] hover:bg-[#2555E5] transition flex items-center justify-center gap-2 shadow-sm shadow-blue-500/20 text-sm cursor-pointer min-h-[44px]"
-              >
+              <button onClick={saveEditCalcModal} className="px-4 md:px-6 py-2.5 md:py-3 rounded-xl font-semibold text-white bg-[#3765F6] hover:bg-[#2555E5] transition flex items-center justify-center gap-2 shadow-sm shadow-blue-500/20 text-xs md:text-sm cursor-pointer min-h-[44px]">
                 Сохранить
               </button>
             </div>

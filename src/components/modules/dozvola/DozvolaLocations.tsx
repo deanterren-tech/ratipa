@@ -442,7 +442,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
   });
 
   return (
-    <div className="flex flex-col h-[820px] w-full gap-4 text-slate-800">
+    <div className="flex flex-col md:h-[820px] w-full gap-4 text-slate-800">
       
       {/* 1) ВЕРХНЯЯ ПАНЕЛЬ ФИЛЬТРОВ И ДЕЙСТВИЙ */}
       <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-4 border border-slate-200/50 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
@@ -689,7 +689,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
                     {/* Action buttons */}
                     <div 
-                      className="absolute top-2.5 right-2 opacity-0 group-hover:opacity-100 transition flex items-center gap-1"
+                      className="absolute top-2.5 right-2 md:opacity-0 md:group-hover:opacity-100 transition flex items-center gap-1"
                       onClick={e => e.stopPropagation()}
                     >
                       <button 

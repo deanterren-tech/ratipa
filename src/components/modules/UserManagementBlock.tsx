@@ -272,7 +272,7 @@ export default function UserManagementBlock({ user }: Props) {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2 max-h-[500px] md:max-h-none">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2">
           {activeMainTab === "users" && filteredUsers.map((u) => {
             const isSelected = selectedUid === u.uid;
             const roleLabel = ROLE_LABELS[u.role] || u.role;
@@ -318,7 +318,7 @@ export default function UserManagementBlock({ user }: Props) {
                           if (selectedUid === u.uid) setSelectedUid(null);
                         }
                       }}
-                      className="opacity-0 sm:opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                      className="md:opacity-0 md:group-hover:opacity-100 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                     >
                       <Trash2 size={13} />
                     </div>

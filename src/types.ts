@@ -237,7 +237,7 @@ export interface TripPlan {
   stripColor: string;
   legs: LegPlan[];
   potentialLoads?: PotentialLoad[];
-  activeLegIndex: number;
+  activeLegIndex?: number;
   dispatcher: string;
   driverName?: string;
   currentMonth: string;

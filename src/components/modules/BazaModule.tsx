@@ -1167,10 +1167,8 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     </div>
                  </div>
 
-                 {/* Swipe Help Badge for Mobile */}
-                 
-
-                 <div className="overflow-x-auto custom-scrollbar">
+                 {/* Desktop Table */}
+                 <div className="hidden lg:block overflow-x-auto custom-scrollbar">
                      
 <table className="w-full text-left border-separate border-spacing-y-2">
   <thead>
@@ -1241,7 +1239,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                  </div>
 
                  {/* Mobile Cards View */}
-                 <div className="hidden">{/* mobile cards removed — table with scroll covers all sizes */}
+                 <div className="block lg:hidden space-y-3 mt-4">
                    {visibleList.map(v => (
                      <div 
                        key={`${v.id}-${normalizePlate(v.carNumber)}`} 
@@ -1297,12 +1295,12 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                          </div>
                        </div>
                      </div>
-                     ))}
-                     {filteredList.length === 0 && (
-                     <div className="text-center p-8 text-slate-400 font-medium bg-slate-50 rounded-2xl border border-slate-200/50">
-                       Нет записей
-                     </div>
-                   )}
+                     ))}</div>
+                   
+                   {filteredList.length === 0 && (
+                   <div className="text-center p-8 text-slate-400 font-medium bg-slate-50 rounded-2xl border border-slate-200/50">
+                     Нет записей
+                   </div>)}
                    {hasMoreBaza && (
                      <div className="flex justify-center mt-4">
                        <button
@@ -1313,7 +1311,6 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                        </button>
                      </div>
                    )}
-                   </div>
              </div>
           </div>
 
@@ -1363,13 +1360,13 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
       {/* Car Editor Modal */}
       <AnimatePresence>
         {isCarModalOpen && (
-           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto">
-              <motion.div initial={{y:30, scale:0.96}} animate={{y:0, scale:1}} exit={{y:20, opacity:0, scale:0.96}} className="bg-white text-slate-900 rounded-[2rem] w-full max-w-full md:max-w-4xl mx-4 flex flex-col shadow-[0_8px_30px_rgba(0,0,0,0.01)] border border-slate-200/50 my-4">
-                 <div className="p-5 border-b border-slate-200/50 flex justify-between items-center bg-white shrink-0">
-                    <div className="flex items-center gap-3">
-                       <h2 className="text-sm font-semibold text-slate-800 tracking-tight">Карточка автомобиля</h2>
+           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-50 bg-slate-900/40 flex items-start md:items-center justify-center overflow-y-auto">
+              <motion.div initial={{y:30, scale:0.96}} animate={{y:0, scale:1}} exit={{y:20, opacity:0, scale:0.96}} className="bg-white w-full md:max-w-4xl md:mx-4 md:rounded-[2rem] flex flex-col md:border md:border-slate-200/50 md:shadow-[0_8px_30px_rgba(0,0,0,0.01)] min-h-screen md:min-h-0 md:max-h-[calc(100vh-2rem)]">
+                 <div className="p-4 md:p-5 border-b border-slate-200/50 flex justify-between items-center bg-white shrink-0 sticky top-0 z-10">
+                    <div className="flex items-center gap-3 min-w-0">
+                       <h2 className="text-sm font-semibold text-slate-800 tracking-tight truncate">Карточка автомобиля</h2>
                        {modalData.carNumber && (
-                          <span className="font-semibold text-[11px] bg-white text-slate-800 border border-slate-200 shadow-3xs px-2.5 py-1 rounded-lg font-mono tracking-wider">
+                          <span className="font-semibold text-[11px] bg-white text-slate-800 border border-slate-200 shadow-3xs px-2.5 py-1 rounded-lg font-mono tracking-wider shrink-0">
                              {modalData.carNumber}
                           </span>
                        )}
@@ -1379,14 +1376,14 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     </div>
                     <button 
                       onClick={() => setIsCarModalOpen(false)} 
-                      className="p-2 md:p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition duration-150 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 border border-slate-200 transition shadow-sm cursor-pointer shrink-0"
                       title="Закрыть"
                     >
-                      <X size={18} />
+                      <X size={18} strokeWidth={2.5} />
                     </button>
                  </div>
 
-                 <div className="p-6 overflow-y-auto flex-1 bg-white space-y-6 custom-scrollbar">
+                 <div className="flex-1 w-full md:overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-6">
                     {/* Summary Widgets */}
                     <div className="bg-slate-50 rounded-2xl p-4 lg:p-5 border border-slate-200/50">
                        <h3 className="text-[11px] font-bold uppercase text-slate-400 tracking-wider mb-3 block">Аналитика простоя по записи</h3>
@@ -1530,7 +1527,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     </div>
                  </div>
 
-                 <div className="p-4 border-t border-slate-200/50 flex justify-end items-center gap-2 bg-white shrink-0">
+                 <div className="p-4 border-t border-slate-200/50 flex justify-end items-center gap-2 bg-white shrink-0 sticky bottom-0 md:static">
                     {currentTab === 'base' && !isMechanic && (
                       <button 
                         onClick={moveCarToArchive} 

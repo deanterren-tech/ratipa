@@ -156,9 +156,9 @@ export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryPro
                   <tr key={id} className="hover:bg-[#3765F6]/5 transition-colors group">
                     <td className="p-4 pl-6">
                         <div className="flex flex-col items-center gap-1">
-                            <button disabled={index === 0} onClick={() => moveItem(index, -1)} className="text-slate-300 hover:text-slate-600 cursor-pointer disabled:opacity-30">▲</button>
+                            <button disabled={index === 0} onClick={() => moveItem(index, -1)} className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-300 hover:text-slate-600 cursor-pointer disabled:opacity-30">▲</button>
                             <span className="text-[10px] font-bold text-slate-400">{index + 1}</span>
-                            <button disabled={index === typesOrder.length - 1} onClick={() => moveItem(index, 1)} className="text-slate-300 hover:text-slate-600 cursor-pointer disabled:opacity-30">▼</button>
+                            <button disabled={index === typesOrder.length - 1} onClick={() => moveItem(index, 1)} className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-300 hover:text-slate-600 cursor-pointer disabled:opacity-30">▼</button>
                         </div>
                     </td>
                     <td className="p-4 font-bold text-slate-900 cursor-pointer hover:text-[#3765F6] transition" onClick={() => openEditor(t.id)}>
@@ -175,7 +175,7 @@ export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryPro
                     </td>
                     <td className="p-4 font-semibold text-slate-500">{printMap.year || new Date().getFullYear()}</td>
                     <td className="p-4 pr-6 text-right">
-                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex justify-end gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                           <button onClick={() => handleDeleteType(t.id, t.name)} className="p-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50/60 rounded-xl transition cursor-pointer border border-transparent hover:border-rose-100">
                             <Trash2 className="h-4 w-4" />
                           </button>

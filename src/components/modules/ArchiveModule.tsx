@@ -149,45 +149,68 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
         <div className="p-6">
           
           {/* TAP 1: VEHICLES */}
-          {activeTab === 'vehicles' && (
-            <div className="table-scroll">
-              <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
-                <thead>
-                  <tr className="border-b border-slate-200/40 text-[10px] uppercase font-mono font-black text-slate-400">
-                    <th className="p-3.5 pl-4">Госномер</th>
-                    <th className="p-3.5">ФИО Водителя</th>
-                    <th className="p-3.5">Комментарий при списании</th>
-                    <th className="p-3.5 pr-4 text-right">Действия</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {filteredItems.map((item: any) => (
-                    <tr key={item.id} className="hover:bg-slate-50/50 transition duration-100">
-                      <td className="p-3.5 pl-4 font-mono font-black text-slate-900">{item.carNumber}</td>
-                      <td className="p-3.5 font-bold text-slate-800">{item.driverName}</td>
-                      <td className="p-3.5 text-slate-500 max-w-sm truncate font-medium">{item.comment || '--'}</td>
-                      <td className="p-3.5 pr-4 text-right">
-                        {user.permissions.archives === 'write' && (
-                          <button
-                            onClick={() => handleRestoreVehicle(item)}
-                            className="inline-flex items-center gap-1 p-2 px-3 bg-slate-950 text-[#c3fb12] hover:bg-[#c3fb12] hover:text-black rounded-lg text-[10px] font-black uppercase transition duration-150 cursor-pointer border border-black/5"
-                            title="Разархивировать"
-                          >
-                            <RefreshCcw className="h-3 w-3" /> Восстановить экипаж
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {!filteredItems.length && (
-                    <tr>
-                      <td colSpan={4} className="text-center p-12 text-slate-400 font-bold uppercase tracking-wider font-mono">Нет списанной техники в архиве.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
+                    {activeTab === 'vehicles' && (
+                      <div>
+                        {/* Mobile Cards */}
+                        <div className="block md:hidden space-y-3">
+                          {(filteredItems as any[]).map((item: any) => (
+                            <div key={item.id} className="bg-white border border-slate-200/60 rounded-2xl p-4 shadow-sm">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="font-mono font-black text-slate-900 text-sm">{item.carNumber}</span>
+                                {user.permissions.archives === 'write' && (
+                                  <button onClick={() => handleRestoreVehicle(item)} className="inline-flex items-center gap-1 px-3 py-2 bg-slate-950 text-[#c3fb12] hover:bg-[#c3fb12] hover:text-black rounded-lg text-[10px] font-black uppercase transition cursor-pointer min-h-[44px]">
+                                    <RefreshCcw className="h-3 w-3" /> Восстановить
+                                  </button>
+                                )}
+                              </div>
+                              <div className="text-xs font-bold text-slate-800">{item.driverName}</div>
+                              <div className="text-[11px] text-slate-500 font-medium mt-1 truncate">{item.comment || '--'}</div>
+                            </div>
+                          ))}
+                          {!filteredItems.length && (
+                            <div className="text-center p-8 text-slate-400 font-bold uppercase tracking-wider text-xs bg-white rounded-2xl border border-slate-200/50">Нет списанной техники в архиве.</div>
+                          )}
+                        </div>
+                        {/* Desktop Table */}
+                        <div className="hidden md:block table-scroll">
+                        <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+                          <thead>
+                            <tr className="border-b border-slate-200/40 text-[10px] uppercase font-mono font-black text-slate-400">
+                              <th className="p-3.5 pl-4">Госномер</th>
+                              <th className="p-3.5">ФИО Водителя</th>
+                              <th className="p-3.5">Комментарий при списании</th>
+                              <th className="p-3.5 pr-4 text-right">Действия</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-slate-700">
+                            {filteredItems.map((item: any) => (
+                              <tr key={item.id} className="hover:bg-slate-50/50 transition duration-100">
+                                <td className="p-3.5 pl-4 font-mono font-black text-slate-900">{item.carNumber}</td>
+                                <td className="p-3.5 font-bold text-slate-800">{item.driverName}</td>
+                                <td className="p-3.5 text-slate-500 max-w-sm truncate font-medium">{item.comment || '--'}</td>
+                                <td className="p-3.5 pr-4 text-right">
+                                  {user.permissions.archives === 'write' && (
+                                    <button
+                                      onClick={() => handleRestoreVehicle(item)}
+                                      className="inline-flex items-center gap-1 p-2 px-3 bg-slate-950 text-[#c3fb12] hover:bg-[#c3fb12] hover:text-black rounded-lg text-[10px] font-black uppercase transition duration-150 cursor-pointer border border-black/5"
+                                      title="Разархивировать"
+                                    >
+                                      <RefreshCcw className="h-3 w-3" /> Восстановить экипаж
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                            {!filteredItems.length && (
+                              <tr>
+                                <td colSpan={4} className="text-center p-12 text-slate-400 font-bold uppercase tracking-wider font-mono">Нет списанной техники в архиве.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      </div>
+                    )}
 
           {/* TAB 2: CALCULATIONS */}
           {activeTab === 'calculations' && (
@@ -224,39 +247,64 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
           )}
 
           {/* TAB 3: SALARIES */}
-          {activeTab === 'salaries' && (
-            <div className="table-scroll">
-              <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
-                <thead>
-                  <tr className="border-b border-slate-200/40 text-[10px] uppercase font-mono font-black text-slate-400">
-                    <th className="p-3.5 pl-4">Дата</th>
-                    <th className="p-3.5">Водитель</th>
-                    <th className="p-3.5">Машина</th>
-                    <th className="p-3.5">Пробег (км)</th>
-                    <th className="p-3.5">Общий итог</th>
-                    <th className="p-3.5">Сотрудник логист</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-650 font-semibold">
-                  {filteredItems.map((item: any) => (
-                    <tr key={item.id} className="hover:bg-slate-50/50 transition duration-100">
-                      <td className="p-3.5 pl-4 text-slate-400 font-mono">{new Date(item.datetime).toLocaleDateString()}</td>
-                      <td className="p-3.5 font-bold text-slate-900">{item.driver}</td>
-                      <td className="p-3.5 font-bold text-slate-700 font-mono">{item.car}</td>
-                      <td className="p-3.5 font-mono">{item.km} км</td>
-                      <td className="p-3.5 font-black text-emerald-750 font-mono">{item.totalSalary?.toFixed(0)} EUR</td>
-                      <td className="p-3.5 font-semibold text-slate-400">{item.logist}</td>
-                    </tr>
-                  ))}
-                  {!filteredItems.length && (
-                    <tr>
-                      <td colSpan={6} className="text-center p-12 text-slate-400 font-mono font-black uppercase tracking-wider">Архив зарплатных ведомостей пуст.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
+                    {activeTab === 'salaries' && (
+                      <div>
+                        {/* Mobile Cards */}
+                        <div className="block md:hidden space-y-2">
+                          {(filteredItems as any[]).map((item: any) => (
+                            <div key={item.id} className="bg-white border border-slate-200/60 rounded-2xl p-3.5 shadow-sm">
+                              <div className="flex items-center justify-between">
+                                <span className="font-mono font-black text-sm text-slate-900">{item.car}</span>
+                                <span className="font-black text-emerald-600 text-xs">{item.totalSalary?.toFixed(0)} EUR</span>
+                              </div>
+                              <div className="flex items-center gap-2 mt-1.5 text-xs">
+                                <span className="font-bold text-slate-800">{item.driver}</span>
+                                <span className="text-slate-300">|</span>
+                                <span className="text-slate-500">{item.km} км</span>
+                                <span className="text-slate-300">|</span>
+                                <span className="text-slate-500 text-[10px]">{new Date(item.datetime).toLocaleDateString()}</span>
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-medium mt-1">Логист: {item.logist}</div>
+                            </div>
+                          ))}
+                          {!filteredItems.length && (
+                            <div className="text-center p-8 text-slate-400 font-bold uppercase tracking-wider text-xs bg-white rounded-2xl border border-slate-200/50">Архив зарплатных ведомостей пуст.</div>
+                          )}
+                        </div>
+                        {/* Desktop Table */}
+                        <div className="hidden md:block table-scroll">
+                        <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
+                          <thead>
+                            <tr className="border-b border-slate-200/40 text-[10px] uppercase font-mono font-black text-slate-400">
+                              <th className="p-3.5 pl-4">Дата</th>
+                              <th className="p-3.5">Водитель</th>
+                              <th className="p-3.5">Машина</th>
+                              <th className="p-3.5">Пробег (км)</th>
+                              <th className="p-3.5">Общий итог</th>
+                              <th className="p-3.5">Сотрудник логист</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-slate-650 font-semibold">
+                            {filteredItems.map((item: any) => (
+                              <tr key={item.id} className="hover:bg-slate-50/50 transition duration-100">
+                                <td className="p-3.5 pl-4 text-slate-400 font-mono">{new Date(item.datetime).toLocaleDateString()}</td>
+                                <td className="p-3.5 font-bold text-slate-900">{item.driver}</td>
+                                <td className="p-3.5 font-bold text-slate-700 font-mono">{item.car}</td>
+                                <td className="p-3.5 font-mono">{item.km} км</td>
+                                <td className="p-3.5 font-black text-emerald-600 font-mono">{item.totalSalary?.toFixed(0)} EUR</td>
+                                <td className="p-3.5 font-semibold text-slate-400">{item.logist}</td>
+                              </tr>
+                            ))}
+                            {!filteredItems.length && (
+                              <tr>
+                                <td colSpan={6} className="text-center p-12 text-slate-400 font-mono font-black uppercase tracking-wider">Архив зарплатных ведомостей пуст.</td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      </div>
+                    )}
 
         </div>
 

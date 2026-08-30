@@ -273,7 +273,7 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition">
+              <div className="flex items-center gap-1 md:opacity-60 md:group-hover:opacity-100 transition">
                 <button
                   onClick={() => openEdit(it)}
                   className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100"

@@ -219,7 +219,7 @@ export default function DozvolaScanner({ user, customTypesKeys, customTypesMap }
                                 <img src={url} alt="preview" className="w-full h-full object-cover" />
                                 <button 
                                     onClick={(e) => { e.stopPropagation(); removeFile(i); }}
-                                    className="absolute top-1 right-1 bg-black/60 text-white p-1 rounded hover:bg-rose-500 transition opacity-0 group-hover:opacity-100"
+                                    className="absolute top-1 right-1 bg-black/60 text-white p-1 rounded hover:bg-rose-500 transition md:opacity-0 md:group-hover:opacity-100 opacity-100"
                                 >
                                     <X className="w-3 h-3" />
                                 </button>
@@ -242,7 +242,7 @@ export default function DozvolaScanner({ user, customTypesKeys, customTypesMap }
                         </button>
                     </div>
                     
-                    <div className="overflow-x-auto bg-white rounded-xl border border-slate-200/50 p-1.5 shadow-sm">
+                    <div className="overflow-x-auto bg-white rounded-xl border border-slate-200/50 p-1.5 shadow-sm hidden md:block">
                         <table className="w-full text-left border-collapse min-w-[700px]">
                             <thead className="bg-slate-50">
                                 <tr>
@@ -329,6 +329,84 @@ export default function DozvolaScanner({ user, customTypesKeys, customTypesMap }
                                 })}
                             </tbody>
                         </table>
+                    </div>
+                    
+                    {/* Mobile card view */}
+                    <div className="block md:hidden space-y-3">
+                        {results.map((item, index) => {
+                            const allTypes = [...new Set([...Object.values(customTypesMap), item.type])].filter(Boolean);
+                            return (
+                                <div key={index} className="bg-white rounded-xl border border-slate-200/50 p-3 shadow-sm space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-[10px] uppercase font-black text-slate-400">Вид дозвола</span>
+                                        <button 
+                                            onClick={() => {
+                                                const newArr = [...results];
+                                                newArr.splice(index, 1);
+                                                setResults(newArr);
+                                            }}
+                                            className="p-1 rounded hover:bg-rose-50 text-rose-500"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                    <select 
+                                        className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-[11px] focus:outline-none"
+                                        value={item.type || 'RUS'}
+                                        onChange={(e) => {
+                                            const newArr = [...results];
+                                            newArr[index].type = e.target.value;
+                                            setResults(newArr);
+                                        }}
+                                    >
+                                        {allTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                                    </select>
+                                    <div>
+                                        <span className="text-[10px] uppercase font-black text-slate-400">Номер бланка</span>
+                                        <input 
+                                            className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-[11px] focus:outline-none mt-1"
+                                            value={item.number || ''}
+                                            onChange={e => {
+                                                const newArr = [...results];
+                                                newArr[index].number = e.target.value.trim();
+                                                setResults(newArr);
+                                            }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] uppercase font-black text-slate-400">Привязка к авто</span>
+                                        <input 
+                                            className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-[11px] focus:outline-none placeholder-slate-300 mt-1"
+                                            placeholder="Не распознано"
+                                            value={item.car || ''}
+                                            onChange={e => {
+                                                const newArr = [...results];
+                                                newArr[index].car = e.target.value.trim().toUpperCase();
+                                                setResults(newArr);
+                                            }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] uppercase font-black text-slate-400">Статус</span>
+                                        <select 
+                                            className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded text-[11px] focus:outline-none mt-1"
+                                            value={item.status || 'office'}
+                                            onChange={(e) => {
+                                                const newArr = [...results];
+                                                newArr[index].status = e.target.value;
+                                                setResults(newArr);
+                                            }}
+                                        >
+                                            <option value="office">В офисе</option>
+                                            <option value="hand">В рейсе</option>
+                                            <option value="office_return">Сдан в офис</option>
+                                            <option value="used">Сдан в транспортную инспекцию</option>
+                                            <option value="expired">Аннулирован</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                     
                     <div className="flex justify-end mt-4">
