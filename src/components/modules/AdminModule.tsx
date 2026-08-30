@@ -36,6 +36,9 @@ import {
   LogOut,
   Shield,
   Link,
+  ExternalLink,
+  Layers,
+  Globe,
 } from 'lucide-react';
 import UserManagementBlock from './UserManagementBlock';
 import AdminOnlinePresenceBlock from './AdminOnlinePresenceBlock';
@@ -231,6 +234,97 @@ export default function AdminModule({ user }: AdminModuleProps) {
 
           <div className={activeTab === 'system' ? 'space-y-6' : 'hidden'}>
             <AdminFirebaseConfigBlock />
+
+            {/* Integrations: Google Sheets & GPS URLs */}
+            {settings && (
+              <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm space-y-6">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                    <Layers className="h-4.5 w-4.5 text-slate-500" />
+                    <span>Интеграции Google Sheets & GPS</span>
+                  </h2>
+                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                    Настройки встроенных системных вкладок фреймов и спутникового позиционирования автопарка
+                  </p>
+                </div>
+
+                {/* Google sheets frames */}
+                <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50 space-y-3.5">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                    <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Google Таблицы (Встроенные Фреймы)</span>
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">План Загрузок</label>
+                      <input type="url"
+                        defaultValue={settings.planZagruzokSheetUrl || ''}
+                        onBlur={(e) => saveSettings({...settings, planZagruzokSheetUrl: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition font-mono"
+                        placeholder="https://docs.google.com/spreadsheets/d/..." />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">План Загрузок (Черный Список)</label>
+                      <input type="url"
+                        defaultValue={settings.planZagruzokBlacklistUrl || ''}
+                        onBlur={(e) => saveSettings({...settings, planZagruzokBlacklistUrl: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-red-400 transition font-mono"
+                        placeholder="https://docs.google.com/spreadsheets/d/..." />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Диспозиция</label>
+                      <input type="url"
+                        defaultValue={settings.dispositionSheetUrl || ''}
+                        onBlur={(e) => saveSettings({...settings, dispositionSheetUrl: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition font-mono"
+                        placeholder="https://docs.google.com/spreadsheets/d/..." />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Google Диск</label>
+                      <input type="url"
+                        defaultValue={settings.googleDriveUrl || ''}
+                        onBlur={(e) => saveSettings({...settings, googleDriveUrl: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-slate-300 transition font-mono"
+                        placeholder="https://drive.google.com/drive/folders/..." />
+                    </div>
+                  </div>
+                </div>
+
+                {/* GPS Integrations */}
+                <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50 space-y-3.5">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                    <Globe className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Спутниковый GPS Мониторинг</span>
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Белтрансспутник</label>
+                      <input type="url"
+                        defaultValue={settings.gpsBeltranssputnikUrl || ''}
+                        onBlur={(e) => saveSettings({...settings, gpsBeltranssputnikUrl: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-slate-300 transition font-mono"
+                        placeholder="https://..." />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Wialon</label>
+                      <input type="url"
+                        defaultValue={settings.gpsWialonUrl || ''}
+                        onBlur={(e) => saveSettings({...settings, gpsWialonUrl: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-slate-300 transition font-mono"
+                        placeholder="https://..." />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">ЭРА ГЛОНАСС</label>
+                      <input type="url"
+                        defaultValue={settings.gpsEraGlonassUrl || ''}
+                        onBlur={(e) => saveSettings({...settings, gpsEraGlonassUrl: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-slate-300 transition font-mono"
+                        placeholder="https://..." />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Force Logout All Sessions — только для Root Admin */}
             {user.role === 'root_admin' && (

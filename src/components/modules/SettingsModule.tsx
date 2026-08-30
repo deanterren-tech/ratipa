@@ -51,7 +51,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const [pdSettings, setPdSettings] = useState<any>({ useDistanceLookup: false, googleMapsApiKey: '' });
   
   // Navigation Tab State
-  const [activeTab, setActiveTab] = useState<'fleet' | 'drivers' | 'system' | 'integrations' | 'directories'>('fleet');
+  const [activeTab, setActiveTab] = useState<'fleet' | 'drivers' | 'system' | 'directories'>('fleet');
 
   // Search states for directories
   const [carSearch, setCarSearch] = useState('');
@@ -909,8 +909,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     { id: 'fleet', label: 'Автопарк и Водители', icon: Truck, count: filteredKnownFleet.length + filteredDrivers.length },
     { id: 'drivers', label: 'База водителей', icon: Users, count: filteredDrivers.length },
     { id: 'directories', label: 'База данных', icon: BookOpen, count: 0 },
-    { id: 'system', label: 'Системные Настройки', icon: Settings, count: 0 },
-    { id: 'integrations', label: 'Интеграции', icon: ExternalLink, count: 0 }
+    { id: 'system', label: 'Системные Настройки', icon: Settings, count: 0 }
   ] as const;
 
   return (
@@ -1024,135 +1023,11 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
               )}
             </div>
 
+            {/* Planning Blocks — настройки вкладок */}
+            <CurrentPlanningSettingsBlock user={user} />
+            <PlanZagruzokSettingsBlock user={user} />
+
           </div>
-
-        </div>
-      )}
-
-      {/* TAB CONTENT 4: EXTERNAL PORTALS & PORTAL LINKS */}
-      {activeTab === 'integrations' && (
-        <div className="space-y-6">
-          
-          {/* Iframe Tables Links & GPS Providers */}
-          <div className="bg-white rounded-2xl p-5 lg:p-6 border border-slate-200/50 shadow-sm space-y-6">
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight flex items-center gap-2">
-                <Layers className="h-4.5 w-4.5 text-blue-500" />
-                <span>Генеральные ссылки интеграций Google Sheets & GPS</span>
-              </h2>
-              <p className="text-[11px] text-slate-400 font-mono mt-0.5 uppercase tracking-wide">
-                Настройки встроенных системных вкладок фреймов и спутникового позиционирования автопарка
-              </p>
-            </div>
-
-            {settings && (
-              <div className="space-y-6">
-                
-                {/* Google sheets frames links */}
-                <div className="border border-slate-200 rounded-2xl p-4 sm:p-5 bg-slate-50/50 space-y-3.5">
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                    <ExternalLink className="w-3.5 h-3.5 text-[#107c41]" />
-                    <span>Google Таблицы RATIPA (Встроенные Фреймы)</span>
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">План Загрузок (Фрейм Таблицы)</label>
-                      <input
-                        type="url"
-                        disabled={!isWritePermitted}
-                        defaultValue={settings.planZagruzokSheetUrl || ''}
-                        onBlur={(e) => dbService.saveSettings({...settings, planZagruzokSheetUrl: e.target.value}, user.name, user.role)}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition font-mono text-[10px]"
-                        placeholder="https://docs.google.com/spreadsheets/d/..."
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">План Загрузок (Черный Список)</label>
-                      <input
-                        type="url"
-                        disabled={!isWritePermitted}
-                        defaultValue={settings.planZagruzokBlacklistUrl || ''}
-                        onBlur={(e) => dbService.saveSettings({...settings, planZagruzokBlacklistUrl: e.target.value}, user.name, user.role)}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-red-400 transition font-mono text-[10px]"
-                        placeholder="https://docs.google.com/spreadsheets/d/..."
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Диспозиция (Фрейм Таблицы)</label>
-                      <input
-                        type="url"
-                        disabled={!isWritePermitted}
-                        defaultValue={settings.dispositionSheetUrl || ''}
-                        onBlur={(e) => dbService.saveSettings({...settings, dispositionSheetUrl: e.target.value}, user.name, user.role)}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition font-mono text-[10px]"
-                        placeholder="https://docs.google.com/spreadsheets/d/..."
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Google Диск (Авто и Водители)</label>
-                      <input
-                        type="url"
-                        disabled={!isWritePermitted}
-                        defaultValue={settings.googleDriveUrl || ''}
-                        onBlur={(e) => dbService.saveSettings({...settings, googleDriveUrl: e.target.value}, user.name, user.role)}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/10 transition font-mono text-[10px]"
-                        placeholder="https://drive.google.com/drive/folders/..."
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* GPS Integrations links */}
-                <div className="border border-slate-200 rounded-2xl p-4 sm:p-5 bg-slate-50/50 space-y-3.5">
-                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                    <Globe className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>Спутниковый GPS Мониторинг RATIPA</span>
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Белтрансспутник (Ссылка)</label>
-                      <input
-                        type="url"
-                        disabled={!isWritePermitted}
-                        defaultValue={settings.gpsBeltranssputnikUrl || ''}
-                        onBlur={(e) => dbService.saveSettings({...settings, gpsBeltranssputnikUrl: e.target.value}, user.name, user.role)}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/10 transition font-mono text-[10px]"
-                        placeholder="https://..."
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Wialon (Ссылка)</label>
-                      <input
-                        type="url"
-                        disabled={!isWritePermitted}
-                        defaultValue={settings.gpsWialonUrl || ''}
-                        onBlur={(e) => dbService.saveSettings({...settings, gpsWialonUrl: e.target.value}, user.name, user.role)}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/10 transition font-mono text-[10px]"
-                        placeholder="https://..."
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">ЭРА ГЛОНАСС (Ссылка)</label>
-                      <input
-                        type="url"
-                        disabled={!isWritePermitted}
-                        defaultValue={settings.gpsEraGlonassUrl || ''}
-                        onBlur={(e) => dbService.saveSettings({...settings, gpsEraGlonassUrl: e.target.value}, user.name, user.role)}
-                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/10 transition font-mono text-[10px]"
-                        placeholder="https://..."
-                      />
-                    </div>
-                  </div>
-                </div>
-
-              </div>
-            )}
-          </div>
-
-          {/* Planning Blocks — из Администрирования */}
-          <CurrentPlanningSettingsBlock user={user} />
-          <PlanZagruzokSettingsBlock user={user} />
-
         </div>
       )}
 
