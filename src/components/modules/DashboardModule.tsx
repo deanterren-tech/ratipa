@@ -297,7 +297,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
       
       {/* 3. Calm ambient glow — static, no movement (animation removed per request) */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none select-none z-0">
-        <div className="absolute -top-32 -left-32 w-[650px] h-[650px] rounded-full bg-[#3765F6]/14 blur-[130px] md:blur-[170px]" />
+        <div className="absolute -top-32 -left-32 w-[650px] h-[650px] rounded-full bg-slate-900/14 blur-[130px] md:blur-[170px]" />
         <div className="absolute -bottom-32 right-[10%] w-[700px] h-[550px] rounded-full bg-[#70FC8E]/11 blur-[130px] md:blur-[170px]" />
         <div className="absolute top-[20%] left-[25%] w-[500px] h-[500px] rounded-full bg-blue-500/5 blur-[120px] md:blur-[160px]" />
       </div>
@@ -309,7 +309,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
         {/* Real-time Clock */}
         <div className="flex items-center gap-3 shrink-0">
           <div className="bg-white/95 border border-slate-200/60 rounded-2xl px-4 py-2 flex items-center gap-2 shadow-xs">
-            <Clock size={13} className="text-[#3765F6]" />
+            <Clock size={13} className="text-slate-500" />
             <span className="font-mono text-xs font-bold text-slate-800">{timeStr || "00:00:00"}</span>
           </div>
         </div>
@@ -320,7 +320,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
         
         {/* Dynamic customized display name greeting - no gradient, calm product typography */}
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight leading-tight mb-3 select-text font-sans text-slate-900">
-          {getTimeOfDayGreeting()}, <span className="text-[#3765F6]">{user?.name || "Пользователь"}</span>
+          {getTimeOfDayGreeting()}, <span className="text-slate-900 font-bold">{user?.name || "Пользователь"}</span>
         </h1>
 
         <p className="text-xs sm:text-sm text-slate-500 max-w-lg mx-auto leading-relaxed mb-8 font-medium">
@@ -336,7 +336,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
 
           return (
             <div 
-              className="w-full max-w-2xl bg-white/95 border border-slate-200/80 rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 mb-8 relative select-none text-left flex flex-col md:flex-row cursor-pointer"
+              className="w-full max-w-2xl bg-white/95 border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-200 mb-8 relative select-none text-left flex flex-col md:flex-row cursor-pointer"
               onMouseEnter={() => setIsHovered(true)}
               onMouseLeave={() => setIsHovered(false)}
               onClick={() => {
@@ -384,7 +384,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                       exit={{ opacity: 0, y: -8 }}
                       transition={{ duration: 0.2 }}
                     >
-                      <h4 className="font-bold text-slate-900 text-base leading-snug mb-1 hover:text-[#3765F6] transition-colors line-clamp-1">
+                      <h4 className="font-bold text-slate-900 text-base leading-snug mb-1 hover:text-slate-900 transition-colors line-clamp-1">
                         {slide?.title || 'Важная информация'}
                       </h4>
                       <p className="text-slate-500 text-xs leading-relaxed font-medium line-clamp-2 md:line-clamp-3">
@@ -422,7 +422,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                     {isAdmin && (
                       <button 
                         onClick={startEditHighlight} 
-                        className="p-1.5 rounded-lg hover:bg-[#3765F6]/10 text-slate-400 hover:text-[#3765F6] transition cursor-pointer shrink-0 bg-transparent border border-transparent"
+                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer shrink-0 bg-transparent border border-transparent"
                         title="Редактировать новость"
                       >
                         <Edit2 size={12} />
@@ -434,6 +434,28 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
             </div>
           );
         })()}
+
+        {/* Announcements from admin */}
+        {settings?.announcements && settings.announcements.length > 0 && (
+          <div className="w-full max-w-2xl space-y-1.5 mb-6">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+              <span>Объявления</span>
+            </div>
+            {settings.announcements.slice(0, 4).map((ann) => (
+              <div 
+                key={ann.id}
+                className={"flex items-start gap-2.5 px-4 py-2.5 rounded-xl text-xs " + (
+                  ann.important 
+                    ? "bg-amber-500/10 border border-amber-500/20 text-slate-800 font-semibold" 
+                    : "bg-white/70 border border-slate-200/50 text-slate-600 font-medium"
+                )}
+              >
+                <span className="leading-relaxed flex-1">{ann.text}</span>
+                <span className="text-[9px] text-slate-400 whitespace-nowrap mt-0.5">{ann.author} • {ann.date}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Direct action controllers */}
         <div className="flex flex-col sm:flex-row items-center gap-4 relative z-20 w-full sm:w-auto">
@@ -449,7 +471,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
             onClick={() => onNavigate('dohod')}
             className="w-full sm:w-auto px-8 py-4 bg-white border border-slate-200/60 hover:border-slate-300 text-slate-700 hover:text-slate-900 font-bold text-xs tracking-wider uppercase rounded-2xl shadow-sm hover:bg-slate-50 transition duration-150 flex items-center justify-center gap-2.5 cursor-pointer group"
           >
-            <Calculator size={14} className="text-[#3765F6] group-hover:rotate-12 transition-transform" />
+            <Calculator size={14} className="text-slate-500 group-hover:rotate-12 transition-transform" />
             <span>КАЛЬКУЛЯЦИЯ</span>
             <ChevronRight size={12} className="text-slate-400 group-hover:translate-x-0.5 transition-transform" />
           </button>
@@ -462,7 +484,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
         
         {/* Useful Resource Links row */}
         {settings?.quickLinks && settings.quickLinks.length > 0 && (
-          <div className="w-full max-w-4xl mx-auto mb-8 p-5 bg-white/60 border border-slate-200/50 rounded-[1.6rem] shadow-2xs">
+          <div className="w-full max-w-4xl mx-auto mb-8 p-5 bg-white/60 border border-slate-200/50 rounded-2xl shadow-2xs">
             <span className="text-xs font-bold text-slate-800 block mb-3 text-center">
               Рекомендуемые ресурсы и полезные ссылки
             </span>
@@ -473,9 +495,9 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                   href={link.url} 
                   target="_blank" 
                   rel="noopener noreferrer" 
-                  className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 border border-slate-200 hover:border-[#3765F6]/30 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-[#3765F6] transition-all shadow-xs group hover:scale-[1.01]"
+                  className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all shadow-xs group hover:scale-[1.01]"
                 >
-                  <ExternalLink size={11} className="text-slate-400 group-hover:text-[#3765F6] transition-colors shrink-0" />
+                  <ExternalLink size={11} className="text-slate-400 group-hover:text-slate-700 transition-colors shrink-0" />
                   <span className="truncate max-w-[140px]">{link.title}</span>
                 </a>
               ))}
@@ -500,7 +522,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: '100%', opacity: 0 }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="w-full sm:max-w-lg sm:mx-4 bg-white sm:border sm:border-slate-200 rounded-t-[2rem] sm:rounded-2xl shadow-sm relative select-text mt-auto sm:mt-0"
+              className="w-full sm:max-w-lg sm:mx-4 bg-white sm:border sm:border-slate-200 rounded-2xl shadow-sm relative select-text mt-auto sm:mt-0"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Close button */}
@@ -512,7 +534,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
               </button>
 
               {/* Cover Image */}
-              <div className="relative w-full bg-slate-100 rounded-t-[2rem] sm:rounded-t-[2.5rem] overflow-hidden">
+              <div className="relative w-full bg-slate-100 rounded-t-2xl overflow-hidden">
                 <div className="aspect-[16/6] w-full overflow-hidden">
                   <img 
                     src={selectedPreviewHighlight.imageUrl || 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?q=80&w=800&auto=format&fit=crop'} 
@@ -553,7 +575,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                       href={selectedPreviewHighlight.linkUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-xs font-bold text-[#3765F6] hover:text-blue-700 transition"
+                      className="inline-flex items-center gap-2 text-xs font-bold text-slate-900 hover:text-slate-700 transition"
                     >
                       <span>Читать подробнее</span>
                       <ExternalLink size={12} />
@@ -590,13 +612,13 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
             >
               {/* Header */}
               <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6 select-none">
-                <div className="flex items-center gap-2 text-[#3765F6]">
+                <div className="flex items-center gap-2 text-slate-900">
                   <Edit2 size={18} className="stroke-[2.5]" />
                   <span className="text-sm font-bold uppercase tracking-wider font-sans">Редактор новостной ленты</span>
                 </div>
                 <button 
                   onClick={() => setIsEditingHighlight(false)}
-                  className="p-1.5 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-800 transition cursor-pointer border border-transparent bg-transparent"
+                  className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-slate-800 transition cursor-pointer border border-transparent bg-transparent"
                 >
                   <X size={18} />
                 </button>
@@ -638,7 +660,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Заголовок новости</label>
                       <input
                         type="text"
-                        className="w-full bg-white text-slate-900 text-xs p-3.5 rounded-xl border border-slate-200 focus:border-[#3765F6]/50 focus:ring-1 focus:ring-[#3765F6]/20 outline-none transition font-sans font-bold"
+                        className="w-full bg-white text-slate-900 text-xs p-3.5 rounded-xl border border-slate-200 focus:border-slate-300 focus:ring-1 focus:ring-slate-200/50 outline-none transition font-sans font-bold"
                         value={editHighlights[selectedEditIndex].title}
                         onChange={(e) => handleFieldChange('title', e.target.value)}
                         placeholder="Например: Введение летних ограничений"
@@ -650,7 +672,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Дата публикации</label>
                       <input
                         type="date"
-                        className="w-full bg-white text-slate-900 text-xs p-3.5 rounded-xl border border-slate-200 focus:border-[#3765F6]/50 outline-none transition font-sans font-bold"
+                        className="w-full bg-white text-slate-900 text-xs p-3.5 rounded-xl border border-slate-200 focus:border-slate-300 outline-none transition font-sans font-bold"
                         value={editHighlights[selectedEditIndex].date || ''}
                         onChange={(e) => handleFieldChange('date', e.target.value)}
                       />
@@ -662,7 +684,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Текст новости</label>
                     <textarea
                       rows={3}
-                      className="w-full bg-white text-slate-900 text-xs p-3.5 rounded-xl border border-slate-200 focus:border-[#3765F6]/50 focus:ring-1 focus:ring-[#3765F6]/20 outline-none transition resize-none font-sans font-medium"
+                      className="w-full bg-white text-slate-900 text-xs p-3.5 rounded-xl border border-slate-200 focus:border-slate-300 focus:ring-1 focus:ring-slate-200/50 outline-none transition resize-none font-sans font-medium"
                       value={editHighlights[selectedEditIndex].text}
                       onChange={(e) => handleFieldChange('text', e.target.value)}
                       placeholder="Подробный информационный текст для сотрудников..."
@@ -674,10 +696,10 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Ссылка на обложку (или выберите пресет ниже)</label>
                     <input
                       type="text"
-                      className="w-full bg-white text-slate-900 text-xs p-3.5 rounded-xl border border-slate-200 focus:border-[#3765F6]/50 outline-none transition font-mono"
+                      className="w-full bg-white text-slate-900 text-xs p-3.5 rounded-xl border border-slate-200 focus:border-slate-300 outline-none transition font-mono"
                       value={editHighlights[selectedEditIndex].imageUrl || ''}
                       onChange={(e) => handleFieldChange('imageUrl', e.target.value)}
-                      placeholder="https://images.unsplash.com/..."
+                      placeholder="https://images.unsplash.com/... (или оставьте пустым)"
                     />
                     
                     {/* Quick presets list */}
@@ -727,7 +749,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                       <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Ссылка кнопки (опционально)</label>
                       <input
                         type="text"
-                        className="w-full bg-white text-slate-900 text-xs p-3.5 rounded-xl border border-slate-200 focus:border-[#3765F6]/50 outline-none transition font-sans"
+                        className="w-full bg-white text-slate-900 text-xs p-3.5 rounded-xl border border-slate-200 focus:border-slate-300 outline-none transition font-sans"
                         value={editHighlights[selectedEditIndex].linkUrl || ''}
                         onChange={(e) => handleFieldChange('linkUrl', e.target.value)}
                         placeholder="https://..."
@@ -739,7 +761,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                       <label className="relative flex items-center gap-2.5 cursor-pointer select-none">
                         <input
                           type="checkbox"
-                          className="w-4 h-4 rounded text-[#3765F6] border-slate-300 focus:ring-[#3765F6] cursor-pointer"
+                          className="w-4 h-4 rounded accent-slate-900 border-slate-300 focus:ring-slate-300 cursor-pointer"
                           checked={!!editHighlights[selectedEditIndex].isImportant}
                           onChange={(e) => handleFieldChange('isImportant', e.target.checked)}
                         />
@@ -809,7 +831,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                       <button
                         type="button"
                         onClick={saveHighlight}
-                        className="px-5 py-2 bg-[#3765F6] hover:bg-blue-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition cursor-pointer border border-transparent"
+                        className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition cursor-pointer border border-transparent"
                       >
                         <Save size={13} /> Сохранить новость
                       </button>

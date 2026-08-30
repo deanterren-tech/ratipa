@@ -54,7 +54,7 @@ export default function AdminAnnouncementsBlock({ user, settings }: Props) {
       </div>
 
       {isWritePermitted && (
- <form onSubmit={handleAddAnnouncement} className="space-y-4 bg-white border border-slate-200 shadow-sm p-5 rounded-[1.8rem]">
+ <form onSubmit={handleAddAnnouncement} className="space-y-4 bg-white border border-slate-200 shadow-sm p-5 rounded-2xl">
           <textarea
             placeholder="Инструкция: Сдавать CMR строго до вторника, 12:00..."
             required
@@ -72,7 +72,7 @@ export default function AdminAnnouncementsBlock({ user, settings }: Props) {
               />
               <span className="group-hover:text-slate-800 transition-colors">Пометить как ВАЖНОЕ (рамка)</span>
             </label>
-            <button type="submit" className="bg-slate-900 hover:bg-slate-800 active:scale-95 text-white shadow-md rounded-xl text-[10px] font-semibold uppercase px-4 py-2 cursor-pointer transition-all">
+            <button type="submit" className="bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-xl shadow-sm text-[10px] font-semibold uppercase px-4 py-2 cursor-pointer transition-all">
               Опубликовать
             </button>
           </div>
