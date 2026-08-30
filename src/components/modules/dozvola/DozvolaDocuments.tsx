@@ -116,7 +116,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
 
   // Get active return/China items lists
   const getReturnItems = () => Object.values(dozvolsData)
-    .filter((i: any) => i.status === 'office_return' || (showArchiveReturns && i.status === 'used'))
+    .filter((i: any) => i.status === 'office_return' && (i.submissionBatch === 1 || !i.submissionBatch) || (showArchiveReturns && i.status === 'used'))
     .sort((a: any, b: any) => (b.issueDate || '').localeCompare(a.issueDate || ''));
   
   const getChinaCopyItems = () => Object.values(dozvolsData)
@@ -402,8 +402,9 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
       checkedItems.forEach((item: any) => {
         updates[`dozvolsRegistryV4/${item.id}/status`] = 'used';
         updates[`dozvolsRegistryV4/${item.id}/car`] = '';
+        updates[`dozvolsRegistryV4/${item.id}/submissionBatch`] = null;
         
-        // Log individual item sписать action
+        // Log individual item списать action
         const logist = localStorage.getItem('ratipa_auth_user') || user?.name || "Система";
         const logRef = push(ref(database, 'dozvolsHistoryV4'));
         updates[`dozvolsHistoryV4/${logRef.key}`] = {
@@ -415,8 +416,15 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
         };
       });
 
+      // Сдача 2 автоматически становится Сдача 1
+      Object.values(dozvolsData).forEach((item: any) => {
+        if (item.submissionBatch === 2 && item.status !== 'used' && item.status !== 'expired') {
+          updates[`dozvolsRegistryV4/${item.id}/submissionBatch`] = 1;
+        }
+      });
+
       update(ref(database), updates);
-      logDocumentHistory('Реестр сдачи использованных разрешений', `Сданы в инспекцию: ${checkedItems.length} бланков`, 'Сданы в ТИ');
+      logDocumentHistory('Реестр сдачи использованных разрешений', `Сданы в инспекцию: ${checkedItems.length} бланков, Сдача 2 → Сдача 1`, 'Сданы в ТИ');
       toast(`Успешно переведено бланков в статус "Сданы в ТИ" (Архив): ${checkedItems.length} шт.`, 'success');
       setReturnRows([]);
     }

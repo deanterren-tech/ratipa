@@ -100,7 +100,7 @@ const DozvolaRow = React.memo(({
             item.status === 'office_return' ? 'bg-amber-500/10 text-amber-800 border border-amber-500/20' :
             item.status === 'used' ? 'bg-slate-500/10 text-slate-700 border border-slate-500/20' :
             item.status === 'expired' ? 'bg-rose-500/10 text-rose-800 border border-rose-500/20' :
-            'bg-emerald-500/10 text-emerald-800 border border-emerald-500/20'}`}>{statusLabel[item.status] || '—'}</span>
+            'bg-emerald-500/10 text-emerald-800 border border-emerald-500/20'}`}>{statusLabel[item.status] || '—'}{item.status === 'office_return' && item.submissionBatch === 1 ? <span className="ml-1">(Сдача 1)</span> : ''}{item.status === 'office_return' && item.submissionBatch === 2 ? <span className="ml-1">(Сдача 2)</span> : ''}</span>
           {item.expiryDate && (() => {
             const today = new Date(); today.setHours(0, 0, 0, 0);
             const expiry = new Date(item.expiryDate); expiry.setHours(0, 0, 0, 0);
@@ -200,7 +200,7 @@ const DozvolaRow = React.memo(({
             <span className="bg-blue-500/10 text-blue-800 border border-blue-500/20 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">В рейсе</span>
           )}
           {item.status === "office_return" && (
-            <span className="bg-amber-500/10 text-amber-800 border border-amber-500/20 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">Использован</span>
+            <span className="bg-amber-500/10 text-amber-800 border border-amber-500/20 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">Использован{item.submissionBatch === 1 ? ' (Сдача 1)' : ''}{item.submissionBatch === 2 ? ' (Сдача 2)' : ''}</span>
           )}
           {item.status === "used" && (
             <span className="bg-slate-500/10 text-slate-700 border border-slate-500/20 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">Сдан в ТИ</span>
@@ -387,6 +387,9 @@ export default function DozvolaRegistryList({
   const [originalComments, setOriginalComments] = useState<
     Record<string, string>
   >({});
+
+  // --- Диалог выбора сдачи ---
+  const [batchDialog, setBatchDialog] = useState<{ id: string; updates: any } | null>(null);
 
   const [editingItem, setEditingItem] = useState<any>(null);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -702,6 +705,11 @@ export default function DozvolaRegistryList({
       const updates: any = { status: newStatus };
       if (newStatus === "office") {
         updates.car = "Минск офис";
+      }
+      // Если статус "Использован" — открываем диалог выбора сдачи
+      if (newStatus === "office_return") {
+        setBatchDialog({ id, updates });
+        return;
       }
       update(ref(database, `dozvolsRegistryV4/${id}`), updates);
       logAction(
@@ -1474,6 +1482,52 @@ export default function DozvolaRegistryList({
           <option key={c} value={c} />
         ))}
       </datalist>
+
+      {/* Диалог выбора сдачи */}
+      {batchDialog && (
+        <div className="fixed inset-0 z-50 bg-slate-950/45 flex justify-center items-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-sm w-full shadow-sm border border-slate-200/50 my-4 p-5">
+            <div className="mb-4">
+              <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">Очередь сдачи</span>
+              <h2 className="text-sm font-bold text-slate-850">Какая это сдача?</h2>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  const { id, updates } = batchDialog;
+                  updates.submissionBatch = 1;
+                  update(ref(database, `dozvolsRegistryV4/${id}`), updates);
+                  const old = dozvolsData[id];
+                  if (old) logAction(old.type, old.number, "Изменен статус", `Статус: [${getStatusLabel(old.status)}] ➔ [Использован (Сдача 1)]`);
+                  setBatchDialog(null);
+                }}
+                className="flex-1 px-5 min-h-[44px] py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold rounded-xl text-xs transition shadow-sm cursor-pointer"
+              >
+                Сдача 1
+              </button>
+              <button
+                onClick={() => {
+                  const { id, updates } = batchDialog;
+                  updates.submissionBatch = 2;
+                  update(ref(database, `dozvolsRegistryV4/${id}`), updates);
+                  const old = dozvolsData[id];
+                  if (old) logAction(old.type, old.number, "Изменен статус", `Статус: [${getStatusLabel(old.status)}] ➔ [Использован (Сдача 2)]`);
+                  setBatchDialog(null);
+                }}
+                className="flex-1 px-5 min-h-[44px] py-2 bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded-xl text-xs transition shadow-sm cursor-pointer"
+              >
+                Сдача 2
+              </button>
+              <button
+                onClick={() => setBatchDialog(null)}
+                className="px-5 min-h-[44px] py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-xl text-xs transition cursor-pointer"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
