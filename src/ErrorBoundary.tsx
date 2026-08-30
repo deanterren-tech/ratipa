@@ -29,21 +29,21 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     if (this.state.hasError) {
       return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-50 font-sans overflow-y-auto">
-          <div className="max-w-md w-full bg-white rounded-[2rem] p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col items-center text-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center text-3xl select-none">
-              😵
+          <div className="max-w-md w-full bg-white rounded-2xl p-8 border border-slate-200/60 shadow-sm flex flex-col items-center text-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-3xl select-none shadow-sm">
+              <span>😵</span>
             </div>
             <h2 className="text-lg font-bold text-slate-900 tracking-tight">
               Что-то пошло не так
             </h2>
-            <p className="text-sm text-slate-400 leading-relaxed max-w-xs">
+            <p className="text-sm text-slate-400 leading-relaxed max-w-xs font-medium">
               После обновления портала могла сброситься сессия. Попробуйте перезагрузить страницу.
             </p>
             <button
               onClick={() => window.location.reload()}
-              className="mt-2 px-6 py-3 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-sm font-semibold transition-all active:scale-95 shadow-sm border border-slate-800 cursor-pointer"
+              className="mt-2 px-6 py-3 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-sm border border-transparent cursor-pointer"
             >
-              🔄 Обновить страницу
+              Обновить страницу
             </button>
             {this.state.error && (
               <details className="w-full mt-2 text-left text-[10px] text-slate-400 font-mono border-t border-slate-100 pt-3">

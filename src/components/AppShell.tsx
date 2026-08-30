@@ -77,6 +77,7 @@ const DirectoriesModule = lazy(() => import('./modules/DirectoriesModule'));
 const AdminModule = lazy(() => import('./modules/AdminModule'));
 const DocumentsModule = lazy(() => import('./modules/DocumentsModule'));
 const VehicleDriverDataModule = lazy(() => import('./modules/VehicleDriverDataModule'));
+const NotFoundPage = lazy(() => import('./common/NotFoundPage'));
 
 const groupIconMap: Record<string, React.ComponentType<any>> = {
   g_home: LayoutDashboard,
@@ -854,7 +855,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       case 'admin':
         return <AdminModule user={user} />;
       default:
-        return null;
+        return <NotFoundPage onNavigate={handleNavigate} />;
     }
   };
 
