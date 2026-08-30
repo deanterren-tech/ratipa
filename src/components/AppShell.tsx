@@ -1281,7 +1281,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         {/* Dynamic active viewport card frame with subtle shadow and round corners */}
         <main 
           ref={mainScrollRef} 
-          className={`flex-1 w-full max-w-full relative pb-20 md:pb-0 ${
+          className={`flex-1 w-full max-w-full relative pb-24 md:pb-0 ${
                       activeModule === 'dashboard' 
                         ? 'p-0 bg-slate-50 overflow-hidden' 
                         : activeModule === 'admin'
@@ -1383,7 +1383,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       </div>
 
       {/* Mobile bottom navigation (small screens only) */}
- <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 flex items-stretch justify-around px-3 py-2 select-none" style={{paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))'}}>
+ <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 flex items-stretch justify-around px-3 py-3 select-none" style={{paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))'}}>
         {[
           { key: 'dashboard', label: 'Главная', icon: Home },
           { key: 'planZagruzok', label: 'Загрузки', icon: FileSpreadsheet },
@@ -1414,7 +1414,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       {/* Mobile "all tools" panel (small screens only) */}
       {isMobileMenuOpen && (
  <div className="md:hidden fixed inset-0 z-40 bg-slate-950/20 overflow-y-auto" onClick={() => setIsMobileMenuOpen(false)}>
-          <div className="min-h-full flex items-end justify-center px-2 pt-2 pb-20" onClick={(e) => e.stopPropagation()}>
+          <div className="min-h-full flex items-end justify-center px-2 pt-2 pb-24" onClick={(e) => e.stopPropagation()}>
             <div className="w-full bg-white rounded-[1.75rem] border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.08)] p-6">
               <div className="flex items-center justify-between mb-5 px-1">
                 <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Все инструменты</span>
