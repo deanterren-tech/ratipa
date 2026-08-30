@@ -274,6 +274,7 @@ export interface ChatMessage {
 export interface AuditLog {
   id: string;
   date: string;
+  timestamp?: number;
   user: string;
   role: string;
   actionType: string;
