@@ -1,20 +1,22 @@
-import {useState, useEffect} from 'react'
+import {useState, useEffect, lazy, Suspense} from 'react'
 import {UserProfile} from '../../types'
 import {FileCheck} from 'lucide-react'
 import DozvolaRegistryList from './dozvola/DozvolaRegistryList';
 import DozvolaDocuments from './dozvola/DozvolaDocuments';
 import DozvolaTypesDirectory from './dozvola/DozvolaTypesDirectory';
 import DozvolaHistory from './dozvola/DozvolaHistory';
-import DozvolaLocations from './dozvola/DozvolaLocations';
+import DozvolaQuotasBlock from './dozvola/DozvolaQuotasBlock';
 import {useFirebase, database, onValue} from '../../api'
 import {ref} from 'firebase/database'
+
+const DozvolaLocations = lazy(() => import('./dozvola/DozvolaLocations'));
 
 interface DozvolaModuleProps {
   user: UserProfile;
 }
 
 export default function DozvolaModule({ user }: DozvolaModuleProps) {
-  const [activeTab, setActiveTab] = useState<'registry' | 'documents' | 'types' | 'history' | 'locations'>('registry');
+  const [activeTab, setActiveTab] = useState<'registry' | 'documents' | 'types' | 'history' | 'locations' | 'quotas'>('registry');
   const [customTypes, setCustomTypes] = useState<Record<string, any>>({});
   const [customTypesOrder, setCustomTypesOrder] = useState<string[]>([]);
 
@@ -31,7 +33,7 @@ export default function DozvolaModule({ user }: DozvolaModuleProps) {
   }, {});
 
   return (
-    <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col gap-5">
+    <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm flex flex-col gap-5">
       
       {/* Page Header */}
       <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
@@ -66,6 +68,16 @@ export default function DozvolaModule({ user }: DozvolaModuleProps) {
           }`}
         >
           Карта локаций
+        </button>
+        <button
+          onClick={() => setActiveTab('quotas')}
+          className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
+            activeTab === 'quotas' 
+              ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40' 
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
+          }`}
+        >
+          Квоты
         </button>
         <button
           onClick={() => setActiveTab('documents')}
@@ -104,6 +116,9 @@ export default function DozvolaModule({ user }: DozvolaModuleProps) {
         <div className={activeTab === 'registry' ? '' : 'hidden'}>
           <DozvolaRegistryList user={user} />
         </div>
+        <div className={activeTab === 'quotas' ? '' : 'hidden'}>
+          <DozvolaQuotasBlock user={user} />
+        </div>
         <div className={activeTab === 'documents' ? '' : 'hidden'}>
           <DozvolaDocuments user={user} />
         </div>
@@ -115,7 +130,9 @@ export default function DozvolaModule({ user }: DozvolaModuleProps) {
         </div>
         {activeTab === 'locations' && (
           <div className="h-[700px]">
-            <DozvolaLocations user={user} />
+            <Suspense fallback={<div className="w-full h-full flex items-center justify-center bg-slate-50/50 rounded-xl"><div className="text-xs text-slate-400 font-semibold animate-pulse">Загрузка карты...</div></div>}>
+              <DozvolaLocations user={user} />
+            </Suspense>
           </div>
         )}
       </div>

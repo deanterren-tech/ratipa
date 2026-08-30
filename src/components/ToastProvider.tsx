@@ -69,7 +69,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
                 animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1, x: 0 }}
                 exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.93, x: 25, transition: { duration: 0.15 } }}
                 transition={shouldReduceMotion ? { duration: 0.1 } : { type: 'spring', stiffness: 280, damping: 26 }}
-                className="pointer-events-auto border border-slate-200/50 rounded-2xl p-4 min-w-[320px] max-w-sm flex items-start gap-3.5 relative overflow-hidden select-none transition-all duration-300 bg-white/75 backdrop-blur-xl shadow-xl shadow-slate-900/5 hover:shadow-2xl hover:shadow-slate-900/10 text-slate-800"
+ className="pointer-events-auto border border-slate-200/50 rounded-2xl p-4 min-w-[320px] max-w-sm flex items-start gap-3.5 relative overflow-hidden select-none transition-all duration-300 bg-white shadow-xl shadow-slate-900/5 hover:shadow-2xl hover:shadow-slate-900/10 text-slate-800"
               >
                 {/* Visual side-marker color bar */}
                 <div className={`absolute left-0 top-0 bottom-0 w-1 ${

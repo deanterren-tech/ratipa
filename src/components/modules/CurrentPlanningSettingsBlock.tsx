@@ -55,7 +55,7 @@ export default function CurrentPlanningSettingsBlock({ user }: Props) {
   const tabs = settings.currentPlanningTabs || [];
 
   return (
-    <div className="bg-white/40 backdrop-blur-xl rounded-[1.8rem] p-6 lg:p-8 border border-white/45 shadow-sm space-y-6 w-full select-none mt-6">
+ <div className="bg-white rounded-[1.8rem] p-6 lg:p-8 border border-slate-200 shadow-sm space-y-6 w-full select-none mt-6">
       <div className="flex items-center justify-between border-b border-white/40 pb-4">
         <div>
           <span className="bg-indigo-600/10 text-indigo-700 border border-indigo-500/10 font-bold text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-wider">
@@ -79,7 +79,7 @@ export default function CurrentPlanningSettingsBlock({ user }: Props) {
 
       <div className="space-y-4">
         {tabs.map(tab => (
-          <div key={tab.id} className="flex flex-col gap-4 p-5 bg-white/40 border border-white/45 backdrop-blur-md shadow-xs rounded-[1.5rem]">
+ <div key={tab.id} className="flex flex-col gap-4 p-5 bg-white border border-slate-200 shadow-xs rounded-[1.5rem]">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 block">Название вкладки</label>
@@ -120,7 +120,7 @@ export default function CurrentPlanningSettingsBlock({ user }: Props) {
           </div>
         ))}
         {tabs.length === 0 && (
-          <div className="text-center py-10 text-slate-500 text-xs font-medium bg-white/40 backdrop-blur-md rounded-[1.5rem] border border-white/45 shadow-inner flex flex-col items-center gap-3">
+ <div className="text-center py-10 text-slate-500 text-xs font-medium bg-white rounded-[1.5rem] border border-slate-200 shadow-inner flex flex-col items-center gap-3">
             <span className="p-3 bg-slate-900/5 text-slate-400 rounded-full border border-white/40 shadow-sm">
                <Plus size={24} />
             </span>

@@ -462,7 +462,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
   const saveToHistory = async () => {
     if (!user.name) {
-        alert("ОШИБКА: Имя пользователя не определено.");
+        toast("Ошибка: Имя пользователя не определено.", 'error');
         return;
     }
 
@@ -497,7 +497,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
     const newLog: SalaryLog = {
         id: Date.now().toString(),
-        datetime: new Date().toLocaleDateString('ru-RU'),
+        datetime: new Date().toLocaleDateString('ru-RU').replace(/\./g, '/'),
         logist: user.name,
         car: carNumber.trim().toUpperCase() || 'НЕ УКАЗАНО',
         rate: ratePerKm,
@@ -558,7 +558,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   return (
     <div className="w-full space-y-6">
         {/* Header Block */}
-        <div className="bg-white rounded-[2rem] p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-5">
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm flex flex-col space-y-5">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
                 <div>
                     <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">
@@ -578,135 +578,76 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
                 {/* Calculator Form */}
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                    <div className="lg:col-span-3 bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] relative overflow-hidden flex flex-col gap-6">
+                    <div className="lg:col-span-3 bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm flex flex-col gap-5">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-4">
-                            <h2 className="text-sm font-semibold text-slate-800 tracking-tight">Калькулятор рейса водителя</h2>
+                            <h2 className="text-sm font-bold text-slate-900 tracking-tight">Калькулятор рейса водителя</h2>
                             <div className="flex gap-2">
-                                 <button onClick={clearForm} className="bg-slate-100 hover:bg-slate-200/80 text-slate-600 font-bold px-4 min-h-[44px] py-2 rounded-xl text-xs transition active:scale-95 cursor-pointer shadow-3xs border border-slate-200/30">Очистить</button>
+                                 <button onClick={clearForm} className="bg-white border border-slate-200/60 hover:bg-slate-50 text-slate-700 font-bold px-4 min-h-[44px] py-2 rounded-xl text-xs transition active:scale-95 cursor-pointer shadow-sm">Очистить</button>
                                  <button onClick={saveToHistory} className="bg-slate-900 text-white hover:bg-slate-800 shadow-sm border border-slate-800 font-bold px-4 min-h-[44px] py-2 rounded-xl text-xs uppercase tracking-wide flex items-center gap-2 transition active:scale-95 cursor-pointer">
                                      Фиксировать выплату <Wallet className="h-4 w-4" />
                                  </button>
                             </div>
                         </div>
 
-                        <div className="flex flex-col gap-5">
-                            {/* Блок рейса */}
-                            <div className="bg-slate-50 rounded-2xl border border-slate-200/50 p-4 flex flex-col gap-4">
-                                <div className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-2">Блок рейса</div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Номер авто</label>
-                                        <CouplingPicker
-                                          onSelect={(rec) => {
-                                            if (rec) handleCarNumberChange(formatCoupling((rec.carNumber || rec.vehicleNumbers || '').toUpperCase()));
-                                          }}
-                                        />
-
-                                        {autofillStatus.type !== 'none' && autofillStatus.message && (
-                                          <div className={`text-[10px] font-semibold mt-1 px-2.5 py-1 rounded-lg border ${
-                                            autofillStatus.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                            autofillStatus.type === 'warning' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                            autofillStatus.type === 'multiple' ? 'bg-blue-50 text-blue-700 border-blue-200' :
-                                            'bg-slate-50 text-slate-600 border-slate-200'
-                                          }`}>
-                                            {autofillStatus.message}
-                                          </div>
-                                        )}
-
-                                        {autofillStatus.type === 'multiple' && autofillStatus.matchedCars && (
-                                          <div className="flex flex-wrap gap-1 mt-1.5 p-1.5 bg-slate-50 rounded-xl border border-slate-200">
-                                            {autofillStatus.matchedCars.slice(0, 5).map(car => {
-                                              const plate = car.carNumber || car.vehicleNumbers || '';
-                                              return (
-                                                <button
-                                                  key={car.id}
-                                                  type="button"
-                                                  onClick={() => {
-                                                    const mDriverId = getDriverIdForCar(car, driversMap);
-                                                    const matchedDriver = mDriverId ? getDriverById(mDriverId, drivers) : undefined;
-                                                    applyCarAndDriverToForm(car, matchedDriver);
-                                                  }}
-                                                  className="text-[10px] font-bold bg-white text-slate-800 border border-slate-200/60 hover:bg-slate-100 hover:text-slate-900 transition px-2 py-1 rounded-lg cursor-pointer active:scale-95"
-                                                >
-                                                  {plate}
-                                                </button>
-                                              );
-                                            })}
-                                            {autofillStatus.matchedCars.length > 5 && (
-                                              <span className="text-[10px] text-blue-500 font-bold self-center px-1">
-                                                +{autofillStatus.matchedCars.length - 5} еще
-                                              </span>
-                                            )}
-                                          </div>
-                                        )}
-                                    </div>
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Направление</label>
-                                        <select value={tripDirection} onChange={e => setTripDirection(e.target.value)} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all cursor-pointer appearance-none">
-                                            <option value="Турция">Турция</option>
-                                            <option value="Китай">Китай</option>
-                                        </select>
-                                    </div>
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Круги</label>
-                                        <select value={tripCircles} onChange={e => setTripCircles(e.target.value)} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all cursor-pointer appearance-none">
-                                            <option value="">—</option>
-                                            <option value="2 круга">2 круга</option>
-                                            <option value="3 круга">3 круга</option>
-                                        </select>
-                                    </div>
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Общий пробег (км)</label>
-                                        <input type="number" value={totalKm} onChange={e => setTotalKm(Number(e.target.value))} placeholder="5500" className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
-                                    </div>
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Ставка за км (€)</label>
-                                        <input type="number" step="0.001" value={ratePerKm} onChange={e => setRatePerKm(Number(e.target.value))} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
-                                    </div>
-                                </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Автомобиль</label>
+                                <CouplingPicker
+                                  value={carNumber}
+                                  onSelect={(rec) => {
+                                    if (rec) {
+                                      const cNum = (rec.carNumber || rec.vehicleNumbers || '').toUpperCase();
+                                      setCarNumber(cNum);
+                                      if (rec.driverName) {
+                                        setDriverName(rec.driverName);
+                                      }
+                                      handleCarNumberChange(cNum);
+                                    }
+                                  }}
+                                />
                             </div>
-
-                            {/* Блок дней и премий */}
-                            <div className="bg-slate-50 rounded-2xl border border-slate-200/50 p-4 flex flex-col gap-4">
-                                <div className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-2">Блок дней и премий</div>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Дней простоя ({currentIdleRate} €/д)</label>
-                                        <input type="number" value={idleDays} onChange={e => setIdleDays(Number(e.target.value))} min="0" className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
-                                    </div>
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Дней в рейсе ({currentPerDiem} €/д)</label>
-                                        <input type="number" value={totalDays} onChange={e => setTotalDays(Number(e.target.value))} min="1" className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
-                                    </div>
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Премия (€)</label>
-                                        <input type="number" value={bonus} onChange={e => setBonus(Number(e.target.value))} min="0" className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" placeholder="0" />
-                                    </div>
-                                </div>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">ФИО Водителя</label>
+                                <input type="text" value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="—" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs" />
                             </div>
-
-                            {/* Блок человека */}
-                            <div className="bg-slate-50 rounded-2xl border border-slate-200/50 p-4 flex flex-col gap-4">
-                                <div className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-2">Блок человека</div>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                    <div className="flex flex-col gap-1.5 sm:col-span-1">
-                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">ФИО Водителя</label>
-                                        <CouplingPicker
-                                          mode="driver"
-                                          value={driverId || undefined}
-                                          onSelect={(rec) => {
-                                            if (!rec) { handleDriverNameChange(''); return; }
-                                            const drv = rec.driverNameRu || rec.driverName || rec.driverShortNameRu || '';
-                                            handleDriverNameChange(drv);
-                                            if (rec.driverId) setDriverId(rec.driverId);
-                                          }}
-                                        />
-                                    </div>
-                                    <div className="flex flex-col gap-1.5 sm:col-span-2">
-                                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Комментарий к выплате</label>
-                                        <input type="text" value={comment} onChange={e => setComment(e.target.value)} placeholder="Опционально (штрафы, детали, премии...)" className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-medium px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
-                                    </div>
-                                </div>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Направление</label>
+                                <select value={tripDirection} onChange={e => setTripDirection(e.target.value)} className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs cursor-pointer appearance-none">
+                                    <option value="Турция">Турция</option>
+                                    <option value="Китай">Китай</option>
+                                </select>
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Круги</label>
+                                <select value={tripCircles} onChange={e => setTripCircles(e.target.value)} className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs cursor-pointer appearance-none">
+                                    <option value="">—</option>
+                                    <option value="2 круга">2 круга</option>
+                                    <option value="3 круга">3 круга</option>
+                                </select>
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Общий пробег (км)</label>
+                                <input type="number" value={totalKm} onChange={e => setTotalKm(Number(e.target.value))} placeholder="5500" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs" />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ставка за км (€)</label>
+                                <input type="number" step="0.001" value={ratePerKm} onChange={e => setRatePerKm(Number(e.target.value))} className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs" />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Дней простоя ({currentIdleRate} €/д)</label>
+                                <input type="number" value={idleDays} onChange={e => setIdleDays(Number(e.target.value))} min="0" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs" />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Дней в рейсе ({currentPerDiem} €/д)</label>
+                                <input type="number" value={totalDays} onChange={e => setTotalDays(Number(e.target.value))} min="1" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs" />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Премия (€)</label>
+                                <input type="number" value={bonus} onChange={e => setBonus(Number(e.target.value))} min="0" placeholder="0" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs" />
+                            </div>
+                            <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-2">
+                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Комментарий к выплате</label>
+                                <input type="text" value={comment} onChange={e => setComment(e.target.value)} placeholder="Опционально (штрафы, детали, премии...)" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs" />
                             </div>
                         </div>
                     </div>
@@ -754,39 +695,39 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
             </div>
 
         {/* Global Statistics Grid (Full Width) */}
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
-            <h2 className="text-sm font-semibold text-slate-800 tracking-tight mb-5 flex items-center gap-2 select-none">
-                <Calculator className="h-4 w-4 text-slate-400" /> 
-                Статистика выплат ({activeTab === 'current' ? 'Текущий месяц' : activeTab === 'archive' ? 'За выбранный месяц' : 'По выбранному логисту'})
-            </h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-center">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Выплат всего</div>
-                    <div className="text-xl font-bold text-slate-800 font-mono">{logs.length}</div>
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm">
+                    <h2 className="text-sm font-bold text-slate-900 tracking-tight mb-4 flex items-center gap-2 select-none">
+                        <Calculator className="h-4 w-4 text-[#3765F6]" /> 
+                        Статистика выплат ({activeTab === 'current' ? 'Текущий месяц' : activeTab === 'archive' ? 'За выбранный месяц' : 'По выбранному логисту'})
+                    </h2>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                         <div className="bg-slate-50/50 rounded-lg px-2.5 py-1.5 flex flex-col">
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Выплат всего</span>
+                            <span className="text-xs font-bold font-mono tabular-nums text-slate-800">{logs.length}</span>
+                        </div>
+                        <div className="bg-slate-50/50 rounded-lg px-2.5 py-1.5 flex flex-col">
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Сумма всех выплат</span>
+                            <span className="text-xs font-bold font-mono tabular-nums text-slate-800">{Math.round(totalPaid).toLocaleString('ru-RU')} €</span>
+                        </div>
+                        <div className="bg-slate-50/50 rounded-lg px-2.5 py-1.5 flex flex-col">
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Средняя выплата</span>
+                            <span className="text-xs font-bold font-mono tabular-nums text-slate-800">{Math.round(avgPaid).toLocaleString('ru-RU')} €</span>
+                        </div>
+                        <div className="bg-slate-50/50 rounded-lg px-2.5 py-1.5 flex flex-col">
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Максимальная</span>
+                            <span className="text-xs font-bold font-mono tabular-nums text-slate-800">{Math.round(maxPaid).toLocaleString('ru-RU')} €</span>
+                        </div>
+                        <div className="bg-slate-50/50 rounded-lg px-2.5 py-1.5 flex flex-col">
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Уникальных водителей</span>
+                            <span className="text-xs font-bold font-mono tabular-nums text-slate-800">{uniqueDrivers}</span>
+                        </div>
+                    </div>
                 </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-center">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1 font-sans">Сумма всех выплат</div>
-                    <div className="text-xl font-bold text-slate-800 font-mono">{Math.round(totalPaid).toLocaleString('ru-RU')} €</div>
-                </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-center">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Средняя выплата</div>
-                    <div className="text-xl font-bold text-slate-800 font-mono">{Math.round(avgPaid).toLocaleString('ru-RU')} €</div>
-                </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-center">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Максимальная</div>
-                    <div className="text-xl font-bold text-slate-800 font-mono">{Math.round(maxPaid).toLocaleString('ru-RU')} €</div>
-                </div>
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-center">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Уникальных водителей</div>
-                    <div className="text-xl font-bold text-slate-800 font-mono">{uniqueDrivers}</div>
-                </div>
-            </div>
-        </div>
 
         {/* History Cards / Recent Logs (Full Width) */}
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                <h2 className="text-sm font-semibold text-slate-800 tracking-tight">Журнал последних выплат</h2>
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                <h2 className="text-sm font-bold text-slate-900 tracking-tight">Журнал последних выплат</h2>
                 
                 {/* Available Months or Dispatchers dropdown inside header */}
                 <div className="flex flex-wrap items-center gap-3">
@@ -912,7 +853,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                     <div className="text-center py-12 text-slate-400 font-medium text-xs bg-slate-50 rounded-xl border border-slate-200">История пустая</div>
                 ) : (
                     filteredHistory.slice(0, logsLimit).map((rec) => (
-                        <div key={rec.id} className={`bg-white border rounded-[2rem] p-6 flex flex-col group hover:shadow-[0_8px_30px_rgba(0,0,0,0.01)] transition-all duration-300 ${
+                        <div key={rec.id} className={`bg-white border rounded-2xl p-5 flex flex-col group hover:shadow-[0_8px_30px_rgba(0,0,0,0.01)] transition-all duration-300 ${
                           (rec.mark || '').includes('2 круга') ? 'border-blue-300 bg-blue-50/30 hover:border-blue-400' :
                           (rec.mark || '').includes('3 круга') ? 'border-purple-300 bg-purple-50/30 hover:border-purple-400' :
                           'border-slate-200 hover:border-slate-300'
@@ -1063,7 +1004,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
         {editingSalaryId && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 animate-fade-in overflow-y-auto">
-                <div className="bg-white rounded-[2rem] w-full max-w-2xl shadow-2xl border border-slate-200 my-4">
+                <div className="bg-white rounded-2xl w-full max-w-2xl shadow-sm border border-slate-200 my-4">
                     <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-[2rem]">
                         <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
                            <Edit className="w-5 h-5 text-slate-400" /> Редактирование выплаты

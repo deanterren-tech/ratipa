@@ -71,14 +71,14 @@ export default function PlanDohodDispatchersSettingsBlock({ user }: Props) {
   };
 
   return (
-    <div className="bg-white/60 backdrop-blur-2xl rounded-[2.5rem] p-6 lg:p-8 border border-white/40 shadow-xl space-y-6 w-full select-none mt-6">
+ <div className="bg-white rounded-[2.5rem] p-6 lg:p-8 border border-slate-200 shadow-xl space-y-6 w-full select-none mt-6">
 
       {/* Block Header */}
       <div className="border-b border-white/40 pb-4">
         <span className="bg-indigo-600 text-white font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-wider">
           Dispatchers Configuration
         </span>
-        <h2 className="text-sm font-black uppercase tracking-tight text-slate-900 mt-2 flex items-center gap-1.5">
+        <h2 className="text-sm font-bold uppercase tracking-tight text-slate-900 mt-2 flex items-center gap-1.5">
           Диспетчеры (План Дохода)
         </h2>
         <p className="text-[10px] text-slate-500 font-medium mt-1 leading-relaxed">
@@ -104,7 +104,7 @@ export default function PlanDohodDispatchersSettingsBlock({ user }: Props) {
         />
         <button
           onClick={handleAddDispatcher}
-          className="flex items-center gap-1 text-[10px] uppercase font-black tracking-widest text-white bg-indigo-600 px-4 py-2.5 rounded-xl hover:bg-indigo-755 active:scale-95 shadow-md transition cursor-pointer"
+          className="flex items-center gap-1 text-[10px] uppercase font-bold tracking-widest text-white bg-indigo-600 px-4 py-2.5 rounded-xl hover:bg-indigo-755 active:scale-95 shadow-md transition cursor-pointer"
         >
           <Plus size={12}/> Добавить
         </button>
@@ -113,7 +113,7 @@ export default function PlanDohodDispatchersSettingsBlock({ user }: Props) {
       <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
         {filteredDispatchers.map((disp, idx) => {
           return (
-            <div key={disp.id} className="flex justify-between items-center py-2.5 px-4 border border-white/45 rounded-xl bg-white/40 backdrop-blur-md hover:bg-white/50 transition">
+ <div key={disp.id} className="flex justify-between items-center py-2.5 px-4 border border-slate-200 rounded-xl bg-white hover:bg-white transition">
               <span className="text-xs font-bold text-slate-800 flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: disp.color || '#94a3b8' }}></span>
                 👤 {disp.name}

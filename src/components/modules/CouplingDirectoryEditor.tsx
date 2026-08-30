@@ -338,15 +338,15 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
             <div className="flex items-center gap-2 bg-slate-900 text-white rounded-xl px-3 py-1.5">
               <Truck className="w-3.5 h-3.5 text-slate-300" />
               <span className="text-[10px] font-semibold text-slate-300">Всего</span>
-              <span className="text-sm font-black font-mono">{stats.total}</span>
+              <span className="text-sm font-bold font-mono">{stats.total}</span>
             </div>
             <div className="flex items-center gap-2 bg-emerald-500 text-white rounded-xl px-3 py-1.5">
               <span className="text-[10px] font-semibold">На базе</span>
-              <span className="text-sm font-black font-mono">{stats.base}</span>
+              <span className="text-sm font-bold font-mono">{stats.base}</span>
             </div>
             <div className="flex items-center gap-2 bg-amber-500 text-white rounded-xl px-3 py-1.5">
               <span className="text-[10px] font-semibold">В рейсе</span>
-              <span className="text-sm font-black font-mono">{stats.trip}</span>
+              <span className="text-sm font-bold font-mono">{stats.trip}</span>
             </div>
           </div>
         </div>
@@ -453,14 +453,14 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
                   </td>
                 )}
                 <td className="px-4 py-2.5 font-mono">
-                  <span className="font-black text-slate-900">{formatPlate(c.carNumber)}</span>
+                  <span className="font-semibold text-slate-900">{formatPlate(c.carNumber)}</span>
                   {c.trailerNumber && <span className="text-slate-400"> / {formatPlate(c.trailerNumber)}</span>}
                 </td>
                 <td className="px-4 py-2.5 text-slate-500">{[c.brand, c.trailerBrand].filter(Boolean).join(' / ') || '—'}</td>
                 <td className="px-4 py-2.5">
                   <button onClick={(e) => { e.stopPropagation(); setViewCard({ type: 'driver', driverId: c.driverId || '', driverName: c.driverName || driverName(c.driverId) }); }}
                     className="inline-flex items-center gap-1.5 text-left hover:underline font-medium text-slate-700">
-                    <span className="w-5 h-5 rounded-full bg-[#3765F6]/15 text-[#3765F6] flex items-center justify-center text-[9px] font-black">
+                    <span className="w-5 h-5 rounded-full bg-[#3765F6]/15 text-[#3765F6] flex items-center justify-center text-[9px] font-semibold">
                       {initials(c.driverName || driverName(c.driverId))}
                     </span>
                     {c.driverName || driverName(c.driverId) || '—'}
@@ -505,10 +505,10 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
 
       {/* MODAL add/edit */}
       {modalOpen && createPortal(
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto" onClick={() => setModalOpen(false)}>
+ <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 p-4 overflow-y-auto" onClick={() => setModalOpen(false)}>
           <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 my-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Link2 className="w-4 h-4 text-[#3765F6]" />
                 {editing ? 'Редактировать сцепку' : 'Новая сцепка'}
               </h3>
@@ -549,10 +549,10 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
 
       {/* BULK modal */}
       {bulkOpen && createPortal(
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto" onClick={() => setBulkOpen(false)}>
+ <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 p-4 overflow-y-auto" onClick={() => setBulkOpen(false)}>
           <div className="w-full max-w-sm bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 my-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Layers className="w-4 h-4 text-[#3765F6]" />
                 {bulkField === 'rateGroupId' ? 'Применить ставку' : 'Назначить диспетчера'} ({selected.size})
               </h3>

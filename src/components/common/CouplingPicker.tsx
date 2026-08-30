@@ -246,7 +246,7 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
             </button>
           )}
           {locFiltered.length > 0 && (
-            <div className="px-3 py-1 text-[9px] font-black uppercase text-slate-400 bg-slate-50">Локации</div>
+            <div className="px-3 py-1 text-[9px] font-bold uppercase text-slate-400 bg-slate-50">Локации</div>
           )}
           {locFiltered.map((loc) => (
             <button

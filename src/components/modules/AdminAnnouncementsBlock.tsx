@@ -21,7 +21,7 @@ export default function AdminAnnouncementsBlock({ user, settings }: Props) {
     const newAnn: Announcement = {
       id: "ann_" + Date.now(),
       text: annText.trim(),
-      date: new Date().toLocaleDateString('ru-RU'),
+      date: new Date().toLocaleDateString('ru-RU').replace(/\./g, '/'),
       author: user.name,
       important: annImportant
     };
@@ -37,15 +37,15 @@ export default function AdminAnnouncementsBlock({ user, settings }: Props) {
   };
 
   return (
-    <div className="bg-white/60 backdrop-blur-2xl rounded-[2.5rem] p-6 lg:p-8 border border-white/40 shadow-xl space-y-8 w-full select-none">
+ <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm space-y-8 w-full select-none">
       
       {/* Block Header */}
       <div className="border-b border-white/40 pb-4">
-        <span className="bg-indigo-600 text-white font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-wider">
+        <span className="bg-slate-900 text-white font-bold text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-wider">
           Dashboard Board
         </span>
-        <h2 className="text-sm font-black uppercase tracking-tight text-slate-900 mt-2 flex items-center gap-1.5">
-          <Megaphone className="h-4.5 w-4.5 text-indigo-600 font-bold" />
+        <h2 className="text-sm font-bold uppercase tracking-tight text-slate-900 mt-2 flex items-center gap-1.5">
+          <Megaphone className="h-4.5 w-4.5 text-slate-500" />
           Системные уведомления (Dashboard)
         </h2>
         <p className="text-[10px] text-slate-500 font-medium mt-1 leading-relaxed">
@@ -54,25 +54,25 @@ export default function AdminAnnouncementsBlock({ user, settings }: Props) {
       </div>
 
       {isWritePermitted && (
-        <form onSubmit={handleAddAnnouncement} className="space-y-4 bg-white/40 border border-white/45 backdrop-blur-md shadow-inner p-5 rounded-[1.8rem]">
+ <form onSubmit={handleAddAnnouncement} className="space-y-4 bg-white border border-slate-200 shadow-sm p-5 rounded-[1.8rem]">
           <textarea
             placeholder="Инструкция: Сдавать CMR строго до вторника, 12:00..."
             required
             value={annText}
             onChange={(e) => setAnnText(e.target.value)}
-            className="w-full p-4 bg-white/40 border border-white/45 text-xs rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/10 shadow-sm h-24 resize-none transition-all font-semibold text-slate-800"
+            className="w-full p-4 bg-white/40 border border-white/45 text-xs rounded-2xl outline-none focus:ring-2 focus:ring-blue-100/30 shadow-sm h-24 resize-none transition-all font-semibold text-slate-800"
           />
-          <div className="flex justify-between items-center bg-white/40 border border-white/45 backdrop-blur-md p-3 shadow-inner rounded-2xl">
-            <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-500 select-none cursor-pointer group">
+ <div className="flex justify-between items-center bg-white border border-slate-200 p-3 shadow-sm rounded-2xl">
+            <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-500 select-none cursor-pointer group">
               <input
                 type="checkbox"
                 checked={annImportant}
                 onChange={(e) => setAnnImportant(e.target.checked)}
-                className="rounded border border-indigo-300 accent-indigo-600 h-4 w-4 cursor-pointer transition"
+                className="rounded border border-slate-200 accent-slate-900 h-4 w-4 cursor-pointer transition"
               />
               <span className="group-hover:text-slate-800 transition-colors">Пометить как ВАЖНОЕ (рамка)</span>
             </label>
-            <button type="submit" className="bg-indigo-600 hover:bg-indigo-750 active:scale-95 text-white shadow-md rounded-xl text-[10px] font-black uppercase px-4 py-2 cursor-pointer transition-all">
+            <button type="submit" className="bg-slate-900 hover:bg-slate-800 active:scale-95 text-white shadow-md rounded-xl text-[10px] font-semibold uppercase px-4 py-2 cursor-pointer transition-all">
               Опубликовать
             </button>
           </div>
@@ -104,7 +104,7 @@ export default function AdminAnnouncementsBlock({ user, settings }: Props) {
           </div>
         ))}
         {(!settings?.announcements || settings.announcements.length === 0) && (
-           <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 text-center py-6 font-mono">
+           <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 text-center py-6 font-mono">
               Уведомлений нет
            </div>
         )}

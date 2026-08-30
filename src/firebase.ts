@@ -1594,10 +1594,10 @@ export const dbService = {
     );
   },
 
-  // PERMITS (Dozvola)
+  // PERMITS (Dozvola) — unified to dozvolsRegistryV4
   getPermits: (callback: (permits: Permit[]) => void) => {
     if (useFirebase) {
-      const dbRef = ref(database, "dozvolaPermits");
+      const dbRef = ref(database, "dozvolsRegistryV4");
       return onValue(
         dbRef,
         (snapshot) => {
@@ -1606,15 +1606,15 @@ export const dbService = {
             const list: Permit[] = Object.keys(data).map((key) => ({
               id: key,
               ...data[key],
+              // Map dozvolsRegistryV4 fields to Permit type
+              permitNumber: data[key].number || data[key].permitNumber || '',
+              assignedVehicle: data[key].car || data[key].assignedVehicle || '',
+              dateIssued: data[key].issueDate || data[key].dateIssued || '',
+              comments: data[key].comment || data[key].comments || '',
             }));
             callback(list);
           } else {
-            INITIAL_PERMITS.forEach((p) => {
-              set(ref(database, `dozvolaPermits/${p.id}`), p).catch((err) =>
-                console.warn(err),
-              );
-            });
-            callback(INITIAL_PERMITS);
+            callback([]);
           }
         },
         (err) => {
@@ -1636,52 +1636,10 @@ export const dbService = {
     }
   },
 
-  savePermit: (permit: Permit, user: string, role: string) => {
-    if (useFirebase) {
-      set(ref(database, `dozvolaPermits/${permit.id}`), permit);
-    } else {
-      const local = getLocalStorageData<Permit[]>(
-        "ratipa_permits",
-        INITIAL_PERMITS,
-      );
-      const idx = local.findIndex((p) => p.id === permit.id);
-      if (idx >= 0) {
-        local[idx] = permit;
-      } else {
-        local.push(permit);
-      }
-      setLocalStorageData("ratipa_permits", local);
-    }
-    dbService.logAction(
-      user,
-      role,
-      "Сохранение дозвола",
-      "Dozvola",
-      permit.id,
-      `Дозвол ${permit.permitNumber} для ${permit.country} обновлен`,
-    );
-  },
-
-  deletePermit: (id: string, user: string, role: string) => {
-    if (useFirebase) {
-      remove(ref(database, `dozvolaPermits/${id}`));
-    } else {
-      const local = getLocalStorageData<Permit[]>(
-        "ratipa_permits",
-        INITIAL_PERMITS,
-      );
-      const filtered = local.filter((p) => p.id !== id);
-      setLocalStorageData("ratipa_permits", filtered);
-    }
-    dbService.logAction(
-      user,
-      role,
-      "Удаление дозвола",
-      "Dozvola",
-      id,
-      `Дозвол удален`,
-    );
-  },
+  // [DEPRECATED] dozvolaPermits is unified into dozvolsRegistryV4.
+  // Use direct RTDB writes via dozvolsRegistryV4 path instead.
+  // savePermit and deletePermit are intentionally removed to prevent dual-writes.
+  // See DozvolaRegistryList.tsx for the canonical write path.
 
   // CHATS
   getChatMessages: (
@@ -2057,12 +2015,12 @@ export const dbService = {
               merged.menuStructure = base.menuStructure;
             }
             set(ref(database, "appSettings"), merged)
-              .then(() => { catalogCache.settings = merged; resolve(); })
+              .then(() => { catalogCache.settings = merged; dbService.logAction(user, role, "Обновление настроек", "Settings", "global", "Изменены глобальные настройки"); resolve(); })
               .catch((e) => { console.warn("[saveSettings] set failed", e); reject(e); });
           })
           .catch(() => {
             set(ref(database, "appSettings"), cleanSettings)
-              .then(() => { catalogCache.settings = cleanSettings; resolve(); })
+              .then(() => { catalogCache.settings = cleanSettings; dbService.logAction(user, role, "Обновление настроек", "Settings", "global", "Изменены глобальные настройки"); resolve(); })
               .catch((e) => { console.warn("[saveSettings] fallback set failed", e); reject(e); });
           });
       } else {
@@ -2073,14 +2031,6 @@ export const dbService = {
         resolve();
       }
     });
-    dbService.logAction(
-      user,
-      role,
-      "Обновление настроек",
-      "Settings",
-      "global",
-      "Изменены глобальные настройки / конфигурация Google Таблиц",
-    );
   },
 
   // FERRY TEMPLATES

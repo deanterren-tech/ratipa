@@ -31,7 +31,9 @@ import {
   XCircle,
   FileText,
   Trash2,
-  Plus
+  Plus,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {useToast} from '../ToastProvider'
 
@@ -61,6 +63,7 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
   });
 
   const [logsFilter, setLogsFilter] = useState('');
+  const [visibleTokens, setVisibleTokens] = useState<Record<string, boolean>>({});
 
   // Data Definitions
   const agentTabs = [
@@ -169,7 +172,7 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
   const createSession = () => {
     const token = 'agt_sess_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     push(ref(database, 'agent_access_center/sessions'), {
-      name: `Сессия от ${new Date().toLocaleDateString()}`,
+      name: `Сессия от ${new Date().toLocaleDateString('ru-RU').replace(/\./g, '/')}`,
       tokenMasked: token.substring(0, 12) + '***',
       fullToken: token, // in real life, show once, don't store plain
       issuedAt: Date.now(),
@@ -193,6 +196,26 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
     }
   };
 
+  const toggleTokenVisibility = (sessId: string) => {
+    setVisibleTokens(prev => {
+      if (prev[sessId]) {
+        const next = { ...prev };
+        delete next[sessId];
+        return next;
+      }
+      const next = { ...prev, [sessId]: true };
+      setTimeout(() => {
+        setVisibleTokens(prev2 => {
+          if (!prev2[sessId]) return prev2;
+          const next2 = { ...prev2 };
+          delete next2[sessId];
+          return next2;
+        });
+      }, 10000);
+      return next;
+    });
+  };
+
   const resolveApproval = async (id: string, decision: 'approved' | 'rejected') => {
     if (await showConfirm(`${decision === 'approved' ? 'Подтвердить' : 'Отклонить'} это действие?`)) {
       update(ref(database, `agent_access_center/approvals/${id}`), {
@@ -208,9 +231,9 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
   // UI Renderers
   const renderOverview = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 border border-slate-200/50 shadow-xl shadow-slate-900/5 flex flex-col md:flex-row items-center justify-between gap-6">
+ <div className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl shadow-slate-900/5 flex flex-col md:flex-row items-center justify-between gap-6">
         <div>
-          <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 mb-2">
+          <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2 mb-2">
             <Power className={`w-6 h-6 ${agentEnabled ? 'text-emerald-500' : 'text-slate-400'}`} />
             Главный переключатель доступа
           </h3>
@@ -229,40 +252,40 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
               <Power className={`w-5 h-5 ${agentEnabled ? 'text-emerald-500' : 'text-slate-400'}`} />
             </div>
           </button>
-          <span className={`text-xs font-black uppercase tracking-widest ${agentEnabled ? 'text-emerald-600' : 'text-slate-500'}`}>
+          <span className={`text-xs font-bold uppercase tracking-widest ${agentEnabled ? 'text-emerald-600' : 'text-slate-500'}`}>
             {agentEnabled ? 'API Активен' : 'API Отключен'}
           </span>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 border border-slate-200/50 shadow-xl shadow-slate-900/5">
+ <div className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl shadow-slate-900/5">
           <div className="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center mb-4">
             <Key className="w-5 h-5 text-indigo-500" />
           </div>
           <h4 className="font-bold text-slate-800 mb-1">Активные сессии</h4>
           <p className="text-xs text-slate-500 mb-4">Короткоживущие токены доступа для агента</p>
-          <div className="text-3xl font-black text-slate-900 font-mono">
+          <div className="text-3xl font-bold text-slate-900 font-mono">
             {sessions.filter(s => s.status === 'active').length}
           </div>
         </div>
-        <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 border border-slate-200/50 shadow-xl shadow-slate-900/5">
+ <div className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl shadow-slate-900/5">
           <div className="w-10 h-10 rounded-2xl bg-amber-50 flex items-center justify-center mb-4">
             <CheckCircle className="w-5 h-5 text-amber-500" />
           </div>
           <h4 className="font-bold text-slate-800 mb-1">Ожидают подтверждения</h4>
           <p className="text-xs text-slate-500 mb-4">Чувствительные действия (Approve flow)</p>
-          <div className="text-3xl font-black text-slate-900 font-mono">
+          <div className="text-3xl font-bold text-slate-900 font-mono">
             {approvals.filter(a => a.status === 'pending').length}
           </div>
         </div>
-        <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 border border-slate-200/50 shadow-xl shadow-slate-900/5">
+ <div className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl shadow-slate-900/5">
           <div className="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center mb-4">
             <ShieldCheck className="w-5 h-5 text-rose-500" />
           </div>
           <h4 className="font-bold text-slate-800 mb-1">Блокировки</h4>
           <p className="text-xs text-slate-500 mb-4">Отклоненные вызовы за 24ч</p>
-          <div className="text-3xl font-black text-slate-900 font-mono">
+          <div className="text-3xl font-bold text-slate-900 font-mono">
             {logs.filter(l => l.status === 'blocked').length}
           </div>
         </div>
@@ -274,7 +297,7 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex justify-between items-end">
         <div>
-          <h3 className="text-lg font-black text-slate-900">Управление Agent Sessions</h3>
+          <h3 className="text-lg font-bold text-slate-900">Управление Agent Sessions</h3>
           <p className="text-sm text-slate-500 mt-1 max-w-2xl">
             Генерация и отзыв короткоживущих токенов. Не используйте постоянные ключи для внешних систем. 
             Если токен скомпрометирован или агент ведет себя подозрительно — отзовите сессию.
@@ -289,10 +312,10 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
         </button>
       </div>
 
-      <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-slate-200/50 shadow-xl shadow-slate-900/5 overflow-hidden">
+ <div className="bg-white rounded-3xl border border-slate-200/50 shadow-xl shadow-slate-900/5 overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead className="bg-slate-50/80 border-b border-slate-200/60">
-            <tr className="text-[10px] font-black text-slate-500 uppercase tracking-wider">
+            <tr className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               <th className="p-4">Название сессии</th>
               <th className="p-4">Токен</th>
               <th className="p-4">Выдан</th>
@@ -309,15 +332,32 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
                   <div className="text-[10px] text-slate-500 mt-0.5">Кем: {sess.issuedBy}</div>
                 </td>
                 <td className="p-4">
-                  <code className="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-1 rounded">{sess.tokenMasked}</code>
-                  {sess.fullToken && (
-                    <div className="text-[10px] text-rose-500 mt-1 font-bold">Скопируйте токен сейчас: {sess.fullToken}</div>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-1 rounded">{sess.tokenMasked}</code>
+                    {sess.fullToken && (
+                      <button
+                        onClick={() => toggleTokenVisibility(sess.id)}
+                        className="text-slate-400 hover:text-indigo-600 transition p-1 rounded-lg hover:bg-slate-100"
+                        title={visibleTokens[sess.id] ? 'Скрыть токен' : 'Показать полный токен'}
+                      >
+                        {visibleTokens[sess.id]
+                          ? <EyeOff className="w-3.5 h-3.5" />
+                          : <Eye className="w-3.5 h-3.5" />
+                        }
+                      </button>
+                    )}
+                  </div>
+                  {sess.fullToken && visibleTokens[sess.id] && (
+                    <div className="text-[10px] font-mono text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mt-1 break-all select-all">
+                      {sess.fullToken}
+                      <div className="text-[9px] text-amber-500 mt-0.5 font-semibold">Автоскрытие через 10 с</div>
+                    </div>
                   )}
                 </td>
                 <td className="p-4 text-xs text-slate-600">{new Date(sess.issuedAt).toLocaleString('ru-RU')}</td>
                 <td className="p-4 text-xs text-slate-600">{new Date(sess.expiresAt).toLocaleString('ru-RU')}</td>
                 <td className="p-4">
-                  <span className={`inline-flex items-center px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                  <span className={`inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
                     sess.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
                     sess.status === 'revoked' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
                     'bg-slate-50 text-slate-700 border border-slate-200'
@@ -352,7 +392,7 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
   const renderPermissions = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div>
-        <h3 className="text-lg font-black text-slate-900">Права по модулям</h3>
+        <h3 className="text-lg font-bold text-slate-900">Права по модулям</h3>
         <p className="text-sm text-slate-500 mt-1 max-w-2xl">
           Матрица прав определяет, какие модули Portal агент может читать или изменять. 
           Эти ограничения работают на уровне доступа к данным API.
@@ -364,7 +404,7 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
           const Icon = mod.icon;
           const currentPerm = permissions[mod.id] || 'none';
           return (
-            <div key={mod.id} className="bg-white/60 backdrop-blur-md rounded-2xl p-5 border border-slate-200/50 shadow-sm flex items-center justify-between gap-4">
+ <div key={mod.id} className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center">
                   <Icon className="w-5 h-5 text-indigo-500" />
@@ -398,7 +438,7 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
   const renderTools = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div>
-        <h3 className="text-lg font-black text-slate-900">Реестр Endpoints & Tools</h3>
+        <h3 className="text-lg font-bold text-slate-900">Реестр Endpoints & Tools</h3>
         <p className="text-sm text-slate-500 mt-1 max-w-2xl">
           Список реальных операций, которые выставлены во внешнее API для агента.
           Вы можете точечно отключать определенные инструменты, даже если у агента есть доступ к модулю.
@@ -409,10 +449,10 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
         {availableTools.map(tool => {
           const isActive = toolsState[tool.id] !== false; // true by default
           return (
-            <div key={tool.id} className="bg-white/60 backdrop-blur-md rounded-2xl p-4 border border-slate-200/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+ <div key={tool.id} className="bg-white rounded-2xl p-4 border border-slate-200/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border ${
+                  <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded border ${
                     tool.type === 'read' ? 'bg-blue-50 text-blue-700 border-blue-200' :
                     tool.type === 'write' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                     tool.type === 'execute' ? 'bg-purple-50 text-purple-700 border-purple-200' :
@@ -432,7 +472,7 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
               </div>
               
               <div className="flex items-center gap-3">
-                <span className={`text-[10px] font-black uppercase ${isActive ? 'text-emerald-500' : 'text-slate-400'}`}>
+                <span className={`text-[10px] font-bold uppercase ${isActive ? 'text-emerald-500' : 'text-slate-400'}`}>
                   {isActive ? 'Active' : 'Disabled'}
                 </span>
                 <button 
@@ -456,7 +496,7 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
   const renderApprovals = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div>
-        <h3 className="text-lg font-black text-slate-900">Approve Flow для чувствительных действий</h3>
+        <h3 className="text-lg font-bold text-slate-900">Approve Flow для чувствительных действий</h3>
         <p className="text-sm text-slate-500 mt-1 max-w-2xl">
           Действия, требующие участия человека (массовые изменения, удаление), попадают сюда со статусом Pending.
           Они не будут выполнены в Portal, пока администратор не нажмет Подтвердить.
@@ -473,13 +513,13 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
         )}
 
         {approvals.map(app => (
-          <div key={app.id} className={`bg-white/60 backdrop-blur-md rounded-2xl p-5 border shadow-sm transition ${
+ <div key={app.id} className={`bg-white rounded-2xl p-5 border shadow-sm transition ${
             app.status === 'pending' ? 'border-amber-300 shadow-amber-500/10' : 'border-slate-200/50 opacity-70'
           }`}>
             <div className="flex flex-col sm:flex-row justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border ${
+                  <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded border ${
                     app.status === 'pending' ? 'bg-amber-50 text-amber-700 border-amber-200' :
                     app.status === 'approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                     'bg-rose-50 text-rose-700 border-rose-200'
@@ -527,13 +567,13 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
   const renderPolicies = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div>
-        <h3 className="text-lg font-black text-slate-900">Ограничения и Guardrails (Policies)</h3>
+        <h3 className="text-lg font-bold text-slate-900">Ограничения и Guardrails (Policies)</h3>
         <p className="text-sm text-slate-500 mt-1 max-w-2xl">
           Глобальные политики безопасности, которые применяются ко всем вызовам агента поверх прав доступа к модулям.
         </p>
       </div>
 
-      <div className="bg-white/60 backdrop-blur-md rounded-3xl p-6 border border-slate-200/50 shadow-xl shadow-slate-900/5 space-y-5">
+ <div className="bg-white rounded-3xl p-6 border border-slate-200/50 shadow-xl shadow-slate-900/5 space-y-5">
         <div className="flex items-center justify-between">
           <div>
             <h4 className="text-sm font-bold text-slate-800">Требовать Approve для массовых изменений</h4>
@@ -621,7 +661,7 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col sm:flex-row justify-between items-end gap-4">
         <div>
-          <h3 className="text-lg font-black text-slate-900">Журнал вызовов (Audit Log)</h3>
+          <h3 className="text-lg font-bold text-slate-900">Журнал вызовов (Audit Log)</h3>
           <p className="text-sm text-slate-500 mt-1 max-w-2xl">
             История всех запросов агента, ошибок доступа, блокировок по политикам и выданных сессий.
           </p>
@@ -633,7 +673,7 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
             placeholder="Поиск по логам..."
             value={logsFilter}
             onChange={e => setLogsFilter(e.target.value)}
-            className="pl-9 pr-8 py-2.5 text-xs font-bold bg-white/80 backdrop-blur-md border border-slate-200 shadow-sm rounded-xl w-full sm:w-[250px] focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+ className="pl-9 pr-8 py-2.5 text-xs font-bold bg-white border border-slate-200 shadow-sm rounded-xl w-full sm:w-[250px] focus:outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 transition-all"
           />
           {logsFilter && (
             <button onClick={() => setLogsFilter('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
@@ -643,11 +683,11 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
         </div>
       </div>
 
-      <div className="bg-white/60 backdrop-blur-md rounded-3xl border border-slate-200/50 shadow-xl shadow-slate-900/5 overflow-hidden">
+ <div className="bg-white rounded-3xl border border-slate-200/50 shadow-xl shadow-slate-900/5 overflow-hidden">
         <div className="overflow-x-auto max-h-[500px] custom-scrollbar">
           <table className="w-full text-left border-collapse">
-            <thead className="sticky top-0 bg-slate-50/95 backdrop-blur z-10 shadow-sm">
-              <tr className="text-[10px] font-black text-slate-500 uppercase tracking-wider border-b border-slate-200/60">
+ <thead className="sticky top-0 bg-slate-50/95 z-10 shadow-sm">
+              <tr className="text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200/60">
                 <th className="p-4">Время</th>
                 <th className="p-4">Событие / Действие</th>
                 <th className="p-4">Статус</th>
@@ -665,7 +705,7 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
                     <span className="text-xs font-bold text-slate-800">{log.action}</span>
                   </td>
                   <td className="p-4">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider ${
                       log.status === 'success' ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 
                       log.status === 'blocked' ? 'text-amber-700 bg-amber-50 border border-amber-200' :
                       'text-rose-700 bg-rose-50 border border-rose-200'
@@ -702,13 +742,13 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
           <Sparkles className="w-5 h-5 text-white" />
         </div>
         <div>
-          <h2 className="text-xl font-black text-slate-900 tracking-tight">Агент API <span className="text-indigo-600">Access Center</span></h2>
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Агент API <span className="text-indigo-600">Access Center</span></h2>
           <p className="text-xs text-slate-500 font-medium mt-0.5">Единая точка управления доступом внешнего AI Agent App к Portal</p>
         </div>
       </div>
 
       {/* TABS NAVIGATION */}
-      <div className="flex overflow-x-auto gap-2 p-1 bg-slate-100/50 backdrop-blur-sm rounded-2xl border border-slate-200/50 w-full no-scrollbar">
+ <div className="flex overflow-x-auto gap-2 p-1 bg-slate-100/50 rounded-2xl border border-slate-200/50 w-full no-scrollbar">
         {agentTabs.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;

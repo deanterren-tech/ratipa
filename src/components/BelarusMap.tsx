@@ -528,7 +528,7 @@ export default function BelarusMap({
           <Navigation className="h-8 w-8 text-rose-500" />
         </div>
         <div className="space-y-2 max-w-sm">
-          <h3 className="text-sm font-black uppercase tracking-tight text-white">
+          <h3 className="text-sm font-bold uppercase tracking-tight text-white">
             Лимит показов карты исчерпан
           </h3>
           <p className="text-slate-400 text-xs font-medium leading-relaxed">
@@ -545,7 +545,7 @@ export default function BelarusMap({
   return (
     <div className="w-full h-full relative font-sans">
       {loading && (
-        <div className="absolute inset-0 bg-white/80 backdrop-blur-xs flex flex-col items-center justify-center z-10">
+ <div className="absolute inset-0 bg-white flex flex-col items-center justify-center z-10">
           <Navigation className="w-8 h-8 text-indigo-500 animate-spin mb-2" />
           <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider font-mono">
             Обновление карты (Mapbox)...

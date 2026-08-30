@@ -146,7 +146,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
     return (
       <div className="bg-white rounded-[2rem] p-8 border border-slate-200 shadow-[0_15px_45px_rgba(0,0,0,0.1)] text-center flex flex-col justify-center items-center py-24 select-none">
         <Lock className="h-12 w-12 text-slate-400 mb-4" style={{ strokeWidth: 1.5 }} />
-        <span className="text-sm font-black text-slate-900 uppercase font-mono tracking-wider">Доступ заблокирован</span>
+        <span className="text-sm font-bold text-slate-900 uppercase font-mono tracking-wider">Доступ заблокирован</span>
         <p className="text-xs text-slate-500 max-w-xs mt-2 font-medium">
           Панель root-администрирования доступна только администраторам.
         </p>

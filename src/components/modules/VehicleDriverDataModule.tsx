@@ -849,7 +849,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     try {
       await dbService.saveVehicleDriverRecord(updatedRecord, user.name, user.role);
     } catch (err: unknown) {
-      alert("Ошибка изменения диспетчера: " + ((err as any).message || String(err)));
+      toast("Ошибка изменения диспетчера: " + ((err as any).message || String(err)), 'error');
     }
   };
 
@@ -1036,7 +1036,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
             <button
               id="btn-add-driver-record"
               onClick={handleOpenAdd}
-              className="px-4 py-2.5 bg-[#3765F6] hover:bg-[#2555E5] text-white font-bold text-xs rounded-xl transition-all duration-150 border border-transparent flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 min-h-[44px]"
+              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all duration-150 border border-transparent flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 min-h-[44px]"
             >
               <Plus className="w-4 h-4" />
               <span>Добавить данные</span>
@@ -1189,7 +1189,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                 {isDriveLoading && (
                   <div className="absolute inset-2 bg-white rounded-xl flex flex-col items-center justify-center p-6 gap-3 z-10 transition duration-300 shadow-inner">
                     <Folder className="w-10 h-10 text-slate-300 animate-bounce" />
-                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Подключение к Google Диск...</span>
+                    <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Подключение к Google Диск...</span>
                     <span className="text-[9px] text-slate-300">Загрузка защищенного хранилища сканов</span>
                   </div>
                 )}
@@ -1212,7 +1212,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     <a href={rawDriveUrl} target="_blank" rel="noopener noreferrer" className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition">
                       <ExternalLink className="w-4 h-4" />
                     </a>
-                    <button onClick={() => { setIsDriveOpen(false); localStorage.setItem('ratipa_driver_drive_visible', 'false'); }} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 border border-slate-200 transition shadow-sm cursor-pointer">
+                    <button onClick={() => { setIsDriveOpen(false); localStorage.setItem('ratipa_driver_drive_visible', 'false'); }} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer">
                       <X className="w-5 h-5" strokeWidth={2.5} />
                     </button>
                   </div>
@@ -1221,7 +1221,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   {isDriveLoading && (
                     <div className="absolute inset-0 bg-white flex flex-col items-center justify-center p-6 gap-3 z-10">
                       <Folder className="w-10 h-10 text-slate-300 animate-bounce" />
-                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Загрузка...</span>
+                      <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Загрузка...</span>
                     </div>
                   )}
                   <iframe key={driveIframeKey + '-mobile'} src={driveEmbedUrl} onLoad={() => setIsDriveLoading(false)} className="w-full h-full border-0 bg-white" allow="clipboard-write" title="Google Диск - Документы Водителей" />
@@ -1260,7 +1260,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
             <div className="flex flex-col gap-2 pt-2">
               <button
                 onClick={() => handleVerifySuccess(currentVerification)}
-                className="w-full py-3 bg-[#3765F6] hover:bg-[#2555E5] text-white font-bold text-xs rounded-xl transition border border-transparent cursor-pointer shadow-sm min-h-[44px]"
+                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition border border-transparent cursor-pointer shadow-sm min-h-[44px]"
               >
                 Да, данные актуальны
               </button>
@@ -1501,7 +1501,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     <button
                       type="button"
                       onClick={addPhoneField}
-                      className="text-[10px] font-bold text-white bg-[#3765F6] hover:bg-[#2555E5] px-2.5 py-1 rounded-lg flex items-center gap-1 transition shadow-sm cursor-pointer active:scale-95 min-h-[44px]"
+                      className="text-[10px] font-bold text-white bg-slate-900 hover:bg-slate-800 px-2.5 py-1 rounded-lg flex items-center gap-1 transition shadow-sm cursor-pointer active:scale-95 min-h-[44px]"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Добавить телефон</span>
@@ -1621,7 +1621,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="px-6 py-2.5 rounded-xl font-bold text-white bg-[#3765F6] hover:bg-[#2555E5] transition shadow-sm text-xs font-sans cursor-pointer active:scale-95 flex items-center justify-center gap-1.5 min-w-[150px] disabled:bg-slate-400 disabled:cursor-not-allowed min-h-[44px]"
+                className="px-6 py-2.5 rounded-xl font-bold text-white bg-slate-900 hover:bg-slate-800 transition shadow-sm text-xs font-sans cursor-pointer active:scale-95 flex items-center justify-center gap-1.5 min-w-[150px] disabled:bg-slate-400 disabled:cursor-not-allowed min-h-[44px]"
               >
                 {isSaving ? (
                   <>

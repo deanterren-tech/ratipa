@@ -18,6 +18,8 @@ import {
   Sliders,
   Shield,
   Users,
+  Activity,
+  Clock,
 } from "lucide-react";
 import {useToast} from '../ToastProvider'
 import {useDialog} from '../DialogProvider'
@@ -65,9 +67,11 @@ export default function UserManagementBlock({ user }: Props) {
   const [newUPassword, setNewUPassword] = useState("");
   const [newURole, setNewURole] = useState("dispatcher");
   
+  const [showPassword, setShowPassword] = useState(false);
   const [showZagruzokSubtabs, setShowZagruzokSubtabs] = useState(false);
   const [showPlanningSubtabs, setShowPlanningSubtabs] = useState(false);
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const isModuleExpanded = (key: string) =>
     key === "planZagruzok" ? showZagruzokSubtabs : key === "currentPlanning" ? showPlanningSubtabs : !!expandedModules[key];
   const toggleModuleExpand = (key: string) => {
@@ -83,6 +87,11 @@ export default function UserManagementBlock({ user }: Props) {
       unsubUsers();
       unsubSettings();
     };
+  }, []);
+
+  useEffect(() => {
+    const unsub = dbService.getAuditLogs(setAuditLogs, 100);
+    return () => { unsub(); };
   }, []);
 
   const handleRegisterUser = (e: React.FormEvent) => {
@@ -161,6 +170,11 @@ export default function UserManagementBlock({ user }: Props) {
 
   const handleUserRoleChange = (u: UserProfile, newRole: string) => {
     const current = users.find((x) => x.uid === u.uid) || u;
+    // SEC-3: Запретить самопонижение — администратор не может снять себе права администратора
+    if (current.uid === user.uid && newRole !== 'root_admin' && newRole !== 'admin') {
+      toast("Вы не можете понизить собственные права администратора", "error");
+      return;
+    }
     dbService.saveUser({ ...current, role: newRole as any, permissions: {} as any, customPermissions: current.customPermissions || {} } as any);
     setUsers(prev => prev.map(user => 
       user.uid === u.uid ? { ...user, role: newRole as any, permissions: {} as any } : user
@@ -168,16 +182,7 @@ export default function UserManagementBlock({ user }: Props) {
     toast("Роль сотрудника обновлена", "success");
   };
 
-  // Поля учёта выезда (Прибыл/Готовность/Ремонт/Выезд/Комментарий/Водитель/Гос.номер):
-    const toggleBazaFieldPerm = (fKey: string, checked: boolean) => {
-      if (!selectedUser) return;
-      const current = users.find((x) => x.uid === selectedUser.uid) || selectedUser;
-      const newCustom = { ...(current.customPermissions || {}), [fKey]: checked ? "write" : "none" };
-      setUsers((prev) => prev.map((u) => (u.uid === selectedUser.uid ? ({ ...u, customPermissions: newCustom as any, permissions: {} as any }) : u)));
-      dbService.saveUser({ ...current, customPermissions: newCustom as any, permissions: {} as any } as any);
-    };
-
-    const filteredUsers = users.filter(
+  const filteredUsers = users.filter(
     (u) =>
       String(u.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       String(ROLE_LABELS[u.role] || u.role).toLowerCase().includes(searchQuery.toLowerCase()),
@@ -206,7 +211,21 @@ export default function UserManagementBlock({ user }: Props) {
       hasSubtabs: true,
       subtabs: settings?.currentPlanningTabs?.map((t) => ({ key: "currentPlanning_" + t.id, label: "Вкладка Т.П.", name: t.name })) || [],
     },
-    { key: "baza", label: "Учет выезда (База)" },
+    {
+      key: "baza",
+      label: "Учет выезда (База)",
+      hasSubtabs: true,
+      subtabs: [
+        { key: "baza_dateArrival", name: "Прибыл" },
+        { key: "baza_dateLoading", name: "Готовность" },
+        { key: "baza_dateRepairStart", name: "Ремонт нач." },
+        { key: "baza_dateRepairEnd", name: "Ремонт оконч." },
+        { key: "baza_dateDeparture", name: "Выезд" },
+        { key: "baza_comment", name: "Комментарий" },
+        { key: "baza_driverName", name: "Водитель" },
+        { key: "baza_carNumber", name: "Гос. номер" },
+      ],
+    },
     { key: "vehicleDriverData", label: "Данные авто и водителей" },
     { key: "dozvola", label: "Дозволы" },
     { key: "disposition", label: "Диспозиция" },
@@ -295,15 +314,15 @@ export default function UserManagementBlock({ user }: Props) {
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className={`w-8.5 h-8.5 rounded-xl flex items-center justify-center font-black text-xs shrink-0 border transition-all ${
+                  <div className={`w-8.5 h-8.5 rounded-xl flex items-center justify-center font-semibold text-xs shrink-0 border transition-all ${
                     isSelected ? "bg-[#3765F6] text-white border-[#3765F6]/20 shadow-sm" : badgeStyles
                   }`}>
                     {initialLetter}
                   </div>
                   <div className="flex flex-col items-start text-left min-w-0">
-                    <span className="text-xs font-black text-slate-800 truncate flex items-center gap-1.5 w-full">
+                    <span className="text-xs font-semibold text-slate-800 truncate flex items-center gap-1.5 w-full">
                       {u.name} 
-                      {u.uid === user.uid && <span className="bg-[#3765F6] text-white font-mono text-[7px] px-1 py-0.5 rounded font-black uppercase tracking-wider shrink-0 scale-90">ВЫ</span>}
+                      {u.uid === user.uid && <span className="bg-[#3765F6] text-white font-mono text-[7px] px-1 py-0.5 rounded font-bold uppercase tracking-wider shrink-0 scale-90">ВЫ</span>}
                     </span>
                     <span className="text-[9px] font-bold font-mono uppercase tracking-widest text-slate-400 mt-0.5">{roleLabel}</span>
                   </div>
@@ -313,6 +332,14 @@ export default function UserManagementBlock({ user }: Props) {
                     <div
                       onClick={async (e) => {
                         e.stopPropagation();
+                        // SEC-4: Запретить удаление последнего администратора
+                        if (u.role === 'admin' || u.role === 'root_admin') {
+                          const adminCount = users.filter(x => x.role === 'admin' || x.role === 'root_admin').length;
+                          if (adminCount <= 1) {
+                            toast("Нельзя удалить единственного администратора", "error");
+                            return;
+                          }
+                        }
                         if (await showConfirm(`Удалить учетную запись ${u.name}?`)) {
                           dbService.deleteUser(u.uid, u.name);
                           if (selectedUid === u.uid) setSelectedUid(null);
@@ -341,13 +368,13 @@ export default function UserManagementBlock({ user }: Props) {
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className={`w-8.5 h-8.5 rounded-xl flex items-center justify-center font-black text-xs shrink-0 border transition-all ${
+                  <div className={`w-8.5 h-8.5 rounded-xl flex items-center justify-center font-semibold text-xs shrink-0 border transition-all ${
                     isSelected ? "bg-[#3765F6] text-white border-[#3765F6]/20 shadow-sm" : "bg-slate-100 text-slate-700 border-slate-200"
                   }`}>
                     <Shield size={14} />
                   </div>
                   <div className="flex flex-col items-start text-left min-w-0">
-                    <span className="text-xs font-black text-slate-800 truncate flex items-center gap-1.5 w-full">
+                    <span className="text-xs font-semibold text-slate-800 truncate flex items-center gap-1.5 w-full">
                       {rLabel}
                     </span>
                     <span className="text-[9px] font-bold font-mono uppercase tracking-widest text-slate-400 mt-0.5">Пользователей: {usersCount}</span>
@@ -403,7 +430,7 @@ export default function UserManagementBlock({ user }: Props) {
           <div className="p-6 lg:p-8 flex flex-col h-full animate-fade-in overflow-y-auto">
              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-slate-200/40 pb-5 select-none">
               <div>
-                <h3 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
                   Шаблон роли: {ROLE_LABELS[selectedRole]}
                 </h3>
                 <span className="text-[10.5px] text-slate-500 font-medium mt-1 block">Эти базовые права применяются ко всем пользователям с данной ролью.</span>
@@ -494,7 +521,7 @@ export default function UserManagementBlock({ user }: Props) {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-slate-200/40 pb-5 select-none">
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
                     {selectedUser.name}
                   </h3>
                   {canEditUsers && (
@@ -526,7 +553,11 @@ export default function UserManagementBlock({ user }: Props) {
                     <Key size={12} className="text-[#3765F6]" /> Пароль доступа
                   </label>
                   <div className="flex gap-2">
-                    <input type="text" readOnly value={selectedUser.password || "—"} className="bg-white/70 border border-slate-200/60 rounded-xl px-3 py-2 text-xs font-mono font-bold w-full select-all outline-none focus:bg-white transition-all text-slate-800 shadow-inner" />
+                    <input type={showPassword ? "text" : "password"} readOnly value={selectedUser.password || "—"} className="bg-white/70 border border-slate-200/60 rounded-xl px-3 py-2 text-xs font-mono font-bold w-full select-all outline-none focus:bg-white transition-all text-slate-800 shadow-inner" />
+                    <button onClick={() => setShowPassword(v => !v)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-600 shadow-xs rounded-xl px-3 transition-all font-semibold text-xs cursor-pointer shrink-0 border border-slate-200/60"
+                      title={showPassword ? "Скрыть пароль" : "Показать пароль"}
+                    >{showPassword ? "Скрыть" : "Показать"}</button>
                     {canEditUsers && (
                       <button onClick={async () => {
                           const p = await showPrompt("Новый пароль сотрудника:", selectedUser.password);
@@ -578,38 +609,13 @@ export default function UserManagementBlock({ user }: Props) {
                         className={`w-7.5 h-7.5 rounded-lg border-2 transition-all flex items-center justify-center ${isSelected ? "border-[#3765F6] scale-110 shadow-sm" : "border-transparent hover:scale-105"} cursor-pointer`}
                         style={{ backgroundColor: p.colorCode }} title={p.name}
                       >
-                        {isSelected && <span className="text-[10px] text-white font-black drop-shadow-md">✓</span>}
+                        {isSelected && <span className="text-[10px] text-white font-semibold drop-shadow-md">✓</span>}
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              <div className="bg-slate-50 rounded-2xl border border-slate-200/50 p-4">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
-                  <ShieldCheck size={12} className="text-[#3765F6]" /> Права редактирования полей Учёта выезда
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                  {[
-                    { key: 'dateArrival', label: 'Прибыл' },
-                    { key: 'dateLoading', label: 'Готовность' },
-                    { key: 'dateRepairStart', label: 'Ремонт нач.' },
-                    { key: 'dateRepairEnd', label: 'Ремонт оконч.' },
-                    { key: 'dateDeparture', label: 'Выезд' },
-                    { key: 'comment', label: 'Комментарий' },
-                    { key: 'driverName', label: 'Водитель' },
-                    { key: 'carNumber', label: 'Гос. номер' },
-                  ].map((f) => {
-                    const checked = selectedUser.role === 'root_admin' || selectedUser.customPermissions?.[f.key] === "write";
-                    return (
-                      <label key={f.key} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[10px] font-semibold ${checked ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
-                        <input disabled={selectedUser.role === 'root_admin'} type="checkbox" checked={checked} onChange={(e) => toggleBazaFieldPerm(f.key, e.target.checked)} className="accent-[#3765F6] h-3.5 w-3.5" />
-                        {f.label}
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
             </div>
 
             <div className="mt-2">
@@ -697,6 +703,39 @@ export default function UserManagementBlock({ user }: Props) {
                 })}
               </div>
             </div>
+
+            {/* Employee Activity History */}
+            {(() => {
+              const userLogs = auditLogs.filter(
+                (l: any) => l.user && selectedUser && l.user.toLowerCase() === selectedUser.name.toLowerCase()
+              ).slice(0, 15);
+              if (userLogs.length === 0) return null;
+              return (
+                <div className="mt-5 bg-slate-50/30 border border-slate-200/40 rounded-2xl p-4">
+                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                    <Activity size={12} className="text-slate-400" />
+                    История активности ({userLogs.length})
+                  </h4>
+                  <div className="space-y-1 max-h-[200px] overflow-y-auto custom-scrollbar">
+                    {userLogs.map((log: any, i: number) => (
+                      <div key={log.id || i} className="flex items-start gap-2 py-1 px-2 rounded-lg hover:bg-white/50 text-[10px]">
+                        <div className="w-1 h-1 mt-1.5 rounded-full bg-slate-300 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-slate-700 font-medium block truncate">{log.details || log.actionType}</span>
+                          <span className="text-slate-400 font-mono text-[9px]">
+                            {log.date ? new Date(log.date).toLocaleDateString('ru-RU').replace(/\./g, '/') + ' ' + new Date(log.date).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''}
+                          </span>
+                        </div>
+                        <span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${String(log.actionType || '').toLowerCase().includes('create') || String(log.actionType || '').toLowerCase().includes('добав') ? 'bg-emerald-100 text-emerald-800' : String(log.actionType || '').toLowerCase().includes('delete') || String(log.actionType || '').toLowerCase().includes('удал') ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-500'}`}>
+                            {log.actionType}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              );
+            })()}
+
           </div>
         )}
 

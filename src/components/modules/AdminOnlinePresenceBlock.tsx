@@ -169,7 +169,7 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
     });
 
   return (
-    <div id="admin-presence-block" className="bg-white/40 backdrop-blur-xl rounded-[1.8rem] p-6 lg:p-8 border border-white/45 shadow-sm space-y-8 select-none">
+ <div id="admin-presence-block" className="bg-white rounded-[1.8rem] p-6 lg:p-8 border border-slate-200 shadow-sm space-y-8 select-none">
       
       {/* Block Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/40 pb-5">
@@ -232,7 +232,7 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
                     >
                       <div className="flex items-start gap-3">
                         {/* Avatar */}
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 border select-none ${
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-semibold text-xs shrink-0 border select-none ${
                           isSelf ? 'bg-[#3765F6] text-white border-[#3765F6]/30' : 'bg-slate-900/5 text-slate-700 border-slate-900/10'
                         }`}>
                           {initial}
@@ -240,11 +240,11 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
                         
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-black text-slate-900 truncate">
+                            <span className="text-xs font-semibold text-slate-900 truncate">
                               {u.name}
                             </span>
                             {isSelf && (
-                              <span className="bg-[#3765F6] text-white font-mono text-[7.5px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider shrink-0 scale-95">
+                              <span className="bg-[#3765F6] text-white font-mono text-[7.5px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider shrink-0 scale-95">
                                 Вы
                               </span>
                             )}
@@ -308,7 +308,7 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
                           className="flex items-center justify-between p-3.5 hover:bg-white/40 transition duration-150"
                         >
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-7.5 h-7.5 rounded-lg bg-slate-100/80 border border-slate-200/50 text-slate-500 flex items-center justify-center font-black text-[11px] shrink-0">
+                            <div className="w-7.5 h-7.5 rounded-lg bg-slate-100/80 border border-slate-200/50 text-slate-500 flex items-center justify-center font-semibold text-[11px] shrink-0">
                               {initial}
                             </div>
                             <div className="min-w-0">

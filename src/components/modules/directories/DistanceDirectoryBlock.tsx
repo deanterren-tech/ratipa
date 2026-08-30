@@ -45,7 +45,7 @@ export default function DistanceDirectoryBlock({ user }: Props) {
   };
 
   return (
-    <div className="bg-white/80 backdrop-blur rounded-2xl border border-slate-200/50 overflow-hidden shadow-sm">
+ <div className="bg-white rounded-2xl border border-slate-200/50 overflow-hidden shadow-sm">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
         <Navigation className="w-4 h-4 text-[#3765F6]" />
         <h3 className="text-sm font-bold text-slate-800">Стандартные расстояния</h3>
@@ -83,7 +83,7 @@ export default function DistanceDirectoryBlock({ user }: Props) {
         </div>
       </div>
       {editing && (
-        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" onClick={() => setEditing(null)}>
+ <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setEditing(null)}>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-sm p-5 space-y-3 my-4" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-sm font-bold text-slate-800">{editing?.id ? 'Изменить' : 'Добавить'} расстояние</h2>
             {[

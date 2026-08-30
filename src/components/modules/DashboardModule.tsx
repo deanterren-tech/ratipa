@@ -27,7 +27,7 @@ import {
   Map,
   Settings,
   ShieldAlert,
-  LayoutDashboard,
+
 } from 'lucide-react';
 
 const formatDateToRu = (dateVal: any): string => {
@@ -36,14 +36,14 @@ const formatDateToRu = (dateVal: any): string => {
     const cleanVal = String(dateVal).trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(cleanVal)) {
       const [y, m, d] = cleanVal.split('-');
-      return `${d}.${m}.${y}`;
+      return `${d}/${m}/${y}`;
     }
     const dateObj = new Date(cleanVal);
     if (!isNaN(dateObj.getTime())) {
       const d = String(dateObj.getDate()).padStart(2, '0');
       const m = String(dateObj.getMonth() + 1).padStart(2, '0');
       const y = dateObj.getFullYear();
-      return `${d}.${m}.${y}`;
+      return `${d}/${m}/${y}`;
     }
   } catch (e) {
     // fallback
@@ -58,16 +58,6 @@ const getTimeOfDayGreeting = (): string => {
   if (hour >= 18 && hour < 23) return 'Добрый вечер';
   return 'Доброй ночи';
 };
-
-const SUGGESTED_BACKGROUND_ITEMS = [
-  { key: 'planDohod', label: 'План дохода', icon: TrendingUp, color: 'text-[#3765F6]', top: '14%', left: '4%', delay: 0, duration: 16, xDist: 24, yDist: 20 },
-  { key: 'currentPlanning', label: 'Текущее планирование', icon: Calendar, color: 'text-rose-500', top: '46%', left: '3%', delay: 1.5, duration: 19, xDist: 26, yDist: 18 },
-  { key: 'baza', label: 'База', icon: Truck, color: 'text-emerald-500', top: '76%', left: '8%', delay: 0.8, duration: 15, xDist: 20, yDist: 22 },
-  { key: 'dohod', label: 'Калькуляция', icon: Calculator, color: 'text-indigo-500', top: '12%', right: '8%', delay: 3, duration: 18, xDist: -26, yDist: 20 },
-  { key: 'documents', label: 'Документы', icon: Files, color: 'text-purple-500', top: '42%', right: '3%', delay: 0.5, duration: 17, xDist: -22, yDist: 18 },
-  { key: 'dozvola', label: 'Дозвола', icon: FileText, color: 'text-teal-500', top: '22%', left: '12%', delay: 4, duration: 18, xDist: 24, yDist: -18 },
-  { key: 'settings', label: 'Справочники', icon: Settings, color: 'text-[#606E80]', top: '56%', right: '12%', delay: 1.2, duration: 20, xDist: -22, yDist: -20 }
-];
 
 interface DashboardModuleProps {
   user: UserProfile;
@@ -84,14 +74,12 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
   const [isEditingHighlight, setIsEditingHighlight] = useState(false);
   const [timeStr, setTimeStr] = useState('');
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-  const [backgroundPills, setBackgroundPills] = useState<typeof SUGGESTED_BACKGROUND_ITEMS>([]);
+  // Ambient pills removed (design simplification)
 
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
 
-  // Launcher, Highlight Modal, and Search States
-  const [isLauncherOpen, setIsLauncherOpen] = useState(false);
+  // Launcher removed (design simplification — navigation via bottom menu)
   const [selectedPreviewHighlight, setSelectedPreviewHighlight] = useState<HighlightData | null>(null);
-  const [launcherSearch, setLauncherSearch] = useState('');
   const [hoveredPillKey, setHoveredPillKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -100,12 +88,6 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
     const listener = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
     mediaQuery.addEventListener('change', listener);
     return () => mediaQuery.removeEventListener('change', listener);
-  }, []);
-
-  useEffect(() => {
-    // Pick a randomized subset of 5 suggested tools so the background stays fresh
-    const shuffled = [...SUGGESTED_BACKGROUND_ITEMS].sort(() => 0.5 - Math.random());
-    setBackgroundPills(shuffled.slice(0, 5));
   }, []);
 
   useEffect(() => {
@@ -305,20 +287,10 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
     return false;
   });
 
-  const filteredTools = allowedTools.filter(mod => {
-    const s = launcherSearch.toLowerCase().trim();
-    if (!s) return true;
-    return mod.label.toLowerCase().includes(s) || mod.description.toLowerCase().includes(s);
-  });
 
-  // Quick stats calculations
-  const totalVehiclesOnBase = vehicles.filter(v => v.status === 'base').length;
-  const totalVehiclesOnRepair = vehicles.filter(v => v.status === 'repair').length;
-  const totalActiveTrips = trips.filter(t => !t.isArchived).length;
-  const totalAvailablePermits = permits.filter(p => p.status === 'available').length;
 
   return (
-    <div className="w-full relative min-h-screen flex flex-col justify-between p-6 sm:p-8 md:p-10 select-none text-slate-900 overflow-hidden">
+    <div className="w-full relative h-full flex flex-col justify-between p-6 sm:p-8 md:p-10 select-none text-slate-900 overflow-hidden">
       
       {/* 2. Technical overlay grid over base */}
       <div className="absolute inset-0 tech-grid opacity-[0.08] pointer-events-none z-0" />
@@ -330,39 +302,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
         <div className="absolute top-[20%] left-[25%] w-[500px] h-[500px] rounded-full bg-blue-500/5 blur-[120px] md:blur-[160px]" />
       </div>
 
-      {/* 4. Ambient Floating Pills/Cards in the background with slow drift and hover interactivity */}
-      {backgroundPills.map((pill, idx) => {
-        const IconComp = pill.icon;
-        const stylePos: React.CSSProperties = {
-          position: 'absolute',
-          top: pill.top,
-          ...(pill.left ? { left: pill.left } : { right: pill.right }),
-        };
-        const isHoveredPill = hoveredPillKey === pill.key;
-
-        return (
-          <div
-            key={`${pill.key}-${idx}`}
-            style={stylePos}
-            tabIndex={0}
-            onClick={() => onNavigate(pill.key)}
-            onMouseEnter={() => setHoveredPillKey(pill.key)}
-            onMouseLeave={() => setHoveredPillKey(null)}
-            onFocus={() => setHoveredPillKey(pill.key)}
-            onBlur={() => setHoveredPillKey(null)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onNavigate(pill.key);
-              }
-            }}
-            className="hidden md:flex items-center gap-2.5 px-3.5 py-2 bg-white/45 border border-slate-200/35 rounded-full text-xs font-semibold text-slate-500/80 cursor-pointer z-10 shadow-3xs backdrop-blur-3xs transition-all duration-200 select-none outline-none focus-visible:ring-2 focus-visible:ring-[#3765F6]/40 opacity-60 hover:opacity-100 focus:opacity-100 active:opacity-100"
-          >
-            <IconComp size={12.5} className={`${pill.color} ${isHoveredPill ? 'opacity-100 scale-105' : 'opacity-70'} transition-all duration-200`} />
-            <span className="font-sans text-[11px] font-bold tracking-tight">{pill.label}</span>
-          </div>
-          );
-          })}
+      {/* Ambient floating pills removed (design simplification) */}
 
           {/* TOP ZONE: Clean operational indicators with no heavy borders or system labels */}
       <div className="relative z-10 w-full flex flex-col sm:flex-row items-center justify-end gap-4 pb-4 mb-4 select-none">
@@ -370,16 +310,16 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
         <div className="flex items-center gap-3 shrink-0">
           <div className="bg-white/95 border border-slate-200/60 rounded-2xl px-4 py-2 flex items-center gap-2 shadow-xs">
             <Clock size={13} className="text-[#3765F6]" />
-            <span className="font-mono text-xs font-black text-slate-800">{timeStr || "00:00:00"}</span>
+            <span className="font-mono text-xs font-bold text-slate-800">{timeStr || "00:00:00"}</span>
           </div>
         </div>
       </div>
 
       {/* CENTER ZONE: Central command greeting & primary CTAs */}
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center text-center max-w-4xl mx-auto py-6 select-none">
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center text-center max-w-4xl mx-auto py-3 select-none overflow-y-auto min-h-0">
         
         {/* Dynamic customized display name greeting - no gradient, calm product typography */}
-        <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight leading-tight mb-3 select-text font-sans text-slate-900">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight leading-tight mb-3 select-text font-sans text-slate-900">
           {getTimeOfDayGreeting()}, <span className="text-[#3765F6]">{user?.name || "Пользователь"}</span>
         </h1>
 
@@ -444,7 +384,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                       exit={{ opacity: 0, y: -8 }}
                       transition={{ duration: 0.2 }}
                     >
-                      <h4 className="font-extrabold text-slate-900 text-base leading-snug mb-1 hover:text-[#3765F6] transition-colors line-clamp-1">
+                      <h4 className="font-bold text-slate-900 text-base leading-snug mb-1 hover:text-[#3765F6] transition-colors line-clamp-1">
                         {slide?.title || 'Важная информация'}
                       </h4>
                       <p className="text-slate-500 text-xs leading-relaxed font-medium line-clamp-2 md:line-clamp-3">
@@ -499,7 +439,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
         <div className="flex flex-col sm:flex-row items-center gap-4 relative z-20 w-full sm:w-auto">
           <button
             onClick={() => onNavigate('planDohod')}
-            className="w-full sm:w-auto px-8 py-4 bg-[#3765F6] hover:bg-blue-600 text-white font-extrabold text-xs tracking-wider uppercase rounded-2xl shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 transition duration-150 flex items-center justify-center gap-2 cursor-pointer border border-transparent"
+            className="w-full sm:w-auto px-8 py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs tracking-wider uppercase rounded-2xl shadow-sm transition duration-150 flex items-center justify-center gap-2 cursor-pointer border border-transparent"
           >
             <span>ОТКРЫТЬ ПЛАН ДОХОДА</span>
             <ArrowRight size={14} className="stroke-[2.5]" />
@@ -507,7 +447,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
           
           <button
             onClick={() => onNavigate('dohod')}
-            className="w-full sm:w-auto px-8 py-4 bg-white border border-slate-200 hover:border-[#3765F6]/40 text-slate-700 hover:text-slate-900 font-extrabold text-xs tracking-wider uppercase rounded-2xl shadow-xs hover:bg-slate-50 transition duration-150 flex items-center justify-center gap-2.5 cursor-pointer group"
+            className="w-full sm:w-auto px-8 py-4 bg-white border border-slate-200/60 hover:border-slate-300 text-slate-700 hover:text-slate-900 font-bold text-xs tracking-wider uppercase rounded-2xl shadow-sm hover:bg-slate-50 transition duration-150 flex items-center justify-center gap-2.5 cursor-pointer group"
           >
             <Calculator size={14} className="text-[#3765F6] group-hover:rotate-12 transition-transform" />
             <span>КАЛЬКУЛЯЦИЯ</span>
@@ -545,107 +485,6 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
 
       </div>
 
-      {/* COMPREHENSIVE GLASSMORPHIC LAUNCHER OVERLAY MODAL */}
-      <AnimatePresence>
-        {isLauncherOpen && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl z-[999] flex items-center justify-center p-4 overflow-y-auto select-none"
-            onClick={() => setIsLauncherOpen(false)}
-          >
-            <motion.div 
-              initial={{ scale: 0.95, y: 15 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 15 }}
-              transition={{ type: "spring", duration: 0.4 }}
-              className="w-full max-w-4xl bg-slate-900/80 border border-slate-800 rounded-[2.5rem] p-4 sm:p-6 md:p-8 shadow-2xl relative flex flex-col custom-scrollbar"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Close controls */}
-              <button 
-                onClick={() => setIsLauncherOpen(false)}
-                className="absolute top-6 right-6 p-2 rounded-full hover:bg-slate-800/80 text-slate-400 hover:text-white transition cursor-pointer border border-transparent bg-transparent"
-              >
-                <X size={18} />
-              </button>
-
-              {/* Header Zone */}
-              <div className="flex items-center gap-3 border-b border-slate-800/60 pb-5 mb-6">
-                <LayoutDashboard size={20} className="text-amber-400" />
-                <div>
-                  <h3 className="text-lg font-black uppercase text-white tracking-wider">Панель рабочих инструментов</h3>
-                  <span className="text-[9px] font-mono uppercase tracking-widest text-slate-500 block mt-0.5">Доступно разделов: {allowedTools.length}</span>
-                </div>
-              </div>
-
-              {/* Launcher Search Bar */}
-              <div className="relative mb-6 select-text">
-                <input 
-                  type="text"
-                  placeholder="Быстрый поиск по названию или описанию модуля..."
-                  value={launcherSearch}
-                  onChange={(e) => setLauncherSearch(e.target.value)}
-                  className="w-full bg-slate-950 text-slate-200 text-xs px-5 py-3.5 rounded-2xl border border-slate-800 focus:border-amber-500/50 outline-none focus:ring-1 focus:ring-amber-500/30 transition-all font-medium font-sans"
-                />
-                {launcherSearch && (
-                  <button 
-                    onClick={() => setLauncherSearch('')}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs cursor-pointer font-bold border border-transparent bg-transparent"
-                  >
-                    Очистить
-                  </button>
-                )}
-              </div>
-
-              {/* Tools Interactive Grid */}
-              {filteredTools.length === 0 ? (
-                <div className="py-12 text-center text-slate-500 font-mono text-xs uppercase font-extrabold select-none">
-                  Разделы не найдены
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 overflow-y-auto pr-1">
-                  {filteredTools.map((mod) => {
-                    const IconComp = mod.icon;
-                    return (
-                      <motion.div
-                        key={mod.key}
-                        whileHover={{ scale: 1.015 }}
-                        className="p-4 bg-slate-950/60 hover:bg-slate-950 border border-slate-850 hover:border-amber-500/20 rounded-2xl transition-all duration-150 cursor-pointer flex flex-col justify-between group h-32"
-                        onClick={() => {
-                          onNavigate(mod.key);
-                          setIsLauncherOpen(false);
-                        }}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className={`p-2.5 rounded-xl ${mod.iconColor} shrink-0 transition-all group-hover:scale-105`}>
-                            <IconComp size={16} />
-                          </div>
-                          <div className="min-w-0">
-                            <h4 className="text-xs font-black text-white group-hover:text-amber-300 transition-colors uppercase tracking-wide truncate">
-                              {mod.label}
-                            </h4>
-                            <p className="text-slate-400 group-hover:text-slate-350 text-[10px] font-medium leading-normal line-clamp-2 mt-1.5 transition-colors">
-                              {mod.description}
-                            </p>
-                          </div>
-                        </div>
-                        
-                        <div className="flex justify-end items-center text-[9px] font-mono tracking-widest uppercase text-slate-600 group-hover:text-amber-400 font-black transition-colors pt-2">
-                          <span>Запустить</span>
-                          <ArrowRight size={10} className="ml-1 opacity-0 group-hover:opacity-100 transition-all translate-x-[-4px] group-hover:translate-x-0" />
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* DETAILED HIGHLIGHT PREVIEW COVER MODAL */}
       <AnimatePresence>
         {selectedPreviewHighlight && (
@@ -653,7 +492,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[1000] flex items-end sm:items-center justify-center p-0 sm:p-4 select-none overflow-y-auto"
+ className="fixed inset-0 bg-slate-900/60 z-[1000] flex items-end sm:items-center justify-center p-0 sm:p-4 select-none overflow-y-auto"
             onClick={() => setSelectedPreviewHighlight(null)}
           >
             <motion.div 
@@ -661,13 +500,13 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: '100%', opacity: 0 }}
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="w-full sm:max-w-lg sm:mx-4 bg-white sm:border sm:border-slate-200 rounded-t-[2rem] sm:rounded-[2.5rem] shadow-2xl relative select-text mt-auto sm:mt-0"
+              className="w-full sm:max-w-lg sm:mx-4 bg-white sm:border sm:border-slate-200 rounded-t-[2rem] sm:rounded-2xl shadow-sm relative select-text mt-auto sm:mt-0"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Close button */}
               <button 
                 onClick={() => setSelectedPreviewHighlight(null)}
-                className="absolute top-3 right-3 z-20 w-11 h-11 bg-white/90 hover:bg-white border border-slate-200/50 rounded-full text-slate-700 hover:text-slate-900 shadow-md transition cursor-pointer select-none flex items-center justify-center"
+                className="absolute top-3 right-3 z-20 w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer"
               >
                 <X size={16} className="stroke-[2.5]" />
               </button>
@@ -739,21 +578,21 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[1001] flex items-center justify-center p-4 select-text overflow-y-auto"
+ className="fixed inset-0 bg-slate-900/60 z-[1001] flex items-center justify-center p-4 select-text overflow-y-auto"
             onClick={() => setIsEditingHighlight(false)}
           >
             <motion.div 
               initial={{ scale: 0.95, y: 15 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 15 }}
-              className="w-full max-w-2xl bg-white border border-slate-200 rounded-[2.5rem] p-4 sm:p-6 md:p-8 shadow-2xl relative flex flex-col custom-scrollbar"
+              className="w-full max-w-2xl bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 md:p-8 shadow-sm relative flex flex-col custom-scrollbar"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
               <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6 select-none">
                 <div className="flex items-center gap-2 text-[#3765F6]">
                   <Edit2 size={18} className="stroke-[2.5]" />
-                  <span className="text-sm font-black uppercase tracking-wider font-sans">Редактор новостной ленты</span>
+                  <span className="text-sm font-bold uppercase tracking-wider font-sans">Редактор новостной ленты</span>
                 </div>
                 <button 
                   onClick={() => setIsEditingHighlight(false)}
@@ -770,9 +609,9 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                     key={h.id || index}
                     type="button"
                     onClick={() => setSelectedEditIndex(index)}
-                    className={`px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition cursor-pointer border border-transparent ${
+                    className={`px-3.5 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition cursor-pointer border border-transparent ${
                       selectedEditIndex === index 
-                        ? 'bg-[#3765F6] text-white shadow-sm' 
+                        ? 'bg-slate-900 text-white shadow-sm' 
                         : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200 bg-transparent'
                     }`}
                   >
@@ -782,7 +621,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                 <button
                   type="button"
                   onClick={addEditSlide}
-                  className="px-3 py-1.5 rounded-xl bg-slate-200/60 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer border border-transparent"
+                  className="px-3 py-1.5 rounded-xl bg-slate-200/60 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer border border-transparent"
                 >
                   <Plus size={12} className="stroke-[2.5]" /> Добавить
                 </button>
@@ -796,7 +635,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Title */}
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Заголовок новости</label>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Заголовок новости</label>
                       <input
                         type="text"
                         className="w-full bg-white text-slate-900 text-xs p-3.5 rounded-xl border border-slate-200 focus:border-[#3765F6]/50 focus:ring-1 focus:ring-[#3765F6]/20 outline-none transition font-sans font-bold"
@@ -808,7 +647,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
 
                     {/* Date */}
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Дата публикации</label>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Дата публикации</label>
                       <input
                         type="date"
                         className="w-full bg-white text-slate-900 text-xs p-3.5 rounded-xl border border-slate-200 focus:border-[#3765F6]/50 outline-none transition font-sans font-bold"
@@ -820,7 +659,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
 
                   {/* Text Description */}
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Текст новости</label>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Текст новости</label>
                     <textarea
                       rows={3}
                       className="w-full bg-white text-slate-900 text-xs p-3.5 rounded-xl border border-slate-200 focus:border-[#3765F6]/50 focus:ring-1 focus:ring-[#3765F6]/20 outline-none transition resize-none font-sans font-medium"
@@ -832,7 +671,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
 
                   {/* Image URL with Preset selection */}
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Ссылка на обложку (или выберите пресет ниже)</label>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Ссылка на обложку (или выберите пресет ниже)</label>
                     <input
                       type="text"
                       className="w-full bg-white text-slate-900 text-xs p-3.5 rounded-xl border border-slate-200 focus:border-[#3765F6]/50 outline-none transition font-mono"
@@ -885,7 +724,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                     {/* Optional link */}
                     <div>
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Ссылка кнопки (опционально)</label>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Ссылка кнопки (опционально)</label>
                       <input
                         type="text"
                         className="w-full bg-white text-slate-900 text-xs p-3.5 rounded-xl border border-slate-200 focus:border-[#3765F6]/50 outline-none transition font-sans"
@@ -924,7 +763,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                           className="w-full h-full object-cover"
                           referrerPolicy="no-referrer"
                         />
-                        <div className="absolute top-2 left-2 flex items-center gap-1 bg-red-600 text-white font-sans font-black uppercase tracking-wider text-[7px] px-1.5 py-0.5 rounded shadow-sm">
+                        <div className="absolute top-2 left-2 flex items-center gap-1 bg-red-600 text-white font-sans font-bold uppercase tracking-wider text-[7px] px-1.5 py-0.5 rounded shadow-sm">
                           <span>{editHighlights[selectedEditIndex]?.isImportant ? 'СРОЧНО' : 'НОВОСТЬ'}</span>
                         </div>
                       </div>
@@ -934,7 +773,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                             <span>{editHighlights[selectedEditIndex]?.author || user.name}</span>
                             <span>{editHighlights[selectedEditIndex]?.date ? formatDateToRu(editHighlights[selectedEditIndex].date) : ''}</span>
                           </div>
-                          <h5 className="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug line-clamp-1">
+                          <h5 className="font-bold text-slate-900 text-xs sm:text-sm leading-snug line-clamp-1">
                             {editHighlights[selectedEditIndex]?.title || 'Важная информация'}
                           </h5>
                           <p className="text-slate-500 text-[10.5px] leading-relaxed line-clamp-2">
@@ -951,7 +790,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                       <button
                         type="button"
                         onClick={() => deleteEditSlide(selectedEditIndex)}
-                        className="px-4 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition cursor-pointer"
+                        className="px-4 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition cursor-pointer"
                       >
                         <Trash2 size={13} /> Удалить этот слайд
                       </button>
@@ -963,14 +802,14 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                       <button
                         type="button"
                         onClick={() => setIsEditingHighlight(false)}
-                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-wider transition cursor-pointer border border-transparent"
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-[10px] font-bold uppercase tracking-wider transition cursor-pointer border border-transparent"
                       >
                         Отмена
                       </button>
                       <button
                         type="button"
                         onClick={saveHighlight}
-                        className="px-5 py-2 bg-[#3765F6] hover:bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition cursor-pointer border border-transparent"
+                        className="px-5 py-2 bg-[#3765F6] hover:bg-blue-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition cursor-pointer border border-transparent"
                       >
                         <Save size={13} /> Сохранить новость
                       </button>

@@ -179,7 +179,7 @@ export const TripList = React.memo(({
                   <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wider">Старт</span>
                   <span className="text-slate-800 font-semibold font-mono">
                     {trip.dateStart
-                      ? new Date(trip.dateStart).toLocaleDateString('ru-RU')
+                      ? new Date(trip.dateStart).toLocaleDateString('ru-RU').replace(/\./g, '/')
                       : '—'}
                   </span>
                 </div>
@@ -187,7 +187,7 @@ export const TripList = React.memo(({
                   <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wider">Финиш</span>
                   <span className="text-slate-800 font-semibold font-mono">
                     {trip.dateEnd
-                      ? new Date(trip.dateEnd).toLocaleDateString('ru-RU')
+                      ? new Date(trip.dateEnd).toLocaleDateString('ru-RU').replace(/\./g, '/')
                       : '—'}
                   </span>
                 </div>

@@ -1,3 +1,4 @@
+import {useToast} from '../ToastProvider'
 import {useDialog} from '../DialogProvider'
 import React, {useState, useEffect, useMemo} from 'react'
 import { normalizeRoadString } from '../../utils/format'
@@ -12,6 +13,7 @@ import {
   AppSettings,
 } from "../../types";
 import {dbService, directoryService} from '../../api';
+import CityAutocomplete from '../common/CityAutocomplete';
 import {pdService} from '../../api';
 import {
   Plus,
@@ -19,7 +21,6 @@ import {
   Save,
   MapPin,
   Calculator,
-  Sparkles,
   Info,
   Ship,
   TrendingUp,
@@ -37,6 +38,7 @@ import {
   Landmark,
   Receipt,
   Map,
+  Printer,
 } from "lucide-react";
 import MapRouteModal from "../MapRouteModal";
 import {applyDistanceToField, recalculateLegRoute} from '../../utils/distanceCalculator'
@@ -713,12 +715,16 @@ const CalculationCard = React.memo(({
   calc,
   user,
   copyHistoryToForm,
-  openEditCalcModal
+  openEditCalcModal,
+  isSelected,
+  onToggleSelect,
 }: {
   calc: RouteCalculation;
   user: UserProfile;
   copyHistoryToForm: (calc: RouteCalculation) => void;
   openEditCalcModal: (calc: RouteCalculation) => void;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) => {
   const routePoints: string[] = [];
   calc.legs.forEach((l) => {
@@ -744,9 +750,34 @@ const CalculationCard = React.memo(({
 
   return (
     <div
-      className="p-5 bg-white border border-slate-200/50 hover:border-slate-300/80 rounded-[2rem] shadow-[0_8px_30px_rgba(0,0,0,0.01)] hover:shadow-md transition duration-300 flex flex-col group"
+      className={`p-5 bg-white border rounded-2xl shadow-sm hover:shadow-md transition duration-300 flex flex-col group ${
+        isSelected
+          ? "border-[#3765F6]/60 ring-2 ring-[#3765F6]/20 bg-blue-50/20"
+          : "border-slate-200/50 hover:border-slate-300/80"
+      }`}
     >
       <div className="flex items-start justify-between mb-4 pb-3 border-b border-slate-200/40 gap-4">
+        {/* Checkbox */}
+        {onToggleSelect && (
+          <button
+            type="button"
+            onClick={() => onToggleSelect(calc.id)}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl shrink-0 cursor-pointer transition-colors duration-150"
+            title={isSelected ? "Снять выделение" : "Выбрать для печати"}
+          >
+            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-150 ${
+              isSelected
+                ? "bg-slate-900 border-slate-900 text-white"
+                : "border-slate-300 hover:border-[#3765F6] bg-white"
+            }`}>
+              {isSelected && (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </div>
+          </button>
+        )}
         <div className="flex flex-col gap-1 min-w-0">
           <div className="text-sm font-bold text-slate-900 uppercase tracking-tight flex items-center gap-1.5 flex-wrap">
             <span className="text-[#3765F6] font-mono">&rarr;</span>
@@ -755,7 +786,7 @@ const CalculationCard = React.memo(({
           <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider flex items-center gap-2 flex-wrap">
             <span>{calc.datetime}</span>
             <span className="text-slate-300">•</span>
-            <span>Направление: <strong className="text-slate-700">{calc.globalDirection || "Не указано"}</strong></span>
+            <span>Направление: <strong className="text-slate-700">{calc.globalDirection || calc.direction || "Не указано"}</strong></span>
             <span className="text-slate-300">•</span>
             <span>Логист: <strong className="text-slate-700">{calc.username || calc.logist || "Система"}</strong></span>
             {calc.additionalExpenses ? (
@@ -806,40 +837,40 @@ const CalculationCard = React.memo(({
       {/* Accented metrics block (bento style) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <div className="bg-emerald-500/5 border border-emerald-500/10 p-3 rounded-2xl flex flex-col justify-between min-h-[64px]">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-600 block mb-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 block mb-1">
             Доход (Чистый)
           </span>
-          <span className="text-base font-black text-emerald-600 font-mono tracking-tight leading-none">
+          <span className="text-base font-bold text-emerald-600 font-mono tracking-tight leading-none">
             {Math.round(profitValue).toLocaleString("ru-RU")}{" "}
             <span className="text-xs font-normal">€</span>
           </span>
         </div>
 
-        <div className="bg-[#3765F6]/5 border border-[#3765F6]/10 p-3 rounded-2xl flex flex-col justify-between min-h-[64px]">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-blue-600 block mb-1">
+        <div className="bg-slate-500/5 border border-slate-500/10 p-3 rounded-2xl flex flex-col justify-between min-h-[64px]">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 block mb-1">
             Доход в день
           </span>
-          <span className="text-base font-black text-blue-700 font-mono tracking-tight leading-none">
+          <span className="text-base font-bold text-blue-700 font-mono tracking-tight leading-none">
             {Math.round(dailyProfitValue).toLocaleString("ru-RU")}{" "}
             <span className="text-xs font-normal">€/дн</span>
           </span>
         </div>
 
         <div className="bg-amber-500/5 border border-amber-500/10 p-3 rounded-2xl flex flex-col justify-between min-h-[64px]">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-amber-600 block mb-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 block mb-1">
             Количество дней
           </span>
-          <span className="text-base font-black text-amber-700 font-mono tracking-tight leading-none">
+          <span className="text-base font-bold text-amber-700 font-mono tracking-tight leading-none">
             {daysValue}{" "}
             <span className="text-xs font-normal">дн</span>
           </span>
         </div>
 
         <div className="bg-slate-500/5 border border-slate-500/10 p-3 rounded-2xl flex flex-col justify-between min-h-[64px]">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
             Километраж
           </span>
-          <span className="text-base font-black text-slate-700 font-mono tracking-tight leading-none">
+          <span className="text-base font-bold text-slate-600 font-mono tracking-tight leading-none">
             {Math.round(totalKmValue).toLocaleString("ru-RU")}{" "}
             <span className="text-xs font-normal">км</span>
           </span>
@@ -848,7 +879,7 @@ const CalculationCard = React.memo(({
 
       {/* Visual rendering of calculation legs steps inside drop list */}
       <div className="mt-1 border-t border-slate-200/40 pt-3">
-        <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 block mb-2.5">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2.5">
           Детализация по плечам
         </span>
         <div className="space-y-1.5">
@@ -896,6 +927,7 @@ const CalculationCard = React.memo(({
 
 export default function DohodModule({ user }: DohodModuleProps) {
   const { showConfirm } = useDialog();
+  const { toast } = useToast();
   
   const [calculationHistory, setCalculationHistory] = useState<
     RouteCalculation[]
@@ -903,6 +935,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
   const [routeTemplates, setRouteTemplates] = useState<RouteTemplate[]>([]);
   const [ferries, setFerries] = useState<FerryTemplate[]>([]);
   const [distances, setDistances] = useState<DistancePreset[]>([]);
+  const citiesList = useMemo(() => {
+    const set = new Set<string>();
+    distances.forEach((d) => { if (d.from) set.add(d.from); if (d.to) set.add(d.to); });
+    return Array.from(set).sort();
+  }, [distances]);
   const [directions, setDirections] = useState<DirectionPreset[]>([]);
   const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
 
@@ -957,13 +994,6 @@ export default function DohodModule({ user }: DohodModuleProps) {
     matches: string[];
   }>({ attempted: false, avoidedSuccessfully: false, matches: [] });
 
-  const [conversionDialog, setConversionDialog] = useState<{
-    index: number;
-    infoRate: number;
-    infoCurrency: string;
-    proposedFreight: number;
-  } | null>(null);
-
   const [legs, setLegs] = useState<Omit<Leg, "id">[]>([
     {
       from: "",
@@ -996,20 +1026,21 @@ export default function DohodModule({ user }: DohodModuleProps) {
   const [activeHistoryDirectionTab, setActiveHistoryDirectionTab] =
     useState("Все");
   const [historyPage, setHistoryPage] = useState(7);
+  const [selectedCalcIds, setSelectedCalcIds] = useState<Set<string>>(new Set());
 
   // Сброс пагинации при смене фильтра/поиска
   useEffect(() => { setHistoryPage(7); }, [historySearch, activeHistoryDirectionTab]);
 
   const uniqueDirections = useMemo(() => {
     return Array.from(
-      new Set(calculationHistory.map((c) => c.globalDirection).filter(Boolean)),
+      new Set(calculationHistory.map((c) => c.globalDirection || c.direction).filter(Boolean)),
     );
   }, [calculationHistory]);
 
   const directionsCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     calculationHistory.forEach((c) => {
-      const dir = c.globalDirection;
+      const dir = c.globalDirection || c.direction;
       if (dir) {
         counts[dir] = (counts[dir] || 0) + 1;
       }
@@ -1028,10 +1059,10 @@ export default function DohodModule({ user }: DohodModuleProps) {
         c.username?.toLowerCase().includes(searchLower) ||
         c.logist?.toLowerCase().includes(searchLower) ||
         JSON.stringify(c.legs).toLowerCase().includes(searchLower) ||
-        (c.globalDirection || "").toLowerCase().includes(searchLower);
+        (c.globalDirection || c.direction || "").toLowerCase().includes(searchLower);
       const matchesTab =
         activeHistoryDirectionTab === "Все" ||
-        c.globalDirection === activeHistoryDirectionTab;
+        (c.globalDirection || c.direction) === activeHistoryDirectionTab;
       return matchesSearch && matchesTab;
     });
   }, [calculationHistory, historySearch, activeHistoryDirectionTab]);
@@ -1379,26 +1410,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
     const currentFreight = legs[index]?.freight || 0;
     if (proposedFreight > 0 && Math.abs(currentFreight - proposedFreight) > 2) {
-      setConversionDialog({
-        index,
-        infoRate,
-        infoCurrency,
-        proposedFreight,
+      // Auto-apply conversion immediately without confirmation dialog
+      updateLeg(index, {
+        freight: proposedFreight,
       });
     }
-  };
-
-  const applyConversion = () => {
-    if (conversionDialog) {
-      updateLeg(conversionDialog.index, {
-        freight: conversionDialog.proposedFreight,
-      });
-      setConversionDialog(null);
-    }
-  };
-
-  const dismissConversion = () => {
-    setConversionDialog(null);
   };
 
   const findDistanceInPool = (c1: string, c2: string) => {
@@ -1497,7 +1513,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
   const saveCalculation = () => {
     if (legs.some((l) => !l.from && !l.to && !l.dist && !l.freight)) {
-      alert("Калькулятор пуст пустой. Нечего сохранять.");
+      toast("Калькулятор пуст пустой. Нечего сохранять.", 'info');
       return;
     }
 
@@ -1526,7 +1542,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
     if (!name || !name.trim()) return;
     const validLegs = legs.filter((l) => l.from || l.to || l.dist || l.freight);
     if (validLegs.length === 0) {
-      alert("Калькулятор пуст!");
+      toast("Калькулятор пуст!", 'info');
       return;
     }
     dbService.saveRouteTemplate(
@@ -1634,6 +1650,290 @@ export default function DohodModule({ user }: DohodModuleProps) {
     setExpenseItems([]);
   };
 
+  // Selection for batch print
+  const toggleSelectCalc = (id: string) => {
+    setSelectedCalcIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    setSelectedCalcIds(new Set(visibleHistory.map((c) => c.id)));
+  };
+
+  const deselectAll = () => {
+    setSelectedCalcIds(new Set());
+  };
+
+  const printSelectedCalculations = () => {
+    if (selectedCalcIds.size === 0) return;
+    const selected = calculationHistory.filter((c) => selectedCalcIds.has(c.id));
+    if (selected.length === 0) return;
+
+    const printHtml = buildPrintHtml(selected);
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.top = "-10000px";
+    iframe.style.left = "-10000px";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "none";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      return;
+    }
+    doc.open();
+    doc.write(printHtml);
+    doc.close();
+
+    iframe.contentWindow?.focus();
+    iframe.contentWindow?.print();
+
+    // Clean up after print
+    setTimeout(() => {
+      document.body.removeChild(iframe);
+      setSelectedCalcIds(new Set());
+    }, 1000);
+  };
+
+  const buildPrintHtml = (selected: RouteCalculation[]): string => {
+    const legRows = (calc: RouteCalculation) => {
+      return (calc.legs || [])
+        .map(
+          (l, i) => `<tr>
+            <td>${i + 1}</td>
+            <td>${l.from || "—"}</td>
+            <td>${l.to || "—"}</td>
+            <td>${Math.round(Number(l.emptyRun || 0)).toLocaleString("ru-RU")}</td>
+            <td>${Math.round(Number(l.totalDistanceKm || l.dist || l.distance || 0)).toLocaleString("ru-RU")}</td>
+            <td>${Math.round(Number(l.freight || 0)).toLocaleString("ru-RU")}</td>
+            <td>${Math.round(Number(l.infoRate || 0)).toLocaleString("ru-RU")} ${l.infoCurrency || ""}</td>
+            <td>${Math.round(Number(l.additionalExpenses || l.otherExpenses || 0)).toLocaleString("ru-RU")}</td>
+          </tr>`,
+        )
+        .join("");
+    };
+
+    const calcBlock = (calc: RouteCalculation) => {
+      const totalKm = calc.km ||
+        calc.totalKm ||
+        (calc.legs || []).reduce(
+          (acc, l) => acc + Number(l.totalDistanceKm || l.dist || l.distance || 0) + Number(l.emptyRun || 0),
+          0,
+        );
+      const days = calc.days || 1;
+      const profit = calc.netProfit || 0;
+      const daily = calc.dailyProfit || (days > 0 ? profit / days : 0);
+      const freight = calc.freight || calc.totalFreight || 0;
+      const expenses = calc.expenses || calc.totalExpenses || 0;
+      const routePoints: string[] = [];
+      calc.legs.forEach((l) => {
+        if (l.from && routePoints[routePoints.length - 1] !== l.from) routePoints.push(l.from);
+        if (l.to && routePoints[routePoints.length - 1] !== l.to) routePoints.push(l.to);
+      });
+      const routeTitle = routePoints.join(" → ");
+
+      return `
+        <div class="print-calc-block">
+          <h2 class="print-calc-title">${escapeHtml(routeTitle || "Без названия")}</h2>
+          <div class="print-meta">${escapeHtml(calc.datetime || calc.date || "")} | Направление: <strong>${escapeHtml(calc.globalDirection || calc.direction || "Не указано")}</strong> | Логист: <strong>${escapeHtml(calc.username || calc.logist || "Система")}</strong></div>
+
+          <div class="print-metrics">
+            <div class="print-metric">
+              <span class="print-metric-label">Чистая прибыль</span>
+              <span class="print-metric-value">${Math.round(profit).toLocaleString("ru-RU")} €</span>
+            </div>
+            <div class="print-metric">
+              <span class="print-metric-label">Пробег общий</span>
+              <span class="print-metric-value">${Math.round(totalKm).toLocaleString("ru-RU")} км</span>
+            </div>
+            <div class="print-metric">
+              <span class="print-metric-label">Фрахт общий</span>
+              <span class="print-metric-value">${Math.round(freight).toLocaleString("ru-RU")} €</span>
+            </div>
+            <div class="print-metric">
+              <span class="print-metric-label">Расходы</span>
+              <span class="print-metric-value">${Math.round(expenses).toLocaleString("ru-RU")} €</span>
+            </div>
+            <div class="print-metric">
+              <span class="print-metric-label">Дней в пути</span>
+              <span class="print-metric-value">${days}</span>
+            </div>
+            <div class="print-metric">
+              <span class="print-metric-label">В день</span>
+              <span class="print-metric-value">${Math.round(daily).toLocaleString("ru-RU")} €/дн</span>
+            </div>
+          </div>
+
+          <table class="print-legs-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Откуда</th>
+                <th>Куда</th>
+                <th>Доезд км</th>
+                <th>Пробег км</th>
+                <th>Ставка €</th>
+                <th>Инфо ставка</th>
+                <th>Доп. расх. €</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${legRows(calc)}
+            </tbody>
+          </table>
+          ${calc.additionalExpenses && Number(calc.additionalExpenses) > 0 ? `
+            <div class="print-additional-expenses">
+              <span>Дополнительные расходы по рейсу: <strong>${Number(calc.additionalExpenses).toLocaleString("ru-RU")} €</strong></span>
+              ${Array.isArray(calc.expenseItems) && calc.expenseItems.length > 0 ? `<span> (${calc.expenseItems.map((e) => e.label || "—").join(", ")})</span>` : ""}
+            </div>
+          ` : ""}
+        </div>
+      `;
+    };
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Сводка расчётов</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 11px;
+      color: #1e293b;
+      background: #fff;
+      padding: 20px;
+    }
+    @page {
+      size: A4;
+      margin: 15mm;
+    }
+    .print-header {
+      font-size: 16px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #334155;
+      text-align: center;
+    }
+    .print-calc-block {
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #cbd5e1;
+      page-break-inside: avoid;
+    }
+    .print-calc-block:last-child {
+      border-bottom: none;
+    }
+    .print-calc-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 4px;
+    }
+    .print-meta {
+      font-size: 9px;
+      color: #64748b;
+      margin-bottom: 10px;
+    }
+    .print-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .print-metric {
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 6px 8px;
+    }
+    .print-metric-label {
+      display: block;
+      font-size: 8px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8;
+      margin-bottom: 2px;
+    }
+    .print-metric-value {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: #0f172a;
+      font-family: "SF Mono", Consolas, monospace;
+    }
+    .print-legs-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9px;
+      margin-top: 6px;
+    }
+    .print-legs-table th {
+      background: #f1f5f9;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      font-size: 8px;
+      color: #475569;
+      padding: 5px 4px;
+      text-align: left;
+      border: 1px solid #e2e8f0;
+    }
+    .print-legs-table td {
+      padding: 4px;
+      border: 1px solid #e2e8f0;
+      font-size: 9px;
+    }
+    .print-legs-table td:nth-child(n+4) {
+      text-align: right;
+      font-family: "SF Mono", Consolas, monospace;
+    }
+    .print-additional-expenses {
+      font-size: 9px;
+      color: #64748b;
+      margin-top: 6px;
+      padding: 4px 6px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 3px;
+    }
+    @media print {
+      body { padding: 0; }
+      .print-header { margin-top: 0; }
+      .print-calc-block { page-break-inside: avoid; }
+    }
+    .print-no-print { display: none; }
+  </style>
+</head>
+<body>
+  <div class="print-header">Сводка расчётов — Калькуляция дохода</div>
+  ${selected.map((c) => calcBlock(c)).join("")}
+  <script>
+    window.onload = function() { window.print(); };
+  </script>
+</body>
+</html>`;
+  };
+
+  const escapeHtml = (text: string | undefined | null): string => {
+    if (!text) return "";
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  };
+
   const saveEditCalcModal = () => {
     if (!editingCalcId) return;
 
@@ -1681,25 +1981,19 @@ export default function DohodModule({ user }: DohodModuleProps) {
     return null;
   };
 
-  const loadCitiesDatalist = () => {
-    const set = new Set<string>();
-    distances.forEach((d) => {
-      set.add(d.from);
-      set.add(d.to);
-    });
-    return Array.from(set).map((c) => <option key={c} value={c} />);
-  };
+  
 
   return (
     <div className="w-full space-y-6 font-sans">
-      <datalist id="cities-datalist">{loadCitiesDatalist()}</datalist>
+      
+      
 
       {/* Main Left Workspace */}
       <div className="w-full space-y-6">
         {/* Header Block */}
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col sm:flex-row justify-between gap-4 items-center">
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm flex flex-col sm:flex-row justify-between gap-4 items-center">
           <div>
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">Модуль Доход</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Модуль Доход</span>
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
               <Calculator className="w-7 h-7 text-slate-800" />
               Калькуляция дохода
@@ -1712,8 +2006,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
 
         {/* Table Container */}
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] overflow-hidden flex flex-col">
-          <h2 className="text-base font-bold text-slate-900 tracking-tight pb-4 border-b border-slate-200/40 mb-6 flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm flex flex-col">
+          <h2 className="text-sm font-bold text-slate-900 tracking-tight pb-4 border-b border-slate-200/40 mb-6 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-slate-900">
               <MapPin className="h-5 w-5 text-[#3765F6]" />{" "}
               Конструктор плеч маршрута
@@ -1731,7 +2025,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
             </select>
           </h2>
 
-          <div className="hidden lg:block w-full overflow-x-auto pb-4 custom-scrollbar">
+          <div className="hidden lg:block w-full pb-4 custom-scrollbar overflow-x-auto">
             <table className="w-full border-collapse relative">
               <thead className="sticky top-0 bg-slate-50 z-20 shadow-[inset_0_-1px_0_rgba(226,232,240,0.4)]">
                 <tr>
@@ -1779,26 +2073,26 @@ export default function DohodModule({ user }: DohodModuleProps) {
                     key={idx}
                     className="hover:bg-slate-50/40 transition"
                   >
-                    <td className="p-2 text-xs font-black text-slate-400">
+                    <td className="p-2 text-xs font-semibold text-slate-400">
                       {idx + 1}
                     </td>
                     <td className="p-2">
-                      <input
-                        list="cities-datalist"
+                      <CityAutocomplete
                         value={leg.from}
-                        onChange={(e) =>
-                          updateLeg(idx, { from: e.target.value })
-                        }
+                        onChange={(v) => updateLeg(idx, { from: v })}
                         onBlur={() => handleCityBlur(idx)}
+                        cities={citiesList}
+                        placeholder="Откуда"
                         className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                       />
                     </td>
                     <td className="p-2">
-                      <input
-                        list="cities-datalist"
+                      <CityAutocomplete
                         value={leg.to}
-                        onChange={(e) => updateLeg(idx, { to: e.target.value })}
+                        onChange={(v) => updateLeg(idx, { to: v })}
                         onBlur={() => handleCityBlur(idx)}
+                        cities={citiesList}
+                        placeholder="Куда"
                         className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                       />
                     </td>
@@ -1944,7 +2238,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                                 ferryCost: Number(e.target.value),
                               })
                             }
-                            className="w-full px-2 py-1.5 bg-yellow-50/50 border border-yellow-200/60 rounded-xl text-[10px] font-black outline-none focus:bg-white transition"
+                            className="w-full px-2 py-1.5 bg-yellow-50/50 border border-yellow-200/60 rounded-xl text-[10px] font-semibold outline-none focus:bg-white transition"
                           />
                         )}
                       </div>
@@ -2000,20 +2294,20 @@ export default function DohodModule({ user }: DohodModuleProps) {
           {/* Mobile Cards View */}
           <div className="block lg:hidden space-y-4 pr-1 pb-4">
             {legs.map((leg, idx) => (
-              <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-4 relative shadow-sm">
+              <div key={idx} className="bg-white rounded-2xl p-4 border border-slate-200/50 shadow-sm flex flex-col gap-4 relative">
                 <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                  <span className="text-xs font-black text-slate-500 bg-slate-100 px-2 py-1 rounded-md">#{idx + 1}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-slate-100/50 px-2 py-1 rounded-lg border border-slate-200/30">#{idx + 1}</span>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => addLegRowAfter(idx)}
-                      className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 transition cursor-pointer"
+                      className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl bg-blue-50/50 hover:bg-blue-100 text-blue-600 border border-blue-100/30 transition cursor-pointer shadow-sm"
                     >
                       <Plus className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => removeLeg(idx)}
                       disabled={legs.length <= 1}
-                      className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 transition disabled:opacity-30 cursor-pointer"
+                      className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl bg-rose-50/50 hover:bg-rose-100 text-rose-600 border border-rose-100/30 transition disabled:opacity-30 cursor-pointer shadow-sm"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -2022,30 +2316,32 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[10px] uppercase font-black text-slate-400">Откуда</span>
-                    <input
-                      list="cities-datalist"
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Откуда</span>
+                    <CityAutocomplete
                       value={leg.from}
-                      onChange={(e) => updateLeg(idx, { from: e.target.value })}
+                      onChange={(v) => updateLeg(idx, { from: v })}
                       onBlur={() => handleCityBlur(idx)}
-                      className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
+                      cities={citiesList}
+                      placeholder="Откуда"
+                      className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[10px] uppercase font-black text-slate-400">Куда</span>
-                    <input
-                      list="cities-datalist"
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Куда</span>
+                    <CityAutocomplete
                       value={leg.to}
-                      onChange={(e) => updateLeg(idx, { to: e.target.value })}
+                      onChange={(v) => updateLeg(idx, { to: v })}
                       onBlur={() => handleCityBlur(idx)}
-                      className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
+                      cities={citiesList}
+                      placeholder="Куда"
+                      className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[10px] uppercase font-black text-slate-400">Доезд (км)</span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Доезд (км)</span>
                     <input
                       type="number"
                       value={leg.emptyRun || ""}
@@ -2056,11 +2352,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           checkManualDistanceUpdate(prevTo, leg.from, leg.emptyRun);
                         }
                       }}
-                      className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
+                      className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[10px] uppercase font-black text-slate-400">Пробег (км)</span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Пробег (км)</span>
                     <div className="relative flex items-center">
                       <input
                         type="number"
@@ -2075,10 +2371,10 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           checkManualDistanceUpdate(leg.from, leg.to, Number(e.target.value))
                         }
                         title={leg.manualOverride ? "Введён вручную" : "Расчёт по карте"}
-                        className={`w-full pl-3 pr-12 py-2 bg-slate-50 border rounded-lg text-xs font-bold focus:border-[#3765F6] outline-none ${
+                        className={`w-full pl-3 pr-12 py-2 bg-white/45 border rounded-xl text-xs font-bold text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs ${
                           leg.manualOverride 
                             ? "border-amber-300 text-amber-950 bg-amber-50/10 focus:border-amber-500" 
-                            : "border-slate-200 text-slate-900"
+                            : "border-slate-200/50 text-slate-900"
                         }`}
                       />
                       <div className="absolute right-1 flex items-center gap-1">
@@ -2103,23 +2399,23 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[10px] uppercase font-black text-slate-400">Ставка €</span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Ставка €</span>
                     <input
                       type="number"
                       value={leg.freight || ""}
                       onChange={(e) => updateLeg(idx, { freight: Number(e.target.value) })}
-                      className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
+                      className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[10px] uppercase font-black text-slate-400">Инфо ставка</span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Инфо ставка</span>
                     <div className="flex gap-1 relative">
                       <input
                         type="number"
                         value={leg.infoRate || ""}
                         onChange={(e) => updateLeg(idx, { infoRate: Number(e.target.value) })}
                         onBlur={() => handleInfoRateBlur(idx)}
-                        className="w-1/2 min-w-0 pr-6 px-2 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs font-bold focus:border-amber-400 outline-none"
+                        className="w-1/2 min-w-0 pr-6 px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                       />
                       {leg.infoRate > 0 && leg.infoCurrency !== "EUR" && (
                         <button
@@ -2137,7 +2433,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           updateLeg(idx, { infoCurrency: val });
                           handleCurrencyChange(idx, val);
                         }}
-                        className="w-1/2 min-w-0 px-1 py-2 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm leading-tight"
+                        className="w-1/2 min-w-0 px-1 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs leading-tight"
                       >
                         <option value="USD">USD</option>
                         <option value="EUR">EUR</option>
@@ -2150,12 +2446,12 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[10px] uppercase font-black text-slate-400">Паром</span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Паром</span>
                     <div className="flex flex-col gap-1">
                       <select
                         value={leg.ferrySelectValue || "none"}
                         onChange={(e) => updateLeg(idx, { ferrySelectValue: e.target.value })}
-                        className="w-full px-2 py-2 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
+                        className="w-full px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                       >
                         <option value="none">Без парома</option>
                         {ferries.map((f, i) => (
@@ -2169,27 +2465,27 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           value={leg.ferryCost || ""}
                           placeholder="Цена €"
                           onChange={(e) => updateLeg(idx, { ferryCost: Number(e.target.value) })}
-                          className="w-full px-2 py-2 bg-yellow-50 border border-yellow-200 rounded-lg text-[10px] font-black outline-none"
+                          className="w-full px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                         />
                       )}
                     </div>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[10px] uppercase font-black text-slate-400">Доп. расх / Коэфф</span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Доп. расх / Коэфф</span>
                     <div className="flex gap-2">
                       <input
                         type="number"
                         value={leg.additionalExpenses || ""}
                         placeholder="Доп €"
                         onChange={(e) => updateLeg(idx, { additionalExpenses: e.target.value === "" ? undefined : Number(e.target.value) })}
-                        className="w-1/2 min-w-0 px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none"
+                        className="w-1/2 min-w-0 px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                       />
                       <input
                         type="number"
                         step="0.01"
                         value={leg.coeff === undefined ? getDirCoeff() : leg.coeff}
                         onChange={(e) => updateLeg(idx, { coeff: Number(e.target.value) })}
-                        className="w-1/2 min-w-0 px-2 py-2 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm text-center"
+                        className="w-1/2 min-w-0 px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs text-center"
                       />
                     </div>
                   </div>
@@ -2201,7 +2497,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
 
           {/* Multi-Leg save template helper */}
-          <div className="mt-4 flex justify-end gap-2">
+          <div className="mt-4 flex flex-col sm:flex-row justify-end gap-2 sm:gap-2">
             <button
               onClick={() =>
                 setLegs([
@@ -2220,20 +2516,20 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   },
                 ])
               }
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition min-h-[44px]"
+              className="w-full sm:w-auto px-4 py-2 bg-white border border-slate-200/60 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition min-h-[44px]"
             >
               Сбросить
             </button>
             <button
               onClick={saveCurrentAsTemplate}
-              className="text-[10px] font-black uppercase text-slate-500 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-1 transition min-h-[44px]"
+              className="w-full sm:w-auto px-4 py-2 bg-white border border-slate-200/60 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 min-h-[44px]"
             >
-              <Save className="h-3 w-3" /> Шаблонизировать текущий вид
+              <Save className="h-3.5 w-3.5" /> Шаблонизировать
             </button>
             {user.permissions.dohod === "write" && (
               <button
                 onClick={saveCalculation}
-                className="flex items-center justify-center gap-2 bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold px-5 py-2.5 rounded-xl transition cursor-pointer shadow-sm shadow-blue-500/20 min-h-[44px]"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-5 py-2.5 rounded-xl transition cursor-pointer shadow-sm min-h-[44px]"
               >
                 <Save className="h-4 w-4" /> Сохранить расчет
               </button>
@@ -2242,7 +2538,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
         </div>
 
         {/* Total Stats Banner - Full Width Layout Panel */}
-        <div className="bg-white rounded-[2rem] md:rounded-[2rem] p-4 md:p-6 lg:p-8 text-slate-900 shadow-[0_8px_30px_rgba(0,0,0,0.01)] border border-slate-200/50 flex flex-col">
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm flex flex-col">
           <h2 className="text-sm font-bold text-slate-900 tracking-tight pb-4 border-b border-slate-200/40 mb-4 md:mb-6 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-slate-900">
               <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-[#3765F6]" />{" "}
@@ -2253,7 +2549,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
             
             {/* Left Column: Экономика Рейса */}
             <div className="lg:col-span-5 flex flex-col gap-4">
-              <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
                 Показатели экономики
               </h3>
               
@@ -2332,7 +2628,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
               
               {/* Блок Дат и Дней */}
               <div className="flex flex-col gap-3">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-[#3765F6]" />
                   Время в пути
                 </h3>
@@ -2340,37 +2636,37 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 <div className="bg-white p-5 rounded-2xl border border-slate-200/40 flex flex-col gap-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="flex flex-col gap-1.5">
-                      <span className="text-xs font-semibold text-slate-500">Старт рейса</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Старт рейса</span>
                       <input
                         type="date"
                         value={tripStartDate}
                         onChange={(e) => setTripStartDate(e.target.value)}
-                        className="w-full bg-white/60 text-slate-800 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-[#3765F6] transition cursor-pointer shadow-2xs min-h-[44px]"
+                        className="w-full bg-white/45 text-slate-800 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs cursor-pointer min-h-[44px]"
                       />
                     </div>
                     
                     <div className="flex flex-col gap-1.5">
-                      <span className="text-xs font-semibold text-slate-500">Завершение</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Завершение</span>
                       <input
                         type="date"
                         value={tripEndDate}
                         onChange={(e) => setTripEndDate(e.target.value)}
-                        className="w-full bg-white/60 text-slate-800 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-[#3765F6] transition cursor-pointer shadow-2xs min-h-[44px]"
+                        className="w-full bg-white/45 text-slate-800 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs cursor-pointer min-h-[44px]"
                       />
                     </div>
                   </div>
                   
-                  <div className="bg-blue-50/30 border border-blue-100/30 rounded-xl p-3 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-700">Итого дней в рейсе:</span>
+                  <div className="bg-slate-500/5 border border-slate-500/10 rounded-xl p-3 flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Итого дней в рейсе:</span>
                     <div className="flex items-center gap-2">
                       <input
                         type="number"
                         min="1"
                         value={tripDays}
                         onChange={(e) => setTripDays(Number(e.target.value))}
-                        className="w-16 bg-white border border-blue-200/50 rounded-lg px-2 py-1 text-sm font-bold text-[#3765F6] outline-none focus:border-[#3765F6] text-center shadow-2xs"
+                        className="w-16 bg-white/45 border border-slate-200/50 rounded-xl px-2 py-1.5 text-xs font-semibold text-[#3765F6] outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs text-center"
                       />
-                      <span className="text-xs font-semibold text-slate-500">дней</span>
+                      <span className="text-xs font-bold text-slate-500">дней</span>
                     </div>
                   </div>
                 </div>
@@ -2378,18 +2674,18 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
               {/* Блок Допрасходов */}
               <div className="flex flex-col gap-3">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                   <CreditCard className="w-3.5 h-3.5 text-rose-500" />
                   Дополнительные расходы
                 </h3>
                 
                 <div className="bg-white p-4 rounded-2xl border border-slate-200/40 flex flex-col gap-3">
-                  <div className="flex items-center justify-between bg-white border border-slate-200/40 rounded-xl p-3 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
+                  <div className="flex items-center justify-between bg-white border border-slate-200/40 rounded-xl p-3 shadow-sm">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-rose-50/50 flex items-center justify-center text-rose-500">
                         <Receipt className="w-4 h-4" />
                       </div>
-                      <span className="text-xs font-semibold text-slate-700">Прочие затраты по рейсу</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Прочие затраты по рейсу</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <input
@@ -2397,7 +2693,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         min="0"
                         value={additionalExpenses}
                         onChange={(e) => setAdditionalExpenses(Number(e.target.value))}
-                        className="w-24 bg-white border border-slate-200/50 rounded-lg px-2.5 py-1 text-sm font-bold text-rose-600 outline-none focus:border-rose-400 transition text-right shadow-2xs min-h-[44px]"
+                        className="w-24 bg-white/45 border border-slate-200/50 rounded-xl px-2.5 py-1.5 text-sm font-semibold text-rose-600 outline-none focus:bg-white focus:border-rose-400 focus:ring-2 focus:ring-rose-100/30 transition shadow-2xs text-right min-h-[44px]"
                       />
                       <span className="text-xs font-bold text-slate-400">€</span>
                     </div>
@@ -2417,7 +2713,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                               setExpenseItems(next);
                             }}
                             placeholder="Название статьи"
-                            className="flex-1 bg-white border border-slate-200/50 rounded-lg px-2.5 py-1 text-xs text-slate-800 outline-none focus:border-[#3765F6] transition"
+                            className="flex-1 bg-white/45 border border-slate-200/50 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                           />
                           <input
                             type="number"
@@ -2429,7 +2725,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                               setExpenseItems(next);
                               setAdditionalExpenses(next.reduce((a, x) => a + Number(x.amount || 0), 0));
                             }}
-                            className="w-24 bg-white border border-slate-200/50 rounded-lg px-2.5 py-1 text-sm font-bold text-rose-600 outline-none focus:border-rose-400 transition text-right shadow-2xs min-h-[44px]"
+                            className="w-24 bg-white/45 border border-slate-200/50 rounded-xl px-2.5 py-1.5 text-sm font-semibold text-rose-600 outline-none focus:bg-white focus:border-rose-400 focus:ring-2 focus:ring-rose-100/30 transition shadow-2xs text-right min-h-[44px]"
                           />
                           <span className="text-xs font-bold text-slate-400">€</span>
                           <button
@@ -2439,7 +2735,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                               setExpenseItems(next);
                               setAdditionalExpenses(next.reduce((a, x) => a + Number(x.amount || 0), 0));
                             }}
-                            className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/40 transition"
+                            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl bg-rose-50/50 hover:bg-rose-100 text-rose-600 border border-rose-100/30 transition shadow-sm cursor-pointer"
                             title="Удалить статью"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -2455,7 +2751,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       const next = [...expenseItems, { label: "", amount: 0 }];
                       setExpenseItems(next);
                     }}
-                    className="flex items-center justify-center gap-1.5 py-2 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs font-medium hover:bg-white/40 hover:text-[#3765F6] hover:border-[#3765F6]/40 transition min-h-[44px]"
+                    className="flex items-center justify-center gap-1.5 py-2 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs font-medium hover:bg-white/40 hover:text-slate-700 hover:border-slate-300/40 transition min-h-[44px]"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     Добавить статью расхода
@@ -2473,19 +2769,19 @@ export default function DohodModule({ user }: DohodModuleProps) {
         {/* Custom Currency Converter Widget */}
         <div
           id="nbrb-converter-widget"
-          className="bg-white rounded-[2rem] p-4 md:p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] relative overflow-hidden"
+          className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm relative overflow-hidden"
         >
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4 select-none">
-            <h2 className="text-sm md:text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <h2 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
               <Landmark className="w-4 h-4 text-[#3765F6]" /> Конвертер валют НБ РБ
             </h2>
-            <span className="text-[10px] md:text-xs font-semibold tracking-wider text-[#3765F6] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+            <span className="text-[10px] md:text-xs font-semibold tracking-wider text-slate-500 bg-slate-100 px-2 py-0.5 rounded-xl border border-slate-200/60">
               API NBRB.BY
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 mb-4 bg-slate-50/50 border border-slate-200/60 p-3 rounded-2xl text-xs select-none shadow-sm">
-            <span className="text-slate-500 font-semibold shrink-0 mr-2">
+          <div className="flex flex-wrap items-center gap-2 mb-4 bg-white/45 border border-slate-200/50 p-3 rounded-2xl text-xs select-none shadow-sm">
+            <span className="text-slate-500 font-bold shrink-0 mr-2">
               Курсы НБ РБ:
             </span>
             <span className="text-slate-800 font-bold shrink-0">
@@ -2505,7 +2801,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
             </span>
           </div>
 
-          <div className="w-full bg-slate-50/50 rounded-2xl p-4 md:p-5 border border-slate-200/60 flex flex-col gap-3 max-h-[400px] md:max-h-[450px] overflow-y-auto custom-scrollbar">
+          <div className="w-full bg-white/45 rounded-2xl p-4 md:p-5 border border-slate-200/50 flex flex-col gap-3 max-h-[60vh] md:max-h-[400px] overflow-y-auto custom-scrollbar">
             {[
               "BYN",
               "USD",
@@ -2520,9 +2816,9 @@ export default function DohodModule({ user }: DohodModuleProps) {
             ].map((cur) => (
               <div
                 key={cur}
-                className="flex items-center w-full bg-white border border-slate-200/60 rounded-xl overflow-hidden focus-within:border-[#3765F6] focus-within:shadow-[0_0_0_2px_rgba(55,101,246,0.1)] shadow-sm transition"
+                className="flex items-center w-full bg-white border border-slate-200/50 rounded-xl overflow-hidden focus-within:border-[#3765F6] focus-within:ring-2 focus-within:ring-blue-100/30 shadow-2xs transition"
               >
-                <div className="bg-slate-50 flex-shrink-0 px-4 py-3 border-r border-slate-200/60 font-semibold text-slate-700 min-w-[85px] text-center select-none flex items-center justify-center gap-2 text-sm">
+                <div className="bg-white/45 flex-shrink-0 px-4 py-3 border-r border-slate-200/50 font-semibold text-slate-700 min-w-[85px] text-center select-none flex items-center justify-center gap-2 text-sm">
                   <span className="text-[16px] leading-none">
                     {cur === "BYN"
                       ? "🇧🇾"
@@ -2631,10 +2927,10 @@ export default function DohodModule({ user }: DohodModuleProps) {
         </div>
 
         {/* Templates Board */}
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col transition-all">
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm flex flex-col transition-all">
           <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-4 border-b border-slate-200/40 mb-6">
             <div>
-              <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <h2 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
                 <FileSpreadsheet className="h-5 w-5 text-[#3765F6]" />
                 База готовых шаблонов мульти-рейсов
               </h2>
@@ -2664,7 +2960,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 return (
                   <div
                     key={idx}
-                    className="group bg-white hover:bg-white/70 border border-slate-200/50 hover:border-[#3765F6]/50 rounded-2xl p-5 flex flex-col gap-4 transition-all duration-200 shadow-[0_8px_30px_rgba(0,0,0,0.01)]"
+                    className="group bg-white hover:bg-white/70 border border-slate-200/50 hover:border-[#3765F6]/50 rounded-2xl p-5 flex flex-col gap-4 transition-all duration-200 shadow-sm"
                   >
                     {/* Top Row: Info and Actions */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-slate-200/20">
@@ -2679,11 +2975,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           </h4>
                           <div className="flex items-center gap-2 mt-1">
                             {t.globalDir && (
-                              <span className="text-[9px] bg-emerald-50 text-emerald-700 font-bold uppercase px-2 py-0.5 rounded-md border border-emerald-100/30">
+                              <span className="text-[9px] bg-emerald-50 text-emerald-700 font-bold uppercase tracking-wider px-2 py-0.5 rounded-xl border border-emerald-100/30">
                                 {t.globalDir}
                               </span>
                             )}
-                            <span className="text-[9px] bg-slate-100/55 text-slate-600 font-bold uppercase px-2 py-0.5 rounded-md border border-slate-200/20">
+                            <span className="text-[9px] bg-slate-100/55 text-slate-600 font-bold uppercase tracking-wider px-2 py-0.5 rounded-xl border border-slate-200/20">
                               {t.legs?.length || 0} {t.legs?.length === 1 ? 'плечо' : t.legs?.length < 5 ? 'плеча' : 'плеч'}
                             </span>
                           </div>
@@ -2693,7 +2989,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       {/* Right: Total Distance and Buttons */}
                       <div className="flex items-center justify-between md:justify-end gap-5 shrink-0">
                         <div className="text-left md:text-right md:mr-2">
-                          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
                             Общий пробег
                           </span>
                           <span className="text-slate-950 font-bold text-xs md:text-sm">
@@ -2704,7 +3000,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => loadTemplate(t)}
-                            className="bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold py-2 px-3.5 rounded-xl transition shadow-sm cursor-pointer active:scale-95 min-h-[44px]"
+                            className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold py-2 px-3.5 rounded-xl transition shadow-sm cursor-pointer active:scale-95 min-h-[44px]"
                           >
                             Развернуть ↵
                           </button>
@@ -2739,7 +3035,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                               <span className="truncate max-w-[140px] text-slate-900" title={l.from}>{l.from || "?"}</span>
                               <span className="text-slate-300 font-normal select-none">&bull;</span>
                               <span className="truncate max-w-[140px] text-slate-700" title={l.to}>{l.to || "?"}</span>
-                              <span className="text-[9px] text-[#3765F6] font-bold bg-blue-50/50 px-1.5 py-0.5 rounded-md border border-blue-100/30 ml-1 shrink-0">
+                              <span className="text-[10px] text-[#3765F6] font-bold bg-blue-50/50 px-1.5 py-0.5 rounded-xl border border-blue-100/30 ml-1 shrink-0">
                                 {Number(l.dist || l.distance || 0).toLocaleString("ru-RU")} км
                               </span>
                             </span>
@@ -2761,10 +3057,10 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
       {/* History of Saved Calculations - FULL WIDTH BOTTOM */}
       <div className="w-full">
-        <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col">
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm flex flex-col">
           <div className="flex flex-col gap-4 border-b border-slate-200/40 pb-5 mb-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <h2 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
                 <FileSpreadsheet className="h-5 w-5 text-[#3765F6]" /> Журнал расчетов
               </h2>
             </div>
@@ -2781,12 +3077,12 @@ export default function DohodModule({ user }: DohodModuleProps) {
           </div>
 
           {/* Directions Tabs */}
-          <div className="flex flex-wrap gap-1.5 mb-6 bg-white p-1.5 rounded-xl border border-slate-200/40">
+          <div className="flex flex-wrap gap-1.5 mb-6 bg-white/45 p-1.5 rounded-xl border border-slate-200/50">
             <button
               onClick={() => setActiveHistoryDirectionTab("Все")}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 activeHistoryDirectionTab === "Все"
-                  ? "bg-[#3765F6] text-white shadow-xs"
+                  ? "bg-slate-900 text-white shadow-xs"
                   : "text-slate-500 hover:text-slate-900 hover:bg-white/30"
               }`}
             >
@@ -2800,7 +3096,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   onClick={() => setActiveHistoryDirectionTab(dir)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     activeHistoryDirectionTab === dir
-                      ? "bg-[#3765F6] text-white shadow-xs"
+                      ? "bg-slate-900 text-white shadow-xs"
                       : "text-slate-500 hover:text-slate-900 hover:bg-white/30"
                   }`}
                 >
@@ -2808,6 +3104,39 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 </button>
               );
             })}
+          </div>
+
+          {/* Selection toolbar */}
+          <div className="flex items-center justify-between gap-3 mb-4 px-1">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={selectAllVisible}
+                className="px-3 py-1.5 bg-white border border-slate-200/60 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition min-h-[36px] cursor-pointer"
+              >
+                Выбрать все
+              </button>
+              <button
+                type="button"
+                onClick={deselectAll}
+                className="px-3 py-1.5 bg-white border border-slate-200/60 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition min-h-[36px] cursor-pointer"
+              >
+                Снять все
+              </button>
+              <span className="text-[10px] text-slate-400 font-medium">
+                Выбрано: {selectedCalcIds.size}
+              </span>
+            </div>
+            {selectedCalcIds.size > 0 && (
+              <button
+                type="button"
+                onClick={printSelectedCalculations}
+                className="flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-5 py-2 rounded-xl transition cursor-pointer shadow-sm min-h-[44px]"
+              >
+                <Printer className="h-4 w-4" />
+                Печать выбранных ({selectedCalcIds.size})
+              </button>
+            )}
           </div>
 
           <div className="pr-1 space-y-2 pb-4">
@@ -2818,10 +3147,12 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 user={user}
                 copyHistoryToForm={copyHistoryToForm}
                 openEditCalcModal={openEditCalcModal}
+                isSelected={selectedCalcIds.has(calc.id)}
+                onToggleSelect={toggleSelectCalc}
               />
             ))}
             {filteredHistory.length === 0 && (
-              <div className="text-center text-slate-400 text-sm font-mono font-black py-8 uppercase tracking-widest">
+              <div className="text-center text-[10px] text-slate-400 font-bold uppercase tracking-wider py-8">
                 Журнал пуст
               </div>
             )}
@@ -2829,7 +3160,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
               <button
                 type="button"
                 onClick={() => setHistoryPage((p) => p + 10)}
-                className="w-full py-2.5 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs font-semibold hover:bg-white/40 hover:text-[#3765F6] hover:border-[#3765F6]/40 transition min-h-[44px]"
+                className="w-full py-2.5 rounded-xl border border-dashed border-slate-200 text-slate-500 text-xs font-semibold hover:bg-white/40 hover:text-slate-700 hover:border-slate-300/40 transition min-h-[44px]"
               >
                 Показать ещё 10
                 <span className="text-slate-400 font-normal">
@@ -2840,56 +3171,6 @@ export default function DohodModule({ user }: DohodModuleProps) {
           </div>
         </div>
       </div>
-
-      {conversionDialog && (
-              <div className="fixed inset-0 z-50 flex flex-col md:items-center md:justify-center bg-slate-900/40 animate-fade-in">
-                <div className="bg-white w-full h-full md:h-auto md:rounded-[2rem] md:w-full md:max-w-md mx-0 md:mx-4 shadow-2xl border border-slate-200 md:my-4 flex flex-col">
-                  <div className="p-4 md:p-6 border-b border-slate-100 flex items-center justify-between shrink-0">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-[#3765F6] shrink-0">
-                        <Sparkles className="h-4 w-4 md:h-5 md:w-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-xs md:text-sm font-black uppercase tracking-wider text-slate-800">Автоконвертация НБ РБ</h3>
-                        <p className="text-[9px] md:text-[10px] text-slate-400 font-bold uppercase mt-0.5">Курсы валют в реальном времени</p>
-                      </div>
-                    </div>
-                    <button onClick={dismissConversion} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 border border-slate-200 transition shadow-sm cursor-pointer">
-                      <X className="w-5 h-5" strokeWidth={2.5} />
-                    </button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-                    <p className="text-xs md:text-sm text-slate-700 font-semibold leading-relaxed">
-                      Вы указали инфо-ставку <span className="text-slate-900 underline font-black">{conversionDialog.infoRate} {conversionDialog.infoCurrency}</span>. Хотите автоматически сконвертировать её в евро для «Ставки €» плеча #{conversionDialog.index + 1}?
-                    </p>
-                    <div className="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200/60 font-mono text-center">
-                      <div className="border-r border-slate-200">
-                        <span className="block text-[8px] font-black text-slate-400 uppercase tracking-widest">Инфо Ставка</span>
-                        <span className="text-sm font-black text-slate-700 mt-1 block">{conversionDialog.infoRate} {conversionDialog.infoCurrency}</span>
-                      </div>
-                      <div>
-                        <span className="block text-[8px] font-black text-emerald-500 uppercase tracking-widest">Результат (€)</span>
-                        <span className="text-sm font-black text-emerald-600 mt-1 block">{conversionDialog.proposedFreight} €</span>
-                      </div>
-                    </div>
-                    <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between px-1">
-                      <span>Курс {conversionDialog.infoCurrency}/EUR (НБ РБ):</span>
-                      <span className="font-extrabold text-slate-600">
-                        {(nbrbRates[conversionDialog.infoCurrency]?.rate / nbrbRates[conversionDialog.infoCurrency]?.scale / (nbrbRates["EUR"]?.rate || 1)).toFixed(5)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="p-4 md:p-6 border-t border-slate-100 flex gap-2.5 shrink-0">
-                    <button onClick={dismissConversion} className="flex-1 py-2.5 px-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl transition cursor-pointer shadow-sm min-h-[44px]">
-                      Пропустить
-                    </button>
-                    <button onClick={applyConversion} className="flex-1 py-2.5 px-4 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold text-xs rounded-xl transition shadow-sm shadow-blue-500/20 cursor-pointer flex items-center justify-center gap-1.5 min-h-[44px]">
-                      Применить
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
 
       <MapRouteModal
         isOpen={mapModalOpen}
@@ -2911,18 +3192,18 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
       {editingCalcId && (
         <div className="fixed inset-0 z-50 flex flex-col md:items-center md:justify-center bg-slate-900/40 animate-fade-in">
-          <div className="bg-white w-full h-full md:h-auto md:rounded-[2rem] md:w-full md:max-w-lg mx-0 md:mx-4 shadow-2xl border border-slate-200 md:my-4 flex flex-col">
+          <div className="bg-white w-full h-full md:h-auto md:rounded-2xl md:w-full md:max-w-lg mx-0 md:mx-4 shadow-2xl border border-slate-200 md:my-4 flex flex-col">
             <div className="p-4 md:p-6 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
-              <h3 className="text-xs md:text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+              <h3 className="text-xs md:text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
                 <Edit className="w-4 h-4 md:w-5 md:h-5 text-[#3765F6]" /> Редактирование калькуляции
               </h3>
-              <button onClick={closeEditCalcModal} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 border border-slate-200 transition shadow-sm cursor-pointer">
+              <button onClick={closeEditCalcModal} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer">
                 <X className="w-5 h-5" strokeWidth={2.5} />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Направление
                 </label>
                 <input
@@ -2934,11 +3215,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       globalDirection: e.target.value,
                     })
                   }
-                  className="w-full bg-slate-50/50 border border-slate-200/60 text-slate-800 text-sm font-semibold px-4 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition shadow-sm"
+                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Чистая прибыль (€)
                 </label>
                 <input
@@ -2951,11 +3232,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       netProfit: Number(e.target.value),
                     })
                   }
-                  className="w-full bg-slate-50/50 border border-slate-200/60 text-slate-800 text-sm font-semibold px-4 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition shadow-sm"
+                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Доп. расходы (€)
                 </label>
                 <input
@@ -2968,11 +3249,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       additionalExpenses: Number(e.target.value),
                     })
                   }
-                  className="w-full bg-slate-50/50 border border-slate-200/60 text-slate-800 text-sm font-semibold px-4 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition shadow-sm"
+                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Дней в пути
                 </label>
                 <input
@@ -2985,11 +3266,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       days: Number(e.target.value),
                     })
                   }
-                  className="w-full bg-slate-50/50 border border-slate-200/60 text-slate-800 text-sm font-semibold px-4 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition shadow-sm"
+                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Дата
                 </label>
                 <input
@@ -3001,11 +3282,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       datetime: e.target.value,
                     })
                   }
-                  className="w-full bg-slate-50/50 border border-slate-200/60 text-slate-800 text-sm font-semibold px-4 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition shadow-sm"
+                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Логист / Кто внёс
                 </label>
                 <input
@@ -3020,16 +3301,16 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       logist: e.target.value,
                     })
                   }
-                  className="w-full bg-slate-50/50 border border-slate-200/60 text-slate-800 text-sm font-semibold px-4 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:bg-white transition shadow-sm"
+                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
                 />
               </div>
             </div>
 
-            <div className="p-4 md:p-6 border-t border-slate-100 flex justify-end gap-3 bg-white md:bg-slate-50/50 shrink-0">
-              <button onClick={closeEditCalcModal} className="px-4 md:px-6 py-2.5 md:py-3 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition cursor-pointer text-xs md:text-sm font-mono uppercase tracking-widest shadow-sm min-h-[44px]">
+            <div className="p-4 md:p-6 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-2 shrink-0">
+              <button onClick={closeEditCalcModal} className="w-full sm:w-auto px-4 md:px-6 py-2.5 md:py-3 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition cursor-pointer text-xs md:text-sm shadow-sm min-h-[44px]">
                 Отмена
               </button>
-              <button onClick={saveEditCalcModal} className="px-4 md:px-6 py-2.5 md:py-3 rounded-xl font-semibold text-white bg-[#3765F6] hover:bg-[#2555E5] transition flex items-center justify-center gap-2 shadow-sm shadow-blue-500/20 text-xs md:text-sm cursor-pointer min-h-[44px]">
+              <button onClick={saveEditCalcModal} className="w-full sm:w-auto px-4 md:px-6 py-2.5 md:py-3 rounded-xl font-semibold text-white bg-slate-900 hover:bg-slate-800 transition flex items-center justify-center gap-2 shadow-sm text-xs md:text-sm cursor-pointer min-h-[44px]">
                 Сохранить
               </button>
             </div>

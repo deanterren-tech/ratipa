@@ -1,3 +1,4 @@
+import {useToast} from '../../ToastProvider'
 import React, {useState, useEffect} from 'react'
 import { useFirebase, database, onValue } from '../../../firebase'
 import { ref, set, push, update, remove } from 'firebase/database'
@@ -36,6 +37,8 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
     customTypesOrder,
     customTypes,
   } = props;
+
+  const { toast } = useToast();
 
   const [todoTasks, setTodoTasks] = useState<any>({});
   const [originalNotes, setOriginalNotes] = useState<Record<string, string>>(
@@ -187,7 +190,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
     const car = plannerCar.trim().toUpperCase() || "БЕЗ АВТО";
     const entries = Object.entries(plannerQuantities) as [string, number][];
     if (!entries.length)
-      return alert("Укажите количество хотя бы по одному виду разрешений.");
+      return toast("Укажите количество хотя бы по одному виду разрешений.", 'info');
 
     const items = entries.map(([typeName, qty]) => ({
       type: typeName,
@@ -225,7 +228,8 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
   const isGlobalTab =
     currentSelectedTab === "all" ||
     currentSelectedTab === "archive" ||
-    currentSelectedTab === "office_returns";
+    currentSelectedTab === "office_returns" ||
+    currentSelectedTab === "expiring";
 
   // Deadline calculation
   const configuredDays = typesDeadlineDays[currentSelectedTab] || 0;
@@ -265,7 +269,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col gap-3">
+ <div className="bg-white rounded-2xl p-6 border border-slate-200/50 shadow-sm flex flex-col gap-3">
         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2 mb-1">
           Статистика по вкладке
         </div>
@@ -335,7 +339,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
       </div>
 
       {!isGlobalTab && (
-        <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 border-l-4 border-l-[#3765F6] border-y border-r border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col gap-3">
+ <div className="bg-white rounded-2xl p-6 border-l-4 border-l-[#3765F6] border-y border-r border-slate-200/50 shadow-sm flex flex-col gap-3">
           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2 mb-1">
             Лимит выдачи: {currentSelectedTab}
           </div>
@@ -415,7 +419,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
       )}
 
       {!isGlobalTab && (
-        <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 border-l-4 border-l-amber-500 border-y border-r border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col gap-3">
+ <div className="bg-white rounded-2xl p-6 border-l-4 border-l-amber-500 border-y border-r border-slate-200/50 shadow-sm flex flex-col gap-3">
           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2 mb-1">
             Сроки сдачи: {currentSelectedTab}
           </div>
@@ -509,7 +513,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
         copyTrackingItems.sort((a, b) => a.daysLeft - b.daysLeft);
 
         return (
-          <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 border-l-4 border-l-purple-600 border-y border-r border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col gap-3">
+ <div className="bg-white rounded-2xl p-6 border-l-4 border-l-purple-600 border-y border-r border-slate-200/50 shadow-sm flex flex-col gap-3">
             <div className="text-[10px] font-bold text-purple-700 uppercase tracking-wider border-b border-purple-100 pb-2 mb-1">
               Контроль оригиналов (30 дней)
             </div>
@@ -526,7 +530,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
                   <div className="flex justify-between items-center text-[11px]">
                     <span className="font-mono font-bold text-slate-800">
                       № {c.number}{" "}
-                      <span className="text-[9px] bg-purple-100/70 text-purple-700 px-1.5 py-0.5 rounded font-black">
+                      <span className="text-[9px] bg-purple-100/70 text-purple-700 px-1.5 py-0.5 rounded font-semibold">
                         {c.type}
                       </span>
                     </span>
@@ -551,9 +555,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
                     <span>
                       Сдана:{" "}
                       {c.copySubmittedAt
-                        ? new Date(c.copySubmittedAt).toLocaleDateString(
-                            "ru-RU",
-                          )
+                        ? new Date(c.copySubmittedAt).toLocaleDateString("ru-RU").replace(/\./g, '/')
                         : "—"}
                     </span>
                   </div>
@@ -564,7 +566,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
         );
       })()}
 
-      <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col gap-4">
+ <div className="bg-white rounded-2xl p-6 border border-slate-200/50 shadow-sm flex flex-col gap-4">
         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2">
           Планерка: заказы дозволов
         </div>
@@ -690,7 +692,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
 
         <button
           onClick={handleAddTodoTask}
-          className="w-full mt-1 px-5 min-h-[44px] py-3 bg-[#3765F6] hover:bg-[#2555E5] text-white font-semibold rounded-xl text-xs transition shadow-xs cursor-pointer"
+          className="w-full mt-1 px-5 min-h-[44px] py-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl text-xs transition shadow-xs cursor-pointer"
         >
           Добавить заявку в планерку
         </button>

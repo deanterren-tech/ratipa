@@ -56,10 +56,10 @@ const DozvolCommentRow: React.FC<{ d: any; isHighlighted?: boolean }> = ({ d, is
         : 'bg-white border-slate-200 hover:border-slate-300'
     }`}>
       <div className="flex justify-between items-center gap-2">
-        <span className="text-[10px] font-black text-blue-600 bg-blue-50 border border-blue-100/70 px-2 py-0.5 rounded-full uppercase tracking-tight truncate max-w-[150px]" title={d.type}>
+        <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-100/70 px-2 py-0.5 rounded-full uppercase tracking-tight truncate max-w-[150px]" title={d.type}>
           {d.type}
         </span>
-        <span className="font-mono font-black text-xs bg-slate-100 text-slate-900 px-2 py-0.5 rounded border border-slate-200/50 shadow-sm shrink-0">
+        <span className="font-mono font-semibold text-xs bg-slate-100 text-slate-900 px-2 py-0.5 rounded border border-slate-200/50 shadow-sm shrink-0">
           {d.number}
         </span>
       </div>
@@ -135,7 +135,7 @@ const MapControls: React.FC<MapControlsProps> = ({ onCenter, isLightMap, setIsLi
   const map = useMap();
   return (
     <div className="absolute top-4 left-4 z-[1000] flex flex-col gap-2 pointer-events-auto">
-      <div className="flex flex-col bg-white/95 backdrop-blur-md rounded-xl border border-slate-200/60 shadow-lg p-1">
+ <div className="flex flex-col bg-white rounded-xl border border-slate-200/60 shadow-lg p-1">
         <button 
           onClick={() => map.zoomIn()} 
           className="w-8 h-8 rounded-lg text-slate-600 hover:text-[#3765F6] hover:bg-slate-50 flex items-center justify-center font-bold text-base transition cursor-pointer"
@@ -155,7 +155,7 @@ const MapControls: React.FC<MapControlsProps> = ({ onCenter, isLightMap, setIsLi
 
       <button 
         onClick={onCenter} 
-        className="w-10 h-10 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200/60 shadow-lg text-[#3765F6] hover:text-[#2555E5] hover:bg-slate-50 flex items-center justify-center transition cursor-pointer"
+ className="w-10 h-10 bg-white rounded-xl border border-slate-200/60 shadow-lg text-slate-500 hover:text-slate-700 hover:bg-slate-50 flex items-center justify-center transition cursor-pointer"
         title="Показать все локации"
       >
         <MapPin className="w-5 h-5" />
@@ -445,7 +445,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
     <div className="flex flex-col md:h-[820px] w-full gap-4 text-slate-800">
       
       {/* 1) ВЕРХНЯЯ ПАНЕЛЬ ФИЛЬТРОВ И ДЕЙСТВИЙ */}
-      <div className="bg-white/80 backdrop-blur-xl rounded-2xl p-4 border border-slate-200/50 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
+ <div className="bg-white rounded-2xl p-4 border border-slate-200/50 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
         <div className="flex flex-col">
           <span className="text-[10px] font-bold text-[#3765F6] uppercase tracking-wider">Логистический узел</span>
           <h2 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 mt-0.5">
@@ -488,7 +488,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
               if (firstLoc) setDelivFrom(firstLoc);
               setShowDeliveryForm(true);
             }}
-            className="flex items-center gap-1 bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold px-3.5 min-h-[44px] py-2 rounded-xl transition cursor-pointer shadow-sm shadow-blue-500/10"
+            className="flex items-center gap-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3.5 min-h-[44px] py-2 rounded-xl transition cursor-pointer shadow-sm"
           >
             <Truck className="w-3.5 h-3.5" />
             Оформить отправку
@@ -503,7 +503,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
         <div className="w-80 sm:w-[350px] flex flex-col gap-4 h-full shrink-0 min-h-0">
           
           {/* LOCATIONS LIST */}
-          <div className="flex-1 flex flex-col bg-white/70 backdrop-blur-xl rounded-2xl border border-slate-200/50 p-4 min-h-0 shadow-sm">
+ <div className="flex-1 flex flex-col bg-white rounded-2xl border border-slate-200/50 p-4 min-h-0 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5 text-[#3765F6]" />
@@ -560,7 +560,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                           type="text" 
                           value={editName}
                           onChange={(e) => setEditName(e.target.value)}
-                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 outline-none focus:border-[#3765F6] focus:bg-white transition"
                         />
                       </div>
                       <div className="flex flex-col gap-1">
@@ -569,7 +569,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                           type="text" 
                           value={editCountry}
                           onChange={(e) => setEditCountry(e.target.value)}
-                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 outline-none focus:border-[#3765F6] focus:bg-white transition"
                         />
                       </div>
                       <div className="flex flex-col gap-1">
@@ -577,14 +577,14 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                         <textarea
                           value={editNotes}
                           onChange={(e) => setEditNotes(e.target.value)}
-                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-[#3765F6] h-12 resize-none transition"
+                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 outline-none focus:border-[#3765F6] h-12 resize-none transition"
                         />
                       </div>
                       <div className="flex justify-end gap-1.5 mt-1 font-semibold">
                         <button onClick={() => setEditingId(null)} className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-[10px] text-slate-600 rounded-lg transition">
                           Отмена
                         </button>
-                        <button onClick={handleSaveLocation} className="px-2.5 py-1 bg-[#3765F6] hover:bg-[#2555E5] text-[10px] text-white rounded-lg transition">
+                        <button onClick={handleSaveLocation} className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-[10px] text-white rounded-xl transition">
                           Сохранить
                         </button>
                       </div>
@@ -640,7 +640,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                     <div className="mt-1.5 border-t border-slate-100/70 pt-2 shrink-0" onClick={e => e.stopPropagation()}>
                       <button 
                         onClick={() => setExpandedLocId(expandedLocId === loc.id ? null : loc.id)}
-                        className="text-[9px] font-bold text-[#3765F6] hover:text-[#2555E5] uppercase tracking-wider flex items-center gap-1"
+                        className="text-[9px] font-bold text-slate-500 hover:text-slate-700 uppercase tracking-wider flex items-center gap-1"
                       >
                         {isDozvolsExpanded ? 'Скрыть бланки' : `Показать бланки (${count})`}
                       </button>
@@ -653,7 +653,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                               placeholder="Быстрый поиск в точке..."
                               value={locSearchQueries[loc.id] || ''}
                               onChange={(e) => setLocSearchQueries(prev => ({ ...prev, [loc.id]: e.target.value }))}
-                              className="w-full text-[10px] bg-white border border-slate-200 rounded-lg pl-2 pr-6 py-1 outline-none focus:border-[#3765F6]"
+                              className="w-full text-[10px] bg-white border border-slate-200 rounded-xl pl-2 pr-6 py-1 outline-none focus:border-[#3765F6]"
                             />
                             {(locSearchQueries[loc.id] || '') && (
                               <button onClick={() => setLocSearchQueries(prev => ({ ...prev, [loc.id]: '' }))} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400">
@@ -719,7 +719,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
           </div>
 
           {/* DELIVERIES LIST (BOTTOM) */}
-          <div className="h-2/5 flex flex-col bg-white/70 backdrop-blur-xl rounded-2xl border border-slate-200/50 p-4 min-h-0 shadow-sm">
+ <div className="h-2/5 flex flex-col bg-white rounded-2xl border border-slate-200/50 p-4 min-h-0 shadow-sm">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 shrink-0 mb-3">
               <Truck className="w-3.5 h-3.5 text-[#3765F6]" />
               Транзитные отправки
@@ -969,7 +969,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
             });
 
             return (
-              <div className="absolute top-4 right-4 bottom-4 w-80 bg-white/95 backdrop-blur-md border border-slate-200/50 shadow-2xl rounded-2xl p-5 z-[1000] flex flex-col gap-4 overflow-y-auto pointer-events-auto custom-scrollbar">
+ <div className="absolute top-4 right-4 bottom-4 w-80 bg-white border border-slate-200/50 shadow-2xl rounded-2xl p-5 z-[1000] flex flex-col gap-4 overflow-y-auto pointer-events-auto custom-scrollbar">
                  <div className="flex items-start justify-between">
                    <div className="flex flex-col">
                      <span className="text-[9px] font-bold text-[#3765F6] bg-blue-50 border border-blue-100/50 px-2.5 py-0.5 rounded-full w-max uppercase tracking-wider">Логистический Узел</span>
@@ -978,7 +978,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                    </div>
                    <button 
                      onClick={() => setSelectedLocId(null)} 
-                     className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition cursor-pointer shrink-0"
+                     className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer shrink-0"
                    >
                      <X className="w-4 h-4" />
                    </button>
@@ -1044,7 +1044,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                      setDelivFrom(loc.id);
                      setShowDeliveryForm(true);
                    }}
-                   className="w-full min-h-[44px] py-2 bg-[#3765F6] hover:bg-[#2555E5] text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm shadow-blue-500/10"
+                   className="w-full min-h-[44px] py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm"
                  >
                    <Truck className="w-3.5 h-3.5" />
                    Оформить отправку
@@ -1072,8 +1072,8 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
       {/* FORM MODAL FOR SENDING PERMITS (GLASSMORPHIC DIALOG) */}
       {showDeliveryForm && (
-        <div className="fixed inset-0 z-[1000] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/50 p-6 w-[620px] max-w-full flex flex-col gap-4 my-4">
+ <div className="fixed inset-0 z-[1000] bg-slate-900/40 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200/50 p-6 w-[620px] max-w-full flex flex-col gap-4 my-4">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100">
               <h2 className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
                 <Route className="w-4 h-4 text-[#3765F6]" />
@@ -1090,7 +1090,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                   setDelivSentAt('');
                   setDelivSearchQuery('');
                 }} 
-                className="min-h-[44px] min-w-[44px] rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition cursor-pointer"
+                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1120,7 +1120,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                     <select 
                       value={delivFrom} 
                       onChange={(e) => { setDelivFrom(e.target.value); setDelivDozvols([]); setDelivSearchQuery(''); }}
-                      className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#3765F6] transition"
+                      className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2 py-1.5 outline-none focus:border-[#3765F6] transition"
                     >
                       <option value="">Выберите начальную точку...</option>
                       {Object.values(locations).map((l: LocationItem) => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -1145,7 +1145,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                           nextRoute[idx] = e.target.value;
                           setDelivRoute(nextRoute);
                         }}
-                        className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#3765F6] transition"
+                        className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2 py-1.5 outline-none focus:border-[#3765F6] transition"
                       >
                         <option value="">Выберите локацию...</option>
                         {Object.values(locations).filter((l: LocationItem) => l.id !== delivFrom).map((l: LocationItem) => (
@@ -1270,7 +1270,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
               <button 
                 onClick={handleSaveDelivery}
                 disabled={!delivFrom || delivRoute.filter(r => r.trim().length > 0).length === 0 || delivDozvols.length === 0 || !delivSentAt}
-                className="px-4 min-h-[44px] py-2 rounded-xl text-xs text-white bg-[#3765F6] hover:bg-[#2555E5] transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-blue-500/10"
+                className="px-4 min-h-[44px] py-2 rounded-xl text-xs text-white bg-slate-900 hover:bg-slate-800 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
                 Оформить отправку
               </button>

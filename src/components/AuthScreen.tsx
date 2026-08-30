@@ -163,14 +163,14 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
   };
 
   return (
-    <div className="min-h-screen relative flex flex-col items-center justify-center p-4 sm:p-6 select-none overflow-hidden font-sans bg-[#f4f5f6]">
+    <div className="min-h-screen relative flex flex-col items-center justify-center p-4 sm:p-6 select-none overflow-hidden font-sans bg-slate-50">
       {/* 1. Base technical overlay grid */}
       <div className="absolute inset-0 tech-grid opacity-[0.08] pointer-events-none z-0" />
 
       {/* 2. Cursor-reactive ambient glow layers with slow drift */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none select-none z-0">
         <motion.div
-          className="absolute -top-32 -left-32 w-[650px] h-[650px] rounded-full bg-[#3765F6]/14 blur-[130px] md:blur-[170px]"
+          className="absolute -top-32 -left-32 w-[650px] h-[650px] rounded-full bg-slate-900/14 blur-[130px] md:blur-[170px]"
           animate={prefersReducedMotion ? undefined : {
             x: [0, 20, -10, 0],
             y: [0, -15, 15, 0],
@@ -198,10 +198,10 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
 
       {/* 3. Ambient Floating Pills/Cards in the background to resemble a true system portal */}
       {[
-        { label: "План дохода", icon: TrendingUp, color: "text-[#3765F6]", top: "15%", left: "10%", x: [0, 15, 0], y: [0, 15, 0], delay: 0, duration: 16 },
+        { label: "План дохода", icon: TrendingUp, color: "text-slate-900", top: "15%", left: "10%", x: [0, 15, 0], y: [0, 15, 0], delay: 0, duration: 16 },
         { label: "Текущее планирование", icon: Calendar, color: "text-rose-500", top: "52%", left: "6%", x: [0, -10, 0], y: [0, 20, 0], delay: 1, duration: 18 },
         { label: "Учет выезда", icon: Truck, color: "text-emerald-500", top: "80%", left: "12%", x: [0, 20, 0], y: [0, -15, 0], delay: 2, duration: 15 },
-        { label: "Калькуляция", icon: Calculator, color: "text-indigo-500", top: "18%", right: "10%", x: [0, -20, 0], y: [0, 15, 0], delay: 0.5, duration: 17 },
+        { label: "Калькуляция", icon: Calculator, color: "text-slate-500", top: "18%", right: "10%", x: [0, -20, 0], y: [0, 15, 0], delay: 0.5, duration: 17 },
         { label: "Документы", icon: Files, color: "text-purple-500", top: "50%", right: "6%", x: [0, 15, 0], y: [0, -15, 0], delay: 1.5, duration: 19 },
         { label: "База данных", icon: Database, color: "text-cyan-500", top: "78%", right: "12%", x: [0, -15, 0], y: [0, 15, 0], delay: 2.5, duration: 14 }
       ].map((pill, idx) => {
@@ -214,7 +214,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
               top: pill.top,
               ...(pill.left ? { left: pill.left } : { right: pill.right })
             }}
-            className="hidden md:flex items-center gap-2 px-3.5 py-2 bg-white/45 border border-slate-200/40 rounded-full text-[11px] font-bold text-slate-500/80 shadow-3xs backdrop-blur-3xs opacity-60 pointer-events-none select-none"
+ className="hidden md:flex items-center gap-2 px-3.5 py-2 bg-white border border-slate-200/40 rounded-full text-[11px] font-bold text-slate-500/80 shadow-sm opacity-50 pointer-events-none select-none"
             animate={prefersReducedMotion ? undefined : {
               x: pill.x,
               y: pill.y
@@ -236,11 +236,11 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
       <div className="w-full max-w-sm relative z-10 flex flex-col gap-4">
         
         {/* Central Frosted Glass Card */}
-        <div className="bg-white/60 backdrop-blur-md rounded-[2rem] p-8 border border-slate-200/50 shadow-xl shadow-slate-900/5 flex flex-col">
+ <div className="bg-white rounded-2xl p-8 border border-slate-200/50 shadow-sm flex flex-col">
           
           {/* Brand/Logo Area */}
           <div className="flex flex-col items-center justify-center text-center mb-6 select-none">
-            <div className="w-12 h-12 rounded-2xl bg-[#3765F6]/10 border border-[#3765F6]/20 flex items-center justify-center text-[#3765F6] mb-3 shadow-2xs">
+            <div className="w-12 h-12 rounded-2xl bg-slate-900/10 border border-slate-900/20 flex items-center justify-center text-slate-900 mb-3 shadow-2xs">
               <Truck className="h-6 w-6 shrink-0" />
             </div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900 uppercase leading-none">
@@ -266,7 +266,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="block w-full px-4 py-3 rounded-2xl border border-slate-200/50 bg-white/45 shadow-inner focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:outline-none text-xs font-semibold text-slate-800 transition duration-200 cursor-pointer focus:bg-white"
+                className="block w-full px-4 py-3 rounded-xl border border-slate-200/50 bg-white/45 shadow-2xs focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:outline-none text-xs font-semibold text-slate-800 transition duration-200 cursor-pointer focus:bg-white"
               >
                 <option value="">-- Выберите пользователя --</option>
                 {users.map((u) => (
@@ -290,7 +290,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
                   onClick={() => {
                     setErrorMsg("Для сброса пароля обратитесь к системному администратору.");
                   }}
-                  className="text-[10px] font-semibold text-[#3765F6] hover:text-[#2555E5] transition cursor-pointer"
+                  className="text-[10px] font-semibold text-slate-500 hover:text-slate-700 transition cursor-pointer"
                 >
                   Забыли пароль?
                 </button>
@@ -304,7 +304,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full px-4 py-3 rounded-2xl border border-slate-200/50 bg-white/45 shadow-inner focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:outline-none text-xs font-semibold text-slate-800 pr-10 transition duration-200 focus:bg-white"
+                  className="block w-full px-4 py-3 rounded-xl border border-slate-200/50 bg-white/45 shadow-2xs focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:outline-none text-xs font-semibold text-slate-800 pr-10 transition duration-200 focus:bg-white"
                 />
                 <button
                   type="button"
@@ -321,7 +321,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
             </div>
 
             {errorMsg && (
-              <div className="p-3 bg-rose-50 border border-rose-100 rounded-2xl text-[10.5px] text-rose-600 font-semibold">
+              <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-[10.5px] text-rose-600 font-semibold">
                 {errorMsg}
               </div>
             )}
@@ -330,7 +330,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full flex justify-between items-center py-3.5 px-5 rounded-2xl text-xs font-semibold text-white bg-[#3765F6] hover:bg-[#2555E5] hover:shadow-md hover:shadow-blue-500/10 active:scale-95 transition-all duration-150 cursor-pointer shadow-sm disabled:opacity-50"
+                className="w-full flex justify-between items-center py-3.5 px-5 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 active:scale-95 transition-all duration-150 cursor-pointer shadow-sm disabled:opacity-50"
               >
                 <span>
                   {isLoading ? "ИНИЦИАЛИЗАЦИЯ СЕССИИ..." : "ВОЙТИ В СИСТЕМУ"}

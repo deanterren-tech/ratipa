@@ -1,3 +1,4 @@
+import {useToast} from '../../ToastProvider'
 import {useDialog} from '../../DialogProvider'
 import {useState, useEffect, useMemo} from 'react'
 import {UserProfile} from '../../../types'
@@ -11,6 +12,7 @@ interface DozvolaHistoryProps {
 
 export default function DozvolaHistory({ user }: DozvolaHistoryProps) {
   const { showConfirm } = useDialog();
+  const { toast } = useToast();
   const [subTab, setSubTab] = useState<'actions' | 'documents'>('actions');
   const [history, setHistory] = useState<any[]>([]);
   const [docHistory, setDocHistory] = useState<any[]>([]);
@@ -81,23 +83,23 @@ export default function DozvolaHistory({ user }: DozvolaHistoryProps) {
   const handleDeleteActionLog = async (id: string) => {
     if (await showConfirm("Вы действительно хотите удалить эту запись из журнала операций?")) {
       remove(ref(database, `dozvolsHistoryV4/${id}`))
-        .then(() => alert("Запись успешно удалена"))
-        .catch(err => alert("Ошибка при удалении: " + err.message));
+        .then(() => toast("Запись успешно удалена", 'success'))
+        .catch(err => toast("Ошибка при удалении: " + (err instanceof Error ? err.message : String(err)), 'error'));
     }
   };
 
   const handleDeleteDocLog = async (id: string) => {
     if (await showConfirm("Вы действительно хотите удалить эту запись о формировании документа?")) {
       remove(ref(database, `dozvolsDocumentsHistoryV1/${id}`))
-        .then(() => alert("Запись успешно удалена"))
-        .catch(err => alert("Ошибка при удалении: " + err.message));
+        .then(() => toast("Запись успешно удалена", 'success'))
+        .catch(err => toast("Ошибка при удалении: " + (err instanceof Error ? err.message : String(err)), 'error'));
     }
   };
 
   const hasWriteAccess = user.role === 'root_admin' || user.permissions?.dozvola === 'write';
 
   return (
-    <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-6">
+ <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm flex flex-col space-y-6">
         
         {/* Tab switcher & Search */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-3 border-b border-slate-100 gap-4">

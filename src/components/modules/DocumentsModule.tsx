@@ -225,7 +225,7 @@ export default function DocumentsModule({ user }: Props) {
   }, []);
   // 1b. Set default loading date and load contacts on startup
   useEffect(() => {
-    const todayStr = new Date().toLocaleDateString('ru-RU');
+    const todayStr = new Date().toLocaleDateString('ru-RU').replace(/\./g, '/');
     setFerryLoadingDatePort(`${todayStr} Карасу`);
     // Fetch and seed contacts
     const contactsRef = ref(database, 'ferryContacts');
@@ -2065,13 +2065,13 @@ export default function DocumentsModule({ user }: Props) {
                             className="w-10 h-10 object-cover rounded border border-slate-200"
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-[9px] font-black text-slate-700 truncate">Изображение прикреплено</p>
+                            <p className="text-[9px] font-semibold text-slate-700 truncate">Изображение прикреплено</p>
                             <p className="text-[8px] text-slate-400 font-mono">Готово к распознаванию</p>
                           </div>
                           <button
                             type="button"
                             onClick={() => setCoupleImageBase64(null)}
-                            className="text-[9px] font-black text-rose-600 hover:underline px-1.5 py-1 bg-rose-50 rounded cursor-pointer"
+                            className="text-[9px] font-semibold text-rose-600 hover:underline px-1.5 py-1 bg-rose-50 rounded cursor-pointer"
                           >
                             Удалить
                           </button>

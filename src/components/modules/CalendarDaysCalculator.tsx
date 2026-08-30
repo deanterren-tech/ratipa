@@ -22,7 +22,7 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
   const totalDays = calculateDays(startDate, endDate);
 
   return (
-    <div className="bg-white/60 backdrop-blur-md p-6 rounded-[2rem] border border-slate-200/50 h-full flex flex-col gap-4 shadow-xl shadow-slate-900/5">
+ <div className="bg-white p-6 rounded-[2rem] border border-slate-200/50 h-full flex flex-col gap-4 shadow-xl shadow-slate-900/5">
       <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
         <Calendar className="w-4 h-4 text-[#3765F6]" />
         Калькулятор дней
@@ -51,7 +51,7 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
       
       <div className="mt-auto pt-4 border-t border-slate-200/50 flex items-center justify-between bg-slate-50/40 -mx-6 -mb-6 p-6 rounded-b-[2rem]">
         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Всего дней в рейсе:</span>
-        <span className="text-2xl font-black text-[#3765F6] font-mono tracking-tight bg-white px-3 py-1 rounded-xl border border-slate-200/30 shadow-3xs">{totalDays}</span>
+        <span className="text-2xl font-bold text-[#3765F6] font-mono tracking-tight bg-white px-3 py-1 rounded-xl border border-slate-200/30 shadow-3xs">{totalDays}</span>
       </div>
     </div>
   );

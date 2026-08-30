@@ -1,7 +1,8 @@
+import {useToast} from '../ToastProvider'
 import React, {useState, useEffect, useRef} from 'react'
 import { database, onValue } from '../../api'
-import { ref, push } from 'firebase/database'
-import {Save, Plus, Printer, FileText, CheckSquare, MapPin, Calendar, FileSignature, MessageSquare, FileSpreadsheet} from 'lucide-react'
+import { ref, push, set } from 'firebase/database'
+import {Save, Plus, Printer, FileText, CheckSquare, MapPin, Calendar, FileSignature, FileSpreadsheet} from 'lucide-react'
 
 const lostDeclImg = '/lost_decl.png';
 
@@ -73,6 +74,7 @@ const DraggableItem = ({ id, x, y, onMove, children, isSelected, onClick, onRemo
 };
 
 export default function LossDeclarationEditor() {
+  const { toast } = useToast();
   // Input states
   const [formValues, setFormValues] = useState({
     assoc: 'БАМАП',
@@ -145,7 +147,7 @@ export default function LossDeclarationEditor() {
     issueDate: '4. Дата выдачи',
     expiryDate: 'Срок действия',
     volets: '5. Количество листов',
-    disPlaceDate: '6. Место и дата происшествия',
+    disPlaceDate: '6. Место и дата утери',
     place: '11.1 Место изъятия',
     date: '11.2 Дата изъятия'
   } ;
@@ -210,27 +212,35 @@ export default function LossDeclarationEditor() {
     if (selectedItemId === id) setSelectedItemId(null);
   };
 
-  // Template saving
+  // Template saving to Firebase (shared across all users)
   const saveTemplate = () => {
     const template = { fields: fieldsLayout, checkmarks, formValues, letterValues, customLetterBody };
-    localStorage.setItem('tirLossTemplateV2', JSON.stringify(template));
-    alert('Шаблон успешно сохранен!');
+    set(ref(database, 'tirLossTemplateV2'), template)
+      .then(() => {
+        toast('Шаблон сохранен в базу для всех пользователей!', 'success');
+      })
+      .catch(err => {
+        console.error("Failed to save template", err);
+        toast('Ошибка сохранения шаблона', 'error');
+      });
   };
 
   const loadTemplate = () => {
-    const data = localStorage.getItem('tirLossTemplateV2');
-    if (data) {
-      try {
-        const parsed = JSON.parse(data);
-        if (parsed.fields) setFieldsLayout(parsed.fields);
-        if (parsed.checkmarks) setCheckmarks(parsed.checkmarks);
-        if (parsed.formValues) setFormValues(prev => ({ ...prev, ...parsed.formValues }));
-        if (parsed.letterValues) setLetterValues(prev => ({ ...prev, ...parsed.letterValues }));
-        if (parsed.customLetterBody !== undefined) setCustomLetterBody(parsed.customLetterBody);
-      } catch (e) {
-        console.error("Failed to load template", e);
+    const tirRef = ref(database, 'tirLossTemplateV2');
+    onValue(tirRef, (snap) => {
+      const data = snap.val();
+      if (data) {
+        try {
+          if (data.fields) setFieldsLayout(data.fields);
+          if (data.checkmarks) setCheckmarks(data.checkmarks);
+          if (data.formValues) setFormValues(prev => ({ ...prev, ...data.formValues }));
+          if (data.letterValues) setLetterValues(prev => ({ ...prev, ...data.letterValues }));
+          if (data.customLetterBody !== undefined) setCustomLetterBody(data.customLetterBody);
+        } catch (e) {
+          console.error("Failed to load template", e);
+        }
       }
-    }
+    }, { onlyOnce: true });
   };
 
   useEffect(() => {
@@ -714,7 +724,7 @@ export default function LossDeclarationEditor() {
                       onClick={setSelectedItemId}
                       onRemove={removeCheckmark}
                     >
-                      <div className="text-2xl font-black text-red-600 leading-none select-none" style={{ fontFamily: 'Arial, sans-serif' }}>
+                      <div className="text-2xl font-bold text-red-600 leading-none select-none" style={{ fontFamily: 'Arial, sans-serif' }}>
                         ✓
                       </div>
                     </DraggableItem>

@@ -78,11 +78,11 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
       
       {/* Banner */}
       <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] select-none">
-        <span className="bg-[#c3fb12] text-slate-950 font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono border border-black/5">
+        <span className="bg-[#3765F6] text-white font-bold text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono border border-slate-200/40">
           Системный Репозиторий
         </span>
-        <h1 className="text-2xl lg:text-3xl font-black text-slate-900 mt-1.5 flex items-center gap-2 uppercase tracking-tight">
-          <Archive className="h-6 w-6 text-slate-900" style={{ fill: '#c3fb12' }} />
+        <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 mt-1.5 flex items-center gap-2 uppercase tracking-tight">
+          <Archive className="h-6 w-6 text-slate-900" style={{ fill: '#3765F6' }} />
           Архивные реестры
         </h1>
         <p className="text-xs text-slate-500 mt-1 font-semibold">
@@ -99,10 +99,10 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
           <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
             <button
               onClick={() => { setActiveTab('vehicles'); setSearchQuery(''); }}
-              className={`flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl text-xs font-black transition whitespace-nowrap uppercase tracking-tight cursor-pointer ${
+              className={`flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap uppercase tracking-tight cursor-pointer ${
                 activeTab === 'vehicles' 
-                  ? 'bg-slate-950 text-[#c3fb12] shadow-sm' 
-                  : 'bg-white text-slate-650 border border-slate-200/40 hover:bg-slate-50'
+                  ? 'bg-[#3765F6] text-white shadow-sm' 
+                  : 'bg-white text-slate-600 border border-slate-200/40 hover:bg-slate-50'
               }`}
             >
               <Truck className="h-4 w-4" />
@@ -110,10 +110,10 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
             </button>
             <button
               onClick={() => { setActiveTab('calculations'); setSearchQuery(''); }}
-              className={`flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl text-xs font-black transition whitespace-nowrap uppercase tracking-tight cursor-pointer ${
+              className={`flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap uppercase tracking-tight cursor-pointer ${
                 activeTab === 'calculations' 
-                  ? 'bg-slate-950 text-[#c3fb12] shadow-sm' 
-                  : 'bg-white text-slate-650 border border-slate-200/40 hover:bg-slate-50'
+                  ? 'bg-[#3765F6] text-white shadow-sm' 
+                  : 'bg-white text-slate-600 border border-slate-200/40 hover:bg-slate-50'
               }`}
             >
               <Calculator className="h-4 w-4" />
@@ -121,10 +121,10 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
             </button>
             <button
               onClick={() => { setActiveTab('salaries'); setSearchQuery(''); }}
-              className={`flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl text-xs font-black transition whitespace-nowrap uppercase tracking-tight cursor-pointer ${
+              className={`flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap uppercase tracking-tight cursor-pointer ${
                 activeTab === 'salaries' 
-                  ? 'bg-slate-950 text-[#c3fb12] shadow-sm' 
-                  : 'bg-white text-slate-650 border border-slate-200/40 hover:bg-slate-50'
+                  ? 'bg-[#3765F6] text-white shadow-sm' 
+                  : 'bg-white text-slate-600 border border-slate-200/40 hover:bg-slate-50'
               }`}
             >
               <FileText className="h-4 w-4" />
@@ -156,9 +156,9 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
                           {(filteredItems as any[]).map((item: any) => (
                             <div key={item.id} className="bg-white border border-slate-200/60 rounded-2xl p-4 shadow-sm">
                               <div className="flex items-center justify-between mb-2">
-                                <span className="font-mono font-black text-slate-900 text-sm">{item.carNumber}</span>
+                                <span className="font-mono font-bold text-slate-900 text-sm">{item.carNumber}</span>
                                 {user.permissions.archives === 'write' && (
-                                  <button onClick={() => handleRestoreVehicle(item)} className="inline-flex items-center gap-1 px-3 py-2 bg-slate-950 text-[#c3fb12] hover:bg-[#c3fb12] hover:text-black rounded-lg text-[10px] font-black uppercase transition cursor-pointer min-h-[44px]">
+                                  <button onClick={() => handleRestoreVehicle(item)} className="inline-flex items-center gap-1 px-3 py-2 bg-[#3765F6] text-white hover:bg-[#2555E5] rounded-lg text-[10px] font-bold uppercase transition cursor-pointer min-h-[44px]">
                                     <RefreshCcw className="h-3 w-3" /> Восстановить
                                   </button>
                                 )}
@@ -175,7 +175,7 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
                         <div className="hidden md:block table-scroll">
                         <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
                           <thead>
-                            <tr className="border-b border-slate-200/40 text-[10px] uppercase font-mono font-black text-slate-400">
+                            <tr className="border-b border-slate-200/40 text-[10px] uppercase font-mono font-bold text-slate-500">
                               <th className="p-3.5 pl-4">Госномер</th>
                               <th className="p-3.5">ФИО Водителя</th>
                               <th className="p-3.5">Комментарий при списании</th>
@@ -185,14 +185,14 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
                           <tbody className="divide-y divide-slate-100 text-slate-700">
                             {filteredItems.map((item: any) => (
                               <tr key={item.id} className="hover:bg-slate-50/50 transition duration-100">
-                                <td className="p-3.5 pl-4 font-mono font-black text-slate-900">{item.carNumber}</td>
+                                <td className="p-3.5 pl-4 font-mono font-bold text-slate-900">{item.carNumber}</td>
                                 <td className="p-3.5 font-bold text-slate-800">{item.driverName}</td>
                                 <td className="p-3.5 text-slate-500 max-w-sm truncate font-medium">{item.comment || '--'}</td>
                                 <td className="p-3.5 pr-4 text-right">
                                   {user.permissions.archives === 'write' && (
                                     <button
                                       onClick={() => handleRestoreVehicle(item)}
-                                      className="inline-flex items-center gap-1 p-2 px-3 bg-slate-950 text-[#c3fb12] hover:bg-[#c3fb12] hover:text-black rounded-lg text-[10px] font-black uppercase transition duration-150 cursor-pointer border border-black/5"
+                                      className="inline-flex items-center gap-1 p-2 px-3 bg-[#3765F6] text-white hover:bg-[#2555E5] rounded-lg text-[10px] font-bold uppercase transition duration-150 cursor-pointer border border-slate-200/40"
                                       title="Разархивировать"
                                     >
                                       <RefreshCcw className="h-3 w-3" /> Восстановить экипаж
@@ -219,10 +219,10 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
                 <div key={item.id} className="bg-slate-50 p-5 rounded-2xl border border-slate-200/40 hover:border-slate-350 transition duration-150 flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between text-[9px] text-slate-400 uppercase font-bold font-mono border-b border-slate-200/20 pb-2 mb-3 select-none">
-                      <span>{new Date(item.date).toLocaleDateString()}</span>
+                      <span>{new Date(item.date).toLocaleDateString('ru-RU').replace(/\./g, '/')}</span>
                       <span>Сохранил: {item.username}</span>
                     </div>
-                    <div className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                    <div className="text-sm font-bold text-slate-900 uppercase tracking-tight">
                       {item.from} — {item.to}
                     </div>
                   </div>
@@ -233,13 +233,13 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
                     </div>
                     <div>
                       <span className="text-slate-400 block pb-0.5">Чистый доход:</span>
-                      <strong className="text-emerald-700 font-black">{item.totalProfit?.toFixed(0)} EUR</strong>
+                      <strong className="text-emerald-700 font-bold">{item.totalProfit?.toFixed(0)} EUR</strong>
                     </div>
                   </div>
                 </div>
               ))}
               {!filteredItems.length && (
-                <div className="text-center py-12 text-slate-400 col-span-full text-xs font-mono font-black uppercase tracking-widest bg-slate-50 rounded-2xl border border-slate-250/20">
+                <div className="text-center py-12 text-slate-400 col-span-full text-xs font-mono font-bold uppercase tracking-widest bg-slate-50 rounded-2xl border border-slate-250/20">
                   Расчеты по фильтру не обнаружены.
                 </div>
               )}
@@ -254,15 +254,15 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
                           {(filteredItems as any[]).map((item: any) => (
                             <div key={item.id} className="bg-white border border-slate-200/60 rounded-2xl p-3.5 shadow-sm">
                               <div className="flex items-center justify-between">
-                                <span className="font-mono font-black text-sm text-slate-900">{item.car}</span>
-                                <span className="font-black text-emerald-600 text-xs">{item.totalSalary?.toFixed(0)} EUR</span>
+                                <span className="font-mono font-bold text-sm text-slate-900">{item.car}</span>
+                                <span className="font-bold text-emerald-600 text-xs">{item.totalSalary?.toFixed(0)} EUR</span>
                               </div>
                               <div className="flex items-center gap-2 mt-1.5 text-xs">
                                 <span className="font-bold text-slate-800">{item.driver}</span>
                                 <span className="text-slate-300">|</span>
                                 <span className="text-slate-500">{item.km} км</span>
                                 <span className="text-slate-300">|</span>
-                                <span className="text-slate-500 text-[10px]">{new Date(item.datetime).toLocaleDateString()}</span>
+                                <span className="text-slate-500 text-[10px]">{new Date(item.datetime).toLocaleDateString('ru-RU').replace(/\./g, '/')}</span>
                               </div>
                               <div className="text-[10px] text-slate-400 font-medium mt-1">Логист: {item.logist}</div>
                             </div>
@@ -275,7 +275,7 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
                         <div className="hidden md:block table-scroll">
                         <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
                           <thead>
-                            <tr className="border-b border-slate-200/40 text-[10px] uppercase font-mono font-black text-slate-400">
+                            <tr className="border-b border-slate-200/40 text-[10px] uppercase font-mono font-bold text-slate-500">
                               <th className="p-3.5 pl-4">Дата</th>
                               <th className="p-3.5">Водитель</th>
                               <th className="p-3.5">Машина</th>
@@ -284,20 +284,20 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
                               <th className="p-3.5">Сотрудник логист</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-100 text-slate-650 font-semibold">
+                          <tbody className="divide-y divide-slate-100 text-slate-600 font-semibold">
                             {filteredItems.map((item: any) => (
                               <tr key={item.id} className="hover:bg-slate-50/50 transition duration-100">
-                                <td className="p-3.5 pl-4 text-slate-400 font-mono">{new Date(item.datetime).toLocaleDateString()}</td>
+                                <td className="p-3.5 pl-4 text-slate-400 font-mono">{new Date(item.datetime).toLocaleDateString('ru-RU').replace(/\./g, '/')}</td>
                                 <td className="p-3.5 font-bold text-slate-900">{item.driver}</td>
                                 <td className="p-3.5 font-bold text-slate-700 font-mono">{item.car}</td>
                                 <td className="p-3.5 font-mono">{item.km} км</td>
-                                <td className="p-3.5 font-black text-emerald-600 font-mono">{item.totalSalary?.toFixed(0)} EUR</td>
+                                <td className="p-3.5 font-bold text-emerald-600 font-mono">{item.totalSalary?.toFixed(0)} EUR</td>
                                 <td className="p-3.5 font-semibold text-slate-400">{item.logist}</td>
                               </tr>
                             ))}
                             {!filteredItems.length && (
                               <tr>
-                                <td colSpan={6} className="text-center p-12 text-slate-400 font-mono font-black uppercase tracking-wider">Архив зарплатных ведомостей пуст.</td>
+                                <td colSpan={6} className="text-center p-12 text-slate-400 font-mono font-bold uppercase tracking-wider">Архив зарплатных ведомостей пуст.</td>
                               </tr>
                             )}
                           </tbody>

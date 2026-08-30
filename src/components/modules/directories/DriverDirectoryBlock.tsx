@@ -177,15 +177,15 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
             <div className="flex items-center gap-2 bg-slate-900 text-white rounded-xl px-3 py-1.5">
               <Users className="w-3.5 h-3.5 text-slate-300" />
               <span className="text-[10px] font-semibold text-slate-300">Всего</span>
-              <span className="text-sm font-black font-mono">{drivers.length}</span>
+              <span className="text-sm font-bold font-mono">{drivers.length}</span>
             </div>
             <div className="flex items-center gap-2 bg-[#3765F6] text-white rounded-xl px-3 py-1.5">
               <span className="text-[10px] font-semibold">С диспетчером</span>
-              <span className="text-sm font-black font-mono">{drivers.filter(d => d.dispatcher).length}</span>
+              <span className="text-sm font-bold font-mono">{drivers.filter(d => d.dispatcher).length}</span>
             </div>
             <div className="flex items-center gap-2 bg-amber-500 text-white rounded-xl px-3 py-1.5">
               <span className="text-[10px] font-semibold">Без диспетчера</span>
-              <span className="text-sm font-black font-mono">{drivers.filter(d => !d.dispatcher).length}</span>
+              <span className="text-sm font-bold font-mono">{drivers.filter(d => !d.dispatcher).length}</span>
             </div>
           </div>
         </div>
@@ -268,7 +268,7 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
                   <td className="px-4 py-2.5">
                     <button onClick={(e) => { e.stopPropagation(); setViewCard({ type: 'driver', driverId: d.id, driverName: d.name }); }}
                       className="inline-flex items-center gap-1.5 text-left hover:underline font-medium text-slate-700">
-                      <span className="w-5 h-5 rounded-full bg-[#3765F6]/15 text-[#3765F6] flex items-center justify-center text-[9px] font-black">
+                      <span className="w-5 h-5 rounded-full bg-[#3765F6]/15 text-[#3765F6] flex items-center justify-center text-[9px] font-semibold">
                         {initials(d.name)}
                       </span>
                       {d.name || '—'}
@@ -302,10 +302,10 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
 
       {/* MODAL add/edit */}
       {modalOpen && createPortal(
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto" onClick={() => setModalOpen(false)}>
+ <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 p-4 overflow-y-auto" onClick={() => setModalOpen(false)}>
           <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 my-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <User className="w-4 h-4 text-[#3765F6]" />
                 {editing ? 'Редактировать водителя' : 'Новый водитель'}
               </h3>
@@ -336,10 +336,10 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
 
       {/* BULK modal */}
       {bulkOpen && createPortal(
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto" onClick={() => setBulkOpen(false)}>
+ <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 p-4 overflow-y-auto" onClick={() => setBulkOpen(false)}>
           <div className="w-full max-w-sm bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 my-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Layers className="w-4 h-4 text-[#3765F6]" />
                 Назначить диспетчера ({selected.size})
               </h3>

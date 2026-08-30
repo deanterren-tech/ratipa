@@ -6,6 +6,7 @@ import { createServer as createViteServer } from "vite";
 import fs from "fs";
 import { agentRouter } from "./agentApi.ts";
 import { agentAuthMiddleware } from "./agentAuth.ts";
+import { handleUserRequest } from "./server/ai/orchestrator.ts";
 
 // Initialize Gemini safely
 let ai: GoogleGenAI | null = null;
@@ -1641,8 +1642,18 @@ Do not return Markdown. Return raw JSON array only.
     }
   });
 
-  // --- Agent API: доступ ко ВСЕМ функциям приложения для бота (delegated за пользователя) ---
+  // --- Agent API ---
   app.use("/api/agent", agentAuthMiddleware, agentRouter);
+
+  // --- Orchestrator AI (агентный диспетчер) ---
+  app.post("/api/agent/ask", agentAuthMiddleware, async (req: any, res: any) => {
+    try {
+      const result = await handleUserRequest(req.body?.message || "", req.agentUser);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err?.message || "Ошибка Orchestrator" });
+    }
+  });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

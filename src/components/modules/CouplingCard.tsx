@@ -54,7 +54,7 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
   const dispatcherName = dispatcher?.name || bazaRecord?.dispatcher || '—';
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto" onClick={onClose}>
+ <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 p-4 overflow-y-auto" onClick={onClose}>
       <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl my-4" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-[#3765F6]/10 to-transparent border-b border-slate-100">
@@ -63,7 +63,7 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
               <Truck className="w-5 h-5 text-[#3765F6]" />
             </div>
             <div>
-              <div className="text-lg font-black text-slate-900 font-mono">{tractor?.carNumber || bazaCarNumber || carNumber}</div>
+              <div className="text-lg font-bold text-slate-900 font-mono">{tractor?.carNumber || bazaCarNumber || carNumber}</div>
               <div className="text-[11px] text-slate-400 font-mono">
                 {trailer?.trailerNumber ? `${trailer.trailerNumber}` : '—'}
                 {(tractor?.brandModel || tractor?.brandsRu || tractor?.brand) ? ` · ${tractor.brandModel || tractor?.brandsRu || tractor.brand}` : ''}

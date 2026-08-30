@@ -549,7 +549,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     });
     const uniqueCars = Array.from(new Set(myCars));
     if (uniqueCars.length === 0) {
-      alert("У вас пока нет оформленных машин в текущем журнале.");
+      addToast("У вас пока нет оформленных машин в текущем журнале.", 'info');
       return;
     }
 
@@ -567,10 +567,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     });
 
     if (addedCount === 0) {
-      alert("Все ваши машины уже внесены в ваш блокнот.");
+      addToast("Все ваши машины уже внесены в ваш блокнот.", 'info');
     } else {
       pdService.saveNotebookOrder(selectedNotebookUser, newOrder);
-      alert(`В блокнот добавлено машин: ${addedCount}`);
+      addToast(`В блокнот добавлено машин: ${addedCount}`, 'success');
     }
   };
 
@@ -821,7 +821,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             <button
               type="button"
               onClick={handleAddCarToNotebook}
-              className="w-8 h-8 bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium flex items-center justify-center rounded-xl transition cursor-pointer text-base leading-none"
+              className="min-h-[44px] min-w-[44px] bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium flex items-center justify-center rounded-xl transition cursor-pointer text-base leading-none"
             >
               +
             </button>
@@ -1460,11 +1460,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
   const savePotentialLoad = () => {
     if (!plName.trim()) {
-      alert("Укажите название просчета");
+      addToast("Укажите название просчета", 'info');
       return;
     }
     if (potentialLoads.length >= 3 && !plEditingId) {
-      alert("Можно сохранить максимум 3 просчета");
+      addToast("Можно сохранить максимум 3 просчета", 'info');
       return;
     }
 
@@ -1695,21 +1695,21 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     const profitPerDayPlan = Math.round(rawProfitPerDayPlan);
 
     return (
-      <div className="fixed inset-0 z-[100] flex items-start md:items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in overflow-y-auto overscroll-contain">
-        <div className="bg-white/90 backdrop-blur-xl w-full md:max-w-[1400px] mx-0 md:mx-4 shadow-2xl rounded-none md:rounded-3xl flex flex-col relative min-h-[100dvh] md:min-h-0 md:max-h-[calc(100vh-2rem)]">
+ <div className="fixed inset-0 z-[100] flex items-start md:items-center justify-center bg-slate-900/60 animate-fade-in overflow-y-auto overscroll-contain">
+ <div className="bg-white w-full md:max-w-[1400px] mx-0 md:mx-4 shadow-2xl rounded-2xl flex flex-col relative min-h-[100dvh] md:min-h-0 md:max-h-[calc(100vh-2rem)] overflow-hidden">
           
           {/* Header */}
-          <div className="bg-white px-4 md:px-6 py-3 md:py-4 flex flex-col md:flex-row md:items-center justify-between sticky top-0 z-10 border-b border-slate-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)] shrink-0 relative">
-            {/* Close button — top-right corner, always visible */}
+          <div className="bg-white px-4 md:px-6 py-3 md:py-4 flex flex-col md:flex-row md:items-center justify-between sticky top-0 z-10 border-b border-slate-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)] shrink-0">
+            {/* Close button — top-right corner */}
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="absolute top-2.5 right-2.5 z-30 w-11 h-11 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900 border border-slate-200 transition shadow-sm cursor-pointer"
+              className="absolute top-3 right-3 z-30 w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer"
               aria-label="Закрыть"
             >
-              <X className="w-5 h-5" strokeWidth={2.5} />
+              <X className="w-5 h-5" strokeWidth={2} />
             </button>
-            <div className="flex flex-col min-w-0 pr-12">  <div className="flex items-center gap-3">
+            <div className="flex flex-col min-w-0 pr-10">  <div className="flex items-center gap-3">
                 <Calculator className="w-5 h-5 text-slate-400 shrink-0" />
                 <h2 className="text-base md:text-lg font-semibold text-slate-900 tracking-tight truncate">
                   {editingTripId ? "Редактирование плана" : "Новый план"}
@@ -1719,7 +1719,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 <span className="text-blue-600 font-semibold">Авто: {carNumber || "—"}</span>
                 <span>Направление: {direction || "—"}</span>
                 <span>Диспетчер: {dispatcher || "—"}</span>
-                <span>Сроки: {dateStart ? new Date(dateStart).toLocaleDateString('ru-RU') : "—"} — {dateEnd ? new Date(dateEnd).toLocaleDateString('ru-RU') : "—"}</span>
+                <span>Сроки: {dateStart ? new Date(dateStart).toLocaleDateString('ru-RU').replace(/\./g, '/') : "—"} — {dateEnd ? new Date(dateEnd).toLocaleDateString('ru-RU').replace(/\./g, '/') : "—"}</span>
               </div>
             </div>
 
@@ -1753,7 +1753,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               <>
                 <div className="grid grid-cols-1 gap-6">
                   {/* Основные реквизиты */}
-                  <div className="bg-white/50 backdrop-blur-md rounded-3xl p-6 border border-slate-200/50 flex flex-col">
+ <div className="bg-white rounded-2xl p-6 border border-slate-200/50 flex flex-col">
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2 mb-5">
                       <FileText className="w-4 h-4 text-slate-400"/>
                       Основные реквизиты
@@ -1968,20 +1968,20 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-4 relative shadow-sm">
                         <div className="flex justify-between items-center pb-2 border-b border-slate-100">
                           <div className="flex items-center gap-3">
-                            <span className="text-xs font-black text-slate-500 bg-slate-100 px-2 py-1 rounded-md">#{idx + 1}</span>
+                            <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">#{idx + 1}</span>
 
                           </div>
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => addLeg(idx)}
-                              className="w-8 h-8 inline-flex items-center justify-center rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 transition cursor-pointer"
+                              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 transition cursor-pointer"
                             >
                               <Plus className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => removeLeg(idx)}
                               disabled={legs.length <= 1}
-                              className="w-8 h-8 inline-flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 transition disabled:opacity-30 cursor-pointer"
+                              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 transition disabled:opacity-30 cursor-pointer"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -1990,7 +1990,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-black text-slate-400">Откуда</span>
+                            <span className="text-[10px] uppercase font-bold text-slate-400">Откуда</span>
                             <input
                               list="cities-db-pl"
                               value={leg.from}
@@ -2000,7 +2000,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                             />
                           </div>
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-black text-slate-400">Куда</span>
+                            <span className="text-[10px] uppercase font-bold text-slate-400">Куда</span>
                             <input
                               list="cities-db-pl"
                               value={leg.to}
@@ -2013,7 +2013,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1.5 relative">
-                            <span className="text-[10px] uppercase font-black text-slate-400">Км</span>
+                            <span className="text-[10px] uppercase font-bold text-slate-400">Км</span>
                             <input
                               type="number"
                               value={leg.km || ""}
@@ -2029,7 +2029,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                             </button>
                           </div>
                           <div className="flex flex-col gap-1.5 relative">
-                            <span className="text-[10px] uppercase font-black text-slate-400">Доезд (км)</span>
+                            <span className="text-[10px] uppercase font-bold text-slate-400">Доезд (км)</span>
                             <input
                               type="number"
                               value={leg.emptyRun || ""}
@@ -2048,7 +2048,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-black text-slate-400">Фрахт</span>
+                            <span className="text-[10px] uppercase font-bold text-slate-400">Фрахт</span>
                             <div className="flex gap-1">
                               <input
                                 type="number"
@@ -2069,7 +2069,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                             </div>
                           </div>
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-black text-slate-400">Инфо ставка</span>
+                            <span className="text-[10px] uppercase font-bold text-slate-400">Инфо ставка</span>
                             <div className="flex gap-1">
                               <input
                                 type="number"
@@ -2094,7 +2094,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-black text-slate-400">Паром €</span>
+                            <span className="text-[10px] uppercase font-bold text-slate-400">Паром €</span>
                             <input
                               type="number"
                               value={leg.ferry || ""}
@@ -2103,7 +2103,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                             />
                           </div>
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-black text-slate-400">Коэфф.</span>
+                            <span className="text-[10px] uppercase font-bold text-slate-400">Коэфф.</span>
                             <input
                               type="number"
                               step="0.01"
@@ -2478,7 +2478,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                                 nl.splice(i + 1, 0, { from: "", to: "", km: 0, rate: 0, ferry: 0, coeff: directions[direction] || 0 });
                                 setPlLegs(nl);
                               }}
-                              className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition cursor-pointer"
+                              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition cursor-pointer"
                             >
                               <Plus className="w-4 h-4" />
                             </button>
@@ -2491,7 +2491,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                                 }
                               }}
                               disabled={plLegs.length <= 1}
-                              className="w-8 h-8 flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 transition disabled:opacity-30 cursor-pointer"
+                              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 transition disabled:opacity-30 cursor-pointer"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -2593,7 +2593,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 {isEditing && currentEditingTrip && (
                   <button
                     onClick={() => deleteTrip(editingTripId!, true)}
-                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-3 md:px-4 py-2.5 rounded-xl text-sm font-black uppercase tracking-tight transition flex items-center gap-2"
+                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-3 md:px-4 py-2.5 rounded-xl text-sm font-bold uppercase tracking-tight transition flex items-center gap-2"
                   >
                     <Trash2 className="w-4 h-4" /> Удалить
                   </button>
@@ -2607,14 +2607,14 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         pdService.restoreTrip(editingTripId, user.name, user.role);
                         setIsModalOpen(false);
                       }}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-black text-sm uppercase tracking-tight transition flex-1 md:flex-none"
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-bold text-sm uppercase tracking-tight transition flex-1 md:flex-none"
                     >
                       Из архива
                     </button>
                   ) : (
                     <button
                       onClick={() => finishTripToArchive(currentEditingTrip, true)}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-black text-sm uppercase tracking-tight transition flex items-center justify-center gap-2 flex-1 md:flex-none"
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-bold text-sm uppercase tracking-tight transition flex items-center justify-center gap-2 flex-1 md:flex-none"
                     >
                       <Archive className="w-4 h-4 hidden md:block" /> В архив
                     </button>
@@ -2623,7 +2623,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 <button
                   onClick={saveTrip}
                   disabled={isSubmitting}
-                  className={`${isSubmitting ? "bg-blue-300 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-500"} text-white px-6 py-2.5 rounded-xl font-black text-sm uppercase tracking-tight transition flex items-center justify-center gap-2 shadow-sm flex-1 md:flex-none`}
+                  className={`${isSubmitting ? "bg-blue-300 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-500"} text-white px-6 py-2.5 rounded-xl font-bold text-sm uppercase tracking-tight transition flex items-center justify-center gap-2 shadow-sm flex-1 md:flex-none`}
                 >
                   <Save className="w-4 h-4 hidden md:block" /> {isSubmitting ? "Сохранение..." : "Сохранить"}
                 </button>
@@ -3000,8 +3000,123 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                   e.stopPropagation();
                 }}
               >
-                {/* Main Accent Block: Plate & Direction + Quick Stats */}
-                <div className="flex flex-col gap-2 w-full">
+                {/* Desktop: horizontal layout (lg+) */}
+                <div className="hidden lg:flex items-stretch gap-4 w-full">
+                  {/* Block 1: Plate + Dispatcher + Actions */}
+                  <div className="flex flex-col gap-2 min-w-[200px] shrink-0 justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-base font-bold text-slate-900 tracking-tight font-sans">
+                          {trip.carNumber}
+                        </span>
+                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${getDirectionBadgeClass(trip.direction || "")}`}>
+                          {trip.direction || "—"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
+                        <span className="text-[11px] text-slate-400">Диспетчер:</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${dispBadgeStyle}`}>
+                          {formatToTitleCase(dispatcherName)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <button onClick={() => loadTripToForm(trip)} className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md transition cursor-pointer" title="Редактировать">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      {!archived ? (
+                        <button onClick={(e) => { e.stopPropagation(); finishTripToArchive(trip); }} className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md transition cursor-pointer" title="В архив">
+                          <Archive className="w-3.5 h-3.5" />
+                        </button>
+                      ) : user.role === "root_admin" ? (
+                        <button onClick={(e) => { e.stopPropagation(); deleteTrip(trip.id); }} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition cursor-pointer" title="Удалить">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Block 2: Dates */}
+                  <div className="flex flex-col gap-1 min-w-[140px] shrink-0 text-xs text-slate-500 font-sans justify-center">
+                    <div className="flex justify-between gap-4 items-center">
+                      <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wider">Старт</span>
+                      <span className="text-slate-800 font-semibold font-mono">
+                        {trip.dateStart ? new Date(trip.dateStart).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-4 items-center">
+                      <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wider">Финиш</span>
+                      <span className="text-slate-800 font-semibold font-mono">
+                        {trip.dateEnd ? new Date(trip.dateEnd).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}
+                      </span>
+                    </div>
+                    {trip.currentMonth && archived && (
+                      <div className="mt-1">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-600 border border-blue-100">
+                          Архив: {trip.currentMonth}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Block 3: Itinerary */}
+                  <div className="flex-1 bg-slate-50/20 rounded-xl p-3 border border-slate-200/40 min-w-[220px]">
+                    <div className="text-xs font-semibold text-slate-800 mb-2 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="tracking-tight text-slate-800 font-semibold">{routeTitle}</span>
+                    </div>
+                    {trip.legs && trip.legs.length > 0 ? (
+                      <div className="flex flex-col gap-1.5 pl-1 border-l-2 border-slate-200/30 ml-1.5">
+                        {trip.legs.map((leg, i) => {
+                          const isActive = trip.activeLegIndex === i;
+                          return (
+                            <div key={i} className={`flex items-center gap-2 text-xs p-1 -ml-2 rounded-md ${isActive ? "bg-slate-900/5 text-slate-900 font-medium" : "text-slate-500"}`}>
+                              <div className={`w-2 h-2 rounded-full border flex-shrink-0 -ml-[10px] ${isActive ? "bg-slate-900 border-white shadow-xs scale-110" : "bg-slate-200 border-white"}`} />
+                              <span className="truncate">{leg.from || "?"} ➔ {leg.to || "?"}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-[10px] text-slate-400 italic">Маршрут не задан</div>
+                    )}
+                  </div>
+
+                  {/* Block 4: Metrics — grid on mobile, flex row on xl */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:flex xl:items-center xl:gap-6 gap-3 w-full xl:w-[500px] xl:pl-6 justify-between xl:justify-end border-t xl:border-t-0 border-slate-100 pt-3 xl:pt-0 shrink-0">
+                    <div className="flex flex-col xl:text-right min-w-0">
+                      <span className="text-[10px] xl:text-[11px] font-medium text-slate-400 leading-tight">Км</span>
+                      <span className="text-xs xl:text-sm font-semibold text-slate-700 font-mono tabular-nums whitespace-nowrap">{Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU")}</span>
+                    </div>
+                    <div className="flex flex-col xl:text-right min-w-0">
+                      <span className="text-[10px] xl:text-[11px] font-medium text-slate-400 leading-tight">Фрахт</span>
+                      <span className="text-xs xl:text-sm font-semibold text-slate-700 font-mono tabular-nums whitespace-nowrap">{Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}</span>
+                    </div>
+                    <div className="flex flex-col xl:text-right min-w-0">
+                      <span className="text-[10px] xl:text-[11px] font-medium text-slate-400 leading-tight">Расходы</span>
+                      <span className="text-xs xl:text-sm font-semibold text-rose-600/90 font-mono tabular-nums whitespace-nowrap">{Math.round(trip.totalExpenses !== undefined ? trip.totalExpenses : (trip.totalFreight - (trip.profit || 0))).toLocaleString("ru-RU")}</span>
+                    </div>
+                    <div className="flex flex-col xl:text-right min-w-0">
+                      <span className="text-[10px] xl:text-[11px] font-medium text-slate-400 leading-tight">Прибыль</span>
+                      <span className={`text-sm xl:text-base font-bold font-mono tabular-nums whitespace-nowrap ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                        {Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}
+                      </span>
+                    </div>
+                    <div className="flex flex-col xl:text-right min-w-0">
+                      <span className="text-[10px] xl:text-[11px] font-medium text-slate-400 leading-tight">Дни</span>
+                      <span className="text-xs xl:text-sm font-semibold font-mono text-slate-600 tabular-nums whitespace-nowrap">{trip.days || "—"}</span>
+                    </div>
+                    <div className="flex flex-col xl:text-right min-w-0">
+                      <span className="text-[10px] xl:text-[11px] font-medium text-slate-400 leading-tight">В день</span>
+                      <span className={`text-xs xl:text-sm font-semibold font-mono tabular-nums whitespace-nowrap ${Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)) < 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                        {Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)).toLocaleString("ru-RU")}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mobile: current compact layout (<lg) */}
+                <div className="flex lg:hidden flex-col gap-2 w-full">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-base font-bold text-slate-900 tracking-tight font-sans truncate">
@@ -3015,51 +3130,30 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       <span className={`text-sm font-bold font-mono tabular-nums ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 0 ? "text-rose-600" : "text-emerald-600"}`}>
                         {Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}€
                       </span>
-                      <button
-                        onClick={() => loadTripToForm(trip)}
-                        className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition cursor-pointer shrink-0"
-                        title="Редактировать"
-                      >
+                      <button onClick={() => loadTripToForm(trip)} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition cursor-pointer shrink-0" title="Редактировать">
                         <Pencil className="w-4 h-4" />
                       </button>
                       {!archived ? (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            finishTripToArchive(trip);
-                          }}
-                          className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition cursor-pointer shrink-0"
-                          title="В архив"
-                        >
+                        <button onClick={(e) => { e.stopPropagation(); finishTripToArchive(trip); }} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition cursor-pointer shrink-0" title="В архив">
                           <Archive className="w-4 h-4" />
                         </button>
                       ) : user.role === "root_admin" ? (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteTrip(trip.id);
-                          }}
-                          className="w-9 h-9 flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-700 transition cursor-pointer shrink-0"
-                          title="Удалить"
-                        >
+                        <button onClick={(e) => { e.stopPropagation(); deleteTrip(trip.id); }} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-700 transition cursor-pointer shrink-0" title="Удалить">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       ) : null}
                     </div>
                   </div>
                   
-                  {/* Meta: Dispatcher + Route + Dates in one row */}
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border shrink-0 ${dispBadgeStyle}`}>
                       {formatToTitleCase(dispatcherName)}
                     </span>
                     <span className="text-slate-300 hidden sm:inline">·</span>
-                    <span className="truncate text-slate-600 font-medium hidden sm:inline">
-                      {routeTitle}
-                    </span>
+                    <span className="truncate text-slate-600 font-medium hidden sm:inline">{routeTitle}</span>
                     <span className="text-slate-300 hidden sm:inline">·</span>
                     <span className="text-slate-400 font-mono shrink-0">
-                      {trip.dateStart ? new Date(trip.dateStart).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}) : "—"}—{trip.dateEnd ? new Date(trip.dateEnd).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}) : "—"}
+                      {trip.dateStart ? new Date(trip.dateStart).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}—{trip.dateEnd ? new Date(trip.dateEnd).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}
                     </span>
                     {trip.currentMonth && archived && (
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
@@ -3069,43 +3163,31 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                   </div>
                 </div>
 
-                {/* Metrics Grid — compact 3 columns */}
-                <div className="grid grid-cols-3 gap-2 w-full">
+                {/* Metrics Grid for BOTH — shown below mobile block, hidden on desktop */}
+                <div className="grid grid-cols-3 gap-2 w-full lg:hidden">
                   <div className="flex flex-col bg-slate-50/50 rounded-lg px-2.5 py-1.5">
                     <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Км</span>
-                    <span className="text-xs font-semibold text-slate-700 font-mono tabular-nums">
-                      {Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU")}
-                    </span>
+                    <span className="text-xs font-semibold text-slate-700 font-mono tabular-nums">{Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU")}</span>
                   </div>
                   <div className="flex flex-col bg-slate-50/50 rounded-lg px-2.5 py-1.5">
                     <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Фрахт</span>
-                    <span className="text-xs font-semibold text-slate-700 font-mono tabular-nums">
-                      {Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}
-                    </span>
+                    <span className="text-xs font-semibold text-slate-700 font-mono tabular-nums">{Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}</span>
                   </div>
                   <div className="flex flex-col bg-slate-50/50 rounded-lg px-2.5 py-1.5">
                     <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Расходы</span>
-                    <span className="text-xs font-semibold text-rose-600/90 font-mono tabular-nums">
-                      {Math.round(trip.totalExpenses !== undefined ? trip.totalExpenses : (trip.totalFreight - (trip.profit || 0))).toLocaleString("ru-RU")}
-                    </span>
+                    <span className="text-xs font-semibold text-rose-600/90 font-mono tabular-nums">{Math.round(trip.totalExpenses !== undefined ? trip.totalExpenses : (trip.totalFreight - (trip.profit || 0))).toLocaleString("ru-RU")}</span>
                   </div>
                   <div className="flex flex-col bg-slate-50/50 rounded-lg px-2.5 py-1.5">
                     <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Прибыль</span>
-                    <span className={`text-xs font-bold font-mono tabular-nums ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 0 ? "text-rose-600" : "text-emerald-600"}`}>
-                      {Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}
-                    </span>
+                    <span className={`text-xs font-bold font-mono tabular-nums ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 0 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}</span>
                   </div>
                   <div className="flex flex-col bg-slate-50/50 rounded-lg px-2.5 py-1.5">
                     <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Дни</span>
-                    <span className="text-xs font-semibold font-mono text-slate-600 tabular-nums">
-                      {trip.days || "—"}
-                    </span>
+                    <span className="text-xs font-semibold font-mono text-slate-600 tabular-nums">{trip.days || "—"}</span>
                   </div>
                   <div className="flex flex-col bg-slate-50/50 rounded-lg px-2.5 py-1.5">
                     <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">В день</span>
-                    <span className={`text-xs font-semibold font-mono tabular-nums ${Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)) < 0 ? "text-rose-600" : "text-emerald-600"}`}>
-                      {Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)).toLocaleString("ru-RU")}
-                    </span>
+                    <span className={`text-xs font-semibold font-mono tabular-nums ${Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)) < 0 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)).toLocaleString("ru-RU")}</span>
                   </div>
                 </div>
               </div>

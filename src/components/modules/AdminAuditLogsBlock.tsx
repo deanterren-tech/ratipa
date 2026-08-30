@@ -100,7 +100,7 @@ export default function AdminAuditLogsBlock({ logs }: AdminAuditLogsBlockProps) 
   };
 
   return (
-    <div className="bg-white/40 border border-white/45 backdrop-blur-xl rounded-[1.8rem] p-6 lg:p-8 shadow-sm flex flex-col h-[640px] w-full">
+ <div className="bg-white border border-slate-200 rounded-[1.8rem] p-6 lg:p-8 shadow-sm flex flex-col h-[640px] w-full">
       
       {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/40 pb-5 mb-5 select-none shrink-0">
@@ -130,7 +130,7 @@ export default function AdminAuditLogsBlock({ logs }: AdminAuditLogsBlockProps) 
             placeholder="Быстрый поиск по сотруднику, описанию или модулю..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-11 pr-4 py-3 bg-white/45 backdrop-blur-sm border border-white/50 rounded-xl text-xs font-semibold outline-none focus:ring-4 focus:ring-[#3765F6]/10 focus:border-[#3765F6] focus:bg-white/80 transition shadow-sm text-slate-800"
+ className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:ring-4 focus:ring-[#3765F6]/10 focus:border-[#3765F6] focus:bg-white transition shadow-sm text-slate-800"
           />
           {searchQuery && (
             <button 
@@ -262,7 +262,7 @@ export default function AdminAuditLogsBlock({ logs }: AdminAuditLogsBlockProps) 
             }}
           />
         ) : (
-          <div className="text-center py-20 text-slate-400 text-xs font-mono font-semibold tracking-wider bg-white/30 backdrop-blur-sm rounded-[1.5rem] border border-white/40 shadow-inner flex flex-col items-center justify-center gap-3 h-full">
+ <div className="text-center py-20 text-slate-400 text-xs font-mono font-semibold tracking-wider bg-white rounded-[1.5rem] border border-slate-200 shadow-inner flex flex-col items-center justify-center gap-3 h-full">
             <span className="p-4 bg-slate-900/5 text-slate-400 rounded-2xl">
               <Activity size={28} />
             </span>

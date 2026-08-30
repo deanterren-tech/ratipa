@@ -419,7 +419,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
     };
 
     return (
-        <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col gap-4 relative overflow-hidden">
+ <div className="bg-white rounded-2xl p-6 lg:p-8 border border-slate-200/50 shadow-sm flex flex-col gap-4 relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
                 <Sparkles className="w-24 h-24 text-blue-500" />
             </div>
@@ -436,7 +436,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                     value={rawText}
                     onChange={(e) => setRawText(e.target.value)}
                     placeholder="Вставьте сюда текст. Система разберет строки вида:&#10;• бланк RUS 130520 выдан в рейс на AB 9271-7 комментарий: отправлен к Виждан&#10;• CHN 2, 4175, 3467, 3133 копии сданы"
-                    className="w-full h-24 p-3.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-medium focus:outline-none focus:bg-white focus:border-[#3765F6] resize-none font-mono leading-relaxed transition"
+                    className="w-full h-24 p-3.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-medium focus:outline-none focus:bg-white focus:border-[#3765F6] resize-none font-mono leading-relaxed transition"
                 />
             </div>
             
@@ -444,7 +444,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                 <button 
                     onClick={handleProcess}
                     disabled={isParsing}
-                    className="bg-[#3765F6] hover:bg-[#2555E5] disabled:opacity-70 text-white px-5 min-h-[44px] py-2.5 rounded-xl text-xs font-semibold transition shadow-xs cursor-pointer flex items-center gap-2"
+                    className="bg-slate-900 hover:bg-slate-800 disabled:opacity-70 text-white px-5 min-h-[44px] py-2.5 rounded-xl text-xs font-semibold transition shadow-xs cursor-pointer flex items-center gap-2"
                 >
                     {isParsing ? <><Loader2 className="w-4 h-4 animate-spin" /> Обработка...</> : "Распознать текст ⚡"}
                 </button>
@@ -456,7 +456,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                         <span>Подтверждение операций:</span>
                         <button 
                             onClick={() => setTempBatchItems([])}
-                            className="bg-rose-50 text-rose-600 hover:bg-rose-100 px-3 min-h-[44px] py-2 rounded-lg text-[10px] font-semibold cursor-pointer transition"
+                            className="bg-rose-50 text-rose-600 hover:bg-rose-100 px-3 min-h-[44px] py-2 rounded-xl text-[10px] font-semibold cursor-pointer transition"
                         >
                             Сбросить
                         </button>
@@ -495,7 +495,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                                                 comment: item.comment,
                                                                 isCopy: item.isCopy
                                                             })}
-                                                            className="text-white bg-[#3765F6] hover:bg-[#2555E5] px-2 min-h-[44px] py-2 rounded-lg text-[10px] font-semibold cursor-pointer shadow-xs transition"
+                                                            className="text-white bg-slate-900 hover:bg-slate-800 px-2 min-h-[44px] py-2 rounded-xl text-[10px] font-semibold cursor-pointer shadow-xs transition"
                                                             title="Открыть подробное окно редактирования"
                                                         >
                                                             Редактировать
@@ -505,7 +505,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                             </td>
                                             <td className="p-2">
                                                 <select 
-                                                    className="w-full p-1.5 bg-slate-50/50 border border-slate-200/80 rounded-lg text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                                                    className="w-full p-1.5 bg-white/45 border border-slate-200/80 rounded-xl text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                                                     value={item.type}
                                                     onChange={(e) => {
                                                         const newArr = [...tempBatchItems];
@@ -518,7 +518,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                             </td>
                                             <td className="p-2">
                                                 <input 
-                                                    className="w-full p-1.5 bg-slate-50/50 border border-slate-200/80 rounded-lg text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                                                    className="w-full p-1.5 bg-white/45 border border-slate-200/80 rounded-xl text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                                                     value={item.number}
                                                     onChange={e => {
                                                         const newArr = [...tempBatchItems];
@@ -529,7 +529,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                             </td>
                                             <td className="p-2">
                                                 <select 
-                                                    className="w-full p-1.5 bg-slate-50/50 border border-slate-200/80 rounded-lg text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                                                    className="w-full p-1.5 bg-white/45 border border-slate-200/80 rounded-xl text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                                                     value={item.status}
                                                     onChange={(e) => {
                                                         const newArr = [...tempBatchItems];
@@ -546,7 +546,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                             </td>
                                             <td className="p-2">
                                                 <input 
-                                                    className="w-full p-1.5 bg-slate-50/50 border border-slate-200/80 rounded-lg text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                                                    className="w-full p-1.5 bg-white/45 border border-slate-200/80 rounded-xl text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                                                     value={item.car}
                                                     onChange={e => {
                                                         const newArr = [...tempBatchItems];
@@ -557,7 +557,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                             </td>
                                             <td className="p-2">
                                                 <input 
-                                                    className="w-full p-1.5 bg-slate-50/50 border border-slate-200/80 rounded-lg text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                                                    className="w-full p-1.5 bg-white/45 border border-slate-200/80 rounded-xl text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
                                                     value={item.comment || ''}
                                                     onChange={e => {
                                                         const newArr = [...tempBatchItems];

@@ -125,7 +125,7 @@ export default function AdminWelcomePhrasesBlock({ settings, onSave }: Props) {
       <div className="xl:col-span-8 flex flex-col gap-6">
         
         {/* Main Phrases Card */}
-        <div className="bg-white/40 border border-white/45 backdrop-blur-xl rounded-[1.8rem] p-6 lg:p-8 shadow-sm flex flex-col h-full">
+ <div className="bg-white border border-slate-200 rounded-[1.8rem] p-6 lg:p-8 shadow-sm flex flex-col h-full">
           
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/40 pb-5 mb-5 shrink-0">
             <div>
@@ -149,7 +149,7 @@ export default function AdminWelcomePhrasesBlock({ settings, onSave }: Props) {
           {/* Scrollable Phrases List */}
           <div className="flex-1 overflow-y-auto max-h-[380px] pr-1 space-y-2.5 custom-scrollbar mb-5">
             {phrases.length === 0 ? (
-              <div className="text-center py-16 text-slate-400 text-xs font-mono font-semibold tracking-wider bg-white/30 backdrop-blur-sm rounded-[1.5rem] border border-white/40 shadow-inner flex flex-col items-center justify-center gap-3">
+ <div className="text-center py-16 text-slate-400 text-xs font-mono font-semibold tracking-wider bg-white rounded-[1.5rem] border border-slate-200 shadow-inner flex flex-col items-center justify-center gap-3">
                 <span className="p-4 bg-slate-900/5 text-slate-400 rounded-2xl">
                   <Sparkles size={24} />
                 </span>
@@ -315,7 +315,7 @@ export default function AdminWelcomePhrasesBlock({ settings, onSave }: Props) {
         </div>
 
         {/* Roles Limitations Card */}
-        <div className="bg-white/40 border border-white/45 backdrop-blur-xl rounded-[1.8rem] p-6 shadow-sm flex flex-col flex-1 justify-between">
+ <div className="bg-white border border-slate-200 rounded-[1.8rem] p-6 shadow-sm flex flex-col flex-1 justify-between">
           <div className="space-y-4">
             <div className="border-b border-white/40 pb-3 flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-[#3765F6]" />

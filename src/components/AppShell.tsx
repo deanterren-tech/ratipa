@@ -869,7 +869,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       )}
       
       {/* Modern Responsive Capsule Header - fully blended light premium top bar */}
-      <header className="bg-white/45 backdrop-blur-lg text-slate-900 border-b border-slate-200/35 min-h-[3.5rem] py-1 md:py-0 md:h-14 flex items-center justify-between px-3 sm:px-8 shrink-0 sticky top-0 z-50 select-none gap-2 sm:gap-3 transition-colors duration-300">
+ <header className="bg-white text-slate-900 border-b border-slate-200/35 min-h-[3.5rem] py-1 md:py-0 md:h-14 flex items-center justify-between px-3 sm:px-8 shrink-0 sticky top-0 z-50 select-none gap-2 sm:gap-3 transition-colors duration-300">
         
         {/* Left: Currency Converter on mobile */}
         <div className="md:hidden flex items-center shrink-0">
@@ -937,7 +937,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                     }}
                     className={`text-[9.5px] md:text-[10px] font-extrabold tracking-tight uppercase transition-all duration-200 py-1.5 px-3 md:px-4 rounded-xl flex items-center gap-1.5 cursor-pointer shrink-0 select-none border ${
                       isChildActive 
-                        ? 'text-[#3765F6] bg-[#3765F6]/8 border-[#3765F6]/20 shadow-2xs font-black' 
+                        ? 'text-[#3765F6] bg-[#3765F6]/8 border-[#3765F6]/20 shadow-2xs font-semibold' 
                         : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/40 border-transparent'
                     }`}
                   >
@@ -967,7 +967,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                               }}
                               className={`flex items-center gap-2 px-4 py-2.5 text-xs transition-all duration-200 rounded-xl mx-1 ${
                                 isActive 
-                                  ? 'bg-[#3765F6]/8 text-[#3765F6] font-black border border-[#3765F6]/15' 
+                                  ? 'bg-[#3765F6]/8 text-[#3765F6] font-semibold border border-[#3765F6]/15' 
                                   : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950 border border-transparent'
                               }`}
                             >
@@ -1001,7 +1001,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                   }}
                   className={`text-[9.5px] md:text-[10px] font-extrabold tracking-tight uppercase transition-all duration-200 py-1.5 px-3 md:px-4 rounded-xl flex items-center gap-1.5 relative cursor-pointer shrink-0 border ${
                     isActive 
-                      ? 'text-[#3765F6] bg-[#3765F6]/8 border-[#3765F6]/20 shadow-2xs font-black' 
+                      ? 'text-[#3765F6] bg-[#3765F6]/8 border-[#3765F6]/20 shadow-2xs font-semibold' 
                       : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/40 border-transparent'
                   }`}
                 >
@@ -1054,7 +1054,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                )
             })}
             {onlineUsers.length > 3 && (
-               <div className="h-7 w-7 rounded-full bg-[#3765F6] border-2 border-white flex items-center justify-center text-[9px] font-black text-white shadow-xs">
+               <div className="h-7 w-7 rounded-full bg-[#3765F6] border-2 border-white flex items-center justify-center text-[9px] font-semibold text-white shadow-xs">
                  +{onlineUsers.length - 3}
                </div>
             )}
@@ -1062,7 +1062,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             {/* Hover Popover with full user list */}
             {onlineUsers.length > 0 && (
               <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-200 shadow-xl rounded-xl p-3 opacity-0 group-hover:opacity-100 invisible group-hover:visible transition-all duration-200 z-50">
-                <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider mb-2 block">Пользователи онлайн</span>
+                <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider mb-2 block">Пользователи онлайн</span>
                 <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
                   {onlineUsers.map(u => (
                     <div key={u.presenceId} className="flex items-center gap-2">
@@ -1106,15 +1106,23 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
           {/* User Badge Profile info */}
           <div className="flex items-center gap-2.5 pl-1.5 sm:pl-2.5">
-            <div className="h-7.5 w-7.5 rounded-xl bg-[#3765F6]/10 text-[#3765F6] border border-[#3765F6]/20 flex items-center justify-center text-[11px] font-black shadow-3xs select-none">
+            <div className="h-7.5 w-7.5 rounded-xl bg-[#3765F6]/10 text-[#3765F6] border border-[#3765F6]/20 flex items-center justify-center text-[11px] font-semibold shadow-3xs select-none">
               {user.name.substring(0, 2).toUpperCase()}
             </div>
             <div className="hidden xl:block text-left text-xs leading-none">
-              <div className="font-extrabold text-slate-900 tracking-tight">{user.name}</div>
+              <div className="font-bold text-slate-900 tracking-tight">{user.name}</div>
               <span className="text-[9.5px] font-bold text-slate-400 block mt-0.5 uppercase tracking-wider">
                 {user.role === 'root_admin' ? 'Админ' : 'Сотрудник'}
               </span>
             </div>
+            {/* Desktop logout button — visible only on xl screens */}
+            <button
+              onClick={handleLogoutSequence}
+              className="hidden xl:flex items-center justify-center min-h-[36px] min-w-[36px] text-slate-400 hover:text-rose-600 transition cursor-pointer ml-1"
+              title="Выйти"
+            >
+              <LogOut className="h-4 w-4" strokeWidth={1.5} />
+            </button>
           </div>
 
 
@@ -1131,7 +1139,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                 >
                   <div className="border-b border-slate-100/60 pb-3 mb-4 flex justify-between items-center select-none">
                     <div>
-                      <h3 className="text-xs font-black text-slate-900 font-sans tracking-tight uppercase">Конвертер валют</h3>
+                      <h3 className="text-xs font-bold text-slate-900 font-sans tracking-tight uppercase">Конвертер валют</h3>
                       <p className="text-[10px] text-slate-400 font-sans font-bold mt-0.5">Официальные курсы НБРБ</p>
                     </div>
                     
@@ -1170,10 +1178,10 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                   {isEditingCurrencies ? (
                     <div className="space-y-3 py-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Выберите валюты</span>
+                        <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Выберите валюты</span>
                         <button
                           onClick={() => setIsEditingCurrencies(false)}
-                          className="text-[10px] font-black text-[#3765F6] hover:underline uppercase tracking-wider cursor-pointer"
+                          className="text-[10px] font-bold text-[#3765F6] hover:underline uppercase tracking-wider cursor-pointer"
                         >
                           Готово
                         </button>
@@ -1241,7 +1249,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                               )}
                             </div>
                             <div className="relative flex items-center">
-                              <span className="absolute left-3 text-xs font-black text-slate-400 group-focus-within:text-[#3765F6] transition-colors select-none">{currencySymbol}</span>
+                              <span className="absolute left-3 text-xs font-semibold text-slate-400 group-focus-within:text-[#3765F6] transition-colors select-none">{currencySymbol}</span>
                               <input
                                 type="text"
                                 inputMode="decimal"
@@ -1272,13 +1280,13 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         {/* Dynamic active viewport card frame with subtle shadow and round corners */}
         <main 
           ref={mainScrollRef} 
-          className={`flex-1 overflow-y-auto overflow-x-hidden w-full max-w-full relative pb-20 md:pb-0 ${
-            activeModule === 'dashboard' 
-              ? 'p-0 bg-slate-50' 
-              : activeModule === 'admin'
-              ? 'p-3 sm:p-4 lg:p-6 bg-transparent'
-              : 'p-3 sm:p-4 lg:p-6 bg-[#f4f5f6]'
-          }`}
+          className={`flex-1 w-full max-w-full relative pb-20 md:pb-0 ${
+                      activeModule === 'dashboard' 
+                        ? 'p-0 bg-slate-50 overflow-hidden' 
+                        : activeModule === 'admin'
+                        ? 'p-3 sm:p-4 lg:p-6 bg-slate-50 overflow-y-auto overflow-x-hidden'
+                        : 'p-3 sm:p-4 lg:p-6 overflow-y-auto overflow-x-hidden bg-slate-50'
+                    }`}
         >
           {allModules.map((mod) => {
             const isSystemModule = ['dashboard', 'settings', 'appSettings', 'admin'].includes(mod.key);
@@ -1347,7 +1355,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                     <BellRing className="h-4.5 w-4.5" />
                   </div>
                   <div>
-                    <span className="text-[9.5px] font-black uppercase tracking-widest text-[#70FC8E] block">
+                    <span className="text-[9.5px] font-bold uppercase tracking-widest text-[#70FC8E] block">
                       Важное Распоряжение
                     </span>
                     <span className="text-[8.5px] text-slate-400 font-mono">
@@ -1363,7 +1371,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
               <button
                 onClick={() => dbService.markBroadcastNotificationAsRead(notif.id, user.uid, user.name)}
-                className="w-full mt-1.5 py-2 px-4 bg-[#70FC8E] hover:bg-[#5be277] active:scale-98 text-slate-950 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
+                className="w-full mt-1.5 py-2 px-4 bg-[#70FC8E] hover:bg-[#5be277] active:scale-98 text-slate-950 font-bold text-[10px] uppercase tracking-widest rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
               >
                 <Check className="h-3.5 w-3.5" strokeWidth={3} />
                 Прочитано / Закрыть
@@ -1374,7 +1382,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       </div>
 
       {/* Mobile bottom navigation (small screens only) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-lg border-t border-slate-200 flex items-stretch justify-around px-2 py-1.5 select-none" style={{paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))'}}>
+ <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 flex items-stretch justify-around px-3 py-2 select-none" style={{paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))'}}>
         {[
           { key: 'dashboard', label: 'Главная', icon: Home },
           { key: 'planZagruzok', label: 'Загрузки', icon: FileSpreadsheet },
@@ -1386,34 +1394,34 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             <button
               key={item.key}
               onClick={() => { setIsMobileMenuOpen(false); handleNavigate(item.key); }}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 rounded-xl transition-all duration-150 ${active ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`flex-1 flex flex-col items-center justify-center gap-1 py-1.5 rounded-xl transition-all duration-150 ${active ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
             >
-              <Icon className="h-5 w-5" strokeWidth={active ? 2 : 1.5} />
-              <span className="text-[9px] font-medium leading-none text-center">{item.label}</span>
+              <Icon className="h-6 w-6" strokeWidth={1.5} fill="none" />
+              <span className={`text-[11px] leading-tight text-center ${active ? 'font-semibold text-slate-900' : 'font-normal text-slate-400'}`}>{item.label}</span>
             </button>
           );
         })}
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1 rounded-xl transition-all duration-150 ${isMobileMenuOpen ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
+          className={`flex-1 flex flex-col items-center justify-center gap-1 py-1.5 rounded-xl transition-all duration-150 ${isMobileMenuOpen ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
         >
-          <Menu className="h-5 w-5" strokeWidth={isMobileMenuOpen ? 2 : 1.5} />
-          <span className="text-[9px] font-medium leading-none">Меню</span>
+          <Menu className="h-6 w-6" strokeWidth={1.5} fill="none" />
+          <span className={`text-[11px] leading-tight text-center ${isMobileMenuOpen ? 'font-semibold text-slate-900' : 'font-normal text-slate-400'}`}>Меню</span>
         </button>
       </nav>
 
       {/* Mobile "all tools" panel (small screens only) */}
       {isMobileMenuOpen && (
-        <div className="md:hidden fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-sm overflow-y-auto" onClick={() => setIsMobileMenuOpen(false)}>
+ <div className="md:hidden fixed inset-0 z-40 bg-slate-950/20 overflow-y-auto" onClick={() => setIsMobileMenuOpen(false)}>
           <div className="min-h-full flex items-end justify-center px-2 pt-2 pb-20" onClick={(e) => e.stopPropagation()}>
-            <div className="w-full bg-white rounded-[1.75rem] border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.08)] p-5">
-              <div className="flex items-center justify-between mb-4 px-1">
-                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Все инструменты</span>
-                <button onClick={() => setIsMobileMenuOpen(false)} className="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 transition cursor-pointer">
-                  <X className="w-4 h-4" />
+            <div className="w-full bg-white rounded-[1.75rem] border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.08)] p-6">
+              <div className="flex items-center justify-between mb-5 px-1">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Все инструменты</span>
+                <button onClick={() => setIsMobileMenuOpen(false)} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 transition cursor-pointer">
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-3 gap-3">
               {allowedModules.map((mod) => {
                 const Icon = mod.icon || Calendar;
                 const active = activeModule === mod.key;
@@ -1421,30 +1429,30 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                   <button
                     key={mod.key}
                     onClick={() => { setIsMobileMenuOpen(false); handleNavigate(mod.key); }}
-                    className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-2xl transition-all duration-150 active:scale-95 ${
+                    className={`flex flex-col items-center justify-center gap-2 p-4 rounded-2xl transition-all duration-150 active:scale-95 ${
                       active 
                         ? 'bg-slate-900 text-white shadow-sm border border-slate-800' 
                         : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
                     }`}
                   >
-                    <Icon className="h-5 w-5" />
-                    <span className="text-[10px] font-medium leading-tight text-center">{mod.label}</span>
+                    <Icon className="h-6 w-6" strokeWidth={1.5} fill="none" />
+                    <span className="text-[11px] font-medium leading-tight text-center">{mod.label}</span>
                   </button>
                 );
               })}
             </div>
-            <div className="grid grid-cols-2 gap-2.5 mt-4 pt-4 border-t border-slate-100">
+            <div className="grid grid-cols-2 gap-3 mt-6 pt-5 border-t border-slate-100">
               <button
                 onClick={() => window.location.reload()}
-                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition text-slate-700 font-semibold text-xs active:scale-95 cursor-pointer"
+                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 transition text-slate-700 font-semibold text-xs active:scale-95 min-h-[44px]"
               >
-                <RefreshCw className="h-4 w-4" /> Обновить
+                <RefreshCw className="h-5 w-5" /> Обновить
               </button>
               <button
                 onClick={() => { setIsMobileMenuOpen(false); handleLogoutSequence(); }}
-                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-rose-100 hover:bg-rose-200 transition text-rose-600 font-semibold text-xs active:scale-95 cursor-pointer"
+                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-rose-100 hover:bg-rose-200 transition text-rose-600 font-semibold text-xs active:scale-95 min-h-[44px]"
               >
-                <LogOut className="h-4 w-4" /> Выход
+                <LogOut className="h-5 w-5" /> Выход
               </button>
             </div>
           </div>

@@ -865,9 +865,9 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   // Guard view options
   if (user.permissions.settings === 'none') {
     return (
-      <div className="bg-white rounded-[2rem] p-8 shadow-[0_8px_30px_rgba(0,0,0,0.01)] border border-slate-200/50 text-center flex flex-col justify-center items-center py-24 select-none">
+      <div className="bg-white rounded-2xl p-8 shadow-sm border border-slate-200/50 text-center flex flex-col justify-center items-center py-24 select-none">
         <Lock className="h-12 w-12 text-slate-400 mb-4" style={{ strokeWidth: 1.5 }} />
-        <span className="text-sm font-black text-slate-900 uppercase font-mono tracking-wider">Раздел заблокирован</span>
+        <span className="text-sm font-bold text-slate-900 uppercase font-mono tracking-wider">Раздел заблокирован</span>
         <p className="text-xs text-slate-500 max-w-xs mt-2 font-medium">
           Просмотр справочников закрыт в соответствии с политикой администратора.
         </p>
@@ -917,7 +917,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     <div className="w-full space-y-6 font-sans">
       
       {/* HEADER BAR */}
-      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
+      <div className="bg-white rounded-2xl p-6 lg:p-8 border border-slate-200/50 shadow-sm">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">Модуль Справочники</span>
@@ -946,14 +946,14 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                 onClick={() => setActiveTab(t.id)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition duration-150 select-none cursor-pointer ${
                   isActive 
-                    ? 'bg-[#3765F6] text-white shadow-sm font-semibold' 
+                    ? 'bg-slate-900 text-white shadow-sm font-semibold' 
                     : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
                 }`}
               >
                 <IconComp className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                 <span>{t.label}</span>
                 {t.count > 0 && (
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-mono font-black ${
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-mono font-bold ${
                     isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
                   }`}>
                     {t.count}
@@ -986,9 +986,9 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             
             {/* Rates setting (5 cols) */}
-            <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 lg:col-span-5 flex flex-col">
+            <div className="bg-white rounded-2xl p-5 lg:p-6 border border-slate-200/50 shadow-sm space-y-4 lg:col-span-5 flex flex-col">
               <div>
-                <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
+                <h3 className="text-xs font-bold uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
                   <Wallet className="h-4.5 w-4.5 text-blue-500" />
                   <span>Глобальные нормативные ставки</span>
                 </h3>
@@ -998,23 +998,23 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
               {settings && (
                 <div className="space-y-4 flex-1">
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">Ставка простоя (€/день)</label>
+                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Ставка простоя (€/день)</label>
                     <input
                       type="number"
                       disabled={!isWritePermitted}
                       defaultValue={settings.idleRate}
                       onBlur={(e) => dbService.saveSettings({...settings, idleRate: Number(e.target.value)}, user.name, user.role)}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black focus:outline-none focus:border-slate-400 font-mono text-slate-800"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-400 font-mono text-slate-800"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">Ставка суточных командировочных (€/день)</label>
+                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Ставка суточных командировочных (€/день)</label>
                     <input
                       type="number"
                       disabled={!isWritePermitted}
                       defaultValue={settings.perDiemRate}
                       onBlur={(e) => dbService.saveSettings({...settings, perDiemRate: Number(e.target.value)}, user.name, user.role)}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black focus:outline-none focus:border-slate-400 font-mono text-slate-800"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-400 font-mono text-slate-800"
                     />
                   </div>
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-[10px] text-slate-400 font-medium leading-relaxed mt-2 uppercase font-mono tracking-wide">
@@ -1034,9 +1034,9 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
         <div className="space-y-6">
           
           {/* Iframe Tables Links & GPS Providers */}
-          <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-6">
+          <div className="bg-white rounded-2xl p-5 lg:p-6 border border-slate-200/50 shadow-sm space-y-6">
             <div>
-              <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight flex items-center gap-2">
                 <Layers className="h-4.5 w-4.5 text-blue-500" />
                 <span>Генеральные ссылки интеграций Google Sheets & GPS</span>
               </h2>
@@ -1050,13 +1050,13 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                 
                 {/* Google sheets frames links */}
                 <div className="border border-slate-200 rounded-2xl p-4 sm:p-5 bg-slate-50/50 space-y-3.5">
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-tight flex items-center gap-2">
                     <ExternalLink className="w-3.5 h-3.5 text-[#107c41]" />
                     <span>Google Таблицы RATIPA (Встроенные Фреймы)</span>
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">План Загрузок (Фрейм Таблицы)</label>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">План Загрузок (Фрейм Таблицы)</label>
                       <input
                         type="url"
                         disabled={!isWritePermitted}
@@ -1067,7 +1067,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">План Загрузок (Черный Список)</label>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">План Загрузок (Черный Список)</label>
                       <input
                         type="url"
                         disabled={!isWritePermitted}
@@ -1078,7 +1078,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">Диспозиция (Фрейм Таблицы)</label>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Диспозиция (Фрейм Таблицы)</label>
                       <input
                         type="url"
                         disabled={!isWritePermitted}
@@ -1089,7 +1089,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">Google Диск (Авто и Водители)</label>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Google Диск (Авто и Водители)</label>
                       <input
                         type="url"
                         disabled={!isWritePermitted}
@@ -1104,13 +1104,13 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
 
                 {/* GPS Integrations links */}
                 <div className="border border-slate-200 rounded-2xl p-4 sm:p-5 bg-slate-50/50 space-y-3.5">
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-tight flex items-center gap-2">
                     <Globe className="w-3.5 h-3.5 text-indigo-500" />
                     <span>Спутниковый GPS Мониторинг RATIPA</span>
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">Белтрансспутник (Ссылка)</label>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Белтрансспутник (Ссылка)</label>
                       <input
                         type="url"
                         disabled={!isWritePermitted}
@@ -1121,7 +1121,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">Wialon (Ссылка)</label>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Wialon (Ссылка)</label>
                       <input
                         type="url"
                         disabled={!isWritePermitted}
@@ -1132,7 +1132,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-mono">ЭРА ГЛОНАСС (Ссылка)</label>
+                      <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">ЭРА ГЛОНАСС (Ссылка)</label>
                       <input
                         type="url"
                         disabled={!isWritePermitted}
@@ -1153,9 +1153,9 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
             
             {/* Custom Dashboard useful bookmarks */}
-            <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 flex flex-col">
+            <div className="bg-white rounded-2xl p-5 lg:p-6 border border-slate-200/50 shadow-sm space-y-4 flex flex-col">
               <div>
-                <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
+                <h3 className="text-xs font-bold uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
                   <Link className="h-4 w-4 text-blue-500" />
                   <span>Полезные Экспресс-ссылки на Dashboard</span>
                 </h3>
@@ -1180,7 +1180,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                     onChange={(e) => setLinkUrl(e.target.value)}
                     className="px-3.5 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/10 font-bold text-slate-800 font-mono text-[10px] transition"
                   />
-                  <button type="submit" className="bg-[#3765F6] hover:bg-[#2555E5] text-white rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95 py-2.5">
+                  <button type="submit" className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95 py-2.5">
                     Вывести
                   </button>
                 </form>
@@ -1245,9 +1245,9 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
             </div>
 
             {/* Custom Top Navigation Bar Menu Links */}
-            <div className="bg-white rounded-[2rem] p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 flex flex-col">
+            <div className="bg-white rounded-2xl p-5 lg:p-6 border border-slate-200/50 shadow-sm space-y-4 flex flex-col">
               <div>
-                <h3 className="text-xs font-black uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
+                <h3 className="text-xs font-bold uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
                   <ExternalLink className="h-4 w-4 text-blue-500" />
                   <span>Кастомные меню-вкладки на внешние сайты</span>
                 </h3>
@@ -1272,7 +1272,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                     onChange={(e) => setExtUrl(e.target.value)}
                     className="px-3.5 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/10 font-bold text-slate-800 font-mono text-[10px] transition"
                   />
-                  <button type="submit" className="bg-[#3765F6] hover:bg-[#2555E5] text-white rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95 py-2.5">
+                  <button type="submit" className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-sm active:scale-95 py-2.5">
                     Добавить
                   </button>
                 </form>

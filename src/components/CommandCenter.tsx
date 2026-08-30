@@ -62,7 +62,7 @@ export default function CommandCenter({ user, isOpen, onClose, onNavigate }: Com
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-start justify-center pt-20 px-4 overflow-y-auto"
+ className="fixed inset-0 z-[100] bg-slate-900/40 flex items-start justify-center pt-20 px-4 overflow-y-auto"
         onClick={onClose}
       >
         <motion.div 

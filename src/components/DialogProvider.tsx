@@ -70,7 +70,7 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
       {children}
       <AnimatePresence>
         {dialog.isOpen && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+ <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 p-4 overflow-y-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
