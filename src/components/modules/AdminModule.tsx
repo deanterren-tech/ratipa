@@ -162,7 +162,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
   const tabsList = [
     { id: 'users', label: 'Пользователи и Сессии', icon: Users, count: userListCount },
     { id: 'welcome', label: 'Бегущая строка', icon: Sparkles, count: settings?.customPhrases?.length || 0 },
-    { id: 'links', label: 'Ссылки и порталы', icon: Link, count: settings?.quickLinks?.length || 0 },
+    { id: 'links', label: 'Ссылки и интеграции', icon: Link, count: (settings?.quickLinks?.length || 0) + (settings?.externalTabs?.length || 0) },
     { id: 'system', label: 'Система и Настройки', icon: Settings, count: 0 },
     { id: 'agent', label: 'Агент (API)', icon: Sparkles, count: 0 },
   ] as const;
@@ -234,6 +234,49 @@ export default function AdminModule({ user }: AdminModuleProps) {
 
           <div className={activeTab === 'system' ? 'space-y-6' : 'hidden'}>
             <AdminFirebaseConfigBlock />
+
+            {/* Force Logout All Sessions — только для Root Admin */}
+            {user.role === 'root_admin' && (
+              <div className="bg-white rounded-[1.8rem] p-6 lg:p-8 border border-rose-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 w-full">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="bg-rose-500/10 text-rose-600 border border-rose-500/20 font-mono text-[9px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full mb-1.5 inline-block">
+                      Безопасность сессий
+                    </span>
+                    <h2 className="text-sm font-bold tracking-tight text-slate-900 flex items-center gap-1.5">
+                      <ShieldAlert className="h-4.5 w-4.5 text-rose-500" />
+                      Завершение всех сессий
+                    </h2>
+                    <p className="text-[11px] text-slate-500 mt-1 max-w-md">
+                      Принудительно выводит из системы всех пользователей. Используйте после обновлений, чтобы все гарантированно вошли заново и работали на актуальной схеме данных.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleForceLogoutAll}
+                    className="bg-rose-500 hover:bg-rose-600 active:scale-[0.98] text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all shadow-sm border border-rose-500/20 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    Завершить все сессии
+                  </button>
+                </div>
+                <div className="text-[10px] font-mono text-slate-400">
+                  Текущая версия сессии: {settings?.globalSessionVersion || 0}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6">
+              {/* Redesigned Audit Logs Block */}
+              <AdminAuditLogsBlock logs={logs} />
+            </div>
+          </div>
+
+          <div className={activeTab === 'welcome' ? 'space-y-6' : 'hidden'}>
+            <AdminWelcomePhrasesBlock settings={settings} onSave={saveSettings} />
+          </div>
+
+          <div className={activeTab === 'links' ? 'space-y-6' : 'hidden'}>
+            <AdminLinksBlock user={user} settings={settings} onSave={saveSettings} />
 
             {/* Integrations: Google Sheets & GPS URLs */}
             {settings && (
@@ -325,49 +368,6 @@ export default function AdminModule({ user }: AdminModuleProps) {
                 </div>
               </div>
             )}
-
-            {/* Force Logout All Sessions — только для Root Admin */}
-            {user.role === 'root_admin' && (
-              <div className="bg-white rounded-[1.8rem] p-6 lg:p-8 border border-rose-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] space-y-4 w-full">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <span className="bg-rose-500/10 text-rose-600 border border-rose-500/20 font-mono text-[9px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full mb-1.5 inline-block">
-                      Безопасность сессий
-                    </span>
-                    <h2 className="text-sm font-bold tracking-tight text-slate-900 flex items-center gap-1.5">
-                      <ShieldAlert className="h-4.5 w-4.5 text-rose-500" />
-                      Завершение всех сессий
-                    </h2>
-                    <p className="text-[11px] text-slate-500 mt-1 max-w-md">
-                      Принудительно выводит из системы всех пользователей. Используйте после обновлений, чтобы все гарантированно вошли заново и работали на актуальной схеме данных.
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleForceLogoutAll}
-                    className="bg-rose-500 hover:bg-rose-600 active:scale-[0.98] text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all shadow-sm border border-rose-500/20 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    Завершить все сессии
-                  </button>
-                </div>
-                <div className="text-[10px] font-mono text-slate-400">
-                  Текущая версия сессии: {settings?.globalSessionVersion || 0}
-                </div>
-              </div>
-            )}
-
-            <div className="mt-6">
-              {/* Redesigned Audit Logs Block */}
-              <AdminAuditLogsBlock logs={logs} />
-            </div>
-          </div>
-
-          <div className={activeTab === 'welcome' ? 'space-y-6' : 'hidden'}>
-            <AdminWelcomePhrasesBlock settings={settings} onSave={saveSettings} />
-          </div>
-
-          <div className={activeTab === 'links' ? 'space-y-6' : 'hidden'}>
-            <AdminLinksBlock user={user} settings={settings} onSave={saveSettings} />
           </div>
 
           <div className={activeTab === 'agent' ? 'space-y-6' : 'hidden'}>
