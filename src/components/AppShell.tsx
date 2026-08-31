@@ -77,6 +77,7 @@ const DirectoriesModule = lazy(() => import('./modules/DirectoriesModule'));
 const AdminModule = lazy(() => import('./modules/AdminModule'));
 const DocumentsModule = lazy(() => import('./modules/DocumentsModule'));
 const VehicleDriverDataModule = lazy(() => import('./modules/VehicleDriverDataModule'));
+const BookIssueModule = lazy(() => import('./modules/BookIssueModule'));
 const NotFoundPage = lazy(() => import('./common/NotFoundPage'));
 
 const groupIconMap: Record<string, React.ComponentType<any>> = {
@@ -668,6 +669,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'disposition', label: 'Диспозиция', icon: Map, permissionKey: 'disposition' },
     { key: 'appSettings', label: 'База данных', icon: Settings2, permissionKey: 'settings' },
     { key: 'settings', label: 'Справочники', icon: BookOpen, permissionKey: 'settings' },
+    { key: 'bookIssue', label: 'Книга выдачи', icon: BookOpen, permissionKey: 'bookIssue' },
     { key: 'admin', label: 'Администрирование', icon: ShieldAlert, permissionKey: 'admin' }
   ];
 
@@ -740,7 +742,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     return [
       { id: 'g_home', label: 'Главная', isDropdown: false, singleModuleKey: 'dashboard' },
       { id: 'g_ops', label: 'Текущее', isDropdown: true, subtabKeys: ['disposition', 'baza', 'documents', 'vehicleDriverData', 'dozvola'] },
-      { id: 'g_planning', label: 'Планирование', isDropdown: true, subtabKeys: ['planDohod', 'currentPlanning', 'dohod', 'planZagruzok'] },
+      { id: 'g_planning', label: 'Планирование', isDropdown: true, subtabKeys: ['planZagruzok', 'planDohod', 'currentPlanning', 'dohod', 'bookIssue'] },
       { id: 'g_report', label: 'Отчетность', isDropdown: true, subtabKeys: ['salary'] },
       { id: 'g_settings', label: 'Настройки', isDropdown: true, subtabKeys: ['appSettings', 'admin'] }
     ];
@@ -854,6 +856,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         return <SettingsModule user={user} />;
       case 'admin':
         return <AdminModule user={user} />;
+      case 'bookIssue':
+        return <BookIssueModule user={user} />;
       default:
         return <NotFoundPage onNavigate={handleNavigate} />;
     }

@@ -3002,7 +3002,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               >
                 {/* Desktop: horizontal layout (lg+) */}
                 <div className="hidden lg:flex items-stretch gap-4 w-full">
-                  {/* Block 1: Plate + Dispatcher + Actions */}
+                  {/* Block 1: Plate + Dispatcher + Dates + Actions */}
                   <div className="flex flex-col gap-2 min-w-[200px] shrink-0 justify-between">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
@@ -3017,6 +3017,17 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         <span className="text-[11px] text-slate-400">Диспетчер:</span>
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${dispBadgeStyle}`}>
                           {formatToTitleCase(dispatcherName)}
+                        </span>
+                      </div>
+                      {/* Dates inline under dispatcher */}
+                      <div className="flex items-center gap-3 mt-2 text-xs text-slate-500 font-sans">
+                        <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wider">Старт</span>
+                        <span className="text-slate-800 font-semibold font-mono">
+                          {trip.dateStart ? new Date(trip.dateStart).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}
+                        </span>
+                        <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wider">Финиш</span>
+                        <span className="text-slate-800 font-semibold font-mono">
+                          {trip.dateEnd ? new Date(trip.dateEnd).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}
                         </span>
                       </div>
                     </div>
@@ -3034,29 +3045,6 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         </button>
                       ) : null}
                     </div>
-                  </div>
-
-                  {/* Block 2: Dates */}
-                  <div className="flex flex-col gap-1 min-w-[140px] shrink-0 text-xs text-slate-500 font-sans justify-center">
-                    <div className="flex justify-between gap-4 items-center">
-                      <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wider">Старт</span>
-                      <span className="text-slate-800 font-semibold font-mono">
-                        {trip.dateStart ? new Date(trip.dateStart).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between gap-4 items-center">
-                      <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wider">Финиш</span>
-                      <span className="text-slate-800 font-semibold font-mono">
-                        {trip.dateEnd ? new Date(trip.dateEnd).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}
-                      </span>
-                    </div>
-                    {trip.currentMonth && archived && (
-                      <div className="mt-1">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-600 border border-blue-100">
-                          Архив: {trip.currentMonth}
-                        </span>
-                      </div>
-                    )}
                   </div>
 
                   {/* Block 3: Itinerary */}
