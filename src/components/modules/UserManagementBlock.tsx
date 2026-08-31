@@ -133,6 +133,8 @@ export default function UserManagementBlock({ user }: Props) {
     
     dbService.saveSettings({ ...settings, rolePermissions: newRolePermissions } as any, user.name, user.role);
     
+    dbService.logAction(user.name, user.role, "Изменение прав роли", "Admin", roleKey, `Роль ${roleKey}: ${permKey} → ${val}`);
+    
     // Сбрасываем permissions для всех пользователей этой роли — принуждаем resolvePermission
     // использовать settings.rolePermissions как единый источник прав.
     const updates: Record<string, any> = {};
@@ -166,6 +168,8 @@ export default function UserManagementBlock({ user }: Props) {
     ));
     
     dbService.saveUser({ ...current, customPermissions: newCustom as any, permissions: {} as any } as any);
+    
+    dbService.logAction(user.name, user.role, "Изменение прав пользователя", "Admin", current.uid, `Пользователь ${current.name}: ${permKey} → ${val}`);
   };
 
   const handleUserRoleChange = (u: UserProfile, newRole: string) => {

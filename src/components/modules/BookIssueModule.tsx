@@ -16,8 +16,7 @@ export default function BookIssueModule({ user }: { user: UserProfile }) {
             Книга выдачи
           </h2>
           <p className="text-xs text-slate-400 font-medium leading-relaxed max-w-xs">
-            Модуль находится в разработке. Здесь будет таблица учёта выдачи
-            документов, ключей и материальных ценностей.
+            Модуль находится в разработке. Здесь будет учет выдачи документов, выдаваемых на водителей.
           </p>
         </div>
 
