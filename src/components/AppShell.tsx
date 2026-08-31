@@ -1140,7 +1140,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 12, scale: 0.96 }}
                   transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                  className="fixed sm:absolute top-14 sm:top-auto left-4 right-4 sm:left-auto sm:right-0 mt-2 sm:mt-3 sm:w-80 bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-900/5 z-[2000] overflow-hidden p-5 max-w-[400px] mx-auto"
+                  className="absolute top-full left-4 right-4 sm:left-auto sm:right-0 mt-2 sm:mt-3 sm:w-80 bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-900/5 z-[2000] overflow-hidden p-5 max-w-[400px] mx-auto"
                 >
                   <div className="border-b border-slate-100/60 pb-3 mb-4 flex justify-between items-center select-none">
                     <div>

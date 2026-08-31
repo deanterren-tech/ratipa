@@ -58,7 +58,11 @@ export default function SheetModuleBase({
   gpsEnabled = true,
   showTabs = true,
 }: SheetModuleBaseProps) {
-  const [zoom, setZoom] = useState(user.sheetZoom?.[moduleKey as keyof (UserProfile["sheetZoom"])] ?? 100);
+  const scaleKey = `ratipa_sheet_zoom_${user.uid || user.name || 'default'}_${moduleKey}`;
+  const [zoom, setZoom] = useState(() => {
+    const saved = localStorage.getItem(scaleKey);
+    return saved ? Number(saved) : 100;
+  });
   const [frameKey, setFrameKey] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -82,7 +86,7 @@ export default function SheetModuleBase({
   const changeZoom = (next: number) => {
     const clamped = Math.max(50, Math.min(200, next));
     setZoom(clamped);
-    dbService.saveUserSheetZoom(user.uid, moduleKey, clamped);
+    localStorage.setItem(scaleKey, String(clamped));
   };
 
   // === GPS-блокнот: drag + resize ===
