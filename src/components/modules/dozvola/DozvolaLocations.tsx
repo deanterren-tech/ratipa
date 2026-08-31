@@ -442,14 +442,14 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
   });
 
   return (
-    <div className="flex flex-col md:h-[820px] w-full gap-4 text-slate-800">
+    <div className="flex flex-col md:flex-row h-auto md:h-[820px] w-full gap-4 text-slate-800">
       
       {/* 1) ВЕРХНЯЯ ПАНЕЛЬ ФИЛЬТРОВ И ДЕЙСТВИЙ */}
- <div className="bg-white rounded-2xl p-4 border border-slate-200/50 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
+ <div className="bg-white rounded-2xl p-4 border border-slate-200/50 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
         <div className="flex flex-col">
-          <span className="text-[10px] font-bold text-[#3765F6] uppercase tracking-wider">Логистический узел</span>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Логистический узел</span>
           <h2 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 mt-0.5">
-            <Route className="w-4 h-4 text-[#3765F6]" />
+            <Route className="w-4 h-4 text-slate-500" />
             Интерактивная карта и логистика дозволов
           </h2>
         </div>
@@ -476,7 +476,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
           <button 
             onClick={handleAddLocation}
-            className="flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 min-h-[44px] py-2 rounded-xl transition cursor-pointer"
+            className="w-full sm:w-auto flex items-center justify-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 min-h-[44px] py-2 rounded-xl transition cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
             Добавить точку
@@ -488,7 +488,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
               if (firstLoc) setDelivFrom(firstLoc);
               setShowDeliveryForm(true);
             }}
-            className="flex items-center gap-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3.5 min-h-[44px] py-2 rounded-xl transition cursor-pointer shadow-sm"
+            className="w-full sm:w-auto flex items-center justify-center gap-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3.5 min-h-[44px] py-2 rounded-xl transition cursor-pointer shadow-sm"
           >
             <Truck className="w-3.5 h-3.5" />
             Оформить отправку
@@ -1073,10 +1073,10 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
       {/* FORM MODAL FOR SENDING PERMITS (GLASSMORPHIC DIALOG) */}
       {showDeliveryForm && (
  <div className="fixed inset-0 z-[1000] bg-slate-900/40 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200/50 p-6 w-[620px] max-w-full flex flex-col gap-4 my-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200/50 p-6 w-[620px] max-w-full flex flex-col gap-4 my-4">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100">
               <h2 className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
-                <Route className="w-4 h-4 text-[#3765F6]" />
+                <Route className="w-4 h-4 text-slate-500" />
                 {editingDelivId ? 'Редактировать отправку дозволов' : 'Оформление транзита бланков'}
               </h2>
               <button 

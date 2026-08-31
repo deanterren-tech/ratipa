@@ -48,7 +48,7 @@ export default function DozvolaModule({ user }: DozvolaModuleProps) {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50">
+      <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50 overflow-x-auto custom-scrollbar">
         <button
           onClick={() => setActiveTab('registry')}
           className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${

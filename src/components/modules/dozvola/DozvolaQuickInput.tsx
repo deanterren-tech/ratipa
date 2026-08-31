@@ -109,7 +109,7 @@ export default function DozvolaQuickInput({
           onKeyDown={handleKeyDown}
           placeholder="Быстрый ввод: вставьте список номеров дозволов"
           disabled={isProcessing}
-          className="flex-1 bg-slate-50/50 border border-slate-200/60 rounded-xl px-4 py-2.5 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition disabled:opacity-50"
+          className="flex-1 bg-slate-50/50 border border-slate-200/60 rounded-xl px-4 py-2.5 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition disabled:opacity-50"
         />
         {isProcessing ? (
           <Loader2 className="h-4 w-4 animate-spin text-slate-400 shrink-0" />

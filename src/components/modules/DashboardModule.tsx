@@ -330,9 +330,10 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
         {/* Operational Announcement Card / News Briefing block (Highlights as elegant news-card) */}
         {(currentHighlights.length > 0 || isAdmin) && (() => {
           const slide = currentHighlights[activeSlideIndex];
-          const defaultImage = 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?q=80&w=800&auto=format&fit=crop';
+          const defaultImage = '';
           const isImageBroken = slide ? !!imageErrors[slide.id || activeSlideIndex] : false;
-          const displayImageUrl = (slide && slide.imageUrl && !isImageBroken) ? slide.imageUrl : defaultImage;
+          const displayImageUrl = (slide && slide.imageUrl && !isImageBroken) ? slide.imageUrl : '';
+          const showGradient = !displayImageUrl;
 
           return (
             <div 
@@ -346,7 +347,8 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
               }}
             >
               {/* Left/Top Column: Image preview */}
-              <div className="w-full md:w-2/5 h-44 md:h-auto min-h-[140px] relative overflow-hidden bg-slate-100 shrink-0">
+              <div className={`w-full md:w-2/5 h-44 md:h-auto min-h-[140px] relative overflow-hidden shrink-0 ${showGradient ? 'bg-gradient-to-br from-slate-100 to-slate-200' : 'bg-slate-100'}`}>
+                {displayImageUrl ? (
                 <img 
                   src={displayImageUrl} 
                   alt={slide?.title || 'Новость'}
@@ -358,6 +360,11 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                     }
                   }}
                 />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <span className="text-3xl opacity-20">📰</span>
+                  </div>
+                )}
                 <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-rose-600 text-white font-sans font-bold tracking-wide text-[9px] px-2.5 py-1 rounded-lg shadow-sm">
                   <span className="relative flex h-1.5 w-1.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
@@ -534,10 +541,11 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
               </button>
 
               {/* Cover Image */}
-              <div className="relative w-full bg-slate-100 rounded-t-2xl overflow-hidden">
+              <div className="relative w-full bg-gradient-to-br from-slate-100 to-slate-200 rounded-t-2xl overflow-hidden">
                 <div className="aspect-[16/6] w-full overflow-hidden">
+                  {selectedPreviewHighlight.imageUrl ? (
                   <img 
-                    src={selectedPreviewHighlight.imageUrl || 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?q=80&w=800&auto=format&fit=crop'} 
+                    src={selectedPreviewHighlight.imageUrl} 
                     alt={selectedPreviewHighlight.title}
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
@@ -545,10 +553,15 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                       const target = e.target as HTMLImageElement;
                       if (!target.dataset.fallbackAttempted) {
                         target.dataset.fallbackAttempted = 'true';
-                        target.src = 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?q=80&w=800&auto=format&fit=crop';
+                        target.style.display = 'none';
                       }
                     }}
                   />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
+                      <span className="text-4xl opacity-30">📰</span>
+                    </div>
+                  )}
                 </div>
                 <div className="absolute inset-0 bg-gradient-to-t from-white/80 via-transparent to-transparent pointer-events-none" />
                 <div className="absolute bottom-3 left-4 flex items-center gap-1.5 bg-red-600 text-white font-sans font-bold text-[9px] px-2.5 py-1 rounded-lg shadow-sm">
@@ -778,13 +791,17 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                     <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Предпросмотр на главной</span>
                     
                     <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs flex flex-col sm:flex-row select-none pointer-events-none">
-                      <div className="w-full sm:w-1/3 h-28 relative overflow-hidden bg-slate-100 shrink-0">
+                      <div className="w-full sm:w-1/3 h-28 relative overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 shrink-0 flex items-center justify-center">
+                        {editHighlights[selectedEditIndex]?.imageUrl ? (
                         <img 
-                          src={editHighlights[selectedEditIndex]?.imageUrl || 'https://images.unsplash.com/photo-1519003722824-194d4455a60c?q=80&w=800&auto=format&fit=crop'} 
+                          src={editHighlights[selectedEditIndex]?.imageUrl} 
                           alt="Preview"
                           className="w-full h-full object-cover"
                           referrerPolicy="no-referrer"
                         />
+                        ) : (
+                          <span className="text-2xl opacity-20">📰</span>
+                        )}
                         <div className="absolute top-2 left-2 flex items-center gap-1 bg-red-600 text-white font-sans font-bold uppercase tracking-wider text-[7px] px-1.5 py-0.5 rounded shadow-sm">
                           <span>{editHighlights[selectedEditIndex]?.isImportant ? 'СРОЧНО' : 'НОВОСТЬ'}</span>
                         </div>

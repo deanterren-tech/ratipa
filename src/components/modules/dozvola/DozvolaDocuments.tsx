@@ -933,7 +933,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
               <select
                 value={docType}
                 onChange={(e) => setDocType(e.target.value)}
-                className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
               >
                 <option value="Заявление на получение разрешений">
                   Заявление на получение разрешений
@@ -953,7 +953,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                 </label>
                 <input 
                     type="date"
-                    className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                    className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
                     value={applicationDate}
                     onChange={e => setApplicationDate(e.target.value)}
                 />
@@ -970,7 +970,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
 
           <div className="w-full lg:w-1/2 rounded-2xl bg-slate-50/50 border border-slate-200/50 p-6 flex flex-col justify-center items-center text-center space-y-6">
             <div className="bg-white p-4 rounded-full border border-slate-100 shadow-sm">
-              <FileText className="h-8 w-8 text-[#3765F6]" />
+              <FileText className="h-8 w-8 text-slate-500" />
             </div>
             <div>
               <h3 className="text-slate-800 font-bold text-lg">
@@ -1018,7 +1018,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                   placeholder="Поиск заявок по машине или виду разрешения..."
                   value={taskSearchQuery}
                   onChange={(e) => setTaskSearchQuery(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-[11px] font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                  className="w-full px-3 py-1.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-[11px] font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
                 />
               </div>
             </div>
@@ -1028,7 +1028,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                 <label key={task.id} className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-2xl cursor-pointer hover:bg-slate-50/50 transition">
                   <input 
                     type="checkbox" 
-                    className="mt-1 accent-[#3765F6]" 
+                    className="mt-1 accent-slate-900" 
                     checked={!!selectedPermitTasks[task.id]}
                     onChange={(e) => setSelectedPermitTasks(prev => ({ ...prev, [task.id]: e.target.checked }))}
                   />
@@ -1100,7 +1100,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
               <button onClick={rebuildReturnRows} className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 shadow-sm text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по выбранным</button>
               <button onClick={loadLastAssembledStatement} className="px-3 min-h-[44px] py-2 bg-white border border-slate-200 hover:bg-slate-50 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по предыдущим</button>
               <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-600 bg-slate-100 px-3.5 min-h-[44px] py-2 rounded-xl cursor-pointer">
-                <input type="checkbox" checked={showArchiveReturns} onChange={(e) => setShowArchiveReturns(e.target.checked)} className="accent-[#3765F6]" />
+                <input type="checkbox" checked={showArchiveReturns} onChange={(e) => setShowArchiveReturns(e.target.checked)} className="accent-slate-900" />
                 Включить уже сданные в ТИ (Архив)
               </label>
               <div className="flex-1 min-w-[200px]">
@@ -1109,7 +1109,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                   placeholder="Поиск бланков по номеру, типу или машине..."
                   value={returnSearchQuery}
                   onChange={(e) => setReturnSearchQuery(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-[11px] font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                  className="w-full px-3 py-1.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-[11px] font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
                 />
               </div>
             </div>
@@ -1119,7 +1119,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                 <label key={item.id} className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-2xl cursor-pointer hover:bg-slate-50/50 transition">
                   <input 
                      type="checkbox" 
-                     className="mt-1 accent-[#3765F6]" 
+                     className="mt-1 accent-slate-900" 
                      checked={!!selectedReturnItems[item.id]}
                      onChange={(e) => setSelectedReturnItems(prev => ({ ...prev, [item.id]: e.target.checked }))}
                   />
@@ -1198,7 +1198,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
               <button onClick={() => setAllChinaChecked(false)} className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Снять все</button>
               <button onClick={rebuildChinaRows} className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 shadow-sm text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по выбранным</button>
               <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 shadow-sm px-3.5 min-h-[44px] py-2 rounded-xl cursor-pointer transition">
-                <input type="checkbox" checked={showArchiveChina} onChange={(e) => setShowArchiveChina(e.target.checked)} className="accent-[#3765F6]" />
+                <input type="checkbox" checked={showArchiveChina} onChange={(e) => setShowArchiveChina(e.target.checked)} className="accent-slate-900" />
                 Включить уже сданные в ТИ (Архив)
               </label>
               <button onClick={() => markSelectedChinaCopiesAsSubmitted(true)} className="px-3.5 min-h-[44px] py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Пометить как отправленные в ТИ</button>
@@ -1209,7 +1209,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                   placeholder="Поиск копий по номеру или машине..."
                   value={chinaSearchQuery}
                   onChange={(e) => setChinaSearchQuery(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-[11px] font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                  className="w-full px-3 py-1.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-[11px] font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
                 />
               </div>
             </div>

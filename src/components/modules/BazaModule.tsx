@@ -940,7 +940,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
         </div>
         
         <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto justify-start sm:justify-end">
-          <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50">
+          <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50 overflow-x-auto custom-scrollbar">
             <button 
               onClick={() => setCurrentTab('base')} 
               className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer min-h-[44px] ${

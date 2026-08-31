@@ -426,7 +426,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
             
             <div className="flex justify-between items-center z-10">
                 <h3 className="text-sm font-bold text-slate-800 tracking-tight flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-[#3765F6]" />
+                    <Sparkles className="h-4 w-4 text-slate-500" />
                     <span>ИИ помощник (разбор номеров)</span>
                 </h3>
             </div>
@@ -436,7 +436,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                     value={rawText}
                     onChange={(e) => setRawText(e.target.value)}
                     placeholder="Вставьте сюда текст. Система разберет строки вида:&#10;• бланк RUS 130520 выдан в рейс на AB 9271-7 комментарий: отправлен к Виждан&#10;• CHN 2, 4175, 3467, 3133 копии сданы"
-                    className="w-full h-24 p-3.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-medium focus:outline-none focus:bg-white focus:border-[#3765F6] resize-none font-mono leading-relaxed transition"
+                    className="w-full h-24 p-3.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-medium focus:outline-none focus:bg-white focus:border-slate-300 resize-none font-mono leading-relaxed transition"
                 />
             </div>
             
@@ -505,7 +505,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                             </td>
                                             <td className="p-2">
                                                 <select 
-                                                    className="w-full p-1.5 bg-white/45 border border-slate-200/80 rounded-xl text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                                                    className="w-full p-1.5 bg-white/45 border border-slate-200/80 rounded-xl text-xs focus:outline-none focus:bg-white focus:border-slate-300 transition"
                                                     value={item.type}
                                                     onChange={(e) => {
                                                         const newArr = [...tempBatchItems];
@@ -518,7 +518,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                             </td>
                                             <td className="p-2">
                                                 <input 
-                                                    className="w-full p-1.5 bg-white/45 border border-slate-200/80 rounded-xl text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                                                    className="w-full p-1.5 bg-white/45 border border-slate-200/80 rounded-xl text-xs focus:outline-none focus:bg-white focus:border-slate-300 transition"
                                                     value={item.number}
                                                     onChange={e => {
                                                         const newArr = [...tempBatchItems];
@@ -529,7 +529,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                             </td>
                                             <td className="p-2">
                                                 <select 
-                                                    className="w-full p-1.5 bg-white/45 border border-slate-200/80 rounded-xl text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                                                    className="w-full p-1.5 bg-white/45 border border-slate-200/80 rounded-xl text-xs focus:outline-none focus:bg-white focus:border-slate-300 transition"
                                                     value={item.status}
                                                     onChange={(e) => {
                                                         const newArr = [...tempBatchItems];
@@ -546,7 +546,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                             </td>
                                             <td className="p-2">
                                                 <input 
-                                                    className="w-full p-1.5 bg-white/45 border border-slate-200/80 rounded-xl text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                                                    className="w-full p-1.5 bg-white/45 border border-slate-200/80 rounded-xl text-xs focus:outline-none focus:bg-white focus:border-slate-300 transition"
                                                     value={item.car}
                                                     onChange={e => {
                                                         const newArr = [...tempBatchItems];
@@ -557,7 +557,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                                             </td>
                                             <td className="p-2">
                                                 <input 
-                                                    className="w-full p-1.5 bg-white/45 border border-slate-200/80 rounded-xl text-xs focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                                                    className="w-full p-1.5 bg-white/45 border border-slate-200/80 rounded-xl text-xs focus:outline-none focus:bg-white focus:border-slate-300 transition"
                                                     value={item.comment || ''}
                                                     onChange={e => {
                                                         const newArr = [...tempBatchItems];

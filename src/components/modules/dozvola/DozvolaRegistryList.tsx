@@ -1047,11 +1047,11 @@ export default function DozvolaRegistryList({
             </h2>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
             {user.permissions.dozvola === "write" && (
               <button
                 onClick={() => setIsBatchCreatorOpen(true)}
-                className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-4 min-h-[44px] py-2.5 rounded-xl transition cursor-pointer"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-4 min-h-[44px] py-2.5 rounded-xl transition cursor-pointer"
               >
                 Массовый ввод
               </button>
@@ -1059,7 +1059,7 @@ export default function DozvolaRegistryList({
             {user.permissions.dozvola === "write" && (
               <button
                 onClick={() => setIsCreatorOpen(true)}
-                className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-4 min-h-[44px] py-2.5 rounded-xl transition cursor-pointer shadow-sm"
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-4 min-h-[44px] py-2.5 rounded-xl transition cursor-pointer shadow-sm"
               >
                 <Plus className="h-4 w-4" />
                 Зарегистрировать
@@ -1067,7 +1067,7 @@ export default function DozvolaRegistryList({
             )}
             <button
               onClick={handleExport}
-              className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-4 min-h-[44px] py-2.5 rounded-xl transition cursor-pointer"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-4 min-h-[44px] py-2.5 rounded-xl transition cursor-pointer"
             >
               <FileDown className="h-4 w-4" />
               Экспорт
@@ -1075,7 +1075,7 @@ export default function DozvolaRegistryList({
           </div>
         </div>
 
-        <div className="flex justify-between items-end mt-4 flex-wrap gap-2 bg-slate-50/30 rounded-t-3xl border border-slate-200/40 border-b-0 pt-2 px-2">
+        <div className="flex justify-between items-end mt-4 flex-wrap gap-2 bg-slate-50/30 rounded-txl border border-slate-200/40 border-b-0 pt-2 px-2 overflow-x-auto custom-scrollbar">
           <div className="flex items-end gap-1 overflow-x-auto custom-scrollbar flex-1 pb-1">
             <button
               onClick={() => setCurrentSelectedTab("all")}
@@ -1175,7 +1175,7 @@ export default function DozvolaRegistryList({
                 placeholder="Быстрый поиск по бланку, машине или комментарию..."
                 value={searchInputValue}
                 onChange={(e) => setSearchInputValue(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-850 focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition"
+                className="w-full pl-10 pr-4 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-850 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition"
               />
             </div>
 
@@ -1217,7 +1217,7 @@ export default function DozvolaRegistryList({
                 <select
                   value={selectedCountryFilter}
                   onChange={(e) => setSelectedCountryFilter(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition cursor-pointer"
+                  className="w-full px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition cursor-pointer"
                 >
                   <option value="all">Все статусы</option>
                   <option value="office">В офисе</option>
@@ -1429,7 +1429,7 @@ export default function DozvolaRegistryList({
                 <select
                   value={type}
                   onChange={(e) => setType(e.target.value)}
-                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition"
+                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition"
                 >
                   {customTypesOrder.map((id) => {
                     const t = customTypes[id];
@@ -1453,7 +1453,7 @@ export default function DozvolaRegistryList({
                   placeholder="PL-001&#10;PL-002&#10;PL-003"
                   value={batchText}
                   onChange={(e) => setBatchText(e.target.value)}
-                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs h-32 resize-none focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition font-mono font-semibold"
+                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs h-32 resize-none focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition font-mono font-semibold"
                 />
               </div>
 

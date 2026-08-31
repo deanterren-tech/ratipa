@@ -1853,20 +1853,30 @@ export const dbService = {
       const pRef = ref(database, `ratipapresence/${presenceId}`);
 
       // Throttle: пишем в Firebase не чаще __PRESENCE_THROTTLE_MS
-      if (now - __lastPresenceWrite > __PRESENCE_THROTTLE_MS) {
-        __lastPresenceWrite = now;
-        set(pRef, item).catch((err) => {
-          console.warn("Silent presence set fail:", err);
-        });
-      }
+      const writePresence = () => {
+        const n = Date.now();
+        if (n - __lastPresenceWrite > __PRESENCE_THROTTLE_MS) {
+          __lastPresenceWrite = n;
+          set(pRef, { ...item, lastActive: new Date().toISOString() }).catch((err) => {
+            console.warn("Silent presence set fail:", err);
+          });
+        }
+      };
+
+      writePresence();
+
+      // Heartbeat: обновляем lastActive каждые 30 секунд
+      const heartbeat = setInterval(writePresence, 30000);
 
       // Cleanup of presence on unloading if possible
       const handleUnload = () => {
+        clearInterval(heartbeat);
         remove(pRef);
       };
       window.addEventListener("beforeunload", handleUnload);
 
       return () => {
+        clearInterval(heartbeat);
         remove(pRef);
         window.removeEventListener("beforeunload", handleUnload);
       };

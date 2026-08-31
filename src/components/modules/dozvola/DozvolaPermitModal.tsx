@@ -129,7 +129,7 @@ export default function DozvolaPermitModal({
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
-              className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition"
+              className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition"
             >
               {customTypesOrder.map((id) => {
                 const t = customTypes[id];
@@ -153,7 +153,7 @@ export default function DozvolaPermitModal({
               placeholder="TR A 55432"
               value={permitNumber}
               onChange={(e) => setPermitNumber(e.target.value)}
-              className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-450 focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition"
+              className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-450 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition"
             />
           </div>
 
@@ -165,7 +165,7 @@ export default function DozvolaPermitModal({
               placeholder="Добавьте примечание к бланку..."
               value={comments}
               onChange={(e) => setComments(e.target.value)}
-              className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold h-16 resize-none focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition"
+              className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold h-16 resize-none focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition"
             />
           </div>
 
@@ -231,7 +231,7 @@ export default function DozvolaPermitModal({
                       setEditCar('Минск офис');
                     }
                   }}
-                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition"
+                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition"
                 >
                   <option value="office">В офисе</option>
                   <option value="hand">В рейсе</option>
@@ -250,7 +250,7 @@ export default function DozvolaPermitModal({
                   type="date"
                   value={editIssueDate}
                   onChange={(e) => setEditIssueDate(e.target.value)}
-                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition"
+                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition"
                 />
               </div>
 
@@ -262,7 +262,7 @@ export default function DozvolaPermitModal({
                   type="date"
                   value={editExpiryDate}
                   onChange={(e) => setEditExpiryDate(e.target.value)}
-                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition"
+                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition"
                 />
               </div>
 

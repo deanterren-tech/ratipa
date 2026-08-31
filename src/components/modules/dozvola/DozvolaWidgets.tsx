@@ -339,7 +339,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
       </div>
 
       {!isGlobalTab && (
- <div className="bg-white rounded-2xl p-6 border-l-4 border-l-[#3765F6] border-y border-r border-slate-200/50 shadow-sm flex flex-col gap-3">
+ <div className="bg-white rounded-2xl p-6 border-l-4 border-l-slate-900 border-y border-r border-slate-200/50 shadow-sm flex flex-col gap-3">
           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-2 mb-1">
             Лимит выдачи: {currentSelectedTab}
           </div>
