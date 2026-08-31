@@ -48,6 +48,8 @@ import AdminAgentBlock from './AdminAgentBlock';
 import AdminAuditLogsBlock from './AdminAuditLogsBlock';
 import AdminWelcomePhrasesBlock from './AdminWelcomePhrasesBlock';
 import AdminLinksBlock from './AdminLinksBlock';
+import CurrentPlanningSettingsBlock from './CurrentPlanningSettingsBlock';
+import PlanZagruzokSettingsBlock from './PlanZagruzokSettingsBlock';
 import {pdService} from '../../api';
 
 interface AdminModuleProps {
@@ -368,6 +370,10 @@ export default function AdminModule({ user }: AdminModuleProps) {
                 </div>
               </div>
             )}
+
+            {/* Planning Blocks — настройки вкладок Текущего планирования и Плана загрузок */}
+            <CurrentPlanningSettingsBlock user={user} />
+            <PlanZagruzokSettingsBlock user={user} />
           </div>
 
           <div className={activeTab === 'agent' ? 'space-y-6' : 'hidden'}>

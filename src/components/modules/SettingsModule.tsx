@@ -7,8 +7,6 @@ import {ref, set, push, remove} from 'firebase/database'
 import CouplingDirectoryEditor from './CouplingDirectoryEditor';
 import DirectoriesModule from './DirectoriesModule';
 import DriverDirectoryBlock from './directories/DriverDirectoryBlock';
-import CurrentPlanningSettingsBlock from './CurrentPlanningSettingsBlock';
-import PlanZagruzokSettingsBlock from './PlanZagruzokSettingsBlock';
 import { 
   Settings, 
   Plus,
@@ -1022,10 +1020,6 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
                 </div>
               )}
             </div>
-
-            {/* Planning Blocks — настройки вкладок */}
-            <CurrentPlanningSettingsBlock user={user} />
-            <PlanZagruzokSettingsBlock user={user} />
 
           </div>
         </div>
