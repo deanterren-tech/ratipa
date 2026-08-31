@@ -1007,10 +1007,11 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                                      <div className="space-y-1">
                                              <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Автомобиль *</label>
                             <CouplingPicker
+                              mode="combined"
                               value={formData.carNumber}
                               onSelect={(rec) => {
                                 if (rec) {
-                                  const cNum = (rec.carNumber || rec.vehicleNumbers || '').toUpperCase();
+                                  const cNum = [(rec.carNumber || rec.vehicleNumbers || '').toUpperCase(), (rec.trailerNumber || '').toUpperCase()].filter(Boolean).join(' / ');
                                   const updates: any = { carNumber: cNum };
                                   if (rec.driverName) updates.driverName = rec.driverName;
                                   if (rec.driverPhone) updates.driverPhone = rec.driverPhone;
@@ -1364,6 +1365,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                        <div className="space-y-1">
                           <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Госномер автомобиля</label>
                           <CouplingPicker
+                            mode="combined"
                             value={modalData.carNumber}
                             onSelect={(rec) => {
                               if (!rec) return;
