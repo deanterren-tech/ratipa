@@ -78,6 +78,18 @@ html, body {
   hyphens: auto;
 }
 
+/* Убираем синее выделение (outline) при фокусе на всех элементах */
+*:focus {
+  outline: none !important;
+}
+
+/* Оставляем доступность: свой focus-visible для клавиатурной навигации */
+*:focus-visible {
+  outline: 2px solid var(--color-slate-400);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 /* Mobile card list container reset helper */
 .mobile-card-grid {
   display: grid;
@@ -137,9 +149,8 @@ html, body {
   border-color: #3765F6 !important;
 }
 
-/* Accessible focus outline */
+/* Accessible focus outline — убран синий, сделан тонкий серый */
 input:focus, select:focus, textarea:focus, button:focus {
-  outline: 2px solid #3765F6 !important;
-  outline-offset: 1px !important;
+  outline: none !important;
 }
 

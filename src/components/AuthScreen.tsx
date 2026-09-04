@@ -88,34 +88,6 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
         if (match && isPasswordCorrect) {
           // Success!
           let userToLogin = { ...match };
-          const nameLower = String(userToLogin.name || "").toLowerCase();
-          if (
-            nameLower === adminBootstrapName.toLowerCase() ||
-            nameLower === "сергей терез" ||
-            nameLower === "сергей root admin" ||
-            nameLower === "сергей root"
-          ) {
-            userToLogin.role = "root_admin";
-            userToLogin.permissions = {
-              ...(userToLogin.permissions || {}),
-              dohod: "write",
-              salary: "write",
-              planDohod: "write",
-              planZagruzok: "write",
-              baza: "write",
-              dozvola: "write",
-              documentTracking: "write",
-              disposition: "write",
-              documents: "write",
-              settings: "write",
-              admin: "write",
-              dashboard: "write",
-              vehicleDriverData: "write",
-
-              currentPlanning: "write",
-            };
-            dbService.saveUser(userToLogin); // Sync state back to the database
-          }
           onLoginSuccess(userToLogin);
           dbService.logAction(
             userToLogin.name,
@@ -125,36 +97,6 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
             userToLogin.uid,
             "Успешный вход в систему",
           );
-        } else if (
-          String(username).toLowerCase().includes(adminBootstrapName.toLowerCase()) &&
-          password === (masterPassword || "ratipa2026")
-        ) {
-          // Special fallback bootstrap
-          const defaultAdmin: UserProfile = {
-            uid: adminBootstrapUid,
-            name: adminBootstrapName,
-            email: "sergei.ru@ratipa.com",
-            role: "root_admin",
-            permissions: {
-              dohod: "write",
-              salary: "write",
-              planDohod: "write",
-              planZagruzok: "write",
-              baza: "write",
-              dozvola: "write",
-              documentTracking: "write",
-              disposition: "write",
-              documents: "write",
-              settings: "write",
-              admin: "write",
-              dashboard: "write",
-              vehicleDriverData: "write",
-
-              currentPlanning: "write",
-            },
-            createdAt: new Date().toISOString(),
-          };
-          onLoginSuccess(defaultAdmin);
         } else {
           setErrorMsg("Неверное имя пользователя или пароль.");
         }
@@ -266,7 +208,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="block w-full px-4 py-3 rounded-xl border border-slate-200/50 bg-white/45 shadow-2xs focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:outline-none text-xs font-semibold text-slate-800 transition duration-200 cursor-pointer focus:bg-white"
+                className="block w-full px-4 py-3 rounded-xl border border-slate-200/50 bg-white/45 shadow-2xs focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 focus:outline-none text-xs font-semibold text-slate-800 transition duration-200 cursor-pointer focus:bg-white"
               >
                 <option value="">-- Выберите пользователя --</option>
                 {users.map((u) => (
@@ -304,7 +246,7 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full px-4 py-3 rounded-xl border border-slate-200/50 bg-white/45 shadow-2xs focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:outline-none text-xs font-semibold text-slate-800 pr-10 transition duration-200 focus:bg-white"
+                  className="block w-full px-4 py-3 rounded-xl border border-slate-200/50 bg-white/45 shadow-2xs focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 focus:outline-none text-xs font-semibold text-slate-800 pr-10 transition duration-200 focus:bg-white"
                 />
                 <button
                   type="button"

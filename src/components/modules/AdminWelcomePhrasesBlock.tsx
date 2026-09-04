@@ -182,7 +182,7 @@ export default function AdminWelcomePhrasesBlock({ settings, onSave }: Props) {
                           type="text"
                           value={editingText}
                           onChange={(e) => setEditingText(e.target.value)}
-                          className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-1 text-xs font-semibold text-slate-800 outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-[#3765F6]/10"
+                          className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-1 text-xs font-semibold text-slate-800 outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-300/10"
                         />
                       ) : (
                         <p className="text-xs font-semibold text-slate-800 truncate" title={phrase}>
@@ -257,7 +257,7 @@ export default function AdminWelcomePhrasesBlock({ settings, onSave }: Props) {
               value={newPhrase}
               onChange={(e) => setNewPhrase(e.target.value)}
               placeholder="Введите новый текст для бегущей строки..."
-              className="flex-1 bg-white/50 border border-slate-200/60 px-4 py-3 text-xs font-semibold rounded-2xl outline-none focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/5 focus:bg-white transition-all shadow-sm"
+              className="flex-1 bg-white/50 border border-slate-200/60 px-4 py-3 text-xs font-semibold rounded-2xl outline-none focus:border-slate-300 focus:ring-4 focus:ring-slate-200/50 focus:bg-white transition-all shadow-sm"
               required
             />
             <button

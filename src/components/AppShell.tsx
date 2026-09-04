@@ -1,12 +1,15 @@
 import React, {useState, useEffect, useMemo, useRef, Suspense, lazy} from 'react'
-import {UserProfile, AppSettings, ChatMessage} from '../types'
-import {dbService, database, useFirebase, onValue} from '../api'
-import {ref, set, push, update} from 'firebase/database'
+import {UserProfile, AppSettings} from '../types'
+import {dbService, useFirebase} from '../api'
 import {motion, AnimatePresence} from 'motion/react'
 import CommandCenter from './CommandCenter';
 import TypingText from './TypingText';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts'
 import { resolvePermission } from '../utils/permissions';
+import {useNotifications} from '../hooks/useNotifications'
+import {useConverter} from '../hooks/useConverter'
+import {usePresence} from '../hooks/usePresence'
+import {useChat} from '../hooks/useChat'
 import { 
   LayoutDashboard, 
   Calculator, 
@@ -49,18 +52,6 @@ import {
   Sliders,
   BookOpen
 } from 'lucide-react';
-
-interface NotificationItem {
-  id: string;
-  title: string;
-  text: string;
-  type: 'info' | 'warning' | 'success' | 'alert';
-  date: string;
-  isRead: boolean;
-  dispatcher?: string;
-  isDeleted?: boolean;
-  targetRoles?: string[];
-}
 
 // Import newly created business modules
 const DashboardModule = lazy(() => import('./modules/DashboardModule'));
@@ -190,7 +181,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     }
     closeTimeoutRef.current = setTimeout(() => {
       setOpenDropdownId(null);
-    }, 200); // 200ms grace period prevents accidental closures
+    }, 200);
   };
 
   useEffect(() => {
@@ -210,153 +201,84 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     window.addEventListener('click', handleOutsideClick);
     return () => window.removeEventListener('click', handleOutsideClick);
   }, []);
-  const [isDbOnline, setIsDbOnline] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
-  const prevOnlineUsersRef = useRef<string>('');
-  const onlineUsersTimeoutRef = useRef<any>(null);
 
-  // Real-time broadcast push notifications state & sync
-  const [broadcastNotifications, setBroadcastNotifications] = useState<any[]>([]);
+  // Settings state (used by useNotifications — must be declared before hook calls)
+  const [settings, setSettings] = useState<AppSettings | null>(null);
 
+  // --- Extracted logic via custom hooks ---
+  const notif = useNotifications(user, settings);
+  const conv = useConverter();
+  const presence = usePresence(user, activeModule);
+  useChat(user);
+
+  const {
+    filteredNotifications,
+    unreadNotifsCount,
+    isNotifOpen,
+    setIsNotifOpen,
+    notifTab,
+    setNotifTab,
+    notifRef,
+    activeUnreadBroadcasts,
+    markNotifAsRead,
+    markAllNotifsAsRead,
+    deleteNotif,
+    clearAllNotifications,
+  } = notif;
+
+  const {
+    isConverterOpen,
+    setIsConverterOpen,
+    isEditingCurrencies,
+    setIsEditingCurrencies,
+    isRatesLoading,
+    activeCurrency,
+    setActiveCurrency,
+    activeValue,
+    setActiveValue,
+    selectedCurrencyCodes,
+    setSelectedCurrencyCodes,
+    rates,
+    displayValues,
+    converterRef,
+    converterDesktopRef,
+    converterPanelRef,
+    fetchNbrbRates,
+    availableCurrencies,
+  } = conv;
+
+  const {
+    isDbOnline,
+    onlineUsers,
+  } = presence;
+
+  // Dynamic page title
   useEffect(() => {
-    return dbService.getBroadcastNotifications(setBroadcastNotifications);
-  }, []);
-
-  const activeUnreadBroadcasts = useMemo(() => {
-    if (!user) return [];
-    return broadcastNotifications.filter(notif => {
-      const readBy = notif.readBy || {};
-      return !readBy[user.uid];
-    });
-  }, [broadcastNotifications, user]);
-
-  // Notifications states
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [userNotifState, setUserNotifState] = useState<Record<string, {isRead: boolean, isDeleted: boolean}>>({});
-  const [isNotifOpen, setIsNotifOpen] = useState(false);
-  const [notifTab, setNotifTab] = useState<'all' | 'unread'>('all');
-  const notifRef = useRef<HTMLDivElement>(null);
-
-  // Converter states
-  const [isConverterOpen, setIsConverterOpen] = useState(false);
-  const [isEditingCurrencies, setIsEditingCurrencies] = useState(false);
-  const [isRatesLoading, setIsRatesLoading] = useState(false);
-  const [activeCurrency, setActiveCurrency] = useState<string>(() => localStorage.getItem('ratipa_converter_currency') || 'USD');
-  const [activeValue, setActiveValue] = useState<string>(() => localStorage.getItem('ratipa_converter_value') || '100');
-  const [availableCurrencies, setAvailableCurrencies] = useState<any[]>([]);
-  
-  const [selectedCurrencyCodes, setSelectedCurrencyCodes] = useState<string[]>(() => {
-    const saved = localStorage.getItem('ratipa_selected_currencies');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      } catch (e) {}
+    const activeObj = allModules.find(m => m.key === activeModule);
+    if (activeObj) {
+      document.title = `Ratipa | ${activeObj.label}`;
+    } else {
+      document.title = 'Ratipa';
     }
-    return ['USD', 'EUR', 'BYN', 'RUB'];
-  });
+  }, [activeModule]);
 
-  const [rates, setRates] = useState<Record<string, number>>(() => {
-    const saved = localStorage.getItem('ratipa_converter_rates');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
-    }
-    return {
-      USD: 3.25,
-      EUR: 3.55,
-      RUB: 0.036,
-      BYN: 1.0,
-      TRY: 0.10,
-      KZT: 0.0073,
-      CNY: 0.45
-    };
-  });
-  const converterRef = useRef<HTMLDivElement>(null);
-  const converterDesktopRef = useRef<HTMLDivElement>(null);
+  // Scroll to top
+  const mainScrollRef = useRef<HTMLDivElement>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
-    return dbService.getCurrencies((list) => {
-      setAvailableCurrencies(list || []);
-    });
-  }, []);
+    const el = mainScrollRef.current;
+    if (!el) return;
+    const onScroll = () => setShowScrollTop(el.scrollTop > 300);
+    onScroll();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [activeModule]);
 
-  useEffect(() => {
-    localStorage.setItem('ratipa_selected_currencies', JSON.stringify(selectedCurrencyCodes));
-  }, [selectedCurrencyCodes]);
-
-  useEffect(() => {
-    localStorage.setItem('ratipa_converter_currency', activeCurrency);
-  }, [activeCurrency]);
-
-  useEffect(() => {
-    localStorage.setItem('ratipa_converter_value', activeValue);
-  }, [activeValue]);
-
-  const fetchNbrbRates = async () => {
-    setIsRatesLoading(true);
-    try {
-      // Try the server-side API proxy first to bypass client CORS / VPN / network issues
-      let response = await fetch('/api/nbrb-rates');
-      const contentType = response.headers.get('content-type') || '';
-      
-      if (!response.ok || !contentType.includes('application/json')) {
-        response = await fetch('https://www.nbrb.by/api/exrates/rates?periodicity=0');
-      }
-      
-      if (!response.ok) throw new Error('Data status check');
-      const data = await response.json();
-      
-      if (Array.isArray(data)) {
-        const foundRates: Record<string, number> = { BYN: 1.0 };
-        data.forEach((item: any) => {
-          if (item && item.Cur_Abbreviation && item.Cur_OfficialRate && item.Cur_Scale) {
-            foundRates[item.Cur_Abbreviation] = item.Cur_OfficialRate / item.Cur_Scale;
-          }
-        });
-
-        if (foundRates.USD && foundRates.EUR && foundRates.RUB) {
-          setRates(prev => {
-            const merged = { ...prev, ...foundRates };
-            localStorage.setItem('ratipa_converter_rates', JSON.stringify(merged));
-            return merged;
-          });
-        }
-      } else {
-        throw new Error('Expected data structure');
-      }
-    } catch (error) {
-    } finally {
-      setIsRatesLoading(false);
-    }
+  const handleLogoutSequence = () => {
+    dbService.logAction(user.name, user.role, "Выход", "Auth", user.uid, "Вышел из учетной записи");
+    onLogout();
   };
-
-  useEffect(() => {
-    fetchNbrbRates();
-  }, []);
-
-  const getDisplayValue = (currency: string) => {
-    if (activeCurrency === currency) {
-      return activeValue;
-    }
-    const numericVal = parseFloat(activeValue);
-    if (isNaN(numericVal) || numericVal === 0) {
-      return '';
-    }
-    const fromRate = rates[activeCurrency] || 1.0;
-    const toRate = rates[currency] || 1.0;
-    const valInByn = numericVal * fromRate;
-    const targetVal = valInByn / toRate;
-    if (currency === 'RUB') {
-      return targetVal.toFixed(1);
-    }
-    return targetVal.toFixed(2);
-  };
-
-  // Real-time Database references for notification auto-generation
-  const [bazaCars, setBazaCars] = useState<any[]>([]);
-  const [tripsDashboard, setTripsDashboard] = useState<any[]>([]);
 
   // Close notifications, converter and mobile menu dropdowns on click outside
   useEffect(() => {
@@ -366,7 +288,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       }
       const isConverterClick = 
         (converterRef.current && converterRef.current.contains(event.target as Node)) ||
-        (converterDesktopRef.current && converterDesktopRef.current.contains(event.target as Node));
+        (converterDesktopRef.current && converterDesktopRef.current.contains(event.target as Node)) ||
+        (converterPanelRef.current && converterPanelRef.current.contains(event.target as Node));
       if (!isConverterClick) {
         setIsConverterOpen(false);
       }
@@ -380,281 +303,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     };
   }, []);
 
-  // Sync notifications from Firebase Realtime Database
-  useEffect(() => {
-    if (!useFirebase || !user) return;
-    try {
-      const notifRef = ref(database, 'ratipa_notifications');
-      const unsubNotif = onValue(notifRef, snap => {
-        const val = snap.val();
-        if (val) {
-          const list: NotificationItem[] = Object.keys(val).map(key => ({
-            id: key,
-            ...val[key]
-          }));
-          
-          list.sort((a, b) => {
-            const tA = a.id.startsWith('notif_') ? parseInt(a.id.replace('notif_', '')) : (a.id.includes('_') ? parseInt(a.id.split('_').slice(-1)[0]) || 0 : 0);
-            const tB = b.id.startsWith('notif_') ? parseInt(b.id.replace('notif_', '')) : (b.id.includes('_') ? parseInt(b.id.split('_').slice(-1)[0]) || 0 : 0);
-            if (tA && tB) return tB - tA;
-            const dateA = a.date || '';
-            const dateB = b.date || '';
-            return dateB.localeCompare(dateA);
-          });
-          
-          setNotifications(list);
-        } else {
-          setNotifications([]);
-        }
-      });
-      
-      const userNotifRef = ref(database, `users/${user.uid}/notificationStates`);
-      const unsubUserNotif = onValue(userNotifRef, snap => {
-        setUserNotifState(snap.val() || {});
-      });
-
-      return () => {
-        unsubNotif();
-        unsubUserNotif();
-      }
-    } catch (e) {
-      console.warn("Error subscribing to ratipa_notifications in Firebase", e);
-    }
-  }, [useFirebase, user]);
-
-  // Subscribe to baza_cars and trips_dashboard
-  useEffect(() => {
-    if (!useFirebase) return;
-    try {
-      const unsubBaza = dbService.getVehicleFleet((list) => setBazaCars(list || []));
-      const unsubTrips = onValue(ref(database, 'trips_dashboard'), snap => {
-        const data = snap.val() || {};
-        const list = Object.keys(data).map(id => ({ id, ...data[id] }));
-        setTripsDashboard(list);
-      });
-      return () => {
-        unsubBaza();
-        unsubTrips();
-      };
-    } catch (e) {
-      console.warn("Error subscribing in AppShell notification updater:", e);
-    }
-  }, [useFirebase]);
-
-  const markNotifAsRead = (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (useFirebase && user) {
-      try {
-        const currentReadState = userNotifState[id]?.isRead || false;
-        update(ref(database, `users/${user.uid}/notificationStates/${id}`), { isRead: !currentReadState }).catch((err) => console.warn("Failed to mark read in firebase", err));
-      } catch (err) {
-        console.warn("Failed to mark read in firebase", err);
-      }
-    }
-  };
-
-  const markAllNotifsAsRead = () => {
-    if (useFirebase && user) {
-      try {
-        const updates: Record<string, any> = {};
-        notifications.forEach(n => {
-          if (!userNotifState[n.id]?.isRead && !userNotifState[n.id]?.isDeleted) {
-            updates[`users/${user.uid}/notificationStates/${n.id}/isRead`] = true;
-          }
-        });
-        if (Object.keys(updates).length > 0) {
-          update(ref(database), updates).catch((err) => console.warn("Failed to update notifications in firebase", err));
-        }
-      } catch (err) {
-        console.warn("Failed to mark all read in firebase", err);
-      }
-    }
-  };
-
-  const deleteNotif = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (useFirebase && user) {
-      try {
-        update(ref(database, `users/${user.uid}/notificationStates/${id}`), { isDeleted: true }).catch((err) => console.warn("Failed to mark deleted in firebase", err));
-      } catch (err) {
-        console.warn("Failed to mark deleted in firebase", err);
-      }
-    }
-  };
-
-  const clearAllNotifications = () => {
-    if (useFirebase && user) {
-      try {
-        const updates: Record<string, any> = {};
-        notifications.forEach(n => {
-          updates[`users/${user.uid}/notificationStates/${n.id}/isDeleted`] = true;
-        });
-        if (Object.keys(updates).length > 0) {
-          update(ref(database), updates).catch((err) => console.warn("Failed to update notifications in firebase", err));
-        }
-      } catch (err) {
-        console.warn("Failed to clear notifications in firebase", err);
-      }
-    }
-  };
-
-  // Dynamic Webpage Tab title
-  useEffect(() => {
-    const activeObj = allModules.find(m => m.key === activeModule);
-    if (activeObj) {
-      document.title = `Ratipa | ${activeObj.label}`;
-    } else {
-      document.title = 'Ratipa';
-    }
-  }, [activeModule]);
-
-  // Scroll to Top states
-  const mainScrollRef = useRef<HTMLDivElement>(null);
-  const [showScrollTop, setShowScrollTop] = useState(false);
-
-  // Show "scroll to top" button only after the user scrolls down
-  useEffect(() => {
-    const el = mainScrollRef.current;
-    if (!el) return;
-    const onScroll = () => setShowScrollTop(el.scrollTop > 300);
-    onScroll();
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
-  }, [activeModule]);
-
-  // Chat states
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [chatInput, setChatInput] = useState('');
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [lastOpenedTime, setLastOpenedTime] = useState<number>(() => {
-    return Number(localStorage.getItem('chat_last_opened_time') || Date.now());
-  });
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // States for user colors and message editing
-  const [usersForColors, setUsersForColors] = useState<UserProfile[]>([]);
-  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
-  const [editingText, setEditingText] = useState('');
-
-  // Subscribe to all users to map message colors in real time
-  useEffect(() => {
-    const unsub = dbService.getUsers((users) => {
-      setUsersForColors(users);
-    });
-    return () => {
-      if (typeof unsub === 'function') unsub();
-    };
-  }, []);
-
-  const handleUpdateMessage = (id: string) => {
-    const text = editingText.trim();
-    if (!text) return;
-    dbService.updateChatMessage(id, text);
-    setEditingMsgId(null);
-    setEditingText('');
-  };
-
-  // Subscribe to global dispatcher chat
-  useEffect(() => {
-    const unsubscribeChat = dbService.getChatMessages('global_panel_chat', (msgs) => {
-      const sorted = [...msgs].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-      setChatMessages(sorted);
-    });
-
-    return () => {
-      if (typeof unsubscribeChat === 'function') {
-         unsubscribeChat();
-      }
-    };
-  }, []);
-
-  // Set up global hotkeys (chat removed per request — ESC now only closes modals via useKeyboardShortcuts)
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // Alt + C previously toggled chat — removed.
-    };
-
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, []);
-
-  // Track unread messages
-  useEffect(() => {
-    if (isChatOpen) {
-      const now = Date.now();
-      setLastOpenedTime(now);
-      localStorage.setItem('chat_last_opened_time', String(now));
-      setUnreadCount(0);
-    } else {
-      const unread = chatMessages.filter(m => m.timestamp > lastOpenedTime && m.userId !== user.uid).length;
-      setUnreadCount(unread);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatMessages, isChatOpen, user.uid]);
-
-  // Scroll to bottom
-  useEffect(() => {
-    if (isChatOpen) {
-      const timer = setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [chatMessages, isChatOpen]);
-
-  const handleSendGlobalMessage = () => {
-    const text = chatInput.trim();
-    if (!text) return;
-
-    dbService.sendChatMessage('global_panel_chat', text, user.name, user.uid);
-    setChatInput('');
-  };
-
-  const handleDeleteGlobalMessage = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    dbService.deleteChatMessage(id);
-  };
-
-  // Presence & Heartbeat ticker
-  useEffect(() => {
-    const cleanup = dbService.trackPresence(user, activeModule);
-    setIsDbOnline(dbService.isOnline());
-
-    const unsubscribeOnline = dbService.getOnlineUsers((users) => {
-      // Keep users that were active recently (e.g. within 5 mins)
-      const now = new Date().getTime();
-      const activeUsers = users.filter((u: any) => {
-         const t = new Date(u.lastActive).getTime();
-         return (now - t) < 5 * 60 * 1000;
-      });
-      // Стабилизация: не обновляем, если список не изменился
-      const key = activeUsers.map((u: any) => u.uid + ':' + u.currentModule + ':' + u.lastActive).join('|');
-      if (key !== prevOnlineUsersRef.current) {
-        prevOnlineUsersRef.current = key;
-        // Debounce: отложенное обновление, чтобы сгладить каскад onValue
-        if (onlineUsersTimeoutRef.current) clearTimeout(onlineUsersTimeoutRef.current);
-        onlineUsersTimeoutRef.current = setTimeout(() => {
-          setOnlineUsers(activeUsers);
-        }, 2000);
-      }
-    });
-
-    return () => {
-      cleanup();
-      if (typeof unsubscribeOnline === 'function') {
-         unsubscribeOnline();
-      }
-      if (onlineUsersTimeoutRef.current) clearTimeout(onlineUsersTimeoutRef.current);
-    };
-  }, [activeModule, user]);
-
-  const handleLogoutSequence = () => {
-    dbService.logAction(user.name, user.role, "Выход", "Auth", user.uid, "Вышел из учетной записи");
-    onLogout();
-  };
-
-  // List of possible modules with tags, keys, icons, and labels
+  // List of possible modules
   const allModules = [
     { key: 'dashboard', label: 'Главная', icon: LayoutDashboard, permissionKey: 'dashboard' },
     { key: 'dohod', label: 'Калькуляция', icon: Calculator, permissionKey: 'dohod' },
@@ -673,65 +322,57 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'admin', label: 'Администрирование', icon: ShieldAlert, permissionKey: 'admin' }
   ];
 
-  // Filter modules based on user's permission (not 'none' and matching admin fields)
-  const [settings, setSettings] = useState<AppSettings | null>(null);
-
   const allowedModules = useMemo(() => {
     if (user.role === 'mechanic') {
       return allModules.filter(mod => mod.key === 'baza');
     }
     return allModules.filter(mod => {
-      // Root admin gets everything
       if (user.role === 'root_admin' || user.name.includes('Сергей Root') || user.email === 'r98ratipaby@gmail.com') return true;
-      
-      // Единая проверка через resolvePermission
       return resolvePermission(user, mod.permissionKey, settings?.rolePermissions) !== 'none';
     });
   }, [user.role, user.name, user.email, user.permissions, settings?.rolePermissions]);
 
-  const filteredNotifications = useMemo(() => {
-    if (!user) return [];
-    
-    // Check if notifications are enabled for this role globally
-    if (settings?.notificationAccess) {
-      const enabledRoles = settings.notificationAccess.enabledRoles || [];
-      if (enabledRoles.length > 0 && !enabledRoles.includes(user.role)) {
-        return [];
-      }
-    }
+  useEffect(() => {
+    return dbService.getSettings(setSettings);
+  }, []);
 
-    const visible = notifications.filter(n => {
-      if (userNotifState[n.id]?.isDeleted) return false;
-
-      // Check if targeted to specific roles by sender
-      if (n.targetRoles && n.targetRoles.length > 0) {
-        if (!n.targetRoles.includes(user.role)) return false;
-      }
-
-      // Check allowed notification types per role configured by Admin
-      if (settings?.notificationAccess?.roleNotificationTypes) {
-        const allowedTypes = settings.notificationAccess.roleNotificationTypes[user.role];
-        if (allowedTypes && n.type && !allowedTypes.includes(n.type)) {
-          return false;
+  // Redirect to first available tab
+  const SYSTEM_MODULE_KEYS = ['dashboard', 'settings', 'appSettings', 'admin'];
+  useEffect(() => {
+    const knownKeys = allModules.map(m => m.key);
+    if (!knownKeys.includes(activeModule) && !SYSTEM_MODULE_KEYS.includes(activeModule)) {
+      if (allowedModules.length > 0) {
+        const sortedModules = [...allowedModules];
+        if (settings && settings.moduleOrder) {
+          sortedModules.sort((a,b) => {
+            const orderA = settings.moduleOrder.indexOf(a.key);
+            const orderB = settings.moduleOrder.indexOf(b.key);
+            const idxA = orderA === -1 ? 99 : orderA;
+            const idxB = orderB === -1 ? 99 : orderB;
+            return idxA - idxB;
+          });
         }
+        setActiveModule(sortedModules[0].key);
       }
-
-      return true;
-    });
-
-    if (notifTab === 'unread') {
-      return visible.filter(n => !userNotifState[n.id]?.isRead);
     }
-    return visible;
-  }, [notifications, notifTab, userNotifState, user, settings]);
+  }, [activeModule, allowedModules, settings]);
 
-  const unreadNotifsCount = useMemo(() => {
-    return filteredNotifications.filter(n => !userNotifState[n.id]?.isRead).length;
-  }, [filteredNotifications, userNotifState]);
+  const navModules = useMemo(() => {
+    const modules = [...allowedModules];
+    if (settings && settings.moduleOrder) {
+       modules.sort((a,b) => {
+         const orderA = settings.moduleOrder.indexOf(a.key);
+         const orderB = settings.moduleOrder.indexOf(b.key);
+         const idxA = orderA === -1 ? 99 : orderA;
+         const idxB = orderB === -1 ? 99 : orderB;
+         return idxA - idxB;
+       });
+    }
+    return modules;
+  }, [allowedModules, settings]);
 
   const menuGroups = useMemo(() => {
     if (settings && settings.menuStructure && settings.menuStructure.length > 0) {
-      // Fix: ensure g_settings uses appSettings (База данных), not settings (Справочники)
       return settings.menuStructure.map((g: any) => {
         if (g.subtabKeys) {
           return { ...g, subtabKeys: g.subtabKeys.map((k: string) => k === 'settings' ? 'appSettings' : k) };
@@ -775,57 +416,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     }
   };
 
-  useEffect(() => {
-     return dbService.getSettings(setSettings);
-  }, []);
-
-  // Redirect to first available tab only if the active key is NOT a known module at all
-  // (protects against broken/invalid hashes). System/console keys (settings, appSettings,
-  // admin, dashboard) are never force-redirected even if absent from allowedModules.
-  const SYSTEM_MODULE_KEYS = ['dashboard', 'settings', 'appSettings', 'admin'];
-  useEffect(() => {
-    const knownKeys = allModules.map(m => m.key);
-    if (!knownKeys.includes(activeModule) && !SYSTEM_MODULE_KEYS.includes(activeModule)) {
-      if (allowedModules.length > 0) {
-        // Find modules sorted by settings.moduleOrder if possible
-        const sortedModules = [...allowedModules];
-        if (settings && settings.moduleOrder) {
-          sortedModules.sort((a,b) => {
-            const orderA = settings.moduleOrder.indexOf(a.key);
-            const orderB = settings.moduleOrder.indexOf(b.key);
-            const idxA = orderA === -1 ? 99 : orderA;
-            const idxB = orderB === -1 ? 99 : orderB;
-            return idxA - idxB;
-          });
-        }
-        setActiveModule(sortedModules[0].key);
-      }
-    }
-  }, [activeModule, allowedModules, settings]);
-
-  const navModules = useMemo(() => {
-    const modules = [...allowedModules];
-    if (settings && settings.moduleOrder) {
-       // sort modules based on settings.moduleOrder
-       modules.sort((a,b) => {
-         const orderA = settings.moduleOrder.indexOf(a.key);
-         const orderB = settings.moduleOrder.indexOf(b.key);
-         const idxA = orderA === -1 ? 99 : orderA;
-         const idxB = orderB === -1 ? 99 : orderB;
-         return idxA - idxB;
-       });
-    }
-    return modules;
-  }, [allowedModules, settings]);
-
-
   const handleNavigate = (moduleKey: string) => {
     window.location.hash = moduleKey;
     setActiveModule(moduleKey);
     setIsSidebarOpen(false);
   };
 
-  // Render the currently selected main active workspace component
   const renderModuleByKey = (key: string) => {
     switch (key) {
       case 'dashboard':
@@ -873,8 +469,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         </div>
       )}
       
-      {/* Modern Responsive Capsule Header - fully blended light premium top bar */}
- <header className="bg-white text-slate-900 border-b border-slate-200/35 min-h-[3.5rem] py-1 md:py-0 md:h-14 flex items-center justify-between px-3 sm:px-8 shrink-0 sticky top-0 z-50 select-none gap-2 sm:gap-3 transition-colors duration-300">
+      {/* Modern Responsive Capsule Header */}
+<header className="bg-white text-slate-900 border-b border-slate-200/35 min-h-[3.5rem] py-1 md:py-0 md:h-14 flex items-center justify-between px-3 sm:px-8 shrink-0 sticky top-0 z-50 select-none gap-2 sm:gap-3 transition-colors duration-300">
         
         {/* Left: Currency Converter on mobile */}
         <div className="md:hidden flex items-center shrink-0">
@@ -884,7 +480,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
               onClick={() => setIsConverterOpen(!isConverterOpen)}
               className={`relative p-2 rounded-xl border transition-all duration-200 active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs ${
                 isConverterOpen 
-                  ? 'bg-[#3765F6]/10 text-[#3765F6] border-[#3765F6]/25 shadow-xs' 
+                  ? 'bg-slate-100 text-slate-900 border-slate-300 shadow-xs' 
                   : 'bg-white/60 text-slate-500 hover:text-slate-900 hover:bg-white border-slate-200/40'
               }`}
               title="Конвертер валют"
@@ -915,7 +511,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             </div>
           </div>
 
-          {/* Navigation Menu aligned left, closer to Logo - borderless, light, premium design */}
+          {/* Navigation Menu */}
           <nav className="hidden md:flex items-center gap-1.5 p-1 rounded-2xl overflow-x-auto lg:overflow-visible whitespace-nowrap scrollbar-none max-w-[50vw] sm:max-w-[70vw] lg:max-w-none flex-nowrap shrink relative">
           {menuGroups.filter(isGroupVisible).map((group) => {
             const GroupIcon = groupIconMap[group.id] || Calendar;
@@ -936,7 +532,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                       e.stopPropagation();
                       const now = Date.now();
                       if (now - lastOpenedRef.current < 300) {
-                        return; // Ignore immediate click from simulated touch hover
+                        return;
                       }
                       setOpenDropdownId(isOpen ? null : group.id);
                     }}
@@ -1046,10 +642,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             </div>
           )}
           
-          {/* Avatar overlap stack exactly like the image dashboard */}
+          {/* Avatar overlap stack */}
           <div className="hidden md:flex items-center -space-x-2 mr-1 relative group cursor-pointer">
             {onlineUsers.slice(0, 3).map((u, i) => {
-               // Cycle through some nice colors for background
                const colors = ['bg-indigo-100 text-indigo-700', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700', 'bg-sky-100 text-sky-700', 'bg-rose-100 text-rose-700'];
                const colorClass = colors[i % colors.length];
                return (
@@ -1087,7 +682,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
               onClick={() => setIsConverterOpen(!isConverterOpen)}
               className={`relative p-2 rounded-xl border transition-all duration-200 active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs ${
                 isConverterOpen 
-                  ? 'bg-[#3765F6]/10 text-[#3765F6] border-[#3765F6]/25 shadow-xs' 
+                  ? 'bg-slate-100 text-slate-900 border-slate-300 shadow-xs' 
                   : 'bg-white/60 text-slate-500 hover:text-slate-900 hover:bg-white border-slate-200/40'
               }`}
               title="Конвертер валют"
@@ -1120,7 +715,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                 {user.role === 'root_admin' ? 'Админ' : 'Сотрудник'}
               </span>
             </div>
-            {/* Desktop logout button — visible only on xl screens */}
             <button
               onClick={handleLogoutSequence}
               className="hidden xl:flex items-center justify-center min-h-[36px] min-w-[36px] text-slate-400 hover:text-rose-600 transition cursor-pointer ml-1"
@@ -1130,17 +724,18 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             </button>
           </div>
 
-
         </div>
 
+      {/* Converter Panel */}
             <AnimatePresence>
               {isConverterOpen && (
                 <motion.div
+                  ref={converterPanelRef}
                   initial={{ opacity: 0, y: 12, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 12, scale: 0.96 }}
                   transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                  className="absolute top-full left-4 right-4 sm:left-auto sm:right-0 mt-2 sm:mt-3 sm:w-80 bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-900/5 z-[2000] overflow-hidden p-5 max-w-[400px] mx-auto"
+                  className="fixed md:absolute top-20 md:top-full left-4 right-4 md:left-auto md:right-8 mt-0 md:mt-2 sm:w-80 bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-900/5 z-[2000] overflow-hidden p-5 max-w-[400px] w-[calc(100vw-2rem)] sm:w-80"
                 >
                   <div className="border-b border-slate-100/60 pb-3 mb-4 flex justify-between items-center select-none">
                     <div>
@@ -1151,15 +746,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsEditingCurrencies(!isEditingCurrencies);
-                        }}
+                        onClick={(e) => { e.stopPropagation(); setIsEditingCurrencies(!isEditingCurrencies); }}
                         title="Настройка списка валют"
                         className={`p-1.5 rounded-xl border transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
                           isEditingCurrencies
-                            ? 'bg-[#3765F6] text-white border-[#3765F6]'
-                            : 'bg-white/60 hover:bg-[#3765F6]/10 border border-slate-200/40 text-slate-500 hover:text-[#3765F6] hover:border-[#3765F6]/20'
+                            ? 'bg-slate-900 text-white border-slate-800'
+                            : 'bg-white/60 hover:bg-slate-100 border border-slate-200/40 text-slate-500 hover:text-slate-700 hover:border-slate-300/50'
                         }`}
                       >
                         <Sliders size={10.5} />
@@ -1167,13 +759,10 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                       
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          fetchNbrbRates();
-                        }}
+                        onClick={(e) => { e.stopPropagation(); fetchNbrbRates(); }}
                         disabled={isRatesLoading}
                         title="Обновить курсы из НБРБ"
-                        className="p-1.5 rounded-xl bg-white/60 hover:bg-[#3765F6]/10 border border-slate-200/40 text-slate-500 hover:text-[#3765F6] hover:border-[#3765F6]/20 transition-all flex items-center justify-center cursor-pointer active:scale-95 disabled:opacity-50"
+                        className="p-1.5 rounded-xl bg-white/60 hover:bg-slate-100 border border-slate-200/40 text-slate-500 hover:text-slate-700 hover:border-slate-300/50 transition-all flex items-center justify-center cursor-pointer active:scale-95 disabled:opacity-50"
                       >
                         <RefreshCw size={10.5} className={`${isRatesLoading ? 'animate-spin' : ''}`} />
                       </button>
@@ -1186,20 +775,15 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                         <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Выберите валюты</span>
                         <button
                           onClick={() => setIsEditingCurrencies(false)}
-                          className="text-[10px] font-bold text-[#3765F6] hover:underline uppercase tracking-wider cursor-pointer"
+                          className="text-[10px] font-bold text-slate-700 hover:underline uppercase tracking-wider cursor-pointer"
                         >
                           Готово
                         </button>
                       </div>
                       <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
                         {(availableCurrencies.length > 0 ? availableCurrencies : [
-                          { id: "1", code: "USD" },
-                          { id: "2", code: "EUR" },
-                          { id: "3", code: "RUB" },
-                          { id: "4", code: "BYN" },
-                          { id: "5", code: "TRY" },
-                          { id: "6", code: "KZT" },
-                          { id: "7", code: "CNY" }
+                          { id: "1", code: "USD" }, { id: "2", code: "EUR" }, { id: "3", code: "RUB" },
+                          { id: "4", code: "BYN" }, { id: "5", code: "TRY" }, { id: "6", code: "KZT" }, { id: "7", code: "CNY" }
                         ]).map(curr => {
                           const isSelected = selectedCurrencyCodes.includes(curr.code);
                           return (
@@ -1216,12 +800,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                               }}
                               className={`p-2 rounded-xl text-xs font-bold border text-left flex items-center justify-between transition-all cursor-pointer ${
                                 isSelected 
-                                  ? 'bg-[#3765F6]/5 border-[#3765F6] text-[#3765F6]' 
+                                  ? 'bg-slate-100 border-slate-400 text-slate-800' 
                                   : 'bg-slate-50 border-slate-200/60 text-slate-400 hover:bg-slate-100'
                               }`}
                             >
                               <span>{curr.code}</span>
-                              <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-[#3765F6]' : 'bg-slate-300'}`} />
+                              <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-slate-800' : 'bg-slate-300'}`} />
                             </button>
                           );
                         })}
@@ -1254,16 +838,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                               )}
                             </div>
                             <div className="relative flex items-center">
-                              <span className="absolute left-3 text-xs font-semibold text-slate-400 group-focus-within:text-[#3765F6] transition-colors select-none">{currencySymbol}</span>
+                              <span className="absolute left-3 text-xs font-semibold text-slate-400 group-focus-within:text-slate-700 transition-colors select-none">{currencySymbol}</span>
                               <input
-                                type="text"
-                                inputMode="decimal"
-                                value={getDisplayValue(code)}
-                                onChange={(e) => {
-                                  setActiveCurrency(code);
-                                  setActiveValue(e.target.value.replace(',', '.'));
-                                }}
-                                className="w-full pl-8 pr-3.5 py-2 bg-slate-50/40 hover:bg-slate-50/70 border border-slate-200/50 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-4 focus:ring-[#3765F6]/8 transition-all"
+                                type="text" inputMode="decimal"
+                                value={displayValues[code]}
+                                onChange={(e) => { setActiveCurrency(code); setActiveValue(e.target.value.replace(',', '.')); }}
+                                className="w-full pl-8 pr-3.5 py-2 bg-slate-50/40 hover:bg-slate-50/70 border border-slate-200/50 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition-all"
                                 placeholder="0.00"
                               />
                             </div>
@@ -1280,9 +860,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       {/* Main Container workspace */}
       <div className="flex-1 flex relative w-full max-w-full overflow-hidden">
 
-        
-
-        {/* Dynamic active viewport card frame with subtle shadow and round corners */}
+        {/* Dynamic active viewport card frame */}
         <main 
           ref={mainScrollRef} 
           className={`flex-1 w-full max-w-full relative pb-24 md:pb-0 ${
@@ -1324,7 +902,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
       </div>
 
-      {/* Scroll to Top Button (round, only visible after scrolling down) */}
+      {/* Scroll to Top Button */}
       {showScrollTop && (
         <button
           onClick={() => {
@@ -1340,7 +918,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
       {/* Chat widget removed per request — data now flows via portal modules */}
 
-      {/* Real-time Broadcast Push Notifications Overlay Stack (Top-Right) */}
+      {/* Real-time Broadcast Push Notifications Overlay Stack */}
       <div className="fixed top-20 right-6 z-[2000] flex flex-col gap-3.5 max-w-sm w-[calc(100%-3rem)] pointer-events-none">
         <AnimatePresence>
           {activeUnreadBroadcasts.map((notif) => (
@@ -1386,8 +964,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         </AnimatePresence>
       </div>
 
-      {/* Mobile bottom navigation (small screens only) */}
- <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 flex items-stretch justify-around px-3 py-3 select-none" style={{paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))'}}>
+      {/* Mobile bottom navigation */}
+<nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 flex items-stretch justify-around px-3 py-3 select-none" style={{paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))'}}>
         {[
           { key: 'dashboard', label: 'Главная', icon: Home },
           { key: 'planZagruzok', label: 'Загрузки', icon: FileSpreadsheet },
@@ -1415,9 +993,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         </button>
       </nav>
 
-      {/* Mobile "all tools" panel (small screens only) */}
+      {/* Mobile "all tools" panel */}
       {isMobileMenuOpen && (
- <div className="md:hidden fixed inset-0 z-40 bg-slate-950/20 overflow-y-auto" onClick={() => setIsMobileMenuOpen(false)}>
+<div className="md:hidden fixed inset-0 z-40 bg-slate-950/20 overflow-y-auto" onClick={() => setIsMobileMenuOpen(false)}>
           <div className="min-h-full flex items-end justify-center px-2 pt-2 pb-24" onClick={(e) => e.stopPropagation()}>
             <div className="w-full bg-white rounded-[1.75rem] border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.08)] p-6">
               <div className="flex items-center justify-between mb-5 px-1">

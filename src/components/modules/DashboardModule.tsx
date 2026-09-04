@@ -13,7 +13,6 @@ import {
   Edit2,
   Save,
   X,
-  Sparkles,
   Plus,
   Trash2,
   Clock,
@@ -73,7 +72,6 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
   const [isDbOnline, setIsDbOnline] = useState(false);
   const [isEditingHighlight, setIsEditingHighlight] = useState(false);
   const [timeStr, setTimeStr] = useState('');
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   // Ambient pills removed (design simplification)
 
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
@@ -81,14 +79,6 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
   // Launcher removed (design simplification — navigation via bottom menu)
   const [selectedPreviewHighlight, setSelectedPreviewHighlight] = useState<HighlightData | null>(null);
   const [hoveredPillKey, setHoveredPillKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setPrefersReducedMotion(mediaQuery.matches);
-    const listener = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
-    mediaQuery.addEventListener('change', listener);
-    return () => mediaQuery.removeEventListener('change', listener);
-  }, []);
 
   useEffect(() => {
     const updateTime = () => {

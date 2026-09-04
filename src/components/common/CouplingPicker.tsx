@@ -203,7 +203,7 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
             onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
             onClick={() => setOpen(true)}
             placeholder={ph}
-            className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-slate-200 outline-none focus:border-[#3765F6] bg-white"
+            className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-slate-200 outline-none focus:border-slate-300 bg-white"
           />
         </div>
       )}

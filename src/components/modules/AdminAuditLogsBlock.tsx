@@ -130,7 +130,7 @@ export default function AdminAuditLogsBlock({ logs }: AdminAuditLogsBlockProps) 
             placeholder="Быстрый поиск по сотруднику, описанию или модулю..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
- className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:ring-4 focus:ring-[#3765F6]/10 focus:border-[#3765F6] focus:bg-white transition shadow-sm text-slate-800"
+ className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:ring-4 focus:ring-slate-300/10 focus:border-slate-300 focus:bg-white transition shadow-sm text-slate-800"
           />
           {searchQuery && (
             <button 

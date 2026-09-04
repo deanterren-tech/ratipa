@@ -109,7 +109,11 @@ export const subscribeFleetUnits = (callback: (units: FleetUnit[]) => void): (()
     const units: FleetUnit[] = couplings.map((c) => {
       const tractorId = c.tractorId || c.id;
       const tractor = tractorId ? (tractors.find((t) => norm(t.id) === norm(tractorId)) || null) : null;
-      const trailer = c.trailerId ? (trailerById.get(norm(c.trailerId)) || null) : null;
+      let trailer = c.trailerId ? (trailerById.get(norm(c.trailerId)) || null) : null;
+      // Fallback: ищем прицеп по госномеру, если не нашли по ID
+      if (!trailer && c.trailerNumber) {
+        trailer = trailers.find(t => norm(t.trailerNumber || t.id || '') === norm(c.trailerNumber)) || null;
+      }
       const driver = c.driverId ? (driverById.get(norm(c.driverId)) || null) : null;
       const dispatcher = c.dispatcherName ? (dispatcherByName.get(norm(c.dispatcherName)) || resolveDispatcher(c.dispatcherName, dispatchers)) : null;
       return {
@@ -177,7 +181,11 @@ export const getFleetUnitsOnce = (callback: (units: any[]) => void): void => {
     acc.dispatchers.forEach((d) => dispatcherByName.set(norm(d.name), d));
     const units: FleetUnit[] = acc.couplings.map((c) => {
       const tractor = c.tractorId ? (acc.tractors.find((t) => norm(t.id) === norm(c.tractorId)) || null) : null;
-      const trailer = c.trailerId ? (trailerById.get(norm(c.trailerId)) || null) : null;
+      let trailer = c.trailerId ? (trailerById.get(norm(c.trailerId)) || null) : null;
+      // Fallback: ищем прицеп по госномеру, если не нашли по ID
+      if (!trailer && c.trailerNumber) {
+        trailer = acc.trailers.find(t => norm(t.trailerNumber || t.id || '') === norm(c.trailerNumber)) || null;
+      }
       const driver = c.driverId ? (driverById.get(norm(c.driverId)) || null) : null;
       const dispatcher = c.dispatcherName ? (dispatcherByName.get(norm(c.dispatcherName)) || resolveDispatcher(c.dispatcherName, acc.dispatchers)) : null;
       return {
@@ -257,7 +265,7 @@ const _mapUnitToFlat = (u: any) => {
   driverName: u.driver?.shortNameRu || u.driver?.name || u.tractor?.driverName || u.tractor?.driverNameRu || '',
   driverNameRu: u.driver?.shortNameRu || u.tractor?.driverNameRu || u.tractor?.driverName || '',
   driverNameLat: u.driver?.nameLat || u.tractor?.driverNameLat || '',
-  phones: u.driver?.phones || u.tractor?.phones || [],
+  phones: u.tractor?.phones?.length ? u.tractor?.phones : (u.driver?.phones || []),
   passportNumber: drv('passport', 'passportNumber'),
   personalId: drv('personalId'),
   birthDate: drv('birthDate'),

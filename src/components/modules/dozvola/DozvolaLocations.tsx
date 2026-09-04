@@ -69,7 +69,7 @@ const DozvolCommentRow: React.FC<{ d: any; isHighlighted?: boolean }> = ({ d, is
             type="text"
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            className="flex-1 text-[10px] px-1.5 py-0.5 border border-slate-300 rounded outline-none focus:border-blue-500"
+            className="flex-1 text-[10px] px-1.5 py-0.5 border border-slate-300 rounded outline-none focus:border-slate-300"
             placeholder="Комментарий..."
             onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
             autoFocus
@@ -462,7 +462,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
               placeholder="Поиск дозвола..."
               value={globalSearchQuery}
               onChange={(e) => setGlobalSearchQuery(e.target.value)}
-              className="w-full text-xs bg-slate-50 border border-slate-200/60 rounded-xl pl-3 pr-8 py-2 outline-none focus:border-[#3765F6] focus:bg-white transition font-medium"
+              className="w-full text-xs bg-slate-50 border border-slate-200/60 rounded-xl pl-3 pr-8 py-2 outline-none focus:border-slate-300 focus:bg-white transition font-medium"
             />
             {globalSearchQuery && (
               <button 
@@ -560,7 +560,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                           type="text" 
                           value={editName}
                           onChange={(e) => setEditName(e.target.value)}
-                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 outline-none focus:border-slate-300 focus:bg-white transition"
                         />
                       </div>
                       <div className="flex flex-col gap-1">
@@ -569,7 +569,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                           type="text" 
                           value={editCountry}
                           onChange={(e) => setEditCountry(e.target.value)}
-                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 outline-none focus:border-[#3765F6] focus:bg-white transition"
+                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 outline-none focus:border-slate-300 focus:bg-white transition"
                         />
                       </div>
                       <div className="flex flex-col gap-1">
@@ -577,7 +577,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                         <textarea
                           value={editNotes}
                           onChange={(e) => setEditNotes(e.target.value)}
-                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 outline-none focus:border-[#3765F6] h-12 resize-none transition"
+                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 outline-none focus:border-slate-300 h-12 resize-none transition"
                         />
                       </div>
                       <div className="flex justify-end gap-1.5 mt-1 font-semibold">
@@ -653,7 +653,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                               placeholder="Быстрый поиск в точке..."
                               value={locSearchQueries[loc.id] || ''}
                               onChange={(e) => setLocSearchQueries(prev => ({ ...prev, [loc.id]: e.target.value }))}
-                              className="w-full text-[10px] bg-white border border-slate-200 rounded-xl pl-2 pr-6 py-1 outline-none focus:border-[#3765F6]"
+                              className="w-full text-[10px] bg-white border border-slate-200 rounded-xl pl-2 pr-6 py-1 outline-none focus:border-slate-300"
                             />
                             {(locSearchQueries[loc.id] || '') && (
                               <button onClick={() => setLocSearchQueries(prev => ({ ...prev, [loc.id]: '' }))} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400">
@@ -1120,7 +1120,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                     <select 
                       value={delivFrom} 
                       onChange={(e) => { setDelivFrom(e.target.value); setDelivDozvols([]); setDelivSearchQuery(''); }}
-                      className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2 py-1.5 outline-none focus:border-[#3765F6] transition"
+                      className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2 py-1.5 outline-none focus:border-slate-300 transition"
                     >
                       <option value="">Выберите начальную точку...</option>
                       {Object.values(locations).map((l: LocationItem) => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -1145,7 +1145,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                           nextRoute[idx] = e.target.value;
                           setDelivRoute(nextRoute);
                         }}
-                        className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2 py-1.5 outline-none focus:border-[#3765F6] transition"
+                        className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2 py-1.5 outline-none focus:border-slate-300 transition"
                       >
                         <option value="">Выберите локацию...</option>
                         {Object.values(locations).filter((l: LocationItem) => l.id !== delivFrom).map((l: LocationItem) => (
@@ -1191,7 +1191,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                     placeholder="Быстрый поиск дозвола в пункте..."
                     value={delivSearchQuery}
                     onChange={(e) => setDelivSearchQuery(e.target.value)}
-                    className="w-full text-xs bg-slate-50 border border-slate-200/60 rounded-xl pl-3 pr-8 py-2 outline-none focus:border-[#3765F6] transition"
+                    className="w-full text-xs bg-slate-50 border border-slate-200/60 rounded-xl pl-3 pr-8 py-2 outline-none focus:border-slate-300 transition"
                   />
                   {delivSearchQuery && (
                     <button onClick={() => setDelivSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
@@ -1210,7 +1210,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                           if (e.target.checked) setDelivDozvols([...delivDozvols, d.id]);
                           else setDelivDozvols(delivDozvols.filter(id => id !== d.id));
                         }} 
-                        className="w-4 h-4 rounded text-[#3765F6] border-slate-300 focus:ring-[#3765F6] cursor-pointer shrink-0"
+                        className="w-4 h-4 rounded text-[#3765F6] border-slate-300 focus:ring-slate-300 cursor-pointer shrink-0"
                       />
                       
                       <div 
@@ -1247,7 +1247,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                  type="date" 
                  value={delivSentAt} 
                  onChange={(e) => setDelivSentAt(e.target.value)} 
-                 className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-[#3765F6]"
+                 className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-slate-300"
                />
             </div>
 

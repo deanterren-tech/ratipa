@@ -60,7 +60,7 @@ export default function AdminAnnouncementsBlock({ user, settings }: Props) {
             required
             value={annText}
             onChange={(e) => setAnnText(e.target.value)}
-            className="w-full p-4 bg-white/40 border border-white/45 text-xs rounded-2xl outline-none focus:ring-2 focus:ring-blue-100/30 shadow-sm h-24 resize-none transition-all font-semibold text-slate-800"
+            className="w-full p-4 bg-white/40 border border-white/45 text-xs rounded-2xl outline-none focus:ring-2 focus:ring-slate-200/50 shadow-sm h-24 resize-none transition-all font-semibold text-slate-800"
           />
  <div className="flex justify-between items-center bg-white border border-slate-200 p-3 shadow-sm rounded-2xl">
             <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-500 select-none cursor-pointer group">

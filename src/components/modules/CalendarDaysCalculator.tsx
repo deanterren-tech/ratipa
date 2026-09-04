@@ -35,7 +35,7 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
             type="date" 
             value={startDate} 
             onChange={(e) => { setStartDate(e.target.value); handleDateChange(e.target.value, endDate); }} 
-            className="w-full bg-white/45 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:bg-white transition cursor-pointer shadow-inner" 
+            className="w-full bg-white/45 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 focus:bg-white transition cursor-pointer shadow-inner" 
           />
         </div>
         <div className="flex flex-col gap-1.5">
@@ -44,7 +44,7 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
             type="date" 
             value={endDate} 
             onChange={(e) => { setEndDate(e.target.value); handleDateChange(startDate, e.target.value); }} 
-            className="w-full bg-white/45 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 focus:bg-white transition cursor-pointer shadow-inner" 
+            className="w-full bg-white/45 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 focus:bg-white transition cursor-pointer shadow-inner" 
           />
         </div>
       </div>

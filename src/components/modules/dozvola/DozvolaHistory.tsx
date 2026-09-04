@@ -136,7 +136,7 @@ export default function DozvolaHistory({ user }: DozvolaHistoryProps) {
                 placeholder="Поиск по документам, авторам..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 w-full bg-slate-50/50 border border-slate-200/60 text-slate-700 text-xs rounded-xl focus:ring-0 focus:border-[#3765F6] block p-2.5 transition-all font-semibold"
+                className="pl-9 w-full bg-slate-50/50 border border-slate-200/60 text-slate-700 text-xs rounded-xl focus:ring-0 focus:border-slate-300 block p-2.5 transition-all font-semibold"
             />
           </div>
         </div>

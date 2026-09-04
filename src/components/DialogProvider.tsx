@@ -91,7 +91,7 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
                       if (e.key === 'Enter') handleClose(dialog.inputValue);
                       if (e.key === 'Escape') handleClose(null);
                     }}
-                    className="mt-4 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500"
+                    className="mt-4 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-slate-300"
                   />
                 )}
               </div>

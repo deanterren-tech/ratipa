@@ -56,7 +56,7 @@ export default function FerryDirectoryBlock({ user }: Props) {
           <div className="relative flex-1">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск…"
-              className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-white/80 outline-none focus:border-[#3765F6]" />
+              className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-white/80 outline-none focus:border-slate-300" />
           </div>
           <button onClick={openAdd}
             className="inline-flex items-center gap-1.5 bg-[#3765F6] text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-[#2a4fd0] shrink-0">
@@ -91,7 +91,7 @@ export default function FerryDirectoryBlock({ user }: Props) {
                 <label className="text-[10px] font-bold text-slate-500 uppercase">{fld.l}</label>
                 <input type={fld.num ? 'number' : 'text'} value={draft[fld.f] || ''}
                   onChange={(e) => setDraft((d) => ({ ...d, [fld.f]: e.target.value }))}
-                  className="w-full mt-1 px-3 py-2 text-sm rounded-lg border border-slate-200 outline-none focus:border-[#3765F6]" />
+                  className="w-full mt-1 px-3 py-2 text-sm rounded-lg border border-slate-200 outline-none focus:border-slate-300" />
               </div>
             ))}
             <div className="flex justify-end gap-2 pt-2">

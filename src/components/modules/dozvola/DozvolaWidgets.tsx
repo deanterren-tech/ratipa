@@ -352,7 +352,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
                 type="number"
                 value={quotaGlobalDriversCount || ""}
                 onChange={handleSaveGlobalDrivers}
-                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#3765F6] focus:bg-white transition"
+                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-slate-300 focus:bg-white transition"
                 placeholder="Кол-во водителей"
               />
             </div>
@@ -364,7 +364,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
                 type="number"
                 value={quotaTypesPercents[currentSelectedTab] || ""}
                 onChange={handleSaveTypeQuotaPercent}
-                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#3765F6] focus:bg-white transition"
+                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-slate-300 focus:bg-white transition"
                 placeholder="Процент"
               />
             </div>
@@ -376,7 +376,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
                 type="number"
                 value={quotaQuarterLimits[currentSelectedTab] || ""}
                 onChange={handleSaveTypeQuarterQuota}
-                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#3765F6] focus:bg-white transition"
+                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-slate-300 focus:bg-white transition"
                 placeholder="Квартальная квота"
               />
             </div>
@@ -431,7 +431,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
               type="number"
               value={configuredDays || ""}
               onChange={handleSaveDeadlineDays}
-              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#3765F6] focus:bg-white transition"
+              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-slate-300 focus:bg-white transition"
               placeholder="Напр. 60"
             />
           </div>
@@ -580,7 +580,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
               type="text"
               value={plannerCar}
               onChange={(e) => setPlannerCar(e.target.value.toUpperCase())}
-              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold uppercase focus:outline-none focus:border-[#3765F6] focus:bg-white transition"
+              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold uppercase focus:outline-none focus:border-slate-300 focus:bg-white transition"
               placeholder="AB 9271-7"
               list="fleet-cars-datalist-planner"
             />
@@ -598,7 +598,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
               type="number"
               value={calcPrice || ""}
               onChange={(e) => setCalcPrice(parseFloat(e.target.value) || 0)}
-              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#3765F6] focus:bg-white transition"
+              className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-slate-300 focus:bg-white transition"
               min="0"
               step="0.01"
             />
@@ -741,7 +741,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
                   {t.createdAt}
                 </div>
                 <input
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-semibold !no-underline focus:outline-none focus:bg-white focus:border-[#3765F6] transition"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-semibold !no-underline focus:outline-none focus:bg-white focus:border-slate-300 transition"
                   value={t.note || ""}
                   placeholder="Заметка к заявке..."
                   onClick={(e) => e.stopPropagation()}

@@ -218,20 +218,20 @@ export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryPro
               <form onSubmit={handleSaveType} className="p-6 space-y-5 flex flex-col">
                   <div>
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block font-mono">Отображаемое название (Вкладка)</label>
-                      <input required type="text" value={typeName} onChange={e => setTypeName(e.target.value)} className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition" placeholder="TR B, PL Euro 6..." />
+                      <input required type="text" value={typeName} onChange={e => setTypeName(e.target.value)} className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition" placeholder="TR B, PL Euro 6..." />
                   </div>
                   <div>
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block font-mono">Страна (для автозаполнения документов)</label>
-                      <input type="text" value={country} onChange={e => setCountry(e.target.value)} className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 placeholder:font-medium placeholder:text-slate-300 focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition" placeholder="Польша, Италия..." />
+                      <input type="text" value={country} onChange={e => setCountry(e.target.value)} className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 placeholder:font-medium placeholder:text-slate-300 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition" placeholder="Польша, Италия..." />
                   </div>
                   <div className="flex gap-4">
                       <div className="flex-1">
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block font-mono">Категория (ЕВРО)</label>
-                          <input type="text" value={category} onChange={e => setCategory(e.target.value)} className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 placeholder:font-medium placeholder:text-slate-300 focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition" placeholder="Euro 5, универсальн..." />
+                          <input type="text" value={category} onChange={e => setCategory(e.target.value)} className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 placeholder:font-medium placeholder:text-slate-300 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition" placeholder="Euro 5, универсальн..." />
                       </div>
                       <div className="w-24">
                           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block font-mono">Год</label>
-                          <input type="number" value={year || ''} onChange={e => setYear(parseInt(e.target.value))} className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 placeholder:font-medium placeholder:text-slate-300 focus:outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition" />
+                          <input type="number" value={year || ''} onChange={e => setYear(parseInt(e.target.value))} className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 placeholder:font-medium placeholder:text-slate-300 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition" />
                       </div>
                   </div>
 

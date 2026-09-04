@@ -6,17 +6,11 @@ import {getDatabase, ref, set, push, remove, update, query, limitToLast} from 'f
 import {getApp} from 'firebase/app'
 import { 
   Trash2, 
-  Search, 
-  Archive, 
-  History, 
-  Clock, 
-  Settings, 
+  History,
   CheckCircle2, 
   Wrench, 
   Truck,
-  FileSpreadsheet,
   X,
-  Users,
   Plus,
   Calendar
 } from 'lucide-react';
@@ -26,6 +20,7 @@ import {useToast} from '../ToastProvider'
 import {formatDriverShortName} from '../../utils/driverSync'
 import {applySharedCarToBazaRecord, applySharedDriverToBazaRecord, normalizePlate} from '../../utils/bazaSync'
 import CouplingPicker from '../common/CouplingPicker';
+import { resolvePermission } from '../../utils/permissions';
 
 interface BazaModuleProps {
   user: UserProfile;
@@ -85,10 +80,6 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
   const [driversMap, setDriversMap] = useState<Record<string, string>>({});
-
-  const allVehicles = useMemo(() => {
-    return [...bazaVehicles];
-  }, [bazaVehicles]);
 
   // РУЧНОЙ журнал (для "На базе"): baza + baza_cars (без archive/trip)
   const manualVehicles = useMemo(() => {
@@ -328,11 +319,17 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
   };
 
   const isRootAdmin = matchedUser.isRootAdmin || matchedUser.name === 'Сергей';
-  const currentUserRole = matchedUser.role; // "Диспетчер" | "Механик"
+  // Используем resolvePermission для проверки доступа к модулю baza
+  const bazaPerm = resolvePermission(ratipaUser, 'baza');
+  const canWriteBaza = isRootAdmin || bazaPerm === 'write';
+  const canReadBaza = isRootAdmin || bazaPerm !== 'none';
+
+  const currentUserRole = matchedUser.role;
   const currentUserPermissions = matchedUser.permissions || {};
 
   const canEditField = (fieldName: string) => {
      if (isRootAdmin) return true;
+     if (canWriteBaza) return true;
      return currentUserPermissions[fieldName] === true;
   };
 
@@ -405,7 +402,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 
   const handleAddNewCar = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isRootAdmin && !currentUserPermissions['carNumber']) {
+    if (!canEditField('carNumber')) {
       toast("У вас нет прав на добавление автомобилей!", 'error'); return;
     }
     const db = getDatabase(getApp());
@@ -1026,29 +1023,29 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                             <input type="text"
                               value={formData.driverName || ''}
                               onChange={(e) => setFormData((f) => ({ ...f, driverName: e.target.value }))}
-                              className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full focus:border-[#3765F6]"
+                              className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full focus:border-slate-300"
                               placeholder="—"
                             />
                          </div>
                          <div className="space-y-1">
                             <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Прибыл на базу</label>
-                            <div className="relative"><input type="text" readOnly disabled={!canEditField('dateArrival')} value={formData.dateArrival ? formData.dateArrival.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6] cursor-pointer pr-10" onClick={() => document.getElementById('picker-dateArrival')?.showPicker()} /><input type="date" id="picker-dateArrival" disabled={!canEditField('dateArrival')} value={formData.dateArrival || ''} onChange={e => handleFormChange(e, 'dateArrival')} className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateArrival')} onClick={() => document.getElementById('picker-dateArrival')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
+                            <div className="relative"><input type="text" readOnly disabled={!canEditField('dateArrival')} value={formData.dateArrival ? formData.dateArrival.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('picker-dateArrival')?.showPicker()} /><input type="date" id="picker-dateArrival" disabled={!canEditField('dateArrival')} value={formData.dateArrival || ''} onChange={e => handleFormChange(e, 'dateArrival')} className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateArrival')} onClick={() => document.getElementById('picker-dateArrival')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
                          </div>
                          <div className="space-y-1">
                             <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="Срок готовности">Срок готовности</label>
-                            <div className="relative"><input type="text" readOnly disabled={!canEditField('dateLoading')} value={formData.dateLoading ? formData.dateLoading.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6] cursor-pointer pr-10" onClick={() => document.getElementById('picker-dateLoading')?.showPicker()} /><input type="date" id="picker-dateLoading" disabled={!canEditField('dateLoading')} value={formData.dateLoading || ''} onChange={e => handleFormChange(e, 'dateLoading')} className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateLoading')} onClick={() => document.getElementById('picker-dateLoading')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
+                            <div className="relative"><input type="text" readOnly disabled={!canEditField('dateLoading')} value={formData.dateLoading ? formData.dateLoading.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('picker-dateLoading')?.showPicker()} /><input type="date" id="picker-dateLoading" disabled={!canEditField('dateLoading')} value={formData.dateLoading || ''} onChange={e => handleFormChange(e, 'dateLoading')} className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateLoading')} onClick={() => document.getElementById('picker-dateLoading')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
                          </div>
                          <div className="space-y-1">
                             <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate">Заявка на ремонт</label>
-                            <div className="relative"><input type="text" readOnly disabled={!canEditField('dateRepairStart')} value={formData.dateRepairStart ? formData.dateRepairStart.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6] cursor-pointer pr-10" onClick={() => document.getElementById('picker-dateRepairStart')?.showPicker()} /><input type="date" id="picker-dateRepairStart" disabled={!canEditField('dateRepairStart')} value={formData.dateRepairStart || ''} onChange={e => handleFormChange(e, 'dateRepairStart')} className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateRepairStart')} onClick={() => document.getElementById('picker-dateRepairStart')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
+                            <div className="relative"><input type="text" readOnly disabled={!canEditField('dateRepairStart')} value={formData.dateRepairStart ? formData.dateRepairStart.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('picker-dateRepairStart')?.showPicker()} /><input type="date" id="picker-dateRepairStart" disabled={!canEditField('dateRepairStart')} value={formData.dateRepairStart || ''} onChange={e => handleFormChange(e, 'dateRepairStart')} className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateRepairStart')} onClick={() => document.getElementById('picker-dateRepairStart')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
                          </div>
                          <div className="space-y-1">
                             <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate">Завершение ремонта</label>
-                            <div className="relative"><input type="text" readOnly disabled={!canEditField('dateRepairEnd')} value={formData.dateRepairEnd ? formData.dateRepairEnd.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6] cursor-pointer pr-10" onClick={() => document.getElementById('picker-dateRepairEnd')?.showPicker()} /><input type="date" id="picker-dateRepairEnd" disabled={!canEditField('dateRepairEnd')} value={formData.dateRepairEnd || ''} onChange={e => handleFormChange(e, 'dateRepairEnd')} className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateRepairEnd')} onClick={() => document.getElementById('picker-dateRepairEnd')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
+                            <div className="relative"><input type="text" readOnly disabled={!canEditField('dateRepairEnd')} value={formData.dateRepairEnd ? formData.dateRepairEnd.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('picker-dateRepairEnd')?.showPicker()} /><input type="date" id="picker-dateRepairEnd" disabled={!canEditField('dateRepairEnd')} value={formData.dateRepairEnd || ''} onChange={e => handleFormChange(e, 'dateRepairEnd')} className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateRepairEnd')} onClick={() => document.getElementById('picker-dateRepairEnd')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
                          </div>
                          <div className="space-y-1">
                             <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Фактический выезд</label>
-                            <div className="relative"><input type="text" readOnly disabled={!canEditField('dateDeparture')} value={formData.dateDeparture ? formData.dateDeparture.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6] cursor-pointer pr-10" onClick={() => document.getElementById('picker-dateDeparture')?.showPicker()} /><input type="date" id="picker-dateDeparture" disabled={!canEditField('dateDeparture')} value={formData.dateDeparture || ''} onChange={e => handleFormChange(e, 'dateDeparture')} className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateDeparture')} onClick={() => document.getElementById('picker-dateDeparture')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
+                            <div className="relative"><input type="text" readOnly disabled={!canEditField('dateDeparture')} value={formData.dateDeparture ? formData.dateDeparture.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('picker-dateDeparture')?.showPicker()} /><input type="date" id="picker-dateDeparture" disabled={!canEditField('dateDeparture')} value={formData.dateDeparture || ''} onChange={e => handleFormChange(e, 'dateDeparture')} className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateDeparture')} onClick={() => document.getElementById('picker-dateDeparture')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
                          </div>
                          <div className="space-y-1">
                             <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Примечание</label>
@@ -1056,7 +1053,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                               disabled={!canEditField('comment')} 
                               value={formData.comment} 
                               onChange={e => handleFormChange(e, 'comment')} 
-                              className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" 
+                              className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300" 
                               placeholder="..." 
                             />
                          </div>
@@ -1086,7 +1083,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                          value={searchQuery} 
                          onChange={e => setSearchQuery(e.target.value)} 
                          type="text" 
-                         className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full sm:w-64 focus:border-[#3765F6]" 
+                         className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full sm:w-64 focus:border-slate-300" 
                          placeholder="Быстрый поиск..." 
                        />
                        <select
@@ -1393,23 +1390,23 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
                        <div className="space-y-1">
                           <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="Прибыл на базу">Прибыл на базу</label>
-                          <div className="relative"><input type="text" readOnly disabled={!canEditField('dateArrival')} value={modalData.dateArrival ? modalData.dateArrival.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6] cursor-pointer pr-10" onClick={() => document.getElementById('modal-picker-dateArrival')?.showPicker()} /><input type="date" id="modal-picker-dateArrival" disabled={!canEditField('dateArrival')} value={modalData.dateArrival || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateArrival: true})); setModalData((mm) => ({...mm, dateArrival: e.target.value})); } } className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateArrival')} onClick={() => document.getElementById('modal-picker-dateArrival')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
+                          <div className="relative"><input type="text" readOnly disabled={!canEditField('dateArrival')} value={modalData.dateArrival ? modalData.dateArrival.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('modal-picker-dateArrival')?.showPicker()} /><input type="date" id="modal-picker-dateArrival" disabled={!canEditField('dateArrival')} value={modalData.dateArrival || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateArrival: true})); setModalData((mm) => ({...mm, dateArrival: e.target.value})); } } className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateArrival')} onClick={() => document.getElementById('modal-picker-dateArrival')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
                        </div>
                        <div className="space-y-1">
                           <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="К какому числу должна быть готова машина">Срок готовности</label>
-                          <div className="relative"><input type="text" readOnly disabled={!canEditField('dateLoading')} value={modalData.dateLoading ? modalData.dateLoading.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6] cursor-pointer pr-10" onClick={() => document.getElementById('modal-picker-dateLoading')?.showPicker()} /><input type="date" id="modal-picker-dateLoading" disabled={!canEditField('dateLoading')} value={modalData.dateLoading || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateLoading: true})); setModalData((mm) => ({...mm, dateLoading: e.target.value})); } } className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateLoading')} onClick={() => document.getElementById('modal-picker-dateLoading')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
+                          <div className="relative"><input type="text" readOnly disabled={!canEditField('dateLoading')} value={modalData.dateLoading ? modalData.dateLoading.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('modal-picker-dateLoading')?.showPicker()} /><input type="date" id="modal-picker-dateLoading" disabled={!canEditField('dateLoading')} value={modalData.dateLoading || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateLoading: true})); setModalData((mm) => ({...mm, dateLoading: e.target.value})); } } className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateLoading')} onClick={() => document.getElementById('modal-picker-dateLoading')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
                        </div>
                        <div className="space-y-1">
                           <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="Дата подачи заявки на ремонт">Заявка на ремонт</label>
-                          <input type="date" disabled={!canEditField('dateRepairStart')} value={modalData.dateRepairStart || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateRepairStart: true})); setModalData((mm) => ({...mm, dateRepairStart: e.target.value})); }} className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" />
+                          <input type="date" disabled={!canEditField('dateRepairStart')} value={modalData.dateRepairStart || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateRepairStart: true})); setModalData((mm) => ({...mm, dateRepairStart: e.target.value})); }} className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300" />
                        </div>
                        <div className="space-y-1">
                           <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="Дата окончания ремонта">Завершение ремонта</label>
-                          <input type="date" disabled={!canEditField('dateRepairEnd')} value={modalData.dateRepairEnd || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateRepairEnd: true})); setModalData((mm) => ({...mm, dateRepairEnd: e.target.value})); }} className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" />
+                          <input type="date" disabled={!canEditField('dateRepairEnd')} value={modalData.dateRepairEnd || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateRepairEnd: true})); setModalData((mm) => ({...mm, dateRepairEnd: e.target.value})); }} className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300" />
                        </div>
                        <div className="space-y-1">
                           <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="Фактический выезд">Фактический выезд</label>
-                          <div className="relative"><input type="text" readOnly disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture ? modalData.dateDeparture.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6] cursor-pointer pr-10" onClick={() => document.getElementById('modal-picker-dateDeparture')?.showPicker()} /><input type="date" id="modal-picker-dateDeparture" disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateDeparture: true})); setModalData((mm) => ({...mm, dateDeparture: e.target.value})); } } className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateDeparture')} onClick={() => document.getElementById('modal-picker-dateDeparture')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
+                          <div className="relative"><input type="text" readOnly disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture ? modalData.dateDeparture.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('modal-picker-dateDeparture')?.showPicker()} /><input type="date" id="modal-picker-dateDeparture" disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateDeparture: true})); setModalData((mm) => ({...mm, dateDeparture: e.target.value})); } } className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateDeparture')} onClick={() => document.getElementById('modal-picker-dateDeparture')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
                        </div>
                     </div>
 
@@ -1420,7 +1417,7 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
                          value={modalData.comment||''} 
                          onChange={(e)=>{ setTouchedFields(prev => ({...prev, comment: true})); setModalData((mm) => ({...mm, comment: e.target.value})); }}
                          onKeyDown={handleInputKeyDown} 
-                         className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-[#3765F6]" 
+                         className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300" 
                        />
                     </div>
 

@@ -27,11 +27,6 @@ export default function DozvolaModule({ user }: DozvolaModuleProps) {
     return () => { unsubTypes(); unsubOrder(); };
   }, []);
 
-  const customTypesMap = Object.keys(customTypes).reduce((acc: any, key) => {
-    acc[key] = customTypes[key].name;
-    return acc;
-  }, {});
-
   return (
     <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm flex flex-col gap-5">
       

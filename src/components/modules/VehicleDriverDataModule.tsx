@@ -12,10 +12,8 @@ import {
   User, 
   Phone, 
   Calendar, 
-  Sparkles, 
   X,
   ClipboardCheck,
-  Shield,
   Folder,
   ExternalLink,
   RefreshCw,
@@ -93,7 +91,7 @@ const VehicleDriverCard = React.memo(({
           <select
             value={rec.dispatcher || ""}
             onChange={(e) => onUpdateDispatcher(rec, e.target.value)}
-            className="bg-[#3765F6]/5 text-[#3765F6] hover:bg-[#3765F6]/10 border border-[#3765F6]/10 px-1.5 py-0.5 rounded-md text-[9.5px] font-extrabold outline-none focus:border-[#3765F6] cursor-pointer shadow-2xs transition-all"
+            className="bg-[#3765F6]/5 text-[#3765F6] hover:bg-[#3765F6]/10 border border-[#3765F6]/10 px-1.5 py-0.5 rounded-md text-[9.5px] font-extrabold outline-none focus:border-slate-300 cursor-pointer shadow-2xs transition-all"
           >
             <option value="" className="text-slate-800 bg-white">Без дисп.</option>
             {dispatchersList.map((dispName) => (
@@ -351,8 +349,6 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   const [trailerNumber, setTrailerNumber] = useState('');
   const [driverPhone, setDriverPhone] = useState('');
   const [rate, setRate] = useState('');
-  
-  // AI assistant state
 
   // Save / CRUD feedback states
   const [saveError, setSaveError] = useState('');
@@ -1446,7 +1442,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={personalId}
                     onChange={e => setPersonalId(e.target.value)}
                     placeholder="3080273A018PB6"
-                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-[#3765F6] focus:bg-white transition font-mono uppercase"
+                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-slate-300 focus:bg-white transition font-mono uppercase"
                   />
                 </div>
 

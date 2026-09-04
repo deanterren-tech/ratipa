@@ -385,7 +385,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Поиск по тягачу / прицепу / водителю..."
-            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-[#3765F6] font-mono" />
+            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-slate-300 font-mono" />
         </div>
         {isWritePermitted && (
           <button onClick={toggleAll}
@@ -431,7 +431,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
         <table className="w-full text-left border-collapse">
           <thead className="bg-slate-50/95">
             <tr className="text-[9px] font-black uppercase text-slate-500 font-mono border-b border-slate-200/80">
-              {isWritePermitted && <th className="px-2 py-3 w-[36px]"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} className="accent-[#3765F6]" /></th>}
+              {isWritePermitted && <th className="px-2 py-3 w-[36px]"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} className="accent-slate-900" /></th>}
               <th className="px-4 py-3 whitespace-nowrap">Сцепка (Тягач / Прицеп)</th>
               <th className="px-4 py-3 whitespace-nowrap">Марка</th>
               <th className="px-4 py-3 whitespace-nowrap">Водитель</th>
@@ -449,7 +449,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
                   className={`hover:bg-slate-50/60 cursor-pointer transition ${isSel ? 'bg-[#3765F6]/10' : ''} ${focusIdx === i ? 'ring-2 ring-[#3765F6]/40 ring-inset' : ''}`} onMouseEnter={() => setFocusIdx(i)}>
                 {isWritePermitted && (
                   <td className="px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
-                    <input type="checkbox" checked={isSel} onChange={() => toggle(c.id)} className="accent-[#3765F6]" />
+                    <input type="checkbox" checked={isSel} onChange={() => toggle(c.id)} className="accent-slate-900" />
                   </td>
                 )}
                 <td className="px-4 py-2.5 font-mono">
@@ -621,7 +621,7 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
     <div>
       <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">{label}</label>
       <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono outline-none focus:border-[#3765F6]" />
+        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono outline-none focus:border-slate-300" />
     </div>
   );
 }
@@ -634,7 +634,7 @@ function SelectField({ label, value, onChange, options, allowCustom }: {
     <div>
       <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">{label}</label>
       <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-[#3765F6]">
+        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-slate-300">
         <option value="">—</option>
         {options.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
         {allowCustom && value && !options.some((o) => o.v === value) && <option value={value}>{value}</option>}

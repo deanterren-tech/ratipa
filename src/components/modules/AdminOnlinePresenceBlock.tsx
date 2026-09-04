@@ -350,6 +350,77 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
             </div>
           </div>
 
+        {/* 3. ALL USERS — LAST ACTIVE TIME */}
+          <div className="space-y-4 pt-2">
+            <h3 className="text-xs font-semibold tracking-wide text-slate-500 font-mono flex items-center gap-2">
+              <Clock size={13} className="text-slate-400" />
+              Все сотрудники — последняя активность ({allUsers.length})
+            </h3>
+
+            <div className="bg-white/30 rounded-2xl border border-slate-200/40 overflow-hidden shadow-xs">
+              <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
+                {allUsers.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400 text-xs font-semibold">
+                    Нет пользователей.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100/40">
+                    {[...allUsers]
+                      .sort((a, b) => {
+                        const aOnline = onlineUids.has(a.uid) ? 1 : 0;
+                        const bOnline = onlineUids.has(b.uid) ? 1 : 0;
+                        if (aOnline !== bOnline) return bOnline - aOnline;
+                        return (b.lastActive || '').localeCompare(a.lastActive || '');
+                      })
+                      .map((u) => {
+                        const isOnline = onlineUids.has(u.uid);
+                        const isSelf = u.uid === user.uid;
+                        const roleLabel = ROLE_LABELS[u.role] || u.role;
+                        const initial = (u.name || "").charAt(0).toUpperCase();
+
+                        return (
+                          <div
+                            key={u.uid}
+                            className="flex items-center gap-3 p-3.5 hover:bg-white/40 transition duration-150"
+                          >
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-semibold text-[10px] shrink-0 border select-none ${
+                              isSelf ? 'bg-slate-900 text-white border-slate-900/30' : 'bg-slate-100 text-slate-600 border-slate-200'
+                            }`}>
+                              {initial}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-semibold text-slate-800 truncate">
+                                  {u.name}
+                                </span>
+                                {isSelf && (
+                                  <span className="bg-slate-900 text-white font-mono text-[7px] font-bold px-1 py-0.5 rounded uppercase tracking-wider shrink-0">
+                                    ВЫ
+                                  </span>
+                                )}
+                                <span className="text-[8px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">
+                                  {roleLabel}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                <span className="text-[9px] font-mono text-slate-400">
+                                  {isOnline ? 'В системе' : formatLastSeen(u.lastActive)}
+                                </span>
+                              </div>
+                            </div>
+                            <span className="text-[9px] font-mono text-slate-400 shrink-0">
+                              {formatTime(u.lastActive)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
         </div>
       )}
     </div>

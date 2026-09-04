@@ -3,7 +3,7 @@ import {UserProfile, SalaryLog, CarRateGroup, AppSettings, Driver, Vehicle} from
 import { dbService, database, onValue } from '../../api'
 import {pdService} from '../../api'
 import { ref } from 'firebase/database'
-import {Wallet, Calculator, Send, Trash2, Edit, Copy} from 'lucide-react'
+import {Wallet, Calculator, Trash2, Edit, Copy} from 'lucide-react'
 import CalendarDaysCalculator from './CalendarDaysCalculator';
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
@@ -68,7 +68,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const [editingSalaryData, setEditingSalaryData] = useState<Partial<SalaryLog>>({});
   const [editDirection, setEditDirection] = useState<string>("");
   const [editCircles, setEditCircles] = useState<string>("");
-  const [logsLimit, setLogsLimit] = useState(7);
+  const [logsLimit, setLogsLimit] = useState(10);
 
   // handlers модалки редактирования выплаты (восстановлены: ранее были удалены,
   // но вызовы остались в JSX → ReferenceError при клике "Править"/"Дублировать")
@@ -522,10 +522,11 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   };
 
 
-  const filteredHistory = logs.filter(rec => {
+  const filteredHistory = useMemo(() => {
+    return logs.filter(rec => {
         const haystack = `${rec.datetime || ''} ${rec.logist || ''} ${rec.driver || ''} ${rec.car || ''} ${rec.mark || ''} ${rec.km || ''} ${rec.rate || ''} ${rec.bonus || ''} ${rec.totalSalary || ''}`.toLowerCase();
         return !searchQuery || haystack.includes(searchQuery.toLowerCase());
-  }).sort((a, b) => {
+    }).sort((a, b) => {
     // Parse date strings formatted as "DD.MM.YYYY" or standard ISO strings
     const parseDate = (dStr: string) => {
       if (!dStr) return 0;
@@ -549,6 +550,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     // Within the same day, compare IDs descending
     return (b.id || "").localeCompare(a.id || "");
   });
+  }, [logs, searchQuery]);
 
   const totalPaid = logs.reduce((s, r) => s + (r.totalSalary || 0), 0);
   const avgPaid = logs.length > 0 ? totalPaid / logs.length : 0;
@@ -608,18 +610,18 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">ФИО Водителя</label>
-                                <input type="text" value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="—" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs" />
+                                <input type="text" value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="—" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs" />
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Направление</label>
-                                <select value={tripDirection} onChange={e => setTripDirection(e.target.value)} className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs cursor-pointer appearance-none">
+                                <select value={tripDirection} onChange={e => setTripDirection(e.target.value)} className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs cursor-pointer appearance-none">
                                     <option value="Турция">Турция</option>
                                     <option value="Китай">Китай</option>
                                 </select>
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Круги</label>
-                                <select value={tripCircles} onChange={e => setTripCircles(e.target.value)} className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs cursor-pointer appearance-none">
+                                <select value={tripCircles} onChange={e => setTripCircles(e.target.value)} className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs cursor-pointer appearance-none">
                                     <option value="">—</option>
                                     <option value="2 круга">2 круга</option>
                                     <option value="3 круга">3 круга</option>
@@ -627,27 +629,27 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Общий пробег (км)</label>
-                                <input type="number" value={totalKm} onChange={e => setTotalKm(Number(e.target.value))} placeholder="5500" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs" />
+                                <input type="number" value={totalKm} onChange={e => setTotalKm(Number(e.target.value))} placeholder="5500" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs" />
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ставка за км (€)</label>
-                                <input type="number" step="0.001" value={ratePerKm} onChange={e => setRatePerKm(Number(e.target.value))} className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs" />
+                                <input type="number" step="0.001" value={ratePerKm} onChange={e => setRatePerKm(Number(e.target.value))} className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs" />
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Дней простоя ({currentIdleRate} €/д)</label>
-                                <input type="number" value={idleDays} onChange={e => setIdleDays(Number(e.target.value))} min="0" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs" />
+                                <input type="number" value={idleDays} onChange={e => setIdleDays(Number(e.target.value))} min="0" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs" />
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Дней в рейсе ({currentPerDiem} €/д)</label>
-                                <input type="number" value={totalDays} onChange={e => setTotalDays(Number(e.target.value))} min="1" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs" />
+                                <input type="number" value={totalDays} onChange={e => setTotalDays(Number(e.target.value))} min="1" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs" />
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Премия (€)</label>
-                                <input type="number" value={bonus} onChange={e => setBonus(Number(e.target.value))} min="0" placeholder="0" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs" />
+                                <input type="number" value={bonus} onChange={e => setBonus(Number(e.target.value))} min="0" placeholder="0" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs" />
                             </div>
                             <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-2">
                                 <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Комментарий к выплате</label>
-                                <input type="text" value={comment} onChange={e => setComment(e.target.value)} placeholder="Опционально (штрафы, детали, премии...)" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs" />
+                                <input type="text" value={comment} onChange={e => setComment(e.target.value)} placeholder="Опционально (штрафы, детали, премии...)" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs" />
                             </div>
                         </div>
                     </div>

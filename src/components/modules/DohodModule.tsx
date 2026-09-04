@@ -1291,7 +1291,6 @@ export default function DohodModule({ user }: DohodModuleProps) {
   };
 
   const handleCityBlur = (idx: number) => {
-    // Already calculated instantly on city input changes in updateLeg!
   };
 
   const updateLeg = (
@@ -1632,7 +1631,6 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
   const editHistoryEntry = (calc: RouteCalculation) => {
     copyHistoryToForm(calc);
-    dbService.deleteRouteCalculation(calc.id, user.name, user.role);
   };
 
   const openEditCalcModal = (calc: RouteCalculation) => {
@@ -1966,20 +1964,6 @@ export default function DohodModule({ user }: DohodModuleProps) {
     closeEditCalcModal();
   };
 
-  // Date and Days helper
-  const extractDays = (txt: string): number | null => {
-    const lower = txt.toLowerCase();
-    // Ищем паттерны вроде "5 дней", "на 10 дн", "рейс 7 суток", "круг 14 дней", "12 суток"
-    const m =
-      lower.match(/(\d+)\s*(?:дней|дн\.|дн|суток|сут\.|сут|дня|день|сутки)/i) ||
-      lower.match(
-        /(?:круг|рейс|на|срок|время)\s*(\d+)\s*(?:дней|дн\.|дн|суток|сут\.|сут|дня|день|сутки)?/i,
-      );
-    if (m) {
-      return parseInt(m[1], 10);
-    }
-    return null;
-  };
 
   
 
@@ -2015,7 +1999,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
             <select
               value={globalDirection}
               onChange={handleGlobalDirectionChange}
-              className="ml-4 px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none w-48 shadow-sm focus:border-[#3765F6] focus:bg-white min-h-[44px]"
+              className="ml-4 px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none w-48 shadow-sm focus:border-slate-300 focus:bg-white min-h-[44px]"
             >
               {directions.map((d) => (
                 <option key={d.id} value={d.name}>
@@ -2083,7 +2067,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         onBlur={() => handleCityBlur(idx)}
                         cities={citiesList}
                         placeholder="Откуда"
-                        className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                        className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                       />
                     </td>
                     <td className="p-2">
@@ -2093,7 +2077,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         onBlur={() => handleCityBlur(idx)}
                         cities={citiesList}
                         placeholder="Куда"
-                        className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                        className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                       />
                     </td>
                     <td className="p-2">
@@ -2107,7 +2091,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                             checkManualDistanceUpdate(prevTo, leg.from, leg.emptyRun);
                           }
                         }}
-                        className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                        className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                       />
                     </td>
                     <td className="p-2">
@@ -2131,7 +2115,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                               )
                             }
                             title={leg.manualOverride ? "Введён вручную" : "Расчёт по карте"}
-                            className={`w-full pl-2 pr-8 py-2 bg-white/45 border rounded-xl text-xs font-bold focus:bg-white focus:border-[#3765F6] outline-none transition shadow-2xs ${
+                            className={`w-full pl-2 pr-8 py-2 bg-white/45 border rounded-xl text-xs font-bold focus:bg-white focus:border-slate-300 outline-none transition shadow-2xs ${
                               leg.manualOverride 
                                 ? "border-amber-300 text-amber-950 bg-amber-50/10 focus:border-amber-500" 
                                 : "border-slate-200/50 text-slate-900"
@@ -2165,7 +2149,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         onChange={(e) =>
                           updateLeg(idx, { freight: Number(e.target.value) })
                         }
-                        className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                        className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                       />
                     </td>
                     <td className="p-2 relative group">
@@ -2176,7 +2160,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           updateLeg(idx, { infoRate: Number(e.target.value) })
                         }
                         onBlur={() => handleInfoRateBlur(idx)}
-                        className="w-full pr-8 px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                        className="w-full pr-8 px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                       />
                       {leg.infoRate > 0 && leg.infoCurrency !== "EUR" && (
                         <button
@@ -2203,7 +2187,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           updateLeg(idx, { infoCurrency: val });
                           handleCurrencyChange(idx, val);
                         }}
-                        className="w-full px-1.5 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs leading-tight overflow-hidden text-ellipsis"
+                        className="w-full px-1.5 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs leading-tight overflow-hidden text-ellipsis"
                       >
                         <option value="USD">USD</option>
                         <option value="EUR">EUR</option>
@@ -2218,7 +2202,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           onChange={(e) =>
                             updateLeg(idx, { ferrySelectValue: e.target.value })
                           }
-                          className="w-full px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs font-sans"
+                          className="w-full px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs font-sans"
                         >
                           <option value="none">Без парома</option>
                           {ferries.map((f, i) => (
@@ -2253,7 +2237,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                             additionalExpenses: e.target.value === "" ? undefined : Number(e.target.value),
                           })
                         }
-                        className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                        className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                       />
                     </td>
                     <td className="p-2">
@@ -2266,7 +2250,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         onChange={(e) =>
                           updateLeg(idx, { coeff: Number(e.target.value) })
                         }
-                        className="w-full px-1 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs text-center"
+                        className="w-full px-1 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs text-center"
                       />
                     </td>
                     <td className="p-2 text-right space-x-1.5 whitespace-nowrap">
@@ -2323,7 +2307,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       onBlur={() => handleCityBlur(idx)}
                       cities={citiesList}
                       placeholder="Откуда"
-                      className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                      className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
@@ -2334,7 +2318,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       onBlur={() => handleCityBlur(idx)}
                       cities={citiesList}
                       placeholder="Куда"
-                      className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                      className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                     />
                   </div>
                 </div>
@@ -2352,7 +2336,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           checkManualDistanceUpdate(prevTo, leg.from, leg.emptyRun);
                         }
                       }}
-                      className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                      className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
@@ -2371,7 +2355,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           checkManualDistanceUpdate(leg.from, leg.to, Number(e.target.value))
                         }
                         title={leg.manualOverride ? "Введён вручную" : "Расчёт по карте"}
-                        className={`w-full pl-3 pr-12 py-2 bg-white/45 border rounded-xl text-xs font-bold text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs ${
+                        className={`w-full pl-3 pr-12 py-2 bg-white/45 border rounded-xl text-xs font-bold text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs ${
                           leg.manualOverride 
                             ? "border-amber-300 text-amber-950 bg-amber-50/10 focus:border-amber-500" 
                             : "border-slate-200/50 text-slate-900"
@@ -2404,7 +2388,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       type="number"
                       value={leg.freight || ""}
                       onChange={(e) => updateLeg(idx, { freight: Number(e.target.value) })}
-                      className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                      className="w-full px-3 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                     />
                   </div>
                   <div className="flex flex-col gap-1.5">
@@ -2415,7 +2399,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         value={leg.infoRate || ""}
                         onChange={(e) => updateLeg(idx, { infoRate: Number(e.target.value) })}
                         onBlur={() => handleInfoRateBlur(idx)}
-                        className="w-1/2 min-w-0 pr-6 px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                        className="w-1/2 min-w-0 pr-6 px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                       />
                       {leg.infoRate > 0 && leg.infoCurrency !== "EUR" && (
                         <button
@@ -2433,7 +2417,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           updateLeg(idx, { infoCurrency: val });
                           handleCurrencyChange(idx, val);
                         }}
-                        className="w-1/2 min-w-0 px-1 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs leading-tight"
+                        className="w-1/2 min-w-0 px-1 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs leading-tight"
                       >
                         <option value="USD">USD</option>
                         <option value="EUR">EUR</option>
@@ -2451,7 +2435,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       <select
                         value={leg.ferrySelectValue || "none"}
                         onChange={(e) => updateLeg(idx, { ferrySelectValue: e.target.value })}
-                        className="w-full px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                        className="w-full px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                       >
                         <option value="none">Без парома</option>
                         {ferries.map((f, i) => (
@@ -2465,7 +2449,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           value={leg.ferryCost || ""}
                           placeholder="Цена €"
                           onChange={(e) => updateLeg(idx, { ferryCost: Number(e.target.value) })}
-                          className="w-full px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                          className="w-full px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                         />
                       )}
                     </div>
@@ -2478,14 +2462,14 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         value={leg.additionalExpenses || ""}
                         placeholder="Доп €"
                         onChange={(e) => updateLeg(idx, { additionalExpenses: e.target.value === "" ? undefined : Number(e.target.value) })}
-                        className="w-1/2 min-w-0 px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                        className="w-1/2 min-w-0 px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                       />
                       <input
                         type="number"
                         step="0.01"
                         value={leg.coeff === undefined ? getDirCoeff() : leg.coeff}
                         onChange={(e) => updateLeg(idx, { coeff: Number(e.target.value) })}
-                        className="w-1/2 min-w-0 px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs text-center"
+                        className="w-1/2 min-w-0 px-2 py-2 bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs text-center"
                       />
                     </div>
                   </div>
@@ -2641,7 +2625,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         type="date"
                         value={tripStartDate}
                         onChange={(e) => setTripStartDate(e.target.value)}
-                        className="w-full bg-white/45 text-slate-800 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs cursor-pointer min-h-[44px]"
+                        className="w-full bg-white/45 text-slate-800 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs cursor-pointer min-h-[44px]"
                       />
                     </div>
                     
@@ -2651,7 +2635,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         type="date"
                         value={tripEndDate}
                         onChange={(e) => setTripEndDate(e.target.value)}
-                        className="w-full bg-white/45 text-slate-800 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs cursor-pointer min-h-[44px]"
+                        className="w-full bg-white/45 text-slate-800 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs cursor-pointer min-h-[44px]"
                       />
                     </div>
                   </div>
@@ -2664,7 +2648,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         min="1"
                         value={tripDays}
                         onChange={(e) => setTripDays(Number(e.target.value))}
-                        className="w-16 bg-white/45 border border-slate-200/50 rounded-xl px-2 py-1.5 text-xs font-semibold text-[#3765F6] outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs text-center"
+                        className="w-16 bg-white/45 border border-slate-200/50 rounded-xl px-2 py-1.5 text-xs font-semibold text-[#3765F6] outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs text-center"
                       />
                       <span className="text-xs font-bold text-slate-500">дней</span>
                     </div>
@@ -2713,7 +2697,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                               setExpenseItems(next);
                             }}
                             placeholder="Название статьи"
-                            className="flex-1 bg-white/45 border border-slate-200/50 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                            className="flex-1 bg-white/45 border border-slate-200/50 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                           />
                           <input
                             type="number"
@@ -2944,7 +2928,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 placeholder="Поиск по названию..."
                 value={routeSearch}
                 onChange={(e) => setRouteSearch(e.target.value)}
-                className="text-xs px-4 pl-9 py-2 bg-white/45 border border-slate-200/50 rounded-xl outline-none font-semibold text-slate-800 focus:bg-white focus:border-[#3765F6] transition shadow-2xs w-full sm:w-64 min-h-[44px]"
+                className="text-xs px-4 pl-9 py-2 bg-white/45 border border-slate-200/50 rounded-xl outline-none font-semibold text-slate-800 focus:bg-white focus:border-slate-300 transition shadow-2xs w-full sm:w-64 min-h-[44px]"
               />
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             </div>
@@ -3070,7 +3054,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 placeholder="Поиск по направлениям, дате, логисту..."
                 value={historySearch}
                 onChange={(e) => setHistorySearch(e.target.value)}
-                className="text-xs px-4 pl-9 py-2.5 w-full bg-white/45 border border-slate-200/50 rounded-xl outline-none font-semibold text-slate-800 focus:bg-white focus:border-[#3765F6] transition shadow-2xs min-h-[44px]"
+                className="text-xs px-4 pl-9 py-2.5 w-full bg-white/45 border border-slate-200/50 rounded-xl outline-none font-semibold text-slate-800 focus:bg-white focus:border-slate-300 transition shadow-2xs min-h-[44px]"
               />
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             </div>
@@ -3215,7 +3199,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       globalDirection: e.target.value,
                     })
                   }
-                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -3232,7 +3216,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       netProfit: Number(e.target.value),
                     })
                   }
-                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -3249,7 +3233,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       additionalExpenses: Number(e.target.value),
                     })
                   }
-                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -3266,7 +3250,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       days: Number(e.target.value),
                     })
                   }
-                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -3282,7 +3266,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       datetime: e.target.value,
                     })
                   }
-                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                 />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -3301,7 +3285,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       logist: e.target.value,
                     })
                   }
-                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] focus:ring-2 focus:ring-blue-100/30 transition shadow-2xs"
+                  className="w-full bg-white/45 border border-slate-200/50 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs"
                 />
               </div>
             </div>

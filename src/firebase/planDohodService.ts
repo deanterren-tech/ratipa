@@ -57,7 +57,16 @@ export const pdService = {
     try {
       const dbRef = ref(database, 'trips_dashboard');
       const newRef = push(dbRef);
-      const cleanTrip = JSON.parse(JSON.stringify({ ...trip, id: newRef.key }, (k, v) => v === undefined ? null : v));
+      const now = new Date().toLocaleString('ru-RU');
+      const tripWithMeta = { 
+        ...trip, 
+        id: newRef.key,
+        updatedAt: now,
+        updatedBy: user,
+      };
+      if (!(trip as any).createdAt) (tripWithMeta as any).createdAt = now;
+      if (!(trip as any).createdBy) (tripWithMeta as any).createdBy = user;
+      const cleanTrip = JSON.parse(JSON.stringify(tripWithMeta, (k, v) => v === undefined ? null : v));
       await set(newRef, cleanTrip);
       dbService.logAction(user, role, 'Создание плана рейса', 'PlanDohod', newRef.key!, `Создан план рейса для ТС ${trip.carNumber}`);
     } catch (e) {
@@ -69,7 +78,12 @@ export const pdService = {
   updateTrip: async (id: string, tripInfo: any, user: string, role: string) => {
     if (!useFirebase) return;
     try {
-      const cleanInfo = JSON.parse(JSON.stringify(tripInfo, (k, v) => v === undefined ? null : v));
+      const now = new Date().toLocaleString('ru-RU');
+      const cleanInfo = JSON.parse(JSON.stringify({ 
+        ...tripInfo, 
+        updatedAt: now,
+        updatedBy: user,
+      }, (k, v) => v === undefined ? null : v));
       update(ref(database, `trips_dashboard/${id}`), cleanInfo);
       dbService.logAction(user, role, 'Обновление плана рейса', 'PlanDohod', id, `Обновлен план рейса для ТС ${tripInfo.carNumber || id}`);
     } catch (e) {

@@ -1,7 +1,7 @@
 // Фабрики общих подписок и кэширующие обёртки (sharedGet*/sharedDir*).
 // Вынесено из firebase.ts для уменьшения монолита.
 // Импортируем примитивы из firebase.ts (live bindings: database/useFirebase — let).
-import { set, update } from "firebase/database";
+import { set, update, get as firebaseGet } from "firebase/database";
 import { ref } from "firebase/database";
 import {
   database,
@@ -86,6 +86,77 @@ function createSharedSubscription<T>(
           }
         }, 5000);
       }
+    };
+  };
+}
+
+// ---- Создание подписки на однократную загрузку (get() + кэш с TTL) ----
+// Для справочных данных, которые меняются редко (reference data).
+function createGetSubscription<T>(
+  dbPath: string,
+  opts: {
+    transform: (val: any) => T;
+    fallback: T;
+    seed?: () => void;
+    storageKey?: string;
+    ttlMs?: number;
+  },
+) {
+  const { transform, fallback, seed, storageKey, ttlMs = 5 * 60 * 1000 } = opts;
+  let cachedData: T | null = null;
+  let lastFetch = 0;
+  let pendingPromise: Promise<void> | null = null;
+  const callbacks = new Set<(data: T) => void>();
+
+  function doFetch() {
+    if (!database || !useFirebase) {
+      cachedData = storageKey ? getLocalStorageData<T>(storageKey, fallback) : fallback;
+      callbacks.forEach((cb) => cb(cachedData!));
+      return;
+    }
+
+    pendingPromise = firebaseGet(ref(database, dbPath))
+      .then((snap) => {
+        const val = snap.val();
+        if (val) {
+          cachedData = transform(val);
+        } else {
+          if (seed) seed();
+          cachedData = fallback;
+        }
+        lastFetch = Date.now();
+        pendingPromise = null;
+        callbacks.forEach((cb) => cb(cachedData!));
+      })
+      .catch((err) => {
+        console.warn(`Failed to fetch ${dbPath}:`, err);
+        cachedData = storageKey ? getLocalStorageData<T>(storageKey, fallback) : fallback;
+        pendingPromise = null;
+        callbacks.forEach((cb) => cb(cachedData!));
+      });
+  }
+
+  return (callback: (data: T) => void) => {
+    if (cachedData !== null && Date.now() - lastFetch < ttlMs) {
+      callback(cachedData);
+    }
+
+    callbacks.add(callback);
+
+    if (!database || !useFirebase) {
+      cachedData = storageKey ? getLocalStorageData<T>(storageKey, fallback) : fallback;
+      callbacks.forEach((cb) => cb(cachedData!));
+      return () => {
+        callbacks.delete(callback);
+      };
+    }
+
+    if (!pendingPromise) {
+      doFetch();
+    }
+
+    return () => {
+      callbacks.delete(callback);
     };
   };
 }
@@ -204,180 +275,138 @@ export const sharedGetCouplings = createSharedSubscription<any[]>(
 
 
 
-export const sharedGetCarRateGroups = createSharedSubscription<CarRateGroup[]>(
-  (onData, onError) => {
-    const dbRef = ref(database, "carsPool");
-    return onValue(
-      dbRef,
-      (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          const list: CarRateGroup[] = Object.keys(data).map((key) => {
-            const val = data[key];
-            const vehicles = Array.isArray(val.vehicles)
-              ? val.vehicles
-              : Object.values(val.vehicles || {});
-            return {
-              id: key,
-              name: val.name || "",
-              rate: Number(val.rate || 0),
-              perDiemRate: val.perDiemRate ? Number(val.perDiemRate) : undefined,
-              vehicles,
-              comment: val.comment || "",
-            };
-          });
-          onData(list);
-        } else {
-          INITIAL_CARS_POOL.forEach((c) => {
-            set(ref(database, `carsPool/${c.id}`), {
-              name: c.name,
-              rate: c.rate,
-              vehicles: c.vehicles,
-              comment: c.comment || "",
-            }).catch((e) => console.warn(e));
-          });
-          onData(INITIAL_CARS_POOL);
-        }
-      },
-      onError
-    );
+export const sharedGetCarRateGroups = createGetSubscription<CarRateGroup[]>(
+  "carsPool",
+  {
+    transform: (data) =>
+      Object.keys(data).map((key) => {
+        const val = data[key];
+        const vehicles = Array.isArray(val.vehicles)
+          ? val.vehicles
+          : Object.values(val.vehicles || {});
+        return {
+          id: key,
+          name: val.name || "",
+          rate: Number(val.rate || 0),
+          perDiemRate: val.perDiemRate ? Number(val.perDiemRate) : undefined,
+          vehicles,
+          comment: val.comment || "",
+        };
+      }),
+    fallback: INITIAL_CARS_POOL,
+    seed: () => {
+      INITIAL_CARS_POOL.forEach((c) => {
+        set(ref(database, `carsPool/${c.id}`), {
+          name: c.name,
+          rate: c.rate,
+          vehicles: c.vehicles,
+          comment: c.comment || "",
+        }).catch((e) => console.warn(e));
+      });
+    },
+    storageKey: "ratipa_cars_pool",
   },
-  (onData) => {
-    onData(getLocalStorageData<CarRateGroup[]>("ratipa_cars_pool", INITIAL_CARS_POOL));
-  }
 );
 
-export const sharedGetDirections = createSharedSubscription<DirectionPreset[]>(
-  (onData, onError) => {
-    const dbRef = ref(database, "directionsPool");
-    return onValue(
-      dbRef,
-      (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          const list: DirectionPreset[] = Object.keys(data).map((key) => ({
-            id: key,
-            name: String(data[key].name || ""),
-            coeff: Number(data[key].coeff || 0),
-          }));
-          onData(list);
-        } else {
-          INITIAL_DIRECTIONS.forEach((d) => {
-            set(ref(database, `directionsPool/${d.id}`), {
-              name: d.name,
-              coeff: d.coeff,
-            }).catch((e) => console.warn(e));
-          });
-          onData(INITIAL_DIRECTIONS);
-        }
-      },
-      onError
-    );
+export const sharedGetDirections = createGetSubscription<DirectionPreset[]>(
+  "directionsPool",
+  {
+    transform: (data) =>
+      Object.keys(data).map((key) => ({
+        id: key,
+        name: String(data[key].name || ""),
+        coeff: Number(data[key].coeff || 0),
+      })),
+    fallback: INITIAL_DIRECTIONS,
+    seed: () => {
+      INITIAL_DIRECTIONS.forEach((d) => {
+        set(ref(database, `directionsPool/${d.id}`), {
+          name: d.name,
+          coeff: d.coeff,
+        }).catch((e) => console.warn(e));
+      });
+    },
+    storageKey: "ratipa_directions",
   },
-  (onData) => {
-    onData(getLocalStorageData<DirectionPreset[]>("ratipa_directions", INITIAL_DIRECTIONS));
-  }
 );
 
-export const sharedGetFerryTemplates = createSharedSubscription<FerryTemplate[]>(
-  (onData, onError) => {
-    const dbRef = ref(database, "ferryTemplates");
-    return onValue(
-      dbRef,
-      (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          const list: FerryTemplate[] = Object.keys(data).map((key) => ({
-            id: key,
-            dbKey: key,
-            ...data[key],
-          }));
-          onData(list);
-        } else {
-          INITIAL_FERRY_TEMPLATES.forEach((f) => {
-            set(ref(database, `ferryTemplates/${f.id}`), f).catch((e) =>
-              console.warn(e)
-            );
-          });
-          onData(INITIAL_FERRY_TEMPLATES);
-        }
-      },
-      onError
-    );
+export const sharedGetFerryTemplates = createGetSubscription<FerryTemplate[]>(
+  "ferryTemplates",
+  {
+    transform: (data) =>
+      Object.keys(data).map((key) => ({
+        id: key,
+        dbKey: key,
+        ...data[key],
+      })),
+    fallback: INITIAL_FERRY_TEMPLATES,
+    seed: () => {
+      INITIAL_FERRY_TEMPLATES.forEach((f) => {
+        set(ref(database, `ferryTemplates/${f.id}`), f).catch((e) =>
+          console.warn(e),
+        );
+      });
+    },
+    storageKey: "ratipa_ferry_templates",
   },
-  (onData) => {
-    onData(getLocalStorageData<FerryTemplate[]>("ratipa_ferry_templates", INITIAL_FERRY_TEMPLATES));
-  }
 );
 
-export const sharedGetDistances = createSharedSubscription<DistancePreset[]>(
-  (onData, onError) => {
-    const dbRef = ref(database, "knownDistancesList");
-    return onValue(
-      dbRef,
-      (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          const list: DistancePreset[] = Object.keys(data).map((key) => ({
-            id: key,
-            dbKey: key,
-            ...data[key],
-          }));
-          onData(list);
-        } else {
-          INITIAL_DISTANCES.forEach((d) => {
-            set(ref(database, `knownDistancesList/${d.id}`), d).catch((e) =>
-              console.warn(e)
-            );
-          });
-          onData(INITIAL_DISTANCES);
-        }
-      },
-      onError
-    );
+export const sharedGetDistances = createGetSubscription<DistancePreset[]>(
+  "knownDistancesList",
+  {
+    transform: (data) =>
+      Object.keys(data).map((key) => ({
+        id: key,
+        dbKey: key,
+        ...data[key],
+      })),
+    fallback: INITIAL_DISTANCES,
+    seed: () => {
+      INITIAL_DISTANCES.forEach((d) => {
+        set(ref(database, `knownDistancesList/${d.id}`), d).catch((e) =>
+          console.warn(e),
+        );
+      });
+    },
+    storageKey: "ratipa_distances",
   },
-  (onData) => {
-    onData(getLocalStorageData<DistancePreset[]>("ratipa_distances", INITIAL_DISTANCES));
-  }
 );
 
-export const sharedGetCurrencies = createSharedSubscription<CurrencyPreset[]>(
-  (onData, onError) => {
-    const dbRef = ref(database, "currenciesList");
-    return onValue(
-      dbRef,
-      (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-          const list: CurrencyPreset[] = Object.keys(data).map((key) => ({
-            id: key,
-            ...data[key],
-          }));
-          onData(list.sort((a, b) => a.code.localeCompare(b.code)));
-        } else {
-          const INITIAL_CURRENCIES: CurrencyPreset[] = [
-            { id: "1", code: "USD" },
-            { id: "2", code: "EUR" },
-            { id: "3", code: "RUB" },
-            { id: "4", code: "BYN" },
-            { id: "5", code: "TRY" },
-            { id: "6", code: "KZT" },
-            { id: "7", code: "CNY" },
-          ];
-          INITIAL_CURRENCIES.forEach((c) => {
-            set(ref(database, `currenciesList/${c.id}`), c).catch((e) =>
-              console.warn(e)
-            );
-          });
-          onData(INITIAL_CURRENCIES);
-        }
-      },
-      onError
-    );
+export const sharedGetCurrencies = createGetSubscription<CurrencyPreset[]>(
+  "currenciesList",
+  {
+    transform: (data) => {
+      const list: CurrencyPreset[] = Object.keys(data).map((key) => ({
+        id: key,
+        ...data[key],
+      }));
+      return list.sort((a, b) => a.code.localeCompare(b.code));
+    },
+    fallback: [
+      { id: "1", code: "USD" },
+      { id: "2", code: "EUR" },
+      { id: "3", code: "RUB" },
+      { id: "4", code: "BYN" },
+      { id: "5", code: "TRY" },
+      { id: "6", code: "KZT" },
+      { id: "7", code: "CNY" },
+    ],
+    seed: () => {
+      [
+        { id: "1", code: "USD" },
+        { id: "2", code: "EUR" },
+        { id: "3", code: "RUB" },
+        { id: "4", code: "BYN" },
+        { id: "5", code: "TRY" },
+        { id: "6", code: "KZT" },
+        { id: "7", code: "CNY" },
+      ].forEach((c) => {
+        set(ref(database, `currenciesList/${c.id}`), c).catch((e) =>
+          console.warn(e),
+        );
+      });
+    },
   },
-  (onData) => {
-    onData([]);
-  }
 );
 
 export const sharedGetSettings = createSharedSubscription<AppSettings>(
@@ -462,37 +491,32 @@ export const sharedGetVehicleStatuses = createSharedSubscription<Record<string, 
 );
 
 // ---- Directories service: unified reference data (brands, dispatchers, rate groups,
-// status types, directions). Uses shared subscriptions for high-performance caching so
-// weak devices don't re-fetch on every module mount. ----
-function createDirSub<T>(path: string) {
-  return createSharedSubscription<T>(
-    (onData, onError) => {
-      if (!useFirebase) {
-        onData([] as any);
-        return () => {};
-      }
-      return onValue(ref(database, path), (snap) => {
-        const val = snap.val();
-        if (!val) { onData([] as any); return; }
-        const list = Object.keys(val).map((k) => {
-          const entry = val[k];
+// status types, directions). Uses shared GET-subscriptions for one-time fetch +
+// in-memory cache with TTL. ----
+function createDirGetSub<T>(path: string) {
+  return createGetSubscription<T>(
+    path,
+    {
+      transform: (data) => {
+        const list = Object.keys(data).map((k) => {
+          const entry = data[k];
           // Если в БД сохранена строка (legacy от saveVehicleDriverRecord) — оборачиваем в объект
           if (typeof entry === 'string') {
             return { name: entry, key: k, id: k, dbKey: k };
           }
           return { ...entry, id: entry.id || k, dbKey: k };
         });
-        onData(list as any);
-      }, () => onError && onError(null));
+        return list as any;
+      },
+      fallback: [] as any,
     },
-    (onData) => onData([] as any)
   );
 }
 
-export const sharedDirVehicleBrands = createDirSub<any[]>("directories/vehicleBrands");
-export const sharedDirTrailerBrands = createDirSub<any[]>("directories/trailerBrands");
-export const sharedDirDispatchers = createDirSub<any[]>("directories/dispatchers");
-export const sharedDirRateGroups = createDirSub<any[]>("directories/rateGroups");
-export const sharedDirStatusTypes = createDirSub<any[]>("directories/statusTypes");
-export const sharedDirDirections = createDirSub<any[]>("directories/directions");
+export const sharedDirVehicleBrands = createDirGetSub<any[]>("directories/vehicleBrands");
+export const sharedDirTrailerBrands = createDirGetSub<any[]>("directories/trailerBrands");
+export const sharedDirDispatchers = createDirGetSub<any[]>("directories/dispatchers");
+export const sharedDirRateGroups = createDirGetSub<any[]>("directories/rateGroups");
+export const sharedDirStatusTypes = createDirGetSub<any[]>("directories/statusTypes");
+export const sharedDirDirections = createDirGetSub<any[]>("directories/directions");
 

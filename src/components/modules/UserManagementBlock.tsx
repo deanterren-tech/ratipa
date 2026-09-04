@@ -135,15 +135,14 @@ export default function UserManagementBlock({ user }: Props) {
     
     dbService.logAction(user.name, user.role, "Изменение прав роли", "Admin", roleKey, `Роль ${roleKey}: ${permKey} → ${val}`);
     
-    // Сбрасываем permissions для всех пользователей этой роли — принуждаем resolvePermission
-    // использовать settings.rolePermissions как единый источник прав.
+    // Мгновенно записываем новое значение в permissions для всех пользователей этой роли.
+    // Это быстрее, чем ждать обновления settings.rolePermissions через Firebase.
     const updates: Record<string, any> = {};
     setUsers(prev => prev.map(u => {
       if (u.role === roleKey) {
-        // Сохраняем customPermissions (пользовательские переопределения), очищаем permissions
-        updates[`users_list/${u.uid}/permissions`] = {};
+        updates[`users_list/${u.uid}/permissions/${permKey}`] = val;
         updates[`users_list/${u.uid}/customPermissions`] = u.customPermissions || {};
-        return { ...u, permissions: {} as any };
+        return { ...u, permissions: { ...(u.permissions || {} as any), [permKey]: val } as any };
       }
       return u;
     }));
@@ -160,14 +159,14 @@ export default function UserManagementBlock({ user }: Props) {
     const current = users.find((x) => x.uid === u.uid) || u;
     const newCustom = { ...(current.customPermissions || {}), [permKey]: val };
     
-    // Optimistic UI update: customPermissions задаёт override, permissions пустые (resolvePermission)
+    // Optimistic UI update: пишем и в permissions (для resolvePermission) и в customPermissions
     setUsers(prev => prev.map(user => 
       user.uid === u.uid 
-        ? { ...user, customPermissions: newCustom as any, permissions: {} as any } 
+        ? { ...user, customPermissions: newCustom as any, permissions: { ...(user.permissions || {} as any), [permKey]: val } as any } 
         : user
     ));
     
-    dbService.saveUser({ ...current, customPermissions: newCustom as any, permissions: {} as any } as any);
+    dbService.saveUser({ ...current, customPermissions: newCustom as any, permissions: { ...(current.permissions || {}), [permKey]: val } as any } as any);
     
     dbService.logAction(user.name, user.role, "Изменение прав пользователя", "Admin", current.uid, `Пользователь ${current.name}: ${permKey} → ${val}`);
   };
@@ -290,7 +289,7 @@ export default function UserManagementBlock({ user }: Props) {
                 placeholder="Поиск сотрудника..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white/50 border border-white/60 placeholder:text-slate-400 text-xs font-semibold py-2.5 pl-10 pr-4 outline-none focus:ring-4 focus:ring-[#3765F6]/5 focus:border-[#3765F6] rounded-xl shadow-xs transition-all text-slate-800"
+                className="w-full bg-white/50 border border-white/60 placeholder:text-slate-400 text-xs font-semibold py-2.5 pl-10 pr-4 outline-none focus:ring-4 focus:ring-slate-200/50 focus:border-slate-300 rounded-xl shadow-xs transition-all text-slate-800"
               />
             </div>
           )}
@@ -410,15 +409,15 @@ export default function UserManagementBlock({ user }: Props) {
             <form onSubmit={handleRegisterUser} className="space-y-5 max-w-sm">
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-mono block select-none">Имя (Логин)</label>
-                <input required type="text" value={newUName} onChange={(e) => setNewUName(e.target.value)} className="w-full bg-white/50 border border-slate-200/50 rounded-xl px-4 py-2.5 text-xs font-semibold outline-none focus:ring-4 focus:ring-[#3765F6]/5 focus:border-[#3765F6]" placeholder="Иван Петров" />
+                <input required type="text" value={newUName} onChange={(e) => setNewUName(e.target.value)} className="w-full bg-white/50 border border-slate-200/50 rounded-xl px-4 py-2.5 text-xs font-semibold outline-none focus:ring-4 focus:ring-slate-200/50 focus:border-slate-300" placeholder="Иван Петров" />
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-mono block select-none">Пароль</label>
-                <input required type="text" value={newUPassword} onChange={(e) => setNewUPassword(e.target.value)} className="w-full bg-white/50 border border-slate-200/50 rounded-xl px-4 py-2.5 text-xs font-semibold outline-none focus:ring-4 focus:ring-[#3765F6]/5 focus:border-[#3765F6]" placeholder="Сложный пароль..." />
+                <input required type="text" value={newUPassword} onChange={(e) => setNewUPassword(e.target.value)} className="w-full bg-white/50 border border-slate-200/50 rounded-xl px-4 py-2.5 text-xs font-semibold outline-none focus:ring-4 focus:ring-slate-200/50 focus:border-slate-300" placeholder="Сложный пароль..." />
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-mono block select-none">Группа роли</label>
-                <select value={newURole} onChange={(e) => setNewURole(e.target.value)} className="w-full bg-white/50 border border-slate-200/50 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-4 focus:ring-[#3765F6]/5 focus:border-[#3765F6] cursor-pointer">
+                <select value={newURole} onChange={(e) => setNewURole(e.target.value)} className="w-full bg-white/50 border border-slate-200/50 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-4 focus:ring-slate-200/50 focus:border-slate-300 cursor-pointer">
                   {Object.entries(ROLE_LABELS).map(([k, v]) => (user.role !== 'root_admin' && k === 'root_admin' ? null : <option key={k} value={k}>{v}</option>))}
                 </select>
               </div>
@@ -582,7 +581,7 @@ export default function UserManagementBlock({ user }: Props) {
                     <ShieldCheck size={12} className="text-[#3765F6]" /> Системная роль
                   </label>
                   <select value={selectedUser.role} disabled={!canEditSelectedUser} onChange={(e) => handleUserRoleChange(selectedUser, e.target.value)}
-                    className="bg-white/70 border border-slate-200/60 rounded-xl px-3 py-2.5 text-xs font-bold w-full outline-none disabled:opacity-50 cursor-pointer text-slate-800 transition-all focus:border-[#3765F6]"
+                    className="bg-white/70 border border-slate-200/60 rounded-xl px-3 py-2.5 text-xs font-bold w-full outline-none disabled:opacity-50 cursor-pointer text-slate-800 transition-all focus:border-slate-300"
                   >
                     {Object.entries(ROLE_LABELS).map(([k, v]) => (user.role !== 'root_admin' && k === 'root_admin' ? null : <option key={k} value={k}>{v}</option>))}
                   </select>
@@ -596,7 +595,7 @@ export default function UserManagementBlock({ user }: Props) {
                         dbService.saveUser({ ...selectedUser, isDispatcher: e.target.checked });
                         toast(e.target.checked ? 'Диспетчер включен' : 'Диспетчер выключен', 'success');
                       }}
-                      className="w-4 h-4 rounded border-slate-300 text-[#3765F6] accent-[#3765F6] focus:ring-[#3765F6] cursor-pointer disabled:opacity-40" />
+                      className="w-4 h-4 rounded border-slate-300 text-[#3765F6] accent-slate-900 focus:ring-slate-300 cursor-pointer disabled:opacity-40" />
                     <span className="text-[11px] font-bold text-slate-700">Диспетчер (показывать в списках диспетчеров)</span>
                   </label>
                 </div>

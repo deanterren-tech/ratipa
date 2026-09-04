@@ -40,8 +40,6 @@ export const DEFAULT_ROLE_PERMS: Record<string, Record<string, string>> = {
   },
 };
 
-const ROOT_USERS = ["Сергей Root", "r98ratipaby@gmail.com"];
-
 /**
  * Резолвит эффективное право доступа пользователя к ключу (модуль или вкладка).
  * Учитывает: root-админов, явные переопределения (permissions[key]),
@@ -49,7 +47,7 @@ const ROOT_USERS = ["Сергей Root", "r98ratipaby@gmail.com"];
  * Возвращает "none" | "read" | "write".
  */
 export function resolvePermission(user: UserProfile, key: string, rolePermissions?: Record<string, Record<string, string>>): "none" | "read" | "write" {
-  if (user.role === "root_admin" || ROOT_USERS.includes(user.name) || ROOT_USERS.includes(user.email || "")) {
+  if (user.role === "root_admin") {
     return "write";
   }
 
@@ -68,13 +66,19 @@ export function resolvePermission(user: UserProfile, key: string, rolePermission
     return baseVal === "write" || baseVal === "read" ? baseVal : "none";
   }
 
-  // Явное переопределение пользователя (customPermissions имеет приоритет)
-  const custom = user.permissions?.[key];
-  if (custom !== undefined && custom !== "inherit") {
-    return custom === "write" || custom === "read" ? custom : "none";
+  // 1. customPermissions — пользовательское переопределение (высший приоритет)
+  const customPerm = user.customPermissions?.[key];
+  if (customPerm !== undefined && customPerm !== "inherit") {
+    return customPerm === "write" || customPerm === "read" ? customPerm : "none";
   }
 
-  // Наследование из базы роли (settings.rolePermissions → DEFAULT_ROLE_PERMS)
+  // 2. Явное переопределение в permissions
+  const perm = user.permissions?.[key];
+  if (perm !== undefined && perm !== "inherit") {
+    return perm === "write" || perm === "read" ? perm : "none";
+  }
+
+  // 3. Наследование из базы роли (settings.rolePermissions → DEFAULT_ROLE_PERMS)
   const inherited = roleBase[key] || "none";
   return inherited === "write" || inherited === "read" ? inherited : "none";
 }

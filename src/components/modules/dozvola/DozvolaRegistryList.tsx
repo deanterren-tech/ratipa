@@ -9,6 +9,7 @@ import DozvolaWidgets from "./DozvolaWidgets";
 import DozvolaQuickInput from "./DozvolaQuickInput";
 import DozvolaPermitModal from "./DozvolaPermitModal";
 import CouplingPicker from "../../common/CouplingPicker";
+import DozvolaExpirySummary from "./DozvolaExpirySummary";
 
 const canWriteRTDB = () => useFirebase;
 
@@ -79,7 +80,7 @@ const DozvolaRow = React.memo(({
   if (variant === 'table') {
     const statusLabel: Record<string, string> = {
       office: 'В офисе', hand: 'В рейсе', office_return: 'Использован',
-      used: 'Сдан в ТИ', expired: 'Аннулирован'
+      used: 'Сдан в ТИ', expired: 'Аннулирован', lost: 'Утерян'
     };
     return (
       <tr data-nav-item className={`border-b border-slate-100/70 hover:bg-slate-50/60 transition ${        item.isCopy && item.status !== 'office_return' && item.status !== 'used' && item.status !== 'expired'
@@ -100,6 +101,7 @@ const DozvolaRow = React.memo(({
             item.status === 'office_return' ? 'bg-amber-500/10 text-amber-800 border border-amber-500/20' :
             item.status === 'used' ? 'bg-slate-500/10 text-slate-700 border border-slate-500/20' :
             item.status === 'expired' ? 'bg-rose-500/10 text-rose-800 border border-rose-500/20' :
+            item.status === 'lost' ? 'bg-stone-500/10 text-stone-800 border border-stone-500/20' :
             'bg-emerald-500/10 text-emerald-800 border border-emerald-500/20'}`}>{statusLabel[item.status] || '—'}{item.status === 'office_return' && item.submissionBatch === 1 ? <span className="ml-1">(Сдача 1)</span> : ''}{item.status === 'office_return' && item.submissionBatch === 2 ? <span className="ml-1">(Сдача 2)</span> : ''}</span>
           {item.expiryDate && (() => {
             const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -146,13 +148,14 @@ const DozvolaRow = React.memo(({
         </td>
         <td className="px-3 py-2.5 align-middle">
           <div className="flex items-center gap-1.5">
-            <select className="px-2.5 py-1.5 bg-slate-50/50 border border-slate-200/60 rounded-lg text-xs font-semibold focus:outline-none focus:border-[#3765F6] transition cursor-pointer" onChange={(e) => { if (e.target.value) onUpdateStatus(e.target.value); e.target.value = ''; }}>
+            <select className="px-2.5 py-1.5 bg-slate-50/50 border border-slate-200/60 rounded-lg text-xs font-semibold focus:outline-none focus:border-slate-300 transition cursor-pointer" onChange={(e) => { if (e.target.value) onUpdateStatus(e.target.value); e.target.value = ''; }}>
               <option value="">Действие...</option>
               <option value="office">В офис</option>
               <option value="hand">Выдать в рейс</option>
               <option value="office_return">Использован</option>
               <option value="used">Сдан в ТИ</option>
               <option value="expired">Аннулировать</option>
+              <option value="lost">Утерян</option>
             </select>
             {canWrite && (<button onClick={onEdit} className="w-7 h-7 flex items-center justify-center text-[#3765F6] hover:bg-blue-50 rounded-lg transition cursor-pointer" title="Редактировать"><Edit className="h-3.5 w-3.5" /></button>)}
             {(isRootAdmin || canWrite) && (<button onClick={onDelete} className="w-7 h-7 flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer" title="Удалить"><Trash2 className="h-3.5 w-3.5" /></button>)}
@@ -177,7 +180,7 @@ const DozvolaRow = React.memo(({
         <div className="flex items-start gap-2.5 min-w-0">
           <input
             type="checkbox"
-            className="mt-0.5 w-4.5 h-4.5 rounded-lg border-slate-200/60 text-[#3765F6] focus:ring-[#3765F6] cursor-pointer accent-slate-900 transition"
+            className="mt-0.5 w-4.5 h-4.5 rounded-lg border-slate-200/60 text-[#3765F6] focus:ring-slate-300 cursor-pointer accent-slate-900 transition"
             checked={isChecked}
             onChange={(e) => onCheckboxChange(e.target.checked)}
           />
@@ -203,11 +206,14 @@ const DozvolaRow = React.memo(({
             <span className="bg-amber-500/10 text-amber-800 border border-amber-500/20 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">Использован{item.submissionBatch === 1 ? ' (Сдача 1)' : ''}{item.submissionBatch === 2 ? ' (Сдача 2)' : ''}</span>
           )}
           {item.status === "used" && (
-            <span className="bg-slate-500/10 text-slate-700 border border-slate-500/20 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">Сдан в ТИ</span>
-          )}
-          {item.status === "expired" && (
-            <span className="bg-rose-500/10 text-rose-800 border border-rose-500/20 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">Аннулирован</span>
-          )}
+                      <span className="bg-slate-500/10 text-slate-700 border border-slate-500/20 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">Сдан в ТИ</span>
+                    )}
+                    {item.status === "expired" && (
+                      <span className="bg-rose-500/10 text-rose-800 border border-rose-500/20 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">Аннулирован</span>
+                    )}
+                    {item.status === "lost" && (
+                      <span className="bg-stone-500/10 text-stone-800 border border-stone-500/20 px-2.5 py-1 rounded-xl text-[10px] font-semibold uppercase tracking-tight">Утерян</span>
+                    )}
           {item.expiryDate && (() => {
             const today = new Date(); today.setHours(0, 0, 0, 0);
             const expiry = new Date(item.expiryDate); expiry.setHours(0, 0, 0, 0);
@@ -307,7 +313,7 @@ const DozvolaRow = React.memo(({
       {/* Quick status + actions */}
       <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
         <select
-          className="w-[140px] px-3 py-2 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold focus:outline-none focus:border-[#3765F6] transition cursor-pointer"
+          className="w-[140px] px-3 py-2 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold focus:outline-none focus:border-slate-300 transition cursor-pointer"
           onChange={(e) => { if (e.target.value) onUpdateStatus(e.target.value); e.target.value = ""; }}
         >
           <option value="">Действие...</option>
@@ -461,6 +467,7 @@ export default function DozvolaRegistryList({
       office_return: "Использован",
       used: "Сдан в транспортную инспекцию",
       expired: "Аннулирован",
+      lost: "Утерян",
     };
     return map[status] || status || "—";
   };
@@ -579,9 +586,9 @@ export default function DozvolaRegistryList({
       return;
     }
     const shortStatusLabel: Record<string, string> = {
-      office: 'В офисе', hand: 'В рейсе', office_return: 'Использован',
-      used: 'Сдан в ТИ', expired: 'Аннулирован', available: 'В наличии'
-    };
+          office: 'В офисе', hand: 'В рейсе', office_return: 'Использован',
+          used: 'Сдан в ТИ', expired: 'Аннулирован', lost: 'Утерян'
+        };
     const rows = items.map((item: any, idx: number) => `<tr>
       <td style="padding:6px 10px;border:1px solid #ddd;text-align:center;font-size:12px">${idx + 1}</td>
       <td style="padding:6px 10px;border:1px solid #ddd;font-size:13px;font-weight:bold;font-family:monospace">${item.number || item.permitNumber || '—'}</td>
@@ -697,7 +704,7 @@ export default function DozvolaRegistryList({
 
   const updateDozvolStatusInline = async (id: string, newStatus: string) => {
     if (!newStatus) return;
-    const statusLabels: Record<string, string> = {office: 'В офисе', hand: 'В рейсе', office_return: 'Использован', used: 'Сдан в ТИ', expired: 'Аннулирован'};
+    const statusLabels: Record<string, string> = {office: 'В офисе', hand: 'В рейсе', office_return: 'Использован', used: 'Сдан в ТИ', expired: 'Аннулирован', lost: 'Утерян'};
     const statusName = statusLabels[newStatus] || newStatus;
     if (!await showConfirm(`Изменить статус бланка на «${statusName}»?`)) return;
     const old = dozvolsData[id];
@@ -863,7 +870,7 @@ export default function DozvolaRegistryList({
     }
   };
 
-  const { rawItems, total, office, hand, officeReturnCount, usedCount, expiredCount, copies } = useMemo(() => {
+  const { rawItems, total, office, hand, officeReturnCount, usedCount, expiredCount, copies, lostCount } = useMemo(() => {
     let raw = Object.entries(dozvolsData).map(([key, value]: [string, any]) => ({
       id: key,
       ...value
@@ -900,6 +907,9 @@ export default function DozvolaRegistryList({
         i.status !== "used" &&
         i.status !== "expired",
     ).length;
+    const lostCountVal = raw.filter(
+      (i) => i.status === "lost",
+    ).length;
 
     return {
       rawItems: raw,
@@ -909,7 +919,8 @@ export default function DozvolaRegistryList({
       officeReturnCount: officeReturnCountVal,
       usedCount: usedCountVal,
       expiredCount: expiredCountVal,
-      copies: copiesVal
+      copies: copiesVal,
+      lostCount: lostCountVal
     };
   }, [dozvolsData, currentSelectedTab]);
 
@@ -919,6 +930,8 @@ export default function DozvolaRegistryList({
       list = list.filter((i) => i.status === "used" || i.status === "expired");
     } else if (currentSelectedTab === "office_returns") {
       list = list.filter((i) => i.status === "office_return");
+    } else if (currentSelectedTab === "lost") {
+      list = list.filter((i) => i.status === "lost");
     } else if (currentSelectedTab === "expiring") {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -1002,7 +1015,8 @@ export default function DozvolaRegistryList({
     currentSelectedTab === "all" ||
     currentSelectedTab === "archive" ||
     currentSelectedTab === "office_returns" ||
-    currentSelectedTab === "expiring";
+    currentSelectedTab === "expiring" ||
+    currentSelectedTab === "lost";
 
   const dynamicLocationsMap: Record<string, boolean> = Object.values(locationsDB || {}).reduce<Record<string, boolean>>((acc, curr: any) => {
     if (curr && curr.name) {
@@ -1025,6 +1039,9 @@ export default function DozvolaRegistryList({
   return (
     <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
       <div className="xl:col-span-8 space-y-6">
+        {/* Expiry Widget above quick input */}
+        <DozvolaExpirySummary user={user} onNavigateToRegistry={() => { setCurrentSelectedTab('all'); }} />
+
         <DozvolaQuickInput
           user={user}
           dozvolsData={dozvolsData}
@@ -1075,96 +1092,72 @@ export default function DozvolaRegistryList({
           </div>
         </div>
 
-        <div className="flex justify-between items-end mt-4 flex-wrap gap-2 bg-slate-50/30 rounded-txl border border-slate-200/40 border-b-0 pt-2 px-2 overflow-x-auto custom-scrollbar">
-          <div className="flex items-end gap-1 overflow-x-auto custom-scrollbar flex-1 pb-1">
-            <button
-              onClick={() => setCurrentSelectedTab("all")}
-              className={
-                "px-4 min-h-[44px] py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer " +
-                (currentSelectedTab === "all"
-                  ? "bg-white text-slate-850 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
-                  : "text-slate-500 hover:bg-slate-100/50 hover:text-slate-700")
-              }
-            >
-              🌐 Все виды
-            </button>
-            {customTypesOrder.map((id) => {
-              const t = customTypes[id];
-              if (!t) return null;
-              return (
-                <button
-                  key={id}
-                  onClick={() => setCurrentSelectedTab(t.name)}
-                  className={
-                    "px-4 min-h-[44px] py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer " +
-                    (currentSelectedTab === t.name
-                      ? "bg-white text-slate-850 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
-                      : "text-slate-500 hover:bg-slate-100/50 hover:text-slate-700")
-                  }
-                >
-                  {t.name}
-                </button>
-              );
-            })}
-            <button
-              onClick={() => setCurrentSelectedTab("archive")}
-              className={
-                "px-4 min-h-[44px] py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer text-slate-400 " +
-                (currentSelectedTab === "archive"
-                  ? "bg-white !text-slate-850 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
-                  : "hover:bg-slate-100/50 hover:!text-slate-650")
-              }
-            >
-              📦 Архив / Инспекция
-            </button>
-            <button
-              onClick={() => setCurrentSelectedTab("office_returns")}
-              className={
-                "px-4 min-h-[44px] py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer text-amber-600 " +
-                (currentSelectedTab === "office_returns"
-                  ? "bg-white !text-slate-850 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
-                  : "hover:bg-slate-100/50 hover:!text-slate-750")
-              }
-            >
-              🟡 Использован
-            </button>
-            <button
-              onClick={() => setCurrentSelectedTab("expiring")}
-              className={
-                "px-4 min-h-[44px] py-2.5 text-xs font-semibold uppercase tracking-wider rounded-t-xl transition whitespace-nowrap cursor-pointer text-rose-600 " +
-                (currentSelectedTab === "expiring"
-                  ? "bg-white !text-slate-850 border border-slate-200/50 border-b-white -mb-[1px] relative z-10"
-                  : "hover:bg-slate-100/50 hover:!text-slate-750")
-              }
-            >
-              🔥 Истекают
-            </button>
-          </div>
-                  </div>
+        {/* Types filter tabs — pill style */}
+        <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1">
+            {[
+              {key: "all", label: "Все виды", icon: "🌐"},
+              ...customTypesOrder.map((id) => {
+                const t = customTypes[id];
+                return t ? {key: t.name, label: t.name, icon: ""} : null;
+              }).filter(Boolean),
+            ].filter(Boolean).map((tab: any) => (
+              <button
+                key={tab.key}
+                onClick={() => setCurrentSelectedTab(tab.key)}
+                className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                  currentSelectedTab === tab.key
+                    ? 'bg-slate-800 text-white shadow-sm'
+                    : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200/70 hover:text-slate-700'
+                }`}
+              >
+                {tab.icon && <span className="mr-1">{tab.icon}</span>}
+                {tab.label}
+              </button>
+            ))}
+        </div>
 
-                  {/* Status pills filter */}
-                  <div className="flex items-center gap-1.5 px-1 flex-wrap">
-                    {[
-                      {id: 'all', label: 'Все'},
-                      {id: 'office', label: 'В офисе'},
-                      {id: 'hand', label: 'В рейсе'},
-                      {id: 'office_return', label: 'Сдан в офис'},
-                      {id: 'used', label: 'Сдан в ТИ'},
-                      {id: 'expired', label: 'Аннулирован'},
-                    ].map((pill) => (
-                      <button
-                        key={pill.id}
-                        onClick={() => setSelectedStatusFilter(pill.id === selectedStatusFilter ? "all" : pill.id)}
-                        className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap transition cursor-pointer ${
-                          selectedStatusFilter === pill.id
-                            ? 'bg-slate-800 text-white shadow-sm'
-                            : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200/70 hover:text-slate-700'
-                        }`}
-                      >
-                        {pill.label}
-                      </button>
-                    ))}
-                  </div>
+        {/* Second row: Архив и Использован */}
+        <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-1">
+          <button
+            onClick={() => {
+              if (currentSelectedTab === 'archive') setCurrentSelectedTab('all');
+              else setCurrentSelectedTab('archive');
+            }}
+            className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              currentSelectedTab === 'archive'
+                ? 'bg-slate-800 text-white shadow-sm'
+                : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200/70 hover:text-slate-700'
+            }`}
+          >
+            📦 Архив <span className="ml-1.5 opacity-70">{usedCount + expiredCount}</span>
+          </button>
+          <button
+            onClick={() => {
+              if (currentSelectedTab === 'office_returns') setCurrentSelectedTab('all');
+              else setCurrentSelectedTab('office_returns');
+            }}
+            className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              currentSelectedTab === 'office_returns'
+                ? 'bg-slate-800 text-white shadow-sm'
+                : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200/70 hover:text-slate-700'
+            }`}
+          >
+            🟡 Использован <span className="ml-1.5 opacity-70">{officeReturnCount}</span>
+          </button>
+          <button
+            onClick={() => {
+              if (currentSelectedTab === 'lost') setCurrentSelectedTab('all');
+              else setCurrentSelectedTab('lost');
+            }}
+            className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              currentSelectedTab === 'lost'
+                ? 'bg-slate-800 text-white shadow-sm'
+                : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200/70 hover:text-slate-700'
+            }`}
+          >
+            ⬜ Утерян <span className="ml-1.5 opacity-70">{lostCount}</span>
+          </button>
+        </div>
 
           <div className="bg-white rounded-b-2xl rounded-tr-2xl border border-slate-200/50 shadow-sm overflow-hidden -mt-[1px] relative z-0">
           <div className="p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -1200,6 +1193,7 @@ export default function DozvolaRegistryList({
                       <option value="office_return">Использован</option>
                       <option value="used">Сдан в ТИ</option>
                       <option value="expired">Аннулировать</option>
+                      <option value="lost">Утерян</option>
                     </select>
                     <button
                       onClick={() => {
@@ -1350,6 +1344,7 @@ export default function DozvolaRegistryList({
       </div>
 
       <div className="xl:col-span-4 space-y-6">
+
         <div className="bg-white rounded-2xl border border-slate-200/50 shadow-sm overflow-hidden">
           <button
             onClick={() => setWidgetsCollapsed(!widgetsCollapsed)}

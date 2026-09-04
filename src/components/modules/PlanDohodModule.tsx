@@ -1,7 +1,6 @@
 import React, {useState, useEffect, useRef, useMemo, useCallback} from 'react'
 import {useToast} from '../ToastProvider'
 import { formatToTitleCase } from '../../utils/format'
-import {TripList} from './TripList'
 import NotebookStatusPills from './NotebookStatusPills'
 import {Virtuoso} from 'react-virtuoso'
 import {
@@ -28,13 +27,11 @@ import {
   TrendingUp,
   Archive,
   History,
-  Check,
   X,
   BookOpen,
   Minus,
-  Bot,
   Search,
-Receipt, CircleDollarSign, MessageSquare, FileText, Pencil} from "lucide-react";
+  CircleDollarSign, MessageSquare, FileText, Pencil} from "lucide-react";
 import MapRouteModal from "../MapRouteModal";
 
 interface PlanDohodModuleProps {
@@ -76,6 +73,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     key: string;
     dir: "asc" | "desc";
   } | null>(null);
+
+  // Announce popup — один раз для каждого пользователя
+  const [showAnnounce, setShowAnnounce] = useState(false);
+  const announceCheckedRef = useRef(false);
 
   // Realtime Data
   const [activeTrips, setActiveTrips] = useState<TripPlan[]>([]);
@@ -186,6 +187,17 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     });
     return () => unsubLogs();
   }, [activeTab]);
+
+  // Announce popup — один раз для каждого пользователя
+  useEffect(() => {
+    if (announceCheckedRef.current) return;
+    announceCheckedRef.current = true;
+    const seenKey = `pl_dohod_announce_${user.uid || user.name || 'default'}`;
+    const seen = localStorage.getItem(seenKey);
+    if (!seen) {
+      setShowAnnounce(true);
+    }
+  }, [user.uid]);
 
   // --- NOTEBOOK STATE & EFFECTS ---
   const [isNotebookOpen, setIsNotebookOpen] = useState<boolean>(() => {
@@ -1073,27 +1085,6 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   );
   const [plReferenceCurrency, setPlReferenceCurrency] = useState("EUR");
 
-  const getDispatcherColor = (disp: string) => {
-    const colorKey = dispatchersColors[disp];
-    if (!colorKey) {
-      const idx = dispatchersOrder.indexOf(disp);
-      if (idx === -1) return "bg-white border-slate-200/80";
-      const legacyBgs = [
-        "bg-[#F8FAFC] border-slate-200",
-        "bg-[#EFF6FF] border-blue-200",
-        "bg-[#ECFDF5] border-emerald-200",
-        "bg-[#FFFBEB] border-amber-200",
-        "bg-[#FAF5FF] border-[#e9d5ff]",
-        "bg-[#FFF1F2] border-rose-200",
-        "bg-[#F0FDFA] border-[#a5f3fc]",
-        "bg-[#F5F3FF] border-[#c084fc]",
-      ];
-      return legacyBgs[idx % legacyBgs.length] || "bg-white border-slate-200";
-    }
-    const preset = DISPATCHER_COLORS_PRESETS.find((p) => p.key === colorKey);
-    return preset ? `${preset.bg}` : "bg-white border-slate-200/80";
-  };
-
   const getDispatcherActiveTabStyle = (d: string) => {
     if (activeDispatcherTab !== d)
       return "bg-slate-50 text-slate-500 hover:bg-slate-100";
@@ -1276,15 +1267,6 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     return found ? found.distance : null;
   }
 
-  const getTripDays = () => {
-    if (!dateStart || !dateEnd) return 1;
-    const s = new Date(dateStart).getTime();
-    const e = new Date(dateEnd).getTime();
-    if (e >= s) {
-      return Math.ceil((e - s) / (1000 * 3600 * 24)) + 1;
-    }
-    return 1;
-  };
 
   const calculateTotals = () => {
     const fin = calculateTripFinances(legs, dateStart, dateEnd, Number(extraExpense), Number(ferryCost), Number(factKm));
@@ -1390,72 +1372,6 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     setIsModalOpen(true);
   }, [directions]);
 
-  const parseAiRouteClient = (
-    raw: string,
-    defaultDir: string,
-    directionsMap: Record<string, number>,
-  ): LegPlan[] => {
-    const chunks = raw
-      .split(/\n|;/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const parsedRows = chunks
-      .map((line) => {
-        let from = "";
-        let to = "";
-        const routePatterns = [
-          /(?:из|от)\s+([а-яёa-z\s.-]+?)\s+(?:в|на|до|—|->|→|-)\s+([а-яёa-z\s.-]+)/i,
-          /^([а-яёa-z\s.-]+?)\s*(?:—|->|→|-)\s*([а-яёa-z\s.-]+)/i,
-          /^([а-яёa-z\s.-]+?)\s+(?:в|на|до)\s+([а-яёa-z\s.-]+)/i,
-        ];
-        for (const pattern of routePatterns) {
-          const match = line.match(pattern);
-          if (match) {
-            from = match[1]
-              .replace(
-                /\b(ставка|фрахт|цена|паром|переправа|коэф|коэффициент|км|евро|eur|usd|долл|руб).*/i,
-                "",
-              )
-              .replace(/[,:;]+$/g, "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .replace(/^./, (ch) => ch.toUpperCase());
-            to = match[2]
-              .replace(
-                /\b(ставка|фрахт|цена|паром|переправа|коэф|коэффициент|км|евро|eur|usd|долл|руб).*/i,
-                "",
-              )
-              .replace(/[,:;]+$/g, "")
-              .trim()
-              .replace(/\s+/g, " ")
-              .replace(/^./, (ch) => ch.toUpperCase());
-            break;
-          }
-        }
-        const rateMatch = line.match(
-          /(?:ставка|фрахт|цена)?\D*?(\d[\d\s.,]*)\s*(?:€|евро|eur)\b/i,
-        );
-        const kmMatch = line.match(/(\d[\d\s.,]*)\s*(?:км|km)\b/i);
-        const ferryMatch = line.match(/(?:паром|переправа)\D*?(\d[\d\s.,]*)/i);
-        const coeffMatch = line.match(
-          /(?:коэф|коэффициент)\D*?(\d+(?:[.,]\d+)?)/i,
-        );
-
-        return {
-          from,
-          to,
-          km: kmMatch ? parseSmartNumber(kmMatch[1]) : 0,
-          rate: rateMatch ? parseSmartNumber(rateMatch[1]) : 0,
-          ferry: ferryMatch ? parseSmartNumber(ferryMatch[1]) : 0,
-          coeff: coeffMatch
-            ? parseSmartNumber(coeffMatch[1])
-            : directionsMap[defaultDir] || 0,
-          referenceRate: "",
-        };
-      })
-      .filter((r) => r.from !== "" || r.to !== "" || r.km > 0 || r.rate > 0);
-    return parsedRows;
-  };
 
 
   const calculatePlTotals = () => {
@@ -1726,6 +1642,19 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 <span>Диспетчер: {dispatcher || "—"}</span>
                 <span>Сроки: {dateStart ? new Date(dateStart).toLocaleDateString('ru-RU').replace(/\./g, '/') : "—"} — {dateEnd ? new Date(dateEnd).toLocaleDateString('ru-RU').replace(/\./g, '/') : "—"}</span>
               </div>
+              {/* Metadata: кто обновил */}
+              {(currentEditingTrip as any)?.updatedBy && (
+                <div className="flex items-center gap-1.5 mt-2">
+                  <span className="inline-flex items-center gap-1 bg-slate-100/80 border border-slate-200/60 px-2.5 py-1 rounded-lg font-semibold text-slate-700 shadow-sm text-[11px]">
+                    ✎ {(currentEditingTrip as any).updatedBy}
+                    {(currentEditingTrip as any).updatedAt && (
+                      <span className="font-medium text-slate-400 font-mono">
+                        · {(currentEditingTrip as any).updatedAt}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-start mt-3 md:mt-0 md:justify-end">
@@ -2256,13 +2185,13 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                           <div className="grid grid-cols-2 gap-2">
                             <div className="bg-white p-2 rounded-xl border border-slate-100/80 flex flex-col justify-center items-center text-center">
                               <span className="text-[9px] uppercase tracking-wider font-medium text-slate-400">Прибыль</span>
-                              <span className={`text-xs font-semibold font-mono tabular-nums ${pl.profit < 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                              <span className={`text-xs font-semibold font-mono tabular-nums ${pl.profit < 3000 ? "text-rose-600" : "text-emerald-600"}`}>
                                 {Math.round(pl.profit).toLocaleString("ru-RU")} €
                               </span>
                             </div>
                             <div className="bg-white p-2 rounded-xl border border-slate-100/80 flex flex-col justify-center items-center text-center">
                               <span className="text-[9px] uppercase tracking-wider font-medium text-slate-400">В день</span>
-                              <span className={`text-xs font-semibold font-mono tabular-nums ${profitPerDay < 0 ? "text-rose-600" : "text-blue-600"}`}>
+                              <span className={`text-xs font-semibold font-mono tabular-nums ${profitPerDay < 100 ? "text-rose-600" : "text-blue-600"}`}>
                                 {profitPerDay.toLocaleString("ru-RU")} €
                               </span>
                             </div>
@@ -2543,7 +2472,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-emerald-400">
                   <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Прибыль общая</span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(profit).toLocaleString("ru-RU")}</span>
+                    <span className={`text-lg font-bold font-mono tabular-nums ${Math.round(profit) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(profit).toLocaleString("ru-RU")}</span>
                     <span className="text-sm font-semibold text-emerald-500">€</span>
                   </div>
                 </div>
@@ -2551,7 +2480,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-blue-400">
                   <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Прибыль в день</span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(rawProfitPerDay).toLocaleString("ru-RU")}</span>
+                    <span className={`text-lg font-bold font-mono tabular-nums ${Math.round(rawProfitPerDay) < 100 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(rawProfitPerDay).toLocaleString("ru-RU")}</span>
                     <span className="text-sm font-semibold text-blue-500">€</span>
                   </div>
                 </div>
@@ -2873,7 +2802,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
               Прибыль в день
             </span>
-            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900 font-sans tabular-nums">
+            <span className={`text-2xl lg:text-3xl font-bold tracking-tight font-sans tabular-nums ${profitPerDayValue < 100 ? "text-rose-600" : "text-slate-900"}`}>
               {profitPerDayValue.toLocaleString("ru-RU")} <span className="text-sm font-medium text-slate-400">€</span>
             </span>
           </div>
@@ -3035,6 +2964,19 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                           {trip.dateEnd ? new Date(trip.dateEnd).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}
                         </span>
                       </div>
+                      {/* Metadata: кто обновил */}
+                      <div className="flex items-center gap-1.5 mt-2">
+                        {(trip as any).updatedBy && (
+                          <span className="inline-flex items-center gap-1 bg-slate-100/80 border border-slate-200/60 px-2 py-0.5 rounded-lg font-semibold text-slate-700 shadow-sm text-[10px]">
+                            ✎ {(trip as any).updatedBy}
+                            {(trip as any).updatedAt && (
+                              <span className="font-medium text-slate-400 font-mono">
+                                · {(trip as any).updatedAt}
+                              </span>
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-1.5 mt-1">
                       <button onClick={() => loadTripToForm(trip)} className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md transition cursor-pointer" title="Редактировать">
@@ -3091,7 +3033,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                     </div>
                     <div className="flex flex-col xl:text-right min-w-0">
                       <span className="text-[10px] xl:text-[11px] font-medium text-slate-400 leading-tight">Прибыль</span>
-                      <span className={`text-sm xl:text-base font-bold font-mono tabular-nums whitespace-nowrap ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                      <span className={`text-sm xl:text-base font-bold font-mono tabular-nums whitespace-nowrap ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>
                         {Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}
                       </span>
                     </div>
@@ -3101,7 +3043,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                     </div>
                     <div className="flex flex-col xl:text-right min-w-0">
                       <span className="text-[10px] xl:text-[11px] font-medium text-slate-400 leading-tight">В день</span>
-                      <span className={`text-xs xl:text-sm font-semibold font-mono tabular-nums whitespace-nowrap ${Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)) < 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                      <span className={`text-xs xl:text-sm font-semibold font-mono tabular-nums whitespace-nowrap ${Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)) < 100 ? "text-rose-600" : "text-emerald-600"}`}>
                         {Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)).toLocaleString("ru-RU")}
                       </span>
                     </div>
@@ -3120,7 +3062,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                       </span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className={`text-sm font-bold font-mono tabular-nums ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                      <span className={`text-sm font-bold font-mono tabular-nums ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>
                         {Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}€
                       </span>
                       <button onClick={() => loadTripToForm(trip)} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition cursor-pointer shrink-0" title="Редактировать">
@@ -3153,6 +3095,14 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         {trip.currentMonth}
                       </span>
                     )}
+                    {(trip as any).updatedBy && (
+                      <span className="inline-flex items-center gap-1 bg-slate-100/80 border border-slate-200/60 px-1.5 py-0.5 rounded-lg font-semibold text-slate-600 shadow-sm text-[9px] ml-auto">
+                        ✎ {(trip as any).updatedBy}
+                        {(trip as any).updatedAt && (
+                          <span className="font-medium text-slate-400 font-mono">· {(trip as any).updatedAt}</span>
+                        )}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -3172,7 +3122,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                   </div>
                   <div className="flex flex-col bg-slate-50/50 rounded-lg px-2.5 py-1.5">
                     <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Прибыль</span>
-                    <span className={`text-xs font-bold font-mono tabular-nums ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 0 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}</span>
+                    <span className={`text-xs font-bold font-mono tabular-nums ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}</span>
                   </div>
                   <div className="flex flex-col bg-slate-50/50 rounded-lg px-2.5 py-1.5">
                     <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Дни</span>
@@ -3180,7 +3130,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                   </div>
                   <div className="flex flex-col bg-slate-50/50 rounded-lg px-2.5 py-1.5">
                     <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">В день</span>
-                    <span className={`text-xs font-semibold font-mono tabular-nums ${Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)) < 0 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)).toLocaleString("ru-RU")}</span>
+                    <span className={`text-xs font-semibold font-mono tabular-nums ${Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)) < 100 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)).toLocaleString("ru-RU")}</span>
                   </div>
                 </div>
               </div>
@@ -3251,8 +3201,85 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     );
   };
 
+  // Announcement popup — один раз для пользователя
+  const dismissAnnounce = () => {
+    setShowAnnounce(false);
+    const seenKey = `pl_dohod_announce_${user.uid || user.name || 'default'}`;
+    localStorage.setItem(seenKey, '1');
+    // Сохраняем в Firebase для синхронизации между устройствами
+    import('firebase/database').then(({ref: fbRef, set}) => {
+      const {database} = require('../../firebase');
+      set(fbRef(database, `users_list/${user.uid}/plDohodAnnounceSeen`), true).catch(() => {});
+    }).catch(() => {});
+  };
+
+  const announceModal = showAnnounce ? (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={dismissAnnounce}>
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200/60 max-w-lg w-full mx-4 p-6 md:p-8 relative" onClick={e => e.stopPropagation()}>
+        <button onClick={dismissAnnounce} className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 transition-colors">
+          <X size={20} />
+        </button>
+
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center">
+            <Calculator className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Потенциальные грузы</h2>
+            <p className="text-[11px] text-slate-400 font-medium">Новая возможность в Плане дохода</p>
+          </div>
+        </div>
+
+        <div className="space-y-4 text-sm text-slate-600 leading-relaxed">
+          <p>
+            <strong className="text-slate-800">Теперь вы можете сохранять потенциальные грузы</strong> прямо в Плане дохода, чтобы просчитывать их рентабельность и сравнивать с текущими рейсами.
+          </p>
+
+          <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3">
+            <div className="flex items-start gap-2.5">
+              <span className="w-5 h-5 rounded-lg bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+              <div>
+                <span className="font-semibold text-slate-800">Добавьте груз</span>
+                <p className="text-[12px] text-slate-500">В модалке редактирования рейса переключитесь на вкладку «Потенц. грузы» и нажмите «+ Добавить».</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <span className="w-5 h-5 rounded-lg bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+              <div>
+                <span className="font-semibold text-slate-800">Заполните маршрут</span>
+                <p className="text-[12px] text-slate-500">Укажите плечи (откуда→куда), километраж, фрахт — система сама посчитает прибыль, расходы и рентабельность.</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <span className="w-5 h-5 rounded-lg bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
+              <div>
+                <span className="font-semibold text-slate-800">Примените к рейсу</span>
+                <p className="text-[12px] text-slate-500">Нажмите «Вставить в форму» — маршрут и расчёты скопируются в основную форму рейса.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 pt-3 mt-3">
+            <p className="text-[12px] text-slate-400">
+              💡 Можно сохранить до <strong className="text-slate-600">10 потенциальных грузов</strong> на один рейс. 
+              Данные хранятся в вашем браузере и не теряются при обновлении страницы.
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={dismissAnnounce}
+          className="mt-6 w-full bg-slate-900 text-white text-sm font-bold py-3.5 px-5 rounded-xl hover:bg-slate-800 transition-all active:scale-[0.98]"
+        >
+          Понятно, спасибо!
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="w-full space-y-6">
+      {announceModal}
       <div className="bg-white rounded-[2rem] p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-5">
         
         {/* Page Header Area */}

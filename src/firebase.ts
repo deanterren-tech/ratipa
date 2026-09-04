@@ -1370,7 +1370,7 @@ export const dbService = {
       carNumber: carNum || null,
       vehicleNumbers: carNum || null,
       tractorId: rec.id,
-      trailerId: rec.trailerId || rec.trailerNumber || null,
+      trailerId: rec.trailerId || null,
       trailerNumber: rec.trailerNumber || rec.trailerId || null,
       driverId: rec.driverId || null,
       driverName: rec.driverName || rec.driverNameRu || null,
@@ -1419,9 +1419,35 @@ export const dbService = {
         console.warn('[saveVehicleDriverRecord] id нормализован:', safeId, '→', normSafeId);
       }
       mainPromise = update(ref(database, `tractors/${normSafeId || safeId}`), cleaned)
-        .then(() => {
-          // Синхронизируем данные водителя в таблицу drivers (чтобы карточки видели паспорт, телефоны, дату рождения)
-          const driverId = rec.driverId || safeId;
+        .then(async () => {
+          // Сначала проверяем, есть ли уже водитель с таким именем в справочнике
+          let driverId = rec.driverId || safeId;
+          if (!rec.driverId) {
+            const driverName = (rec.driverNameRu || rec.driverName || '').trim().toLowerCase();
+            if (driverName) {
+              try {
+                const driverSnapshot = await new Promise<any>((resolve) => {
+                  const dbRef = ref(database, 'drivers');
+                  const unsub = onValue(dbRef, (snap) => {
+                    resolve(snap.val());
+                    unsub();
+                  }, () => { resolve(null); unsub(); });
+                  setTimeout(() => { resolve(null); }, 2000);
+                });
+                if (driverSnapshot) {
+                  const existing = Object.entries(driverSnapshot).find(([, d]: [string, any]) =>
+                    (d.name || '').trim().toLowerCase() === driverName ||
+                    (d.shortNameRu || '').trim().toLowerCase() === driverName
+                  );
+                  if (existing) {
+                    driverId = existing[0];
+                  }
+                }
+              } catch (e) {
+                console.warn('[saveVehicleDriverRecord] driver lookup failed', e);
+              }
+            }
+          }
           const driverData: Record<string, any> = {
             id: driverId,
             name: rec.driverNameRu || rec.driverName || null,
@@ -1437,6 +1463,10 @@ export const dbService = {
             passportEnd: rec.passportEnd || null,
             passportIssued: rec.passportIssuedBy || null,
             licenseNumber: rec.licenseNumber || null,
+            // Сохраняем полные части имени, чтобы в Базе водителей отображалось ФИО полностью
+            lastNameRu: rec.lastNameRu || (rec.driverNameRu ? rec.driverNameRu.split(' ')[0] || '' : '') || null,
+            firstNameRu: rec.firstNameRu || (rec.driverNameRu ? rec.driverNameRu.split(' ')[1] || '' : '') || null,
+            middleNameRu: rec.middleNameRu || (rec.driverNameRu ? rec.driverNameRu.split(' ')[2] || '' : '') || null,
           };
           for (const [k, v] of Object.entries(driverData)) {
             if (v === undefined) driverData[k] = null;
@@ -1444,7 +1474,7 @@ export const dbService = {
           update(ref(database, `drivers/${driverId}`), driverData)
             .catch((e) => console.warn('[saveVehicleDriverRecord] drivers update failed', e));
           // ВСЕГДА пишем сцепку (иначе новое авто без диспетчера не появляется в Базе сцепок)
-          // ВАЖНО: обновляем couplingRec.driverId = driverId, чтобы сцепка ссылалась на водителя
+          // ВАЖНО: используем driverId после дедупликации
           const couplingRecWithDriver = { ...couplingRec, driverId };
           update(ref(database, `couplings/${safeId}`), couplingRecWithDriver)
             .catch((e) => console.warn('[saveVehicleDriverRecord] coupling update failed', e));
@@ -1857,9 +1887,13 @@ export const dbService = {
         const n = Date.now();
         if (n - __lastPresenceWrite > __PRESENCE_THROTTLE_MS) {
           __lastPresenceWrite = n;
-          set(pRef, { ...item, lastActive: new Date().toISOString() }).catch((err) => {
+          const ts = new Date().toISOString();
+          // Пишем в ratipapresence (для онлайна)
+          set(pRef, { ...item, lastActive: ts }).catch((err) => {
             console.warn("Silent presence set fail:", err);
           });
+          // И прямо в users_list — чтобы lastActive был актуальным
+          set(ref(database, `users_list/${presenceId}/lastActive`), ts).catch(() => {});
         }
       };
 
