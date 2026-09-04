@@ -1,5 +1,5 @@
 import React, {useState, useEffect, useMemo} from 'react'
-import {UserProfile} from '../../types'
+import {UserProfile, AppSettings} from '../../types'
 import {dbService, onValue} from '../../api'
 import {pdService} from '../../api'
 import {getDatabase, ref, set, push, remove, update, query, limitToLast} from 'firebase/database'
@@ -24,6 +24,7 @@ import { resolvePermission } from '../../utils/permissions';
 
 interface BazaModuleProps {
   user: UserProfile;
+  settings?: AppSettings | null;
 }
 
 const allFields = ['carNumber', 'driverName', 'dateArrival', 'dateLoading', 'dateRepairStart', 'dateRepairEnd', 'dateDeparture', 'comment'] as const;
@@ -49,7 +50,7 @@ const getNormalizedFieldLabel = (field: string) => {
 
 
 
-export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
+export default function BazaModule({ user: ratipaUser, settings }: BazaModuleProps) {
   const { showConfirm } = useDialog();
   const { toast } = useToast();
   const [currentTab, setCurrentTab] = useState<'base' | 'archive' | 'history'>('base');
@@ -320,16 +321,39 @@ export default function BazaModule({ user: ratipaUser }: BazaModuleProps) {
 
   const isRootAdmin = matchedUser.isRootAdmin || matchedUser.name === 'Сергей';
   // Используем resolvePermission для проверки доступа к модулю baza
-  const bazaPerm = resolvePermission(ratipaUser, 'baza');
+  const bazaPerm = resolvePermission(ratipaUser, 'baza', settings?.rolePermissions);
   const canWriteBaza = isRootAdmin || bazaPerm === 'write';
   const canReadBaza = isRootAdmin || bazaPerm !== 'none';
 
   const currentUserRole = matchedUser.role;
   const currentUserPermissions = matchedUser.permissions || {};
 
+  // Маппинг fieldName → permissionKey для полей БД
+  const FIELD_TO_PERM_KEY: Record<string, string> = {
+    carNumber: 'baza_carNumber',
+    driverName: 'baza_driverName',
+    dateArrival: 'baza_dateArrival',
+    dateLoading: 'baza_dateLoading',
+    dateRepairStart: 'baza_dateRepairStart',
+    dateRepairEnd: 'baza_dateRepairEnd',
+    dateDeparture: 'baza_dateDeparture',
+    comment: 'baza_comment',
+  };
+
   const canEditField = (fieldName: string) => {
      if (isRootAdmin) return true;
+     const permKey = FIELD_TO_PERM_KEY[fieldName];
+     // 1. Явное переопределение поля (permissions > customPermissions).
+     //    none/read → поле НЕ редактируемо, даже если модуль baza: write
+     if (permKey) {
+       const own = ratipaUser.permissions?.[permKey];
+       const ownCustom = ratipaUser.customPermissions?.[permKey];
+       const direct = ownCustom !== undefined && ownCustom !== 'inherit' ? ownCustom : (own !== undefined && own !== 'inherit' ? own : null);
+       if (direct) return direct === 'write';
+     }
+     // 2. Право на весь модуль baza (роль)
      if (canWriteBaza) return true;
+     // 3. Fallback: старая система per-field permissions (boolean true)
      return currentUserPermissions[fieldName] === true;
   };
 

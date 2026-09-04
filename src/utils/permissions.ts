@@ -51,6 +51,18 @@ export function resolvePermission(user: UserProfile, key: string, rolePermission
     return "write";
   }
 
+  // 1. customPermissions — пользовательское переопределение (высший приоритет)
+  const customPerm = user.customPermissions?.[key];
+  if (customPerm !== undefined && customPerm !== "inherit") {
+    return customPerm === "write" || customPerm === "read" ? customPerm : "none";
+  }
+
+  // 2. Явное переопределение в permissions
+  const perm = user.permissions?.[key];
+  if (perm !== undefined && perm !== "inherit") {
+    return perm === "write" || perm === "read" ? perm : "none";
+  }
+
   // Определяем базовые права для роли (из settings.rolePermissions → DEFAULT_ROLE_PERMS)
   const role = user.role;
   const roleBase: Record<string, string> =
@@ -64,18 +76,6 @@ export function resolvePermission(user: UserProfile, key: string, rolePermission
     // admin/manager получают write на всё кроме admin
     const baseVal = roleBase[key] || "write";
     return baseVal === "write" || baseVal === "read" ? baseVal : "none";
-  }
-
-  // 1. customPermissions — пользовательское переопределение (высший приоритет)
-  const customPerm = user.customPermissions?.[key];
-  if (customPerm !== undefined && customPerm !== "inherit") {
-    return customPerm === "write" || customPerm === "read" ? customPerm : "none";
-  }
-
-  // 2. Явное переопределение в permissions
-  const perm = user.permissions?.[key];
-  if (perm !== undefined && perm !== "inherit") {
-    return perm === "write" || perm === "read" ? perm : "none";
   }
 
   // 3. Наследование из базы роли (settings.rolePermissions → DEFAULT_ROLE_PERMS)

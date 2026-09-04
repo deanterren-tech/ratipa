@@ -437,7 +437,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       case 'planZagruzok':
         return <PlanZagruzokModule user={user} />;
       case 'baza':
-        return <BazaModule user={user} />;
+        return <BazaModule user={user} settings={settings} />;
       case 'vehicleDriverData':
         return <VehicleDriverDataModule user={user} />;
       case 'dozvola':
