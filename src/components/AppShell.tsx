@@ -51,7 +51,7 @@ import {
   Home,
   Sliders,
   BookOpen
-} from 'lucide-react';
+, ClipboardList} from 'lucide-react';
 
 // Import newly created business modules
 const DashboardModule = lazy(() => import('./modules/DashboardModule'));
@@ -69,6 +69,8 @@ const AdminModule = lazy(() => import('./modules/AdminModule'));
 const DocumentsModule = lazy(() => import('./modules/DocumentsModule'));
 const VehicleDriverDataModule = lazy(() => import('./modules/VehicleDriverDataModule'));
 const BookIssueModule = lazy(() => import('./modules/BookIssueModule'));
+const TabelModule = lazy(() => import('./modules/TabelModule'));
+const MdpJournalModule = lazy(() => import('./modules/MdpJournalModule'));
 const NotFoundPage = lazy(() => import('./common/NotFoundPage'));
 
 const groupIconMap: Record<string, React.ComponentType<any>> = {
@@ -316,9 +318,11 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'dozvola', label: 'Учет Дозволов', icon: FileText, permissionKey: 'dozvola' },
     { key: 'documents', label: 'Документы', icon: Files, permissionKey: 'documents' },
     { key: 'disposition', label: 'Диспозиция', icon: Map, permissionKey: 'disposition' },
-    { key: 'appSettings', label: 'База данных', icon: Settings2, permissionKey: 'settings' },
-    { key: 'settings', label: 'Справочники', icon: BookOpen, permissionKey: 'settings' },
+    { key: 'appSettings', label: 'Справочники', icon: Settings2, permissionKey: 'settings' },
+    { key: 'settings', label: 'База данных', icon: BookOpen, permissionKey: 'settings' },
     { key: 'bookIssue', label: 'Книга выдачи', icon: BookOpen, permissionKey: 'bookIssue' },
+    { key: 'tabel', label: 'Табель', icon: ClipboardList, permissionKey: 'bookIssue' },
+    { key: 'mdpJournal', label: 'Журнал МДП', icon: FileText, permissionKey: 'bookIssue' },
     { key: 'admin', label: 'Администрирование', icon: ShieldAlert, permissionKey: 'admin' }
   ];
 
@@ -383,9 +387,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     return [
       { id: 'g_home', label: 'Главная', isDropdown: false, singleModuleKey: 'dashboard' },
       { id: 'g_ops', label: 'Текущее', isDropdown: true, subtabKeys: ['disposition', 'baza', 'documents', 'vehicleDriverData', 'dozvola'] },
-      { id: 'g_planning', label: 'Планирование', isDropdown: true, subtabKeys: ['planZagruzok', 'planDohod', 'currentPlanning', 'dohod', 'bookIssue'] },
-      { id: 'g_report', label: 'Отчетность', isDropdown: true, subtabKeys: ['salary'] },
-      { id: 'g_settings', label: 'Настройки', isDropdown: true, subtabKeys: ['appSettings', 'admin'] }
+      { id: 'g_planning', label: 'Планирование', isDropdown: true, subtabKeys: ['planZagruzok', 'planDohod', 'currentPlanning', 'dohod'] },
+      { id: 'g_report', label: 'Отчетность', isDropdown: true, subtabKeys: ['salary', 'bookIssue', 'tabel', 'mdpJournal'] },
+      { id: 'g_settings', label: 'Настройки', isDropdown: true, subtabKeys: ['settings', 'appSettings', 'admin'] }
     ];
   }, [settings]);
 
@@ -453,7 +457,11 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       case 'admin':
         return <AdminModule user={user} />;
       case 'bookIssue':
-        return <BookIssueModule user={user} />;
+        return <BookIssueModule user={user} settings={settings} />;
+      case 'tabel':
+        return <TabelModule user={user} settings={settings} />;
+      case 'mdpJournal':
+        return <MdpJournalModule user={user} settings={settings} />;
       default:
         return <NotFoundPage onNavigate={handleNavigate} />;
     }

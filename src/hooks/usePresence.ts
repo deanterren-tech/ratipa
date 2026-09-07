@@ -24,11 +24,11 @@ export function usePresence(user: UserProfile, activeModule: string) {
       const key = activeUsers.map((u: any) => u.uid + ':' + u.currentModule + ':' + u.lastActive).join('|');
       if (key !== prevOnlineUsersRef.current) {
         prevOnlineUsersRef.current = key;
-        // Debounce: отложенное обновление, чтобы сгладить каскад onValue
+        // Debounce: сглаживаем каскад onValue, но обновляем быстро
         if (onlineUsersTimeoutRef.current) clearTimeout(onlineUsersTimeoutRef.current);
         onlineUsersTimeoutRef.current = setTimeout(() => {
           setOnlineUsers(activeUsers);
-        }, 2000);
+        }, 300);
       }
     });
 

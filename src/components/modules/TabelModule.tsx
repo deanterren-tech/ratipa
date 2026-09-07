@@ -1,28 +1,28 @@
 import { UserProfile } from "../../types";
 import { AppSettings } from "../../types";
-import { BookOpen } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import SheetModuleBase, { SheetTab } from "./SheetModuleBase";
 
-interface BookIssueModuleProps {
+interface TabelModuleProps {
   user: UserProfile;
   settings?: AppSettings;
 }
 
-export default function BookIssueModule({ user, settings }: BookIssueModuleProps) {
-  const sheetUrl = settings?.bookIssueSheetUrl || "";
+export default function TabelModule({ user, settings }: TabelModuleProps) {
+  const sheetUrl = settings?.tabelSheetUrl || "";
   const tabs: SheetTab[] = sheetUrl
-    ? [{ id: "main", name: "Книга выдачи", sheetUrl }]
+    ? [{ id: "main", name: "Табель", sheetUrl }]
     : [];
 
   return (
     <SheetModuleBase
       user={user}
-      moduleKey="bookIssue"
-      title="Книга выдачи"
-      subtitle="Учет выданных документов"
-      icon={BookOpen}
-      iconWrapClass="bg-indigo-500/10 border-indigo-500/20"
-      iconColorClass="text-indigo-600"
+      moduleKey="tabel"
+      title="Табель"
+      subtitle="Учёт рабочего времени"
+      icon={ClipboardList}
+      iconWrapClass="bg-emerald-500/10 border-emerald-500/20"
+      iconColorClass="text-emerald-600"
       tabs={tabs}
       gpsUrls={{
         beltranssputnik: settings?.gpsBeltranssputnikUrl || "",

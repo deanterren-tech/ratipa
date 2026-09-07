@@ -135,6 +135,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     const unsubCars = directoryService.getCarsList(setSavedCars);
     const unsubDirs = directoryService.getDirectionsMap(setDirections);
     const unsubDist = pdService.subscribeKnownDistances(setDistances);
+    const unsubCp = dbService.getCheckpoints ? dbService.getCheckpoints((list: any) => setAllCheckpoints(list || [])) : undefined;
     const unsubCurrencies = dbService.getCurrencies(setCurrencies);
     const unsubSet = pdService.subscribePlanDohodSettings(setSettings);
     // Цвета диспетчеров — теперь из единой базы (directories/dispatchers[].color)
@@ -1053,8 +1054,45 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [mapKmResult, setMapKmResult] = useState<number>(0);
   const [mapIsCheckingPl, setMapIsCheckingPl] = useState(false);
   const [saveToDirectoryChecked, setSaveToDirectoryChecked] = useState(false);
-  const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
+  const [showAddDistModal, setShowAddDistModal] = useState(false);
+  const [addDistFrom, setAddDistFrom] = useState('');
+  const [addDistTo, setAddDistTo] = useState('');
+  const [addDistKm, setAddDistKm] = useState(0);
+  const [addDistCountryFrom, setAddDistCountryFrom] = useState('');
+  const [addDistCountryTo, setAddDistCountryTo] = useState('');
+  const [addDistCheckpoints, setAddDistCheckpoints] = useState('');
+  const [addDistCpInput, setAddDistCpInput] = useState('');
+  const [allCheckpoints, setAllCheckpoints] = useState<any[]>([]);
+  const [cityDropdown, setCityDropdown] = useState<{idx: number; field: 'from'|'to'; isPl: boolean; rect?: DOMRect} | null>(null);
+  const cityDropdownRef = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    if (!cityDropdown) return;
+    const handleClick = (e: MouseEvent) => {
+      if (cityDropdownRef.current && !cityDropdownRef.current.contains(e.target as Node)) {
+        setCityDropdown(null);
+      }
+    };
+    const handleScroll = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (cityDropdownRef.current && cityDropdownRef.current.contains(target)) return;
+      setCityDropdown(null);
+    };
+    const handleResize = () => setCityDropdown(null);
+    document.addEventListener('mousedown', handleClick);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [cityDropdown]);
+
+const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
   const [currentProvider, setCurrentProvider] = useState<"google" | "yandex">("google");
+
+  const cityOptions = useMemo(() => Array.from(new Set(distances.flatMap((d) => [d.from, d.to]))).filter(Boolean).sort(), [distances]);
 
   const mapLeg = useMemo(() => {
     if (mapLegIndex === null) return null;
@@ -1620,7 +1658,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
  <div className="bg-white w-full md:max-w-[1400px] mx-0 md:mx-4 shadow-2xl rounded-2xl flex flex-col relative min-h-[100dvh] md:min-h-0 md:max-h-[calc(100vh-2rem)] overflow-hidden">
           
           {/* Header */}
-          <div className="bg-white px-4 md:px-6 py-3 md:py-4 flex flex-col md:flex-row md:items-center justify-between sticky top-0 z-10 border-b border-slate-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)] shrink-0">
+          <div className="bg-white px-4 md:px-6 py-3 md:py-4 flex flex-col md:flex-row md:items-center gap-4 md:gap-10 sticky top-0 z-10 border-b border-slate-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)] shrink-0">
             {/* Close button — top-right corner */}
             <button
               type="button"
@@ -1785,19 +1823,21 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                             <td className="py-1.5 text-xs font-semibold text-slate-400 font-mono">{idx + 1}</td>
                             <td className="py-1.5 pr-2">
                               <input
-                                list="cities-db-pl"
+                                autoComplete="off"
                                 value={leg.from}
                                 onChange={(e) => updateLeg(idx, { from: e.target.value })}
-                                onBlur={() => checkLegDistance(idx)}
+                                onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx, field: 'from', isPl: false, rect}); }}
+                                onBlur={() => { checkLegDistance(idx); }}
                                 className="w-full text-left px-3 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:bg-white focus:border-slate-400 transition"
                               />
                             </td>
                             <td className="py-1.5 pr-2">
                               <input
-                                list="cities-db-pl"
+                                autoComplete="off"
                                 value={leg.to}
                                 onChange={(e) => updateLeg(idx, { to: e.target.value })}
-                                onBlur={() => checkLegDistance(idx)}
+                                onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx, field: 'to', isPl: false, rect}); }}
+                                onBlur={() => { checkLegDistance(idx); }}
                                 className="w-full text-left px-3 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:bg-white focus:border-slate-400 transition"
                               />
                             </td>
@@ -1805,6 +1845,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                               <input
                                 type="number"
                                 onFocus={(e) => e.target.select()}
+                                onBlur={() => {
+                                  if (!findDistance(leg.from, leg.to) && leg.km > 0 && leg.from && leg.to) {
+                                    openAddDistModal(leg.from, leg.to);
+                                  }
+                                }}
                                 value={leg.km || ""}
                                 onChange={(e) => updateLeg(idx, { km: Number(e.target.value) })}
                                 className="w-full text-left pl-3 pr-8 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 transition"
@@ -1926,20 +1971,22 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                           <div className="flex flex-col gap-1.5">
                             <span className="text-[10px] uppercase font-bold text-slate-400">Откуда</span>
                             <input
-                              list="cities-db-pl"
+                              autoComplete="off"
                               value={leg.from}
                               onChange={(e) => updateLeg(idx, { from: e.target.value })}
-                              onBlur={() => checkLegDistance(idx)}
+                              onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx, field: 'from', isPl: false, rect}); }}
+                              onBlur={() => { checkLegDistance(idx); }}
                               className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
                             />
                           </div>
                           <div className="flex flex-col gap-1.5">
                             <span className="text-[10px] uppercase font-bold text-slate-400">Куда</span>
                             <input
-                              list="cities-db-pl"
+                              autoComplete="off"
                               value={leg.to}
                               onChange={(e) => updateLeg(idx, { to: e.target.value })}
-                              onBlur={() => checkLegDistance(idx)}
+                              onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx, field: 'to', isPl: false, rect}); }}
+                              onBlur={() => { checkLegDistance(idx); }}
                               className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
                             />
                           </div>
@@ -2052,9 +2099,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                     ))}
                   </div>
 
-                  <datalist id="cities-db-pl">
-                    {Array.from(new Set(distances.flatMap((d) => [d.from, d.to]))).map((c) => c && <option key={c} value={c} />)}
-                  </datalist>
+                  
                 </div>
 
                 {/* Financial Params & Comment */}
@@ -2292,26 +2337,30 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                             <td className="p-1">
                               <input
                                 type="text"
+                                autoComplete="off"
                                 value={leg.from}
                                 onChange={(e) => {
                                   const nl = [...plLegs];
                                   nl[i].from = e.target.value;
                                   setPlLegs(nl);
                                 }}
-                                onBlur={() => checkLegDistance(i, true)}
+                                onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'from', isPl: true, rect}); }}
+                                onBlur={() => { checkLegDistance(i, true); }}
                                 className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all font-sans"
                               />
                             </td>
                             <td className="p-1">
                               <input
                                 type="text"
+                                autoComplete="off"
                                 value={leg.to}
                                 onChange={(e) => {
                                   const nl = [...plLegs];
                                   nl[i].to = e.target.value;
                                   setPlLegs(nl);
                                 }}
-                                onBlur={() => checkLegDistance(i, true)}
+                                onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'to', isPl: true, rect}); }}
+                                onBlur={() => { checkLegDistance(i, true); }}
                                 className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all font-sans"
                               />
                             </td>
@@ -2434,11 +2483,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1">
                             <span className="text-[10px] uppercase font-semibold text-slate-400">Откуда</span>
-                            <input type="text" value={leg.from} onChange={(e) => { const nl = [...plLegs]; nl[i].from = e.target.value; setPlLegs(nl); }} onBlur={() => checkLegDistance(i, true)} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:bg-white" />
+                            <input type="text" autoComplete="off" value={leg.from} onChange={(e) => { const nl = [...plLegs]; nl[i].from = e.target.value; setPlLegs(nl); }} onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'from', isPl: true, rect}); }} onBlur={() => { checkLegDistance(i, true); }} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:bg-white" />
                           </div>
                           <div className="flex flex-col gap-1">
                             <span className="text-[10px] uppercase font-semibold text-slate-400">Куда</span>
-                            <input type="text" value={leg.to} onChange={(e) => { const nl = [...plLegs]; nl[i].to = e.target.value; setPlLegs(nl); }} onBlur={() => checkLegDistance(i, true)} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:bg-white" />
+                            <input type="text" autoComplete="off" value={leg.to} onChange={(e) => { const nl = [...plLegs]; nl[i].to = e.target.value; setPlLegs(nl); }} onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'to', isPl: true, rect}); }} onBlur={() => { checkLegDistance(i, true); }} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:bg-white" />
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
@@ -3516,6 +3565,142 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         setSaveToDirectoryChecked={setSaveToDirectoryChecked}
         onApply={handleApplyMapRoute}
       />
+    ;
+      {/* Global City Dropdown Portal */}
+      {cityDropdown?.rect && (
+        <div
+          ref={cityDropdownRef}
+          className="fixed z-[200] bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto"
+          style={{
+            top: cityDropdown.rect.bottom + 4 + 'px',
+            left: cityDropdown.rect.left + 'px',
+            width: cityDropdown.rect.width + 'px',
+          }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          {cityOptions.filter(c => {
+            const val = cityDropdown.isPl
+              ? (cityDropdown.field === 'from'
+                ? (plLegs[cityDropdown.idx]?.from || '')
+                : (plLegs[cityDropdown.idx]?.to || ''))
+              : (cityDropdown.field === 'from'
+                ? (legs[cityDropdown.idx]?.from || '')
+                : (legs[cityDropdown.idx]?.to || ''));
+            return !val || c.toLowerCase().includes(val.toLowerCase());
+          }).slice(0, 30).map(c => (
+            <div
+              key={c}
+              className="px-3 py-1.5 text-xs cursor-pointer hover:bg-slate-100 text-slate-700 font-medium truncate"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                if (cityDropdown.isPl) {
+                  const nl = [...plLegs];
+                  if (cityDropdown.field === 'from') nl[cityDropdown.idx].from = c;
+                  else nl[cityDropdown.idx].to = c;
+                  setPlLegs(nl);
+                } else {
+                  updateLeg(cityDropdown.idx, { [cityDropdown.field]: c });
+                }
+                setCityDropdown(null);
+              }}
+            >
+              {c}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Distance to DB Modal */}
+      {showAddDistModal && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowAddDistModal(false)}>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-md p-6 space-y-4 my-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-base font-bold text-slate-900">Добавить маршрут в базу</h2>
+            <p className="text-xs text-slate-500">Маршрут «{addDistFrom} → {addDistTo}» не найден в базе расстояний. Добавить?</p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Город A</label>
+                <input type="text" value={addDistFrom} onChange={(e) => setAddDistFrom(e.target.value)}
+                  className="w-full mt-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:border-slate-400 bg-slate-50 transition" />
+                <div className="mt-1">
+                  <select value={addDistCountryFrom} onChange={(e) => setAddDistCountryFrom(e.target.value)}
+                    className="w-full px-2 py-1.5 text-[10px] font-semibold rounded-lg border border-slate-200 outline-none focus:border-slate-400 bg-white transition cursor-pointer text-slate-700">
+                    <option value="">Страна A</option>
+                    {['BY','RUS','KZ','UZ','TJ','KG','MN','CN','TR','IR','GE','AM','AZ'].map(c => (
+                      <option key={c} value={c}>{c === 'BY' ? '🇧🇾' : c === 'RUS' ? '🇷🇺' : c === 'KZ' ? '🇰🇿' : c === 'UZ' ? '🇺🇿' : c === 'TJ' ? '🇹🇯' : c === 'KG' ? '🇰🇬' : c === 'MN' ? '🇲🇳' : c === 'CN' ? '🇨🇳' : c === 'TR' ? '🇹🇷' : c === 'IR' ? '🇮🇷' : c === 'GE' ? '🇬🇪' : c === 'AM' ? '🇦🇲' : c === 'AZ' ? '🇦🇿' : ''} {c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Город B</label>
+                <input type="text" value={addDistTo} onChange={(e) => setAddDistTo(e.target.value)}
+                  className="w-full mt-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:border-slate-400 bg-slate-50 transition" />
+                <div className="mt-1">
+                  <select value={addDistCountryTo} onChange={(e) => setAddDistCountryTo(e.target.value)}
+                    className="w-full px-2 py-1.5 text-[10px] font-semibold rounded-lg border border-slate-200 outline-none focus:border-slate-400 bg-white transition cursor-pointer text-slate-700">
+                    <option value="">Страна B</option>
+                    {['BY','RUS','KZ','UZ','TJ','KG','MN','CN','TR','IR','GE','AM','AZ'].map(c => (
+                      <option key={c} value={c}>{c === 'BY' ? '🇧🇾' : c === 'RUS' ? '🇷🇺' : c === 'KZ' ? '🇰🇿' : c === 'UZ' ? '🇺🇿' : c === 'TJ' ? '🇹🇯' : c === 'KG' ? '🇰🇬' : c === 'MN' ? '🇲🇳' : c === 'CN' ? '🇨🇳' : c === 'TR' ? '🇹🇷' : c === 'IR' ? '🇮🇷' : c === 'GE' ? '🇬🇪' : c === 'AM' ? '🇦🇲' : c === 'AZ' ? '🇦🇿' : ''} {c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Расстояние (км)</label>
+              <input type="number" min="1" value={addDistKm || ''} onChange={(e) => setAddDistKm(parseFloat(e.target.value) || 0)}
+                placeholder="0"
+                className="w-full mt-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:border-slate-400 bg-white transition" />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                <MapPin className="w-3 h-3" /> Погранпереходы (через запятую)
+              </label>
+              <div className="flex flex-wrap gap-1 mt-1 mb-1.5">
+                {addDistCheckpoints.split(',').filter(Boolean).map((cp, i) => (
+                  <span key={i} className="px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-700 rounded-lg flex items-center gap-1">
+                    {cp.trim()}
+                    <button type="button" onClick={() => { const list = addDistCheckpoints.split(',').filter(Boolean); list.splice(i, 1); setAddDistCheckpoints(list.join(', ')); }} className="text-slate-400 hover:text-rose-500 cursor-pointer">×</button>
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-1">
+                <input list="add-dist-cp-list" type="text" value={addDistCpInput}
+                  onChange={(e) => setAddDistCpInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const val = addDistCpInput.trim();
+                      if (val) {
+                        const existing = addDistCheckpoints.split(',').filter(Boolean).map(s => s.trim());
+                        if (!existing.includes(val)) {
+                          setAddDistCheckpoints([...existing, val].join(', '));
+                          setAddDistCpInput('');
+                        }
+                      }
+                    }
+                  }}
+                  placeholder="КПП..."
+                  className="flex-1 px-3 py-2 text-sm rounded-xl border border-slate-200 outline-none focus:border-slate-400 bg-white transition" />
+                <button type="button" onClick={() => { const val = addDistCpInput.trim(); if (val) { const existing = addDistCheckpoints.split(',').filter(Boolean).map(s => s.trim()); if (!existing.includes(val)) { setAddDistCheckpoints([...existing, val].join(', ')); setAddDistCpInput(''); } } }} className="px-3 py-2 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition cursor-pointer">+</button>
+              </div>
+              <datalist id="add-dist-cp-list">
+                {allCheckpoints.filter((c: any) => { const existing = addDistCheckpoints.split(',').filter(Boolean).map(s => s.trim().toLowerCase()); return !existing.includes(c.name.toLowerCase()); }).map((c: any) => <option key={c.id} value={c.name} />)}
+              </datalist>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => setShowAddDistModal(false)} className="px-4 py-2 text-xs font-medium text-slate-500 rounded-xl hover:bg-slate-100 transition cursor-pointer">Отмена</button>
+              <button onClick={() => { const [a, b] = [addDistFrom.trim(), addDistTo.trim()].sort((x, y) => x.localeCompare(y)); const id = 'dist_' + Date.now().toString(); const checkpoints = addDistCheckpoints.split(',').filter(Boolean).map(s => s.trim()); dbService.saveDistance({ id, from: a, to: b, distance: addDistKm || 0, countryFrom: addDistCountryFrom, countryTo: addDistCountryTo, checkpoints: checkpoints.length > 0 ? checkpoints : undefined, }, user.name, user.role); setShowAddDistModal(false); toast('Маршрут добавлен в базу расстояний', 'success'); }} className="inline-flex items-center gap-1.5 bg-slate-900 text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-slate-800 shadow-sm transition cursor-pointer">
+                <Plus className="w-3.5 h-3.5" /> Добавить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

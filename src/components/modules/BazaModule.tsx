@@ -149,8 +149,9 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
   // Local state
   const [selectedDispatcher, setSelectedDispatcher] = useState<string>("Все автомобили");
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortMode, setSortMode] = useState<string>('default');
+  const [sortConfig, setSortConfig] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
   const [isCarModalOpen, setIsCarModalOpen] = useState(false);
+  const [archiveMonth, setArchiveMonth] = useState<string | null>(null);
   const [historyLimit, setHistoryLimit] = useState(100);
   
   // Form State
@@ -858,22 +859,34 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
 
         const q = searchQuery.toLowerCase();
         if (q && !(String(c.carNumber||'').toLowerCase().includes(q) || String(c.driverName||'').toLowerCase().includes(q) || String(c.comment||'').toLowerCase().includes(q))) return false;
+        // Archive month filter
+        if (currentTab === 'archive' && archiveMonth !== null) {
+          const m = c.dateDeparture ? c.dateDeparture.substring(0, 7) : 'Без даты';
+          if (m !== archiveMonth) return false;
+        }
         return true;
      }).map(c => ({...c, _status: calculateCarStatus(c), displayDriver: resolveDriverName(c)})).sort((a,b) => {
-        if (sortMode === 'car_asc') return (a.carNumber||'').localeCompare(b.carNumber||'');
-        if (sortMode === 'car_desc') return (b.carNumber||'').localeCompare(a.carNumber||'');
-        if (sortMode === 'arrival_desc') return (b.dateArrival||'0000').localeCompare(a.dateArrival||'0000');
-        if (sortMode === 'arrival_asc') return (a.dateArrival||'9999').localeCompare(b.dateArrival||'9999');
-        if (sortMode === 'departure_desc') return (b.dateDeparture||'0000').localeCompare(a.dateDeparture||'0000');
-        if (sortMode === 'departure_asc') return (a.dateDeparture||'9999').localeCompare(a.dateDeparture||'9999');
-        
+        if (sortConfig) {
+          const { key, dir } = sortConfig;
+          let valA: string, valB: string;
+          if (key === 'carNumber') { valA = a.carNumber||''; valB = b.carNumber||''; }
+          else if (key === 'driverName') { valA = a.displayDriver||''; valB = b.displayDriver||''; }
+          else if (key === 'dateArrival') { valA = a.dateArrival||''; valB = b.dateArrival||''; }
+          else if (key === 'dateLoading') { valA = a.dateLoading||''; valB = b.dateLoading||''; }
+          else if (key === 'dateRepairStart') { valA = a.dateRepairStart||''; valB = b.dateRepairStart||''; }
+          else if (key === 'dateRepairEnd') { valA = a.dateRepairEnd||''; valB = b.dateRepairEnd||''; }
+          else if (key === 'dateDeparture') { valA = a.dateDeparture||''; valB = b.dateDeparture||''; }
+          else { valA = a.carNumber||''; valB = b.carNumber||''; }
+          const cmp = valA.localeCompare(valB);
+          return dir === 'asc' ? cmp : -cmp;
+        }
         // default smart sort
         if (currentTab === 'archive') {
             return (b.dateDeparture||'0000').localeCompare(a.dateDeparture||'0000');
         }
         return (b.dateArrival||'0000').localeCompare(a.dateArrival||'0000');
      });
-  }, [currentTab, cars, archiveCars, searchQuery, sortMode, selectedDispatcher]);
+  }, [currentTab, cars, archiveCars, searchQuery, sortConfig, archiveMonth]);
 
   // Ленивая подгрузка списка (Учёт выезда): порция + «Показать ещё»,
   // чтобы не рендерить сразу все записи (тормоза при большом объёме).
@@ -881,7 +894,8 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
   const [visibleBazaCount, setVisibleBazaCount] = useState(BAZA_PAGE_SIZE);
   useEffect(() => {
     setVisibleBazaCount(BAZA_PAGE_SIZE);
-  }, [currentTab, selectedDispatcher, searchQuery, sortMode]);
+    if (currentTab !== 'archive') setArchiveMonth(null);
+  }, [currentTab, searchQuery, sortConfig]);
   const visibleList = filteredList.slice(0, visibleBazaCount);
   const hasMoreBaza = visibleBazaCount < filteredList.length;
 
@@ -903,6 +917,22 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
      return Array.from(set).filter(Boolean).sort();
   }, [systemUsers, cars, archiveCars]);
 
+  const handleSort = (key: string) => {
+    setSortConfig(prev => {
+      if (!prev || prev.key !== key) return { key, dir: "asc" };
+      if (prev.dir === "asc") return { key, dir: "desc" };
+      return null; // 3rd click → default (no sort)
+    });
+  };
+
+  const renderSortIndicator = (sortKey: string) => {
+    if (sortConfig?.key !== sortKey) return null;
+    return (
+      <span className="text-slate-500 ml-1">
+        {sortConfig.dir === "asc" ? "↑" : "↓"}
+      </span>
+    );
+  };
 
   const wTotal = useMemo(() => {
      return cars.filter(c => ['base','repair','ready'].includes(calculateCarStatus(c).code)).length;
@@ -1110,37 +1140,33 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
                          className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full sm:w-64 focus:border-slate-300" 
                          placeholder="Быстрый поиск..." 
                        />
-                       <select
-                         value={selectedDispatcher}
-                         onChange={e => setSelectedDispatcher(e.target.value)}
-                         className="bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold outline-none px-3 py-2 cursor-pointer"
-                       >
-                          <option value="Все автомобили">Все диспетчеры</option>
-                          {dispatcherList.map(disp => (
-                             <option key={disp} value={disp}>{disp}</option>
-                          ))}
-                       </select>
-                       <select 
-                         value={sortMode} 
-                         onChange={e => setSortMode(e.target.value)} 
-                         className="bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold outline-none px-3 py-2 min-w-[170px] max-w-[250px]"
-                       >
-                          <option value="default">Умная сортировка</option>
-                          <optgroup label="По номеру авто">
-                             <option value="car_asc">А–Я По номеру авто</option>
-                             <option value="car_desc">Я–А По номеру авто</option>
-                          </optgroup>
-                          <optgroup label="Фактический выезд">
-                             <option value="departure_desc">Вначале недавно выехавшие</option>
-                             <option value="departure_asc">Вначале давно выехавшие</option>
-                          </optgroup>
-                          <optgroup label="Прибытие на базу">
-                             <option value="arrival_desc">Вначале недавно прибывшие</option>
-                             <option value="arrival_asc">Вначале давно прибывшие</option>
-                          </optgroup>
-                       </select>
                     </div>
                  </div>
+
+                 {/* Month tabs for archive */}
+                 {currentTab === 'archive' && (
+                   <div className="flex gap-1.5 overflow-x-auto pb-2 custom-scrollbar mt-2">
+                     {(() => {
+                       const monthNames = ['','Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+                       const groups: Record<string, number> = {};
+                       archiveCars.forEach(v => {
+                         const m = v.dateDeparture ? v.dateDeparture.substring(0, 7) : 'Без даты';
+                         groups[m] = (groups[m] || 0) + 1;
+                       });
+                       const months = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+                       return [
+                         <button key="all" onClick={() => setArchiveMonth(null)} className={`px-3 py-1.5 rounded-full text-[10px] font-semibold transition-all whitespace-nowrap cursor-pointer select-none ${archiveMonth === null ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200'}`}>Все ({archiveCars.length})</button>,
+                         ...months.map(m => {
+                           const [y, mo] = m.split('-');
+                           const label = m === 'Без даты' ? 'Без даты' : `${monthNames[parseInt(mo)]} ${y}`;
+                           return (
+                             <button key={m} onClick={() => setArchiveMonth(m)} className={`px-3 py-1.5 rounded-full text-[10px] font-semibold transition-all whitespace-nowrap cursor-pointer select-none ${archiveMonth === m ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200'}`}>{label} ({groups[m]})</button>
+                           );
+                         })
+                       ];
+                     })()}
+                   </div>
+                 )}
 
                  {/* Desktop Table */}
                  <div className="hidden lg:block overflow-x-auto custom-scrollbar">
@@ -1148,13 +1174,13 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
 <table className="w-full text-left border-separate border-spacing-y-2">
   <thead>
     <tr>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Госномер</th>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Водитель</th>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Прибыл на базу</th>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Срок готовности</th>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Заявка на ремонт</th>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Завершение ремонта</th>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Фактический выезд</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('carNumber')}>Госномер{renderSortIndicator('carNumber')}</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('driverName')}>Водитель{renderSortIndicator('driverName')}</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('dateArrival')}>Прибыл на базу{renderSortIndicator('dateArrival')}</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('dateLoading')}>Срок готовности{renderSortIndicator('dateLoading')}</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('dateRepairStart')}>Заявка на ремонт{renderSortIndicator('dateRepairStart')}</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('dateRepairEnd')}>Завершение ремонта{renderSortIndicator('dateRepairEnd')}</th>
+      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('dateDeparture')}>Фактический выезд{renderSortIndicator('dateDeparture')}</th>
       <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Примечание</th>
       <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Действия</th>
     </tr>

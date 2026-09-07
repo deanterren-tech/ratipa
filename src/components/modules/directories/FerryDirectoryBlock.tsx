@@ -14,6 +14,7 @@ export default function FerryDirectoryBlock({ user }: Props) {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<FerryTemplate | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     return dbService.getFerryTemplates((list) => setItems(list || []));
@@ -29,11 +30,22 @@ export default function FerryDirectoryBlock({ user }: Props) {
   const openEdit = (f: FerryTemplate) => { setDraft({ name: f.name || '', price: String(f.price || 0), id: f.id || '', dbKey: (f as any).dbKey || '' }); setEditing(f); };
 
   const handleSave = () => {
-    const rec: any = { ...draft };
+    if (isSubmitting) return;
+    const name = (draft.name || '').trim();
+    if (!name) { toast('Укажите название парома', 'error'); return; }
+    if (editing && !(editing as any).id) {
+      if (items.some((f) => f.name?.toLowerCase() === name.toLowerCase())) {
+        toast('Тариф с таким названием уже существует', 'error');
+        return;
+      }
+    }
+    setIsSubmitting(true);
+    const rec: any = { ...draft, name };
     rec.price = parseFloat(rec.price || '0') || 0;
     if (!rec.id) rec.id = (rec.dbKey as string) || 'ferry_' + Date.now().toString();
     dbService.saveFerryTemplate(rec as FerryTemplate, user.name, user.role);
     toast('Тариф парома сохранён', 'success');
+    setIsSubmitting(false);
     setEditing(null);
   };
 
@@ -47,7 +59,7 @@ export default function FerryDirectoryBlock({ user }: Props) {
   return (
  <div className="bg-white rounded-2xl border border-slate-200/50 overflow-hidden shadow-sm">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
-        <Anchor className="w-4 h-4 text-[#3765F6]" />
+        <Anchor className="w-4 h-4 text-slate-600" />
         <h3 className="text-sm font-bold text-slate-800">Тарифы паромов</h3>
         <span className="ml-auto text-[11px] text-slate-400 font-mono">{items.length}</span>
       </div>
@@ -59,7 +71,7 @@ export default function FerryDirectoryBlock({ user }: Props) {
               className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-white/80 outline-none focus:border-slate-300" />
           </div>
           <button onClick={openAdd}
-            className="inline-flex items-center gap-1.5 bg-[#3765F6] text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-[#2a4fd0] shrink-0">
+            className="inline-flex items-center gap-1.5 bg-slate-900 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-slate-800 shrink-0">
             <Plus className="w-3.5 h-3.5" /> Добавить
           </button>
         </div>
@@ -71,7 +83,7 @@ export default function FerryDirectoryBlock({ user }: Props) {
               <div className="flex items-center gap-2">
                 <span className="font-mono font-black text-slate-900 bg-white border border-slate-200 px-2 py-0.5 rounded text-[10px]">{f.price} EUR</span>
                 <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition">
-                  <button onClick={() => openEdit(f)} className="text-slate-400 hover:text-[#3765F6] p-1.5 rounded-lg hover:bg-blue-50"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => openEdit(f)} className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100"><Pencil className="w-4 h-4" /></button>
                   <button onClick={() => handleDelete(f)} className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
@@ -80,7 +92,7 @@ export default function FerryDirectoryBlock({ user }: Props) {
         </div>
       </div>
       {editing && (
- <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setEditing(null)}>
+ <div className="fixed inset-0 z-[100] bg-black/30 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setEditing(null)}>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-sm p-5 space-y-3 my-4" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-sm font-bold text-slate-800">{editing?.id ? 'Изменить' : 'Добавить'} тариф парома</h2>
             {[
@@ -88,7 +100,7 @@ export default function FerryDirectoryBlock({ user }: Props) {
               { f: 'price', l: 'Цена (EUR)', num: true },
             ].map((fld) => (
               <div key={fld.f}>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">{fld.l}</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase">{fld.l}{fld.f === 'name' ? ' *' : ''}</label>
                 <input type={fld.num ? 'number' : 'text'} value={draft[fld.f] || ''}
                   onChange={(e) => setDraft((d) => ({ ...d, [fld.f]: e.target.value }))}
                   className="w-full mt-1 px-3 py-2 text-sm rounded-lg border border-slate-200 outline-none focus:border-slate-300" />
@@ -96,7 +108,7 @@ export default function FerryDirectoryBlock({ user }: Props) {
             ))}
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setEditing(null)} className="px-3 py-2 text-xs font-bold text-slate-500 rounded-lg hover:bg-slate-100">Отмена</button>
-              <button onClick={handleSave} className="inline-flex items-center gap-1.5 bg-[#3765F6] text-white text-xs font-bold px-3 py-2 rounded-lg hover:bg-[#2a4fd0]"><Plus className="w-3.5 h-3.5" /> Сохранить</button>
+              <button onClick={handleSave} disabled={isSubmitting} className={`inline-flex items-center gap-1.5 ${isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-900 hover:bg-slate-800'} text-white text-xs font-bold px-3 py-2 rounded-lg`}><Plus className="w-3.5 h-3.5" /> {isSubmitting ? 'Сохранение...' : 'Сохранить'}</button>
             </div>
           </div>
         </div>

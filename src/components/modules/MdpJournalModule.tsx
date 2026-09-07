@@ -1,28 +1,28 @@
 import { UserProfile } from "../../types";
 import { AppSettings } from "../../types";
-import { BookOpen } from "lucide-react";
+import { FileText } from "lucide-react";
 import SheetModuleBase, { SheetTab } from "./SheetModuleBase";
 
-interface BookIssueModuleProps {
+interface MdpJournalModuleProps {
   user: UserProfile;
   settings?: AppSettings;
 }
 
-export default function BookIssueModule({ user, settings }: BookIssueModuleProps) {
-  const sheetUrl = settings?.bookIssueSheetUrl || "";
+export default function MdpJournalModule({ user, settings }: MdpJournalModuleProps) {
+  const sheetUrl = settings?.mdpJournalSheetUrl || "";
   const tabs: SheetTab[] = sheetUrl
-    ? [{ id: "main", name: "Книга выдачи", sheetUrl }]
+    ? [{ id: "main", name: "Журнал МДП", sheetUrl }]
     : [];
 
   return (
     <SheetModuleBase
       user={user}
-      moduleKey="bookIssue"
-      title="Книга выдачи"
-      subtitle="Учет выданных документов"
-      icon={BookOpen}
-      iconWrapClass="bg-indigo-500/10 border-indigo-500/20"
-      iconColorClass="text-indigo-600"
+      moduleKey="mdpJournal"
+      title="Журнал МДП"
+      subtitle="Учёт книжек МДП"
+      icon={FileText}
+      iconWrapClass="bg-amber-500/10 border-amber-500/20"
+      iconColorClass="text-amber-600"
       tabs={tabs}
       gpsUrls={{
         beltranssputnik: settings?.gpsBeltranssputnikUrl || "",

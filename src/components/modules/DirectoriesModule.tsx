@@ -4,16 +4,15 @@ import {useToast} from '../ToastProvider'
 import {directoryService} from '../../api'
 import {BookOpen, Trash2, Save, Plus, Search, Pencil, X} from 'lucide-react'
 import {UserProfile} from '../../types'
-import DriverDirectoryBlock from './directories/DriverDirectoryBlock'
 import CurrencyDirectoryBlock from './directories/CurrencyDirectoryBlock'
-import DistanceDirectoryBlock from './directories/DistanceDirectoryBlock'
 import FerryDirectoryBlock from './directories/FerryDirectoryBlock'
+import CheckpointDirectoryBlock from './directories/CheckpointDirectoryBlock'
 
 interface DirectoriesModuleProps {
   user: UserProfile;
 }
 
-type DirKey = 'vehicleBrands' | 'trailerBrands' | 'rateGroups' | 'directions' | 'currencies' | 'distances' | 'ferries';
+type DirKey = 'vehicleBrands' | 'trailerBrands' | 'rateGroups' | 'directions' | 'currencies' | 'ferries' | 'checkpoints';
 
 interface TabDef {
   key: DirKey;
@@ -27,9 +26,9 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { key: 'vehicleBrands', label: 'Марки тягачей', idField: 'key', nameField: 'name',
-    fields: [{ f: 'name', label: 'Название', ph: 'Mercedes' }] },
+    fields: [{ f: 'name', label: 'Название', ph: 'Mercedes' }], searchable: true },
   { key: 'trailerBrands', label: 'Марки прицепов', idField: 'key', nameField: 'name',
-    fields: [{ f: 'name', label: 'Название', ph: 'Kögel' }] },
+    fields: [{ f: 'name', label: 'Название', ph: 'Kögel' }], searchable: true },
   
   { key: 'rateGroups', label: 'Группы ставок', idField: 'id', nameField: 'name',
     fields: [
@@ -44,9 +43,11 @@ const TABS: TabDef[] = [
       { f: 'coeff', label: 'Коэффициент', ph: '1.0', numeric: true },
     ], searchable: true },
   { key: 'currencies', label: 'Валюты', block: CurrencyDirectoryBlock },
-  { key: 'distances', label: 'Расстояния', block: DistanceDirectoryBlock },
   { key: 'ferries', label: 'Паромы', block: FerryDirectoryBlock },
+  { key: 'checkpoints', label: 'Погранпереходы', block: CheckpointDirectoryBlock },
 ];
+
+const PAGE_SIZE = 30;
 
 export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
   const { showConfirm } = useDialog();
@@ -54,9 +55,12 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
   const [activeTab, setActiveTab] = useState<DirKey>('vehicleBrands');
   const [items, setItems] = useState<any[]>([]);
   const [search, setSearch] = useState('');
-  const [editing, setEditing] = useState<any | null>(null);  // запись для модалки (null = закрыто)
+  const [editing, setEditing] = useState<any | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const listRef = useRef<HTMLDivElement>(null);
 
   const tab = useMemo(() => TABS.find((t) => t.key === activeTab)!, [activeTab]);
@@ -77,17 +81,35 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
     if (!getter) return;
     const unsub = getter((list: any[]) => setItems(list || []));
     setSearch('');
+    setPage(1);
+    setSortKey(null);
     setEditing(null);
     return unsub;
   }, [activeTab]);
 
   const filtered = useMemo(() => {
-    if (!search.trim() || !tab.searchable) return items;
-    const q = search.toLowerCase();
-    return items.filter((it) =>
-      String(it[tab.nameField] || it[tab.idField] || '').toLowerCase().includes(q)
-    );
-  }, [items, search, tab]);
+    let result = items;
+    // Search
+    if (search.trim() && tab.searchable) {
+      const q = search.toLowerCase();
+      result = result.filter((it) =>
+        String(it[tab.nameField] || it[tab.idField] || '').toLowerCase().includes(q)
+      );
+    }
+    // Sort
+    if (sortKey) {
+      result = [...result].sort((a, b) => {
+        const va = String(a[sortKey] ?? '').toLowerCase();
+        const vb = String(b[sortKey] ?? '').toLowerCase();
+        const cmp = va.localeCompare(vb);
+        return sortDir === 'asc' ? cmp : -cmp;
+      });
+    }
+    return result;
+  }, [items, search, tab, sortKey, sortDir]);
+
+  const paginated = useMemo(() => filtered.slice(0, page * PAGE_SIZE), [filtered, page]);
+  const hasMore = paginated.length < filtered.length;
 
   const openAdd = () => {
     if (!tab.fields) return;
@@ -107,9 +129,26 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
   };
 
   const handleSave = () => {
-    if (!tab.fields) return;
+    if (!tab.fields || isSubmitting) return;
+    const nameField = tab.nameField || 'name';
+    const nameVal = (draft[nameField] || '').trim();
+    if (!nameVal) {
+      toast('Заполните название', 'error');
+      return;
+    }
+    // Проверка уникальности (только для новых записей)
+    if (editing?.__new) {
+      const dup = items.some((it) =>
+        String(it[nameField] || '').toLowerCase() === nameVal.toLowerCase()
+      );
+      if (dup) {
+        toast('Запись с таким названием уже существует', 'error');
+        return;
+      }
+    }
+    setIsSubmitting(true);
     const rec: any = { ...draft };
-    if (draft.dbKey) { rec.dbKey = draft.dbKey; rec.id = draft.dbKey; }  // реальный ключ БД (приоритет)
+    if (draft.dbKey) { rec.dbKey = draft.dbKey; rec.id = draft.dbKey; }
     else if (draft.id) rec.id = draft.id;
     if (draft[tab.idField]) rec[tab.idField] = draft[tab.idField];
     tab.fields.forEach((f) => {
@@ -119,19 +158,17 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
       }
     });
     if (tab.idField === 'key' && !rec.key) {
-      rec.key = (rec.name || '').toString().toUpperCase().replace(/\\s+/g, '_');
+      rec.key = (rec.name || '').toString().toUpperCase().replace(/\s+/g, '_');
     }
     if (!rec.id && !rec.key) rec.id = 'dir_' + Date.now().toString();
 
-    // Нормализация ключа БД: транслит кириллицы + удаление недопустимых символов
-    // (.#$[]), иначе set(ref) падает синхронно и модалка не закрывается.
     const CYR_TO_LAT: Record<string, string> = {
       А:'A',В:'B',Е:'E',К:'K',М:'M',Н:'H',О:'O',Р:'P',С:'C',Т:'T',У:'Y',Х:'X',
       а:'a',в:'b',е:'e',к:'k',м:'m',н:'h',о:'o',р:'p',с:'c',т:'t',у:'y',х:'x',
     };
     const normId = (s: string) =>
       String(s || '').split('').map((ch) => CYR_TO_LAT[ch] ?? ch).join('')
-        .replace(/[.#$[\]]/g, '_').replace(/[^A-Z0-9_-]/g, '');
+        .replace(/[.#$[\]\\]/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
     if (rec.id) rec.id = normId(rec.id);
     if (rec.key) rec.key = normId(rec.key);
     if (rec[tab.idField]) rec[tab.idField] = normId(rec[tab.idField]);
@@ -143,6 +180,7 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
       console.error('[DirectoriesModule] saveDirItem failed:', err);
       toast('Ошибка сохранения: ' + (err?.message || err), 'error');
     } finally {
+      setIsSubmitting(false);
       setEditing(null);
     }
   };
@@ -155,30 +193,18 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
     }
   };
 
-  // Drag reorder (только для dispatchers)
-  const onDrop = (targetIdx: number) => {
-    if (dragIdx === null || dragIdx === targetIdx) return;
-    const reordered = [...filtered];
-    const [moved] = reordered.splice(dragIdx, 1);
-    reordered.splice(targetIdx, 0, moved);
-    // переносим порядок на весь items (с учётом фильтра — применяем к полному списку)
-    const full = [...items];
-    const fromId = filtered[dragIdx][tab.idField] || filtered[dragIdx].id;
-    const toId = filtered[targetIdx][tab.idField] || filtered[targetIdx].id;
-    const fromI = full.findIndex((x) => (x[tab.idField] || x.id) === fromId);
-    const toI = full.findIndex((x) => (x[tab.idField] || x.id) === toId);
-    if (fromI < 0 || toI < 0) return;
-    const [mv] = full.splice(fromI, 1);
-    full.splice(toI, 0, mv);
-    directoryService.reorderDir(tab.key, full, user.name, user.role);
-    setDragIdx(null);
+  const toggleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir((d) => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
   };
-
-  const cardColor = (it: any) => it.color;
 
   return (
     <div key={activeTab} className="w-full space-y-6">
-      <div className="bg-white rounded-[2rem] p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-5">
+      <div className="bg-white rounded-2xl p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-5">
 
         {/* Header with title + tab segment */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
@@ -242,23 +268,15 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
 
         {/* List */}
         <div ref={listRef} className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden shadow-sm divide-y divide-slate-100">
-          {filtered.length === 0 && (
+          {paginated.length === 0 && (
             <div className="p-6 text-center text-xs text-slate-400">Пусто</div>
           )}
-          {filtered.map((it, idx) => (
+          {paginated.map((it, idx) => (
             <div
               key={it[tab.idField] || it.id || idx}
-              data-nav-item
-              draggable={false}
-              onDragStart={() => setDragIdx(idx)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => onDrop(idx)}
               className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 group"
             >
               <div className="flex items-center gap-3 min-w-0">
-                {cardColor(it) && (
-                  <span className="w-3 h-3 rounded-full shrink-0" style={{ background: cardColor(it) }} />
-                )}
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-slate-800 truncate">
                     {it[tab.nameField] || it[tab.idField] || it.id || it.dbKey || '—'}
@@ -289,6 +307,14 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
               </div>
             </div>
           ))}
+          {hasMore && (
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              className="w-full py-3 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition"
+            >
+              Показать ещё ({filtered.length - paginated.length})
+            </button>
+          )}
         </div>
 
         {/* Block components */}
@@ -297,23 +323,33 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
 
       {/* Edit/Add Modal */}
       {editing && (
- <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 animate-fade-in overflow-y-auto" onClick={() => setEditing(null)}>
+<div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 animate-fade-in overflow-y-auto" onClick={() => {
+  const hasChanges = Object.keys(draft).length > 0;
+  if (hasChanges && !window.confirm('Несохранённые изменения будут потеряны. Продолжить?')) return;
+  setEditing(null);
+}}>
           <div
- className="bg-white rounded-3xl w-full max-w-md shadow-2xl p-4 sm:p-6 flex flex-col space-y-4"
+className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-4 sm:p-6 flex flex-col space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-bold text-slate-800">
                 {editing.__new ? 'Добавить в ' : 'Изменить · '}{tab.label}
               </h2>
-              <button onClick={() => setEditing(null)} className="min-h-[44px] min-w-[44px] text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition flex items-center justify-center">
+              <button onClick={() => {
+                const hasChanges = Object.keys(draft).length > 0;
+                if (hasChanges && !window.confirm('Несохранённые изменения будут потеряны. Продолжить?')) return;
+                setEditing(null);
+              }} className="min-h-[44px] min-w-[44px] text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition flex items-center justify-center">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {tab.fields.map((f) => (
               <div key={f.f}>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{f.label}</label>
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                  {f.label}{f.f === (tab.nameField || 'name') ? ' *' : ''}
+                </label>
                 <input
                   type={f.type || 'text'}
                   value={draft[f.f] || ''}
@@ -326,16 +362,25 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
 
             <div className="flex justify-end gap-2 pt-2">
               <button
-                onClick={() => setEditing(null)}
+                onClick={() => {
+                  const hasChanges = Object.keys(draft).length > 0;
+                  if (hasChanges && !window.confirm('Несохранённые изменения будут потеряны. Продолжить?')) return;
+                  setEditing(null);
+                }}
                 className="px-3 py-2 text-xs font-medium text-slate-500 rounded-lg hover:bg-slate-100 transition"
               >
                 Отмена
               </button>
               <button
                 onClick={handleSave}
-                className="inline-flex items-center gap-1.5 bg-slate-900 text-white text-xs font-semibold px-3 py-2 rounded-lg hover:bg-slate-800 shadow-sm transition"
+                disabled={isSubmitting}
+                className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg shadow-sm transition ${
+                  isSubmitting
+                    ? 'bg-slate-400 text-white cursor-not-allowed'
+                    : 'bg-slate-900 text-white hover:bg-slate-800'
+                }`}
               >
-                <Save className="w-3.5 h-3.5" /> Сохранить
+                <Save className="w-3.5 h-3.5" /> {isSubmitting ? 'Сохранение...' : 'Сохранить'}
               </button>
             </div>
           </div>

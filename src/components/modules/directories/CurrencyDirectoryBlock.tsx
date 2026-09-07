@@ -14,6 +14,7 @@ export default function CurrencyDirectoryBlock({ user }: Props) {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<CurrencyPreset | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     return dbService.getCurrencies((list) => setItems(list || []));
@@ -29,10 +30,22 @@ export default function CurrencyDirectoryBlock({ user }: Props) {
   const openEdit = (c: CurrencyPreset) => { setDraft({ code: c.code || '' }); if (c.id) setDraft((d) => ({ ...d, id: c.id })); setEditing(c); };
 
   const handleSave = () => {
-    const rec: any = { ...draft };
-    if (!rec.id) rec.id = (rec.code || '').toString().toUpperCase() || 'cur_' + Date.now().toString();
+    if (isSubmitting) return;
+    const code = (draft.code || '').trim().toUpperCase();
+    if (!code) { toast('Укажите код валюты', 'error'); return; }
+    // Проверка уникальности
+    if (editing && !(editing as any).id) {
+      if (items.some((c) => c.code?.toUpperCase() === code)) {
+        toast('Валюта с таким кодом уже существует', 'error');
+        return;
+      }
+    }
+    setIsSubmitting(true);
+    const rec: any = { ...draft, code };
+    if (!rec.id) rec.id = code || 'cur_' + Date.now().toString();
     dbService.saveCurrency(rec as CurrencyPreset, user.name, user.role);
     toast('Валюта сохранена', 'success');
+    setIsSubmitting(false);
     setEditing(null);
   };
 
@@ -46,7 +59,7 @@ export default function CurrencyDirectoryBlock({ user }: Props) {
   return (
  <div className="bg-white rounded-2xl border border-slate-200/50 overflow-hidden shadow-sm">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
-        <Coins className="w-4 h-4 text-[#3765F6]" />
+        <Coins className="w-4 h-4 text-slate-600" />
         <h3 className="text-sm font-bold text-slate-800">Валюты</h3>
         <span className="ml-auto text-[11px] text-slate-400 font-mono">{items.length}</span>
       </div>
@@ -58,7 +71,7 @@ export default function CurrencyDirectoryBlock({ user }: Props) {
               className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-white/80 outline-none focus:border-slate-300" />
           </div>
           <button onClick={openAdd}
-            className="inline-flex items-center gap-1.5 bg-[#3765F6] text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-[#2a4fd0] shrink-0">
+            className="inline-flex items-center gap-1.5 bg-slate-900 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-slate-800 shrink-0">
             <Plus className="w-3.5 h-3.5" /> Добавить
           </button>
         </div>
@@ -68,7 +81,7 @@ export default function CurrencyDirectoryBlock({ user }: Props) {
             <div key={c.id} className="flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 group">
               <div className="text-sm font-semibold text-slate-800">{c.code}</div>
               <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition">
-                <button onClick={() => openEdit(c)} className="text-slate-400 hover:text-[#3765F6] p-1.5 rounded-lg hover:bg-blue-50"><Pencil className="w-4 h-4" /></button>
+                <button onClick={() => openEdit(c)} className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100"><Pencil className="w-4 h-4" /></button>
                 <button onClick={() => handleDelete(c)} className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
@@ -76,17 +89,17 @@ export default function CurrencyDirectoryBlock({ user }: Props) {
         </div>
       </div>
       {editing && (
- <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setEditing(null)}>
+ <div className="fixed inset-0 z-[100] bg-black/30 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setEditing(null)}>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-sm p-5 space-y-3 my-4" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-sm font-bold text-slate-800">{editing?.id ? 'Изменить' : 'Добавить'} валюту</h2>
             <div>
-              <label className="text-[10px] font-bold text-slate-500 uppercase">Код (напр. EUR)</label>
+              <label className="text-[10px] font-bold text-slate-500 uppercase">Код (напр. EUR) *</label>
               <input value={draft.code || ''} onChange={(e) => setDraft((d) => ({ ...d, code: e.target.value.toUpperCase() }))}
                 className="w-full mt-1 px-3 py-2 text-sm rounded-lg border border-slate-200 outline-none focus:border-slate-300" />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setEditing(null)} className="px-3 py-2 text-xs font-bold text-slate-500 rounded-lg hover:bg-slate-100">Отмена</button>
-              <button onClick={handleSave} className="inline-flex items-center gap-1.5 bg-[#3765F6] text-white text-xs font-bold px-3 py-2 rounded-lg hover:bg-[#2a4fd0]"><Plus className="w-3.5 h-3.5" /> Сохранить</button>
+              <button onClick={handleSave} disabled={isSubmitting} className={`inline-flex items-center gap-1.5 ${isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-900 hover:bg-slate-800'} text-white text-xs font-bold px-3 py-2 rounded-lg`}><Plus className="w-3.5 h-3.5" /> {isSubmitting ? 'Сохранение...' : 'Сохранить'}</button>
             </div>
           </div>
         </div>

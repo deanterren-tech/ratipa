@@ -351,6 +351,11 @@ export const sharedGetFerryTemplates = createGetSubscription<FerryTemplate[]>(
   },
 );
 
+export const sharedGetCheckpoints = createGetSubscription<any[]>("checkpoints", {
+    transform: (data) => Object.keys(data).map((key) => ({ id: key, dbKey: key, ...data[key] })),
+    fallback: [],
+  });
+
 export const sharedGetDistances = createGetSubscription<DistancePreset[]>(
   "knownDistancesList",
   {

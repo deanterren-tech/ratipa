@@ -41,8 +41,8 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const DEFAULT_ROLE_PERMS: Record<string, any> = {
-  root_admin: { dashboard: "write", settings: "write", dohod: "write", salary: "write", planDohod: "write", planZagruzok: "write", baza: "write", vehicleDriverData: "write", dozvola: "write", disposition: "write", documents: "write",admin: "write", bookIssue: "write" },
-  admin: { dashboard: "read", dohod: "write", salary: "write", planDohod: "write", planZagruzok: "write", baza: "write", vehicleDriverData: "write", dozvola: "write", disposition: "write", documents: "write",settings: "write", admin: "write", bookIssue: "write" },
+  root_admin: { dashboard: "write", settings: "write", dohod: "write", salary: "write", planDohod: "write", planZagruzok: "write", baza: "write", vehicleDriverData: "write", dozvola: "write", disposition: "write", documents: "write",admin: "write", bookIssue: "write", tabel: "write", mdpJournal: "write" },
+  admin: { dashboard: "read", dohod: "write", salary: "write", planDohod: "write", planZagruzok: "write", baza: "write", vehicleDriverData: "write", dozvola: "write", disposition: "write", documents: "write",settings: "write", admin: "write", bookIssue: "write", tabel: "write", mdpJournal: "write" },
   manager: { dashboard: "read", dohod: "write", salary: "write", planDohod: "write", planZagruzok: "write", baza: "write", vehicleDriverData: "write", dozvola: "write", disposition: "write", documents: "write",settings: "write", admin: "none" },
   mechanic: { dashboard: "read", dohod: "read", salary: "none", planDohod: "read", planZagruzok: "none", baza: "read", vehicleDriverData: "read", dozvola: "read", disposition: "write", documents: "read",settings: "none", admin: "none" },
   dispatcher: { dashboard: "read", dohod: "write", salary: "write", planDohod: "read", planZagruzok: "read", baza: "read", vehicleDriverData: "read", dozvola: "read", disposition: "read", documents: "write",settings: "none", admin: "none" },
@@ -235,6 +235,8 @@ export default function UserManagementBlock({ user }: Props) {
     { key: "documents", label: "Шаблоны документов" },
     { key: "settings", label: "Справочники" },
     { key: "bookIssue", label: "Книга выдачи" },
+    { key: "tabel", label: "Табель" },
+    { key: "mdpJournal", label: "Журнал МДП" },
     { key: "admin", label: "Администрирование" },
   ];
 

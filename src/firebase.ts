@@ -33,7 +33,7 @@ import {
   CurrencyPreset,
 } from "./types";
 import { firebaseConfig } from "./firebaseConfig";
-import { sharedGetDrivers, sharedGetTractors, sharedGetTrailers, sharedGetCouplings, sharedGetCarRateGroups, sharedGetCurrencies, sharedGetSettings, sharedGetFerryTemplates, sharedGetDistances, sharedGetDirections, sharedGetVehicleStatuses, sharedDirVehicleBrands, sharedDirTrailerBrands, sharedDirDispatchers, sharedDirRateGroups, sharedDirStatusTypes, sharedDirDirections } from "./db/subscriptions";
+import { sharedGetDrivers, sharedGetTractors, sharedGetTrailers, sharedGetCouplings, sharedGetCarRateGroups, sharedGetCurrencies, sharedGetSettings, sharedGetFerryTemplates, sharedGetCheckpoints, sharedGetDistances, sharedGetDirections, sharedGetVehicleStatuses, sharedDirVehicleBrands, sharedDirTrailerBrands, sharedDirDispatchers, sharedDirRateGroups, sharedDirStatusTypes, sharedDirDirections } from "./db/subscriptions";
 import { DEFAULT_USERS, INITIAL_VEHICLES, INITIAL_TRIPS, INITIAL_PERMITS, INITIAL_FERRY_TEMPLATES, INITIAL_DISTANCES, INITIAL_CARS_POOL, INITIAL_DIRECTIONS, INITIAL_SETTINGS } from "./db/seed";
 
 // Resilient initialization
@@ -1905,13 +1905,15 @@ export const dbService = {
       // Cleanup of presence on unloading if possible
       const handleUnload = () => {
         clearInterval(heartbeat);
-        remove(pRef);
+        // Не удаляем presence при закрытии вкладки
       };
       window.addEventListener("beforeunload", handleUnload);
 
       return () => {
         clearInterval(heartbeat);
-        remove(pRef);
+        // При отключении не удаляем presence — пусть истечёт сам
+        // через 5-минутный фильтр в getOnlineUsers, чтобы избежать
+        // мерцания при HMR / переключении модулей.
         window.removeEventListener("beforeunload", handleUnload);
       };
     } else {
@@ -2131,6 +2133,35 @@ export const dbService = {
       id,
       `Шаблон парома удален`,
     );
+  },
+
+  // --- CHECKPOINTS (погранпереходы) ---
+  getCheckpoints: (callback: (list: any[]) => void) => {
+    return sharedGetCheckpoints(callback);
+  },
+
+  saveCheckpoint: (c: any, user: string, role: string) => {
+    if (useFirebase) {
+      set(ref(database, `checkpoints/${c.id}`), c);
+    } else {
+      const local = getLocalStorageData<any[]>("ratipa_checkpoints", []);
+      const idx = local.findIndex((x) => x.id === c.id);
+      if (idx >= 0) local[idx] = c;
+      else local.push(c);
+      setLocalStorageData("ratipa_checkpoints", local);
+    }
+    dbService.logAction(user, role, "Сохранение КПП", "Settings", c.id, `КПП: ${c.name} (${c.country})`);
+  },
+
+  deleteCheckpoint: (id: string, user: string, role: string) => {
+    if (!id) return;
+    if (useFirebase) {
+      remove(ref(database, `checkpoints/${id}`));
+    } else {
+      const local = getLocalStorageData<any[]>("ratipa_checkpoints", []);
+      setLocalStorageData("ratipa_checkpoints", local.filter((x) => x.id !== id));
+    }
+    dbService.logAction(user, role, "Удаление КПП", "Settings", id, `КПП удален`);
   },
 
   // DISTANCES Presets

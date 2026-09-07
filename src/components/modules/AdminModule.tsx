@@ -324,6 +324,30 @@ export default function AdminModule({ user }: AdminModuleProps) {
                         className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition font-mono"
                         placeholder="https://docs.google.com/spreadsheets/d/..." />
                     </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1">Книга выдачи — Google Таблица</label>
+                      <input type="url"
+                        defaultValue={settings.bookIssueSheetUrl || ''}
+                        onBlur={(e) => saveSettings({...settings, bookIssueSheetUrl: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition font-mono"
+                        placeholder="https://docs.google.com/spreadsheets/d/..." />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1">Табель — Google Таблица</label>
+                      <input type="url"
+                        defaultValue={settings.tabelSheetUrl || ''}
+                        onBlur={(e) => saveSettings({...settings, tabelSheetUrl: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition font-mono"
+                        placeholder="https://docs.google.com/spreadsheets/d/..." />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1">Журнал МДП — Google Таблица</label>
+                      <input type="url"
+                        defaultValue={settings.mdpJournalSheetUrl || ''}
+                        onBlur={(e) => saveSettings({...settings, mdpJournalSheetUrl: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-400 transition font-mono"
+                        placeholder="https://docs.google.com/spreadsheets/d/..." />
+                    </div>
                     <div className="space-y-1">
                       <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Google Диск</label>
                       <input type="url"

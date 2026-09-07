@@ -7,6 +7,7 @@ import {ref, set, push, remove} from 'firebase/database'
 import CouplingDirectoryEditor from './CouplingDirectoryEditor';
 import DirectoriesModule from './DirectoriesModule';
 import DriverDirectoryBlock from './directories/DriverDirectoryBlock';
+import DistanceDirectoryBlock from './directories/DistanceDirectoryBlock';
 import { 
   Settings, 
   Plus,
@@ -389,6 +390,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     if (!(await showConfirm(`Вы действительно хотите удалить направление "${nameToDel}"?`))) return;
     const updatedDirections = { ...directions };
     delete updatedDirections[nameToDel];
+    setDirections(updatedDirections);
     directoryService.deleteDirItem('directions', nameToDel, user.name, user.role);
     dbService.logAction(user.name, user.role, 'Delete Direction', 'Settings', nameToDel, `Удалено направление: ${nameToDel}`);
     if (editingDirKey === nameToDel) {
@@ -435,6 +437,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
 
   const handleDeleteTariff = async (id: string) => {
     if (await showConfirm("Удалить эту тарифную группу?")) {
+      setCarRateGroups(prev => prev.filter(g => g.id !== id));
       dbService.deleteCarRateGroup(id, user.name, user.role);
     }
   };
@@ -705,6 +708,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   };
 
   const handleDeleteFerry = (id: string) => {
+    setFerries(prev => prev.filter(f => f.id !== id));
     dbService.deleteFerryTemplate(id, user.name, user.role);
   };
 
@@ -729,6 +733,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
 
   const handleDeleteDistance = async (id: string) => {
     if (await showConfirm("Удалить этот ориентир?")) {
+      setDistances(prev => prev.filter(d => d.id !== id));
       dbService.deleteDistance(id, user.name, user.role);
     }
   };
@@ -906,7 +911,8 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const tabList = [
     { id: 'fleet', label: 'Автопарк и Водители', icon: Truck, count: filteredKnownFleet.length + filteredDrivers.length },
     { id: 'drivers', label: 'База водителей', icon: Users, count: filteredDrivers.length },
-    { id: 'directories', label: 'База данных', icon: BookOpen, count: 0 },
+    { id: 'distances', label: 'Расстояния', icon: Navigation, count: distances.length },
+    { id: 'directories', label: 'Реестры данных', icon: BookOpen, count: 0 },
     { id: 'system', label: 'Системные Настройки', icon: Settings, count: 0 }
   ] as const;
 
@@ -917,10 +923,10 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
       <div className="bg-white rounded-2xl p-6 lg:p-8 border border-slate-200/50 shadow-sm">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">Модуль Справочники</span>
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">Справочники</span>
             <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
               <Settings className="w-7 h-7 text-slate-800" />
-              <span>Корпоративные справочники</span>
+              <span>Справочники</span>
             </h1>
             <p className="text-xs text-slate-400 mt-1 font-medium">
               Системные реестры, тарифные сетки, коэффициенты и интеграционные ключи RATIPA
@@ -973,6 +979,11 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
         <div className="space-y-6">
           <DriverDirectoryBlock user={user} />
         </div>
+      )}
+
+      {/* TAB CONTENT: DISTANCES */}
+      {activeTab === 'distances' && (
+        <DistanceDirectoryBlock user={user} />
       )}
 
       {/* TAB CONTENT 3: SYSTEM SETTINGS */}

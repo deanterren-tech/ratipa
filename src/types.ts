@@ -29,6 +29,9 @@ export interface UserPermissions {
   vehicleDriverData?: "none" | "read" | "write";
   currentPlanning?: "none" | "read" | "write";
   archives?: "none" | "read" | "write";
+  bookIssue?: "none" | "read" | "write";
+  tabel?: "none" | "read" | "write";
+  mdpJournal?: "none" | "read" | "write";
 }
 
 export interface UserProfile {
@@ -211,6 +214,9 @@ export interface PotentialLoad {
   referenceCurrency?: string;
   profit: number;
   profitFact: number;
+  dateStart?: string;
+  dateEnd?: string;
+  days?: number;
 }
 
 export interface TripPlan {
@@ -350,6 +356,9 @@ export interface AppSettings {
   planZagruzokSheetUrl?: string;
   planZagruzokBlacklistUrl?: string;
   dispositionSheetUrl?: string;
+  bookIssueSheetUrl?: string;
+  tabelSheetUrl?: string;
+  mdpJournalSheetUrl?: string;
   googleDriveUrl?: string;
   gpsBeltranssputnikUrl?: string;
   gpsWialonUrl?: string;
@@ -421,6 +430,19 @@ export interface DistancePreset {
   from: string;
   to: string;
   distance: number;
+  checkpoints?: string[];
+  countryFrom?: string;
+  countryTo?: string;
+  countryGroup?: string;
+}
+
+export interface Checkpoint {
+  id: string;
+  name: string;
+  country: string;
+  countryFrom?: string;
+  countryTo?: string;
+  active?: boolean;
 }
 
 export interface CarRateGroup {
