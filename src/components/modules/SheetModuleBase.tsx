@@ -234,6 +234,28 @@ export default function SheetModuleBase({
                   {subtitle}
                 </p>
               </div>
+
+              {/* Tabs inline, справа от названия */}
+              {showTabs && tabs.length > 0 && (
+                <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar ml-2 sm:ml-4">
+                  {tabs.map((tab) => {
+                    const active = tab.id === activeTabId;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => { setActiveTabId(tab.id); setFrameKey((k) => k + 1); }}
+                        className={`px-3 py-1 text-[10px] font-bold tracking-tight rounded-lg transition-all duration-150 cursor-pointer whitespace-nowrap ${
+                          active
+                            ? "bg-white text-slate-900 shadow-xs border border-slate-200/40"
+                            : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/30 border border-transparent"
+                        }`}
+                      >
+                        {tab.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-1 sm:gap-1.5">
@@ -276,28 +298,6 @@ export default function SheetModuleBase({
               </button>
             </div>
           </div>
-
-          {/* Tabs below header */}
-          {showTabs && tabs.length > 0 && (
-            <div className="flex items-center gap-1 mt-2 -mb-1 overflow-x-auto custom-scrollbar">
-              {tabs.map((tab) => {
-                const active = tab.id === activeTabId;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => { setActiveTabId(tab.id); setFrameKey((k) => k + 1); }}
-                    className={`px-3 py-1 text-[10px] font-bold tracking-tight rounded-lg transition-all duration-150 cursor-pointer ${
-                      active
-                        ? "bg-white text-slate-900 shadow-xs border border-slate-200/40"
-                        : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/30 border border-transparent"
-                    }`}
-                  >
-                    {tab.name}
-                  </button>
-                );
-              })}
-            </div>
-          )}
         </div>
       )}
 
