@@ -476,8 +476,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           ⚠ Офлайн-режим: данные сохраняются только локально на этом устройстве и не синхронизируются с сервером.
         </div>
       )}
-      
-      {/* Modern Responsive Capsule Header */}
+
+            {/* Modern Responsive Capsule Header */}
 <header className="bg-white text-slate-900 border-b border-slate-200/35 min-h-[3.5rem] py-1 md:py-0 md:h-14 flex items-center justify-between px-3 sm:px-8 shrink-0 sticky top-0 z-50 select-none gap-2 sm:gap-3 transition-colors duration-300">
         
         {/* Left: Currency Converter on mobile */}
@@ -887,11 +887,11 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             if (!isAllowed) return null;
 
             const isActive = activeModule === mod.key;
-            if (!isActive) return null;
+            if (!isActive && !loadedModules.includes(mod.key)) return null;
             return (
               <div
                 key={mod.key}
-                className="h-full"
+                className={`h-full ${isActive ? '' : 'hidden'}`}
               >
                 <motion.div
                   initial={{ opacity: 0, y: 3 }}
