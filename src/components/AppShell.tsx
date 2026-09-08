@@ -112,7 +112,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const [loadedModules, setLoadedModules] = useState<string[]>([getDefaultModule()]);
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
   const [offlineMode, setOfflineMode] = useState(() => localStorage.getItem('offline_mode') === 'true');
-  const [notifDismissed, setNotifDismissed] = useState(false);
 
   const toggleOfflineMode = () => {
     const newVal = !offlineMode;
@@ -479,14 +478,14 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       )}
 
       {/* Единоразовое уведомление о новых модулях */}
-      {['dispatcher', 'root_admin'].includes(user.role) && !notifDismissed && (
+      {['dispatcher', 'root_admin'].includes(user.role) && !localStorage.getItem('ratipa_notify_new_modules') && (
         <div className="bg-gradient-to-r from-indigo-600 via-blue-500 to-cyan-500 text-white text-xs sm:text-sm font-semibold text-center py-2.5 px-3 sm:px-6 flex items-center justify-center gap-2 sm:gap-4 flex-wrap relative shadow-md" style={{ paddingRight: '2.5rem' }}>
           <span className="text-xl leading-none">📋</span>
           <span>
             <strong>Книга выдачи</strong>, <strong>Табель</strong> и <strong>Журнал МДП</strong> — теперь в портале! Находятся в меню <strong>Отчётность</strong>
           </span>
           <button
-            onClick={() => setNotifDismissed(true)}
+            onClick={() => { localStorage.setItem('ratipa_notify_new_modules', '1'); window.location.reload(); }}
             className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-lg hover:bg-white/20 text-white/80 hover:text-white transition shrink-0 cursor-pointer"
             title="Закрыть"
           >
