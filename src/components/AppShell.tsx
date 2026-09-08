@@ -482,7 +482,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         <div className="bg-gradient-to-r from-indigo-600 to-blue-500 text-white text-xs sm:text-[13px] font-medium text-center py-1.5 px-3 sm:px-6 flex items-center justify-center gap-2 sm:gap-4 flex-wrap relative" style={{ paddingRight: '2.5rem' }}>
           <span className="text-lg leading-none">📋</span>
           <span>
-            <strong>Книга выдачи</strong>, <strong>Табель</strong> и <strong>Журнал МДП</strong> — теперь в портале, в Отчётности!
+            <strong>Книга выдачи</strong>, <strong>Табель</strong> и <strong>Журнал МДП</strong> — теперь в портале! Находятся в меню <strong>Отчётность</strong>
           </span>
           <span className="text-indigo-200 hidden sm:inline">Вносите записи прямо из портала, без доступа к Google Таблицам</span>
           <button
