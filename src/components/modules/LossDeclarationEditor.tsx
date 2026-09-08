@@ -73,7 +73,11 @@ const DraggableItem = ({ id, x, y, onMove, children, isSelected, onClick, onRemo
   );
 };
 
-export default function LossDeclarationEditor() {
+interface LossDeclarationEditorProps {
+  signeeName?: string;
+}
+
+export default function LossDeclarationEditor({ signeeName }: LossDeclarationEditorProps) {
   const { toast } = useToast();
   // Input states
   const [formValues, setFormValues] = useState({
@@ -186,6 +190,17 @@ export default function LossDeclarationEditor() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Sync signee when prop changes from DocumentsModule
+  useEffect(() => {
+    if (signeeName) {
+      setLetterValues(prev => ({
+        ...prev,
+        signeeTitle: signeeName === 'С.Е.Терез' ? 'Начальник транспортного отдела' : 'Директор',
+        signeeName: signeeName === 'С.Е.Терез' ? 'С.Е.Терез' : 'В.В.Бориско'
+      }));
+    }
+  }, [signeeName]);
 
   const handleSaveNewPlace = (val: string) => {
     if (!val || savedPlaces.includes(val)) return;
@@ -456,7 +471,7 @@ export default function LossDeclarationEditor() {
             </div>
 
             <div class="signature-block">
-              <span>Директор</span>
+              <span>{letterValues.signeeTitle}</span>
               <span>{letterValues.signeeName}</span>
             </div>
           </div>
@@ -793,7 +808,7 @@ export default function LossDeclarationEditor() {
 
               {/* Signature Section */}
               <div className="mt-12 pt-6 flex justify-between items-end text-[11pt] font-bold">
-                <span>Директор</span>
+                <span>{letterValues.signeeTitle}</span>
                 <span>{letterValues.signeeName}</span>
               </div>
             </div>

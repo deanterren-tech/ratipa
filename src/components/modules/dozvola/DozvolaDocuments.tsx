@@ -28,6 +28,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
   const [todoTasks, setTodoTasks] = useState<any>({});
   const [permitPrintMappings, setPermitPrintMappings] = useState<any>({});
   const [applicationDate, setApplicationDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedSignee, setSelectedSignee] = useState(() => localStorage.getItem('ratipa_selected_signee') || 'В.В.Бориско');
 
   // Document row state for interactive editing
   const [permitRows, setPermitRows] = useState<any[]>([]);
@@ -64,7 +65,23 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
 
   const safeText = (value: any) => String(value || '').replace(/[&<>"']/g, s => (({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' } as any)[s]));
   
-  const formatApplicationDate = (value: string) => {
+  const getSigneeInfo = (pref?: string) => {
+  const stored = pref || selectedSignee;
+  if (stored === 'С.Е.Терез') {
+    return {
+      fullWithSpaces: 'С. Е. Терез',
+      reverse: 'Терез С.Е.',
+      title: 'Начальник транспортного отдела',
+    };
+  }
+  return {
+    fullWithSpaces: 'В. В. Бориско',
+    reverse: 'Бориско В.В.',
+    title: 'Исполнитель',
+  };
+};
+
+const formatApplicationDate = (value: string) => {
     if (!value) return '';
     const [year, month, day] = String(value).split('-');
     if (year && month && day) return `${day}.${month}.${year}`;
@@ -512,7 +529,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
         <tr>
             <td style="width:34%;">Директор</td>
             <td style="width:33%; border-bottom:1px solid #000;"></td>
-            <td style="width:33%; text-align:center;">В. В. Бориско</td>
+            <td style="width:33%; text-align:center;">${getSigneeInfo().fullWithSpaces}</td>
         </tr>
         <tr class="small">
             <td>(должность руководителя или представителя<br>автомобильного перевозчика, действующего<br>на основании доверенности)</td>
@@ -542,7 +559,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
         <div class="center">возврата перевозчиком использованных разрешений<br>на проезд автотранспортных средств<br>по территориям иностранных государств</div>
         <div class="meta">Дата возврата ${formatApplicationDate(applicationDate)} &nbsp;&nbsp; Место возврата г.Минск</div>
         <div class="meta">Наименование перевозчика ООО «РАТИПА»</div>
-        <table><thead><tr><th>Наименование государства</th><th>Вид бланков</th><th>Год бланков</th><th>Номера бланков</th><th>Всего, шт.</th></tr></thead><tbody>${bodyRows}<tr><td><strong>Итого</strong></td><td></td><td></td><td></td><td><strong>${total}</strong></td></tr><tr class="sign-table"><td colspan="5">Исполнитель<span class="executor-gap"></span>В. В. Бориско<br><br>Лицо, возвращающее разрешения:<br><br>Уполномоченный сотрудник<br>Транспортной инспекции, принявший к возврату разрешения: (подпись, номерная печать)</td></tr></tbody></table>
+        <table><thead><tr><th>Наименование государства</th><th>Вид бланков</th><th>Год бланков</th><th>Номера бланков</th><th>Всего, шт.</th></tr></thead><tbody>${bodyRows}<tr><td><strong>Итого</strong></td><td></td><td></td><td></td><td><strong>${total}</strong></td></tr><tr class="sign-table"><td colspan="5">${getSigneeInfo().title}<span class="executor-gap"></span>${getSigneeInfo().fullWithSpaces}<br><br>Лицо, возвращающее разрешения:<br><br>Уполномоченный сотрудник<br>Транспортной инспекции, принявший к возврату разрешения: (подпись, номерная печать)</td></tr></tbody></table>
     </body></html>`;
   };
 
@@ -559,7 +576,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
         <h1>Заявление</h1><p>Прошу принять копии использованных разрешений:</p>
         <table><thead><tr><th style="width:28%;">Страна</th><th>Номера разрешений</th></tr></thead><tbody>${bodyRows}</tbody></table>
         <p>Оригиналы обязуемся предоставить в течение 30 календарных дней с даты предоставления копии разрешения в Транспортную инспекцию</p>
-        <p>${formatApplicationDate(applicationDate)}<span class="signature-gap"></span>Бориско В.В.</p>
+        <p>${formatApplicationDate(applicationDate)}<span class="signature-gap"></span>${getSigneeInfo().reverse}</p>
     </body></html>`;
   };
 
@@ -673,7 +690,7 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
         if (signatureRow) {
             const signatureCells = [...signatureRow.getElementsByTagNameNS(ns, 'tc')];
             signatureCells.forEach(cell => removeWordCellBorders(cell, ns));
-            setFirstWordText(signatureRow, 'Исполнитель                                                                                                  В. В. Бориско', ns);
+            setFirstWordText(signatureRow, `${getSigneeInfo().title}                                                                                                  ${getSigneeInfo().fullWithSpaces}`, ns);
             table.appendChild(signatureRow);
         }
     }
@@ -705,11 +722,11 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
 
     const dateText = formatApplicationDate(applicationDate);
     const paragraphs = [...xmlDoc.getElementsByTagNameNS(ns, 'p')];
-    const signatureParagraph = paragraphs.find(p => p.textContent?.includes('Бориско В.В'));
+    const signatureParagraph = paragraphs.find(p => p.textContent?.includes(getSigneeInfo().reverse));
     if (signatureParagraph) {
         const textNodes = [...signatureParagraph.getElementsByTagNameNS(ns, 't')];
         if (textNodes.length) {
-            textNodes[0].textContent = `${dateText}                                      Бориско В.В.`;
+            textNodes[0].textContent = `${dateText}                                      ${getSigneeInfo().reverse}`;
             textNodes[0].setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve');
             textNodes.slice(1).forEach(t => t.textContent = '');
         }
@@ -957,6 +974,25 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
                     value={applicationDate}
                     onChange={e => setApplicationDate(e.target.value)}
                 />
+            </div>
+
+            {/* Подписант */}
+            <div>
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">
+                Подписант
+              </label>
+              <select
+                value={selectedSignee}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedSignee(val);
+                  localStorage.setItem('ratipa_selected_signee', val);
+                }}
+                className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition cursor-pointer"
+              >
+                <option value="В.В.Бориско">Директор Бориско В.В.</option>
+                <option value="С.Е.Терез">Начальник транспортного отдела Терез С.Е.</option>
+              </select>
             </div>
 
             <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-200/50">

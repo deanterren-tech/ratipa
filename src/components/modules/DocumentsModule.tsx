@@ -1975,7 +1975,7 @@ export default function DocumentsModule({ user }: Props) {
       {/* BAMAP TIR TAB */}
       {activeTab === 'bamap_tir' && (
         <div className="w-full">
-          <LossDeclarationEditor />
+          <LossDeclarationEditor signeeName={tirSignee} />
         </div>
       )}
 
