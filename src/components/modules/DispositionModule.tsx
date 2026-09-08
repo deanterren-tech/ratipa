@@ -34,7 +34,6 @@ export default function DispositionModule({ user }: { user: UserProfile }) {
       iconColorClass="text-orange-600"
       tabs={tabs}
       gpsUrls={gpsUrls}
-      gpsEnabled={false}
       showTabs={false}
     />
   );
