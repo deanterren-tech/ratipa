@@ -72,12 +72,14 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
       fullWithSpaces: 'С. Е. Терез',
       reverse: 'Терез С.Е.',
       title: 'Начальник транспортного отдела',
+      execTitle: 'Начальник транспортного отдела',
     };
   }
   return {
     fullWithSpaces: 'В. В. Бориско',
     reverse: 'Бориско В.В.',
-    title: 'Исполнитель',
+    title: 'Директор',
+    execTitle: 'Исполнитель',
   };
 };
 
@@ -527,7 +529,7 @@ const formatApplicationDate = (value: string) => {
     </table>
     <table class="signature">
         <tr>
-            <td style="width:34%;">Директор</td>
+            <td style="width:34%;">${getSigneeInfo().title}</td>
             <td style="width:33%; border-bottom:1px solid #000;"></td>
             <td style="width:33%; text-align:center;">${getSigneeInfo().fullWithSpaces}</td>
         </tr>
@@ -559,7 +561,7 @@ const formatApplicationDate = (value: string) => {
         <div class="center">возврата перевозчиком использованных разрешений<br>на проезд автотранспортных средств<br>по территориям иностранных государств</div>
         <div class="meta">Дата возврата ${formatApplicationDate(applicationDate)} &nbsp;&nbsp; Место возврата г.Минск</div>
         <div class="meta">Наименование перевозчика ООО «РАТИПА»</div>
-        <table><thead><tr><th>Наименование государства</th><th>Вид бланков</th><th>Год бланков</th><th>Номера бланков</th><th>Всего, шт.</th></tr></thead><tbody>${bodyRows}<tr><td><strong>Итого</strong></td><td></td><td></td><td></td><td><strong>${total}</strong></td></tr><tr class="sign-table"><td colspan="5">${getSigneeInfo().title}<span class="executor-gap"></span>${getSigneeInfo().fullWithSpaces}<br><br>Лицо, возвращающее разрешения:<br><br>Уполномоченный сотрудник<br>Транспортной инспекции, принявший к возврату разрешения: (подпись, номерная печать)</td></tr></tbody></table>
+        <table><thead><tr><th>Наименование государства</th><th>Вид бланков</th><th>Год бланков</th><th>Номера бланков</th><th>Всего, шт.</th></tr></thead><tbody>${bodyRows}<tr><td><strong>Итого</strong></td><td></td><td></td><td></td><td><strong>${total}</strong></td></tr><tr class="sign-table"><td colspan="5">${getSigneeInfo().execTitle}<span class="executor-gap"></span>${getSigneeInfo().fullWithSpaces}<br><br>Лицо, возвращающее разрешения:<br><br>Уполномоченный сотрудник<br>Транспортной инспекции, принявший к возврату разрешения: (подпись, номерная печать)</td></tr></tbody></table>
     </body></html>`;
   };
 
@@ -690,7 +692,7 @@ const formatApplicationDate = (value: string) => {
         if (signatureRow) {
             const signatureCells = [...signatureRow.getElementsByTagNameNS(ns, 'tc')];
             signatureCells.forEach(cell => removeWordCellBorders(cell, ns));
-            setFirstWordText(signatureRow, `${getSigneeInfo().title}                                                                                                  ${getSigneeInfo().fullWithSpaces}`, ns);
+            setFirstWordText(signatureRow, `${getSigneeInfo().execTitle}                                                                                                  ${getSigneeInfo().fullWithSpaces}`, ns);
             table.appendChild(signatureRow);
         }
     }
