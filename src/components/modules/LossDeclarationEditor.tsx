@@ -107,8 +107,8 @@ export default function LossDeclarationEditor() {
     companyIban: 'BY87PJCB30120030121000000933 ОАО Приорбанк г.Минск, код 749',
     companyUnp: '100492419',
     companyOkpo: '14612221',
-    signeeTitle: 'Директор',
-    signeeName: 'В.В.Бориско'
+    signeeTitle: localStorage.getItem('ratipa_selected_signee') === 'С.Е.Терез' ? 'Начальник транспортного отдела' : 'Директор',
+    signeeName: localStorage.getItem('ratipa_selected_signee') === 'С.Е.Терез' ? 'С.Е.Терез' : 'В.В.Бориско'
   });
 
   const [customLetterBody, setCustomLetterBody] = useState('');
@@ -457,7 +457,7 @@ export default function LossDeclarationEditor() {
 
             <div class="signature-block">
               <span>Директор</span>
-              <span>В.В.Бориско</span>
+              <span>{letterValues.signeeName}</span>
             </div>
           </div>
           <script>
@@ -794,7 +794,7 @@ export default function LossDeclarationEditor() {
               {/* Signature Section */}
               <div className="mt-12 pt-6 flex justify-between items-end text-[11pt] font-bold">
                 <span>Директор</span>
-                <span>В.В.Бориско</span>
+                <span>{letterValues.signeeName}</span>
               </div>
             </div>
           )}

@@ -97,6 +97,11 @@ const DEFAULT_COUPLES: FerryCouple[] = [
     dispatcher: 'Елена В.'
   }
 ];
+const SIGNEE_OPTIONS = [
+  { title: "Директор", fullName: "В.В.Бориско", display: "Директор Бориско В.В." },
+  { title: "Начальник транспортного отдела", fullName: "С.Е.Терез", display: "Начальник транспортного отдела Терез С.Е." },
+];
+
 const DEFAULT_CONTACTS = [
   'Терез Сергей Евгеньевич +375445835065',
   'Бориско Владимир Владимирович +375296554522',
@@ -110,7 +115,7 @@ export default function DocumentsModule({ user }: Props) {
   const [tirOutboxNum, setTirOutboxNum] = useState('90');
   const [tirOutboxDate, setTirOutboxDate] = useState('');
   const [tirCarnetNumbers, setTirCarnetNumbers] = useState('XZ87832581');
-  const [tirSignee, setTirSignee] = useState('В.В.Бориско');
+  const [tirSignee, setTirSignee] = useState(() => localStorage.getItem('ratipa_selected_signee') || 'В.В.Бориско');
   const [tirSavedSuccess, setTirSavedSuccess] = useState(false);
   const [tirSubTab, setTirSubTab] = useState<"letter" | "loss">("letter");
   const [tirLossCause, setTirLossCause] = useState("retained");
@@ -158,7 +163,7 @@ export default function DocumentsModule({ user }: Props) {
   // Non-editable fields fixed to default values as requested
   const ferryCarrierName = 'Общество с ограниченной ответственностью «РАТИПА»';
   const ferryTotalCost = '';
-  const ferryClientSignee = 'Директор Бориско В.В.';
+  const ferryClientSignee = tirSignee === 'В.В.Бориско' ? 'Директор Бориско В.В.' : 'Начальник транспортного отдела Терез С.Е.';
   // Bound vehicle fields (linked dynamically under selected Couple)
   const [ferryStateNumber, setFerryStateNumber] = useState('');
   const [ferryVehicleModel, setFerryVehicleModel] = useState('');
@@ -986,7 +991,7 @@ export default function DocumentsModule({ user }: Props) {
           <table class="signature-table">
             <tr>
               <td>
-                <strong>Директор<br/>ООО «РАТИПА»</strong>
+                <strong>${tirSignee === 'В.В.Бориско' ? 'Директор' : 'Начальник транспортного отдела'}<br/>ООО «РАТИПА»</strong>
               </td>
               <td style="text-align: right; font-weight: bold; font-size: 15pt;">
                 ${tirSignee}
@@ -1696,7 +1701,18 @@ export default function DocumentsModule({ user }: Props) {
                 </div>
                 <div className="text-[11px] text-slate-400 font-medium">
                   <span className="block uppercase text-[9px] tracking-wider text-slate-400 font-semibold">Руководитель со стороны Клиента</span>
-                  Директор Бориско В.В. 🔒
+                  <select
+                    value={tirSignee}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTirSignee(val);
+                      localStorage.setItem('ratipa_selected_signee', val);
+                    }}
+                    className="w-full px-2 py-1 mt-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-400 transition cursor-pointer"
+                  >
+                    <option value="В.В.Бориско">Директор Бориско В.В.</option>
+                    <option value="С.Е.Терез">Начальник транспортного отдела Терез С.Е.</option>
+                  </select>
                 </div>
               </div>
             </div>
