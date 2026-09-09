@@ -196,6 +196,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
   
   const [hoveredMarker, setHoveredMarker] = useState<string | null>(null);
   const [selectedLocId, setSelectedLocId] = useState<string | null>(null);
+  const [selectedDeliveryId, setSelectedDeliveryId] = useState<string | null>(null);
   const [isLightMap, setIsLightMap] = useState(true);
   const [triggerCenter, setTriggerCenter] = useState(0);
 
@@ -920,6 +921,9 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                           dashArray: isDashed ? '10, 10' : undefined,
                           opacity: 0.8
                         }}
+                        eventHandlers={{
+                          click: () => setSelectedDeliveryId(d.id)
+                        }}
                       />
                     );
                   })}
@@ -927,6 +931,48 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
               );
             })}
           </MapContainer>
+
+                    {/* DELIVERY DETAIL POPUP — при клике на линию отправки */}
+          {selectedDeliveryId && deliveries[selectedDeliveryId] && (() => {
+            const d = deliveries[selectedDeliveryId];
+            const fromLoc = locations[d.fromLocId];
+            const toLoc = locations[d.toLocId];
+            const dozvolsInDelivery = d.dozvolIds.map((did: string) => dozvolsData[did]).filter(Boolean);
+            return (
+              <div className="absolute bottom-4 left-4 z-[1001] bg-white border border-slate-200/70 shadow-2xl rounded-2xl p-4 w-80 max-w-[calc(100%-2rem)] flex flex-col gap-3 pointer-events-auto">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-bold text-[#3765F6] uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded-full">Транзит</span>
+                  <button onClick={() => setSelectedDeliveryId(null)} className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1.5 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                    <span className="font-semibold text-slate-700">{fromLoc?.name || '?'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#3765F6] shrink-0" />
+                    <span className="font-semibold text-slate-700">{toLoc?.name || '?'}</span>
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-400 font-mono">Отправлено: {new Date(d.sentAt).toLocaleDateString('ru-RU').replace(/\./g, '/')}</div>
+                <div className="border-t border-slate-100 pt-2">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Дозволы в отправке ({dozvolsInDelivery.length})</span>
+                  <div className="flex flex-wrap gap-1 mt-1.5 max-h-32 overflow-y-auto custom-scrollbar">
+                    {dozvolsInDelivery.map((p: any, pi: number) => (
+                      <span key={pi} className="font-mono text-[9px] font-semibold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
+                        {p?.type || '?'} №{p?.number || p?.permitNumber || '—'}
+                      </span>
+                    ))}
+                    {dozvolsInDelivery.length === 0 && (
+                      <span className="text-[10px] text-slate-400 italic">Нет данных о дозволах</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* 3) GLASSMORPHIC FLOATING DETAIL PANEL (DRAWER SIDE-BAR OVER MAP) */}
           {selectedLocId && locations[selectedLocId] && (() => {

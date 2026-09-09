@@ -943,51 +943,68 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
       {/* Chat widget removed per request — data now flows via portal modules */}
 
-      {/* Real-time Broadcast Push Notifications Overlay Stack */}
-      <div className="fixed top-20 right-6 z-[2000] flex flex-col gap-3.5 max-w-sm w-[calc(100%-3rem)] pointer-events-none">
+      {/* Real-time Broadcast Push Notifications — blocking modal */}
+      {activeUnreadBroadcasts.length > 0 && (
         <AnimatePresence>
-          {activeUnreadBroadcasts.map((notif) => (
+          {activeUnreadBroadcasts.map((notif, notifIdx) => (
             <motion.div
               key={notif.id}
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
-              className="pointer-events-auto bg-slate-950 text-white rounded-2xl border border-slate-800 shadow-[0_15px_50px_rgba(0,0,0,0.5)] p-5 relative overflow-hidden flex flex-col gap-3"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4"
+              style={{ zIndex: 10000 + notifIdx }}
             >
-              {/* Highlight bar */}
-              <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#70FC8E]" />
+              <motion.div
+                initial={{ scale: 0.9, y: 20, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="bg-slate-950 text-white rounded-2xl border border-slate-700/60 shadow-[0_20px_80px_rgba(0,0,0,0.6)] p-6 sm:p-8 w-full max-w-lg relative overflow-hidden flex flex-col gap-4"
+              >
+                {/* Highlight bar */}
+                <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#70FC8E]" />
 
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-2.5">
-                  <div className="p-1.5 bg-slate-900 border border-slate-800 rounded-lg text-[#70FC8E] mt-0.5">
-                    <BellRing className="h-4.5 w-4.5" />
-                  </div>
-                  <div>
-                    <span className="text-[9.5px] font-bold uppercase tracking-widest text-[#70FC8E] block">
-                      Важное Распоряжение
-                    </span>
-                    <span className="text-[8.5px] text-slate-400 font-mono">
-                      от {notif.createdBy} • {new Date(notif.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-slate-900 border border-slate-700 rounded-xl text-[#70FC8E]">
+                      <BellRing className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#70FC8E] block">
+                        Важное Распоряжение
+                      </span>
+                      <span className="text-[9px] text-slate-400 font-mono">
+                        от {notif.createdBy} • {new Date(notif.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <p className="text-xs text-slate-100 font-medium leading-relaxed whitespace-pre-wrap select-text">
-                {notif.text}
-              </p>
+                <h3 className="text-base font-bold text-white leading-snug">
+                  Внимание!
+                </h3>
 
-              <button
-                onClick={() => dbService.markBroadcastNotificationAsRead(notif.id, user.uid, user.name)}
-                className="w-full mt-1.5 py-2 px-4 bg-[#70FC8E] hover:bg-[#5be277] active:scale-98 text-slate-950 font-bold text-[10px] uppercase tracking-widest rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
-              >
-                <Check className="h-3.5 w-3.5" strokeWidth={3} />
-                Прочитано / Закрыть
-              </button>
+                <p className="text-sm text-slate-100 font-medium leading-relaxed whitespace-pre-wrap select-text max-h-[40vh] overflow-y-auto custom-scrollbar">
+                  {notif.text}
+                </p>
+
+                <div className="bg-slate-900/60 border border-slate-700/40 rounded-xl px-3.5 py-2.5 text-[10px] text-slate-400 font-medium">
+                  Для продолжения работы с порталом подтвердите, что вы ознакомились с уведомлением
+                </div>
+
+                <button
+                  onClick={() => dbService.markBroadcastNotificationAsRead(notif.id, user.uid, user.name)}
+                  className="w-full mt-1 py-3 px-4 bg-[#70FC8E] hover:bg-[#5be277] active:scale-[0.99] text-slate-950 font-bold text-xs uppercase tracking-widest rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center gap-2 shadow-lg"
+                >
+                  <Check className="h-4 w-4" strokeWidth={3} />
+                  Подтвердить прочтение
+                </button>
+              </motion.div>
             </motion.div>
           ))}
         </AnimatePresence>
-      </div>
+      )}
 
       {/* Mobile bottom navigation */}
 <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 flex items-stretch justify-around px-3 py-3 select-none" style={{paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))'}}>

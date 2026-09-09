@@ -39,6 +39,7 @@ import {
   ExternalLink,
   Layers,
   Globe,
+  BellRing,
 } from 'lucide-react';
 import UserManagementBlock from './UserManagementBlock';
 import AdminOnlinePresenceBlock from './AdminOnlinePresenceBlock';
@@ -47,7 +48,7 @@ import AdminFirebaseConfigBlock from './AdminFirebaseConfigBlock';
 import AdminAgentBlock from './AdminAgentBlock';
 import AdminAuditLogsBlock from './AdminAuditLogsBlock';
 import AdminWelcomePhrasesBlock from './AdminWelcomePhrasesBlock';
-import AdminLinksBlock from './AdminLinksBlock';
+import AdminBroadcastBlock from './AdminBroadcastBlock';import AdminLinksBlock from './AdminLinksBlock';
 import CurrentPlanningSettingsBlock from './CurrentPlanningSettingsBlock';
 import PlanZagruzokSettingsBlock from './PlanZagruzokSettingsBlock';
 import {pdService} from '../../api';
@@ -167,6 +168,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
     { id: 'links', label: 'Ссылки и интеграции', icon: Link, count: (settings?.quickLinks?.length || 0) + (settings?.externalTabs?.length || 0) },
     { id: 'system', label: 'Система и Настройки', icon: Settings, count: 0 },
     { id: 'agent', label: 'Агент (API)', icon: Sparkles, count: 0 },
+    { id: 'broadcast', label: 'Сообщения', icon: BellRing, count: 0 },
   ] as const;
 
   return (
@@ -402,6 +404,10 @@ export default function AdminModule({ user }: AdminModuleProps) {
 
           <div className={activeTab === 'agent' ? 'space-y-6' : 'hidden'}>
             <AdminAgentBlock user={user} />
+          </div>
+
+          <div className={activeTab === 'broadcast' ? 'space-y-6' : 'hidden'}>
+            <AdminBroadcastBlock user={user} />
           </div>
 
         </div>

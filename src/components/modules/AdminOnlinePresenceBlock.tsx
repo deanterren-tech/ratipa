@@ -25,10 +25,15 @@ const MODULE_LABELS: Record<string, string> = {
   planZagruzok: "План Загрузок",
   currentPlanning: "Текущее планирование",
   baza: "Учет выезда",
+  vehicleDriverData: "Авто и Водители",
   dozvola: "Учет Дозволов",
   disposition: "Диспозиция",
   documents: "Шаблоны документов",
-  settings: "Настройки",
+  appSettings: "Справочники",
+  settings: "База данных",
+  bookIssue: "Книга выдачи",
+  tabel: "Табель",
+  mdpJournal: "Журнал МДП",
   admin: "Администрирование",
 };
 
