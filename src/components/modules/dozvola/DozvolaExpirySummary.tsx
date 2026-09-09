@@ -32,6 +32,8 @@ export default function DozvolaExpirySummary({ user, onNavigateToRegistry }: Pro
   Object.entries(dozvolsData).forEach(([id, item]: [string, any]) => {
     if (!(item.number || item.permitNumber)) return;
     if (item.status === 'used' || item.status === 'office_return') return;
+    // Если дозвол сдан по копии — срок оригинала не показываем, для копий отдельный контроль 30 дней
+    if (item.isCopy) return;
 
     const typeStr = (item.typeName || item.type || '').toUpperCase();
     // Skip RUS

@@ -238,7 +238,7 @@ export default function DozvolaWidgets(props: DozvolaWidgetsProps) {
   const criticalItems: any[] = [];
   if (!isGlobalTab && configuredDays > 0) {
     Object.values(dozvolsData)
-      .filter((i: any) => i.type === currentSelectedTab && i.status === "hand")
+      .filter((i: any) => i.type === currentSelectedTab && i.status === "hand" && !i.isCopy)
       .forEach((item: any) => {
         if (!item.issueDate) return;
         const issue = new Date(item.issueDate);

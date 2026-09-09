@@ -2510,7 +2510,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
             >
               <Save className="h-3.5 w-3.5" /> Шаблонизировать
             </button>
-            {user.permissions.dohod === "write" && (
+            {true && (
               <button
                 onClick={saveCalculation}
                 className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-5 py-2.5 rounded-xl transition cursor-pointer shadow-sm min-h-[44px]"
@@ -2988,7 +2988,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           >
                             Развернуть ↵
                           </button>
-                          {user.permissions.dohod === "write" && (
+                          {true && (
                             <button
                               onClick={() =>
                                 dbService.deleteRouteTemplate(

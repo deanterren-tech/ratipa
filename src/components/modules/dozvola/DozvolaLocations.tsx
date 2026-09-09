@@ -442,68 +442,50 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
   });
 
   return (
-    <div className="flex flex-col md:flex-row h-auto md:h-[820px] w-full gap-4 text-slate-800">
+    <div className="w-full flex flex-col text-slate-800 h-full max-h-full pb-3">
       
-      {/* 1) ВЕРХНЯЯ ПАНЕЛЬ ФИЛЬТРОВ И ДЕЙСТВИЙ */}
- <div className="bg-white rounded-2xl p-4 border border-slate-200/50 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
-        <div className="flex flex-col">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Логистический узел</span>
-          <h2 className="text-sm font-bold text-slate-800 flex items-center gap-1.5 mt-0.5">
-            <Route className="w-4 h-4 text-slate-500" />
-            Интерактивная карта и логистика дозволов
+          {/* 1) ВЕРХНЯЯ ПАНЕЛЬ — полная ширина, компактная */}
+          <div className="bg-white rounded-2xl p-3 border border-slate-200/50 shadow-sm flex items-center justify-between gap-2 shrink-0 w-full">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider hidden sm:inline shrink-0">Логистический узел</span>
+          <h2 className="text-[11px] sm:text-xs font-bold text-slate-800 truncate flex items-center gap-1">
+            <Route className="w-3 h-3 text-slate-500 shrink-0" />
+            <span className="truncate">Интерактивная карта и логистика дозволов</span>
           </h2>
         </div>
-
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          {/* Search Inputs */}
-          <div className="relative min-w-[180px] flex-1 sm:flex-initial">
-            <input 
-              type="text"
-              placeholder="Поиск дозвола..."
-              value={globalSearchQuery}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="relative w-28 sm:w-36">
+            <input type="text" placeholder="Поиск дозвола..." value={globalSearchQuery}
               onChange={(e) => setGlobalSearchQuery(e.target.value)}
-              className="w-full text-xs bg-slate-50 border border-slate-200/60 rounded-xl pl-3 pr-8 py-2 outline-none focus:border-slate-300 focus:bg-white transition font-medium"
+              className="w-full text-[10px] sm:text-xs bg-slate-50 border border-slate-200/60 rounded-lg pl-2 pr-6 py-1 outline-none focus:border-slate-300 focus:bg-white transition font-medium"
             />
             {globalSearchQuery && (
-              <button 
-                onClick={() => setGlobalSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
-              >
-                <X className="w-3.5 h-3.5" />
+              <button onClick={() => setGlobalSearchQuery('')} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <X className="w-3 h-3" />
               </button>
             )}
           </div>
-
-          <button 
-            onClick={handleAddLocation}
-            className="w-full sm:w-auto flex items-center justify-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 min-h-[44px] py-2 rounded-xl transition cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Добавить точку
+          <button onClick={handleAddLocation} className="flex items-center justify-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold px-2 min-h-[32px] py-1.5 rounded-lg transition cursor-pointer whitespace-nowrap">
+            <Plus className="w-3 h-3" />
+            <span className="hidden sm:inline">Точка</span>
           </button>
-          
-          <button 
-            onClick={() => {
-              const firstLoc = Object.keys(locations)[0];
-              if (firstLoc) setDelivFrom(firstLoc);
-              setShowDeliveryForm(true);
-            }}
-            className="w-full sm:w-auto flex items-center justify-center gap-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-3.5 min-h-[44px] py-2 rounded-xl transition cursor-pointer shadow-sm"
+          <button onClick={() => { const firstLoc = Object.keys(locations)[0]; if (firstLoc) setDelivFrom(firstLoc); setShowDeliveryForm(true); }}
+            className="flex items-center justify-center gap-1 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-semibold px-2 min-h-[32px] py-1.5 rounded-lg transition cursor-pointer shadow-sm whitespace-nowrap"
           >
-            <Truck className="w-3.5 h-3.5" />
-            Оформить отправку
+            <Truck className="w-3 h-3" />
+            <span className="hidden sm:inline">Отправка</span>
           </button>
         </div>
       </div>
 
-      {/* TWO COLUMNS BODY */}
-      <div className="flex-1 flex gap-4 min-h-0">
+      {/* TWO COLUMNS: слева список локаций + транзит, справа карта */}
+      <div className="flex-1 flex flex-col md:flex-row gap-3 mt-3 min-h-0 overflow-hidden">
         
         {/* SIDEBAR COL (LEFT) */}
-        <div className="w-80 sm:w-[350px] flex flex-col gap-4 h-full shrink-0 min-h-0">
+        <div className="w-full md:w-72 lg:w-80 flex flex-col gap-3 shrink-0 min-h-0 overflow-hidden">
           
           {/* LOCATIONS LIST */}
- <div className="flex-1 flex flex-col bg-white rounded-2xl border border-slate-200/50 p-4 min-h-0 shadow-sm">
+          <div className="flex-1 flex flex-col bg-white rounded-2xl border border-slate-200/50 p-4 shadow-sm min-h-0">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5 text-[#3765F6]" />
@@ -719,7 +701,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
           </div>
 
           {/* DELIVERIES LIST (BOTTOM) */}
- <div className="h-2/5 flex flex-col bg-white rounded-2xl border border-slate-200/50 p-4 min-h-0 shadow-sm">
+ <div className="h-2/5 flex flex-col bg-white rounded-2xl border border-slate-200/50 p-4 shadow-sm min-h-0">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 shrink-0 mb-3">
               <Truck className="w-3.5 h-3.5 text-[#3765F6]" />
               Транзитные отправки
@@ -791,7 +773,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
         </div>
 
         {/* MAP PANEL (RIGHT) */}
-        <div className="flex-1 h-full rounded-2xl overflow-hidden relative border border-slate-200/50 bg-slate-50 z-0">
+        <div className="flex-1 min-h-[400px] md:min-h-0 h-full rounded-2xl overflow-hidden relative border border-slate-200/50 bg-slate-50 z-0">
           <MapContainer
             center={[53.9006, 27.5590]}
             zoom={6}
@@ -984,26 +966,41 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                    </button>
                  </div>
 
-                 {/* Associated Permits Categories */}
-                 <div className="flex flex-col gap-2">
-                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                     <FileText className="w-3.5 h-3.5" />
-                     <span>Виды дозволов на точке</span>
-                   </h4>
-                   <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto custom-scrollbar">
-                     {Object.entries(typeCounts).map(([type, total]) => (
-                       <div key={type} className="flex justify-between items-center bg-white border border-slate-200 p-2 rounded-lg text-xs font-semibold shadow-sm">
-                         <span className="text-slate-700">{type}</span>
-                         <span className="font-mono font-bold text-[#3765F6] bg-blue-50/50 border border-blue-100/50 px-2 py-0.5 rounded">{total} шт</span>
-                       </div>
-                     ))}
-                     {Object.keys(typeCounts).length === 0 && (
-                       <span className="text-[11px] text-slate-400 italic text-center py-2 bg-slate-50/30 border border-dashed border-slate-200 rounded-lg">
-                         Дозволов на точке нет
-                       </span>
-                     )}
-                   </div>
-                 </div>
+                 {/* Associated Permits — номера дозволов по видам */}
+                                 <div className="flex flex-col gap-2">
+                                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                     <FileText className="w-3.5 h-3.5" />
+                                     <span>Дозволы на точке</span>
+                                   </h4>
+                                   <div className="flex flex-col gap-2 max-h-60 overflow-y-auto custom-scrollbar">
+                                     {(() => {
+                                       // Group permits by type
+                                       const grouped: Record<string, any[]> = {};
+                                       dozvolsList.forEach(d => {
+                                         const t = d.type || 'Прочее';
+                                         if (!grouped[t]) grouped[t] = [];
+                                         grouped[t].push(d);
+                                       });
+                                       return Object.entries(grouped).map(([type, items]) => (
+                                         <div key={type} className="flex flex-col bg-white border border-slate-200 rounded-lg p-2">
+                                           <div className="text-[10px] font-bold text-slate-500 mb-1">{type} — {items.length} шт</div>
+                                           <div className="flex flex-wrap gap-1">
+                                             {items.map((d: any) => (
+                                               <span key={d.id} className="font-mono text-[9px] font-semibold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
+                                                 №{d.number || d.permitNumber || '—'}
+                                               </span>
+                                             ))}
+                                           </div>
+                                         </div>
+                                       ));
+                                     })()}
+                                     {dozvolsList.length === 0 && (
+                                       <span className="text-[11px] text-slate-400 italic text-center py-2 bg-slate-50/30 border border-dashed border-slate-200 rounded-lg">
+                                         Дозволов на точке нет
+                                       </span>
+                                     )}
+                                   </div>
+                                 </div>
 
                  {/* Logs and operation journal */}
                  <div className="flex flex-col gap-2">
@@ -1072,8 +1069,8 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
       {/* FORM MODAL FOR SENDING PERMITS (GLASSMORPHIC DIALOG) */}
       {showDeliveryForm && (
- <div className="fixed inset-0 z-[1000] bg-slate-900/40 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200/50 p-6 w-[620px] max-w-full flex flex-col gap-4 my-4">
+ <div className="fixed inset-0 z-[1000] bg-slate-900/40 flex items-start justify-center p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200/50 p-4 sm:p-6 w-[620px] max-w-full flex flex-col gap-4 my-auto max-h-[95vh] overflow-y-auto">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100">
               <h2 className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
                 <Route className="w-4 h-4 text-slate-500" />
