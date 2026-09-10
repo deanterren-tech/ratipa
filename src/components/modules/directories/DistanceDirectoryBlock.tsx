@@ -99,6 +99,8 @@ export default function DistanceDirectoryBlock({ user }: Props) {
   const [bulkText, setBulkText] = useState('');
   const [showBulk, setShowBulk] = useState(false);
   const [showCpDropdown, setShowCpDropdown] = useState(false);
+  const cpInputRef = useRef<HTMLInputElement>(null);
+  const [cpDropdownRect, setCpDropdownRect] = useState<{top: number; left: number; width: number} | null>(null);
   const inlineRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -601,10 +603,14 @@ export default function DistanceDirectoryBlock({ user }: Props) {
                   </span>
                 ))}
               </div>
-              <div className="flex gap-1 relative">
-                <input type="text" value={draft.cpInput || ''}
+              <div className="flex gap-1">
+                <input type="text" value={draft.cpInput || ''} ref={cpInputRef}
                   onChange={(e) => setDraft((d) => ({ ...d, cpInput: e.target.value }))}
-                  onFocus={() => setShowCpDropdown(true)}
+                  onFocus={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setCpDropdownRect({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+                    setShowCpDropdown(true);
+                  }}
                   onBlur={() => setTimeout(() => setShowCpDropdown(false), 200)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -629,8 +635,9 @@ export default function DistanceDirectoryBlock({ user }: Props) {
                     }
                   }
                 }} className="px-3 py-2 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition cursor-pointer">+</button>
-                {showCpDropdown && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-[110] max-h-[200px] overflow-y-auto">
+                {showCpDropdown && cpDropdownRect && (
+                  <div style={{ position: 'fixed', top: cpDropdownRect.top, left: cpDropdownRect.left, width: cpDropdownRect.width, zIndex: 110 }}
+                    className="bg-white border border-slate-200 rounded-xl shadow-xl max-h-[200px] overflow-y-auto" onMouseDown={(e) => e.preventDefault()}>
                     {(draft.cpInput || '').trim().length > 0 ? (
                       allCheckpoints.filter((c: any) => {
                         const existing = (draft.checkpoints || '').split(',').filter(Boolean).map(s => s.trim().toLowerCase());

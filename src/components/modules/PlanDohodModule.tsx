@@ -1845,9 +1845,13 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                               <input
                                 type="number"
                                 onFocus={(e) => e.target.select()}
-                                onBlur={() => {
-                                  if (!findDistance(leg.from, leg.to) && leg.km > 0 && leg.from && leg.to) {
-                                    openAddDistModal(leg.from, leg.to);
+                                onBlur={(e) => {
+                                  const kmVal = Number(e.currentTarget.value);
+                                  if (!findDistance(leg.from, leg.to) && kmVal > 0 && leg.from && leg.to) {
+                                    setAddDistFrom(leg.from);
+                                    setAddDistTo(leg.to);
+                                    setAddDistKm(kmVal);
+                                    setShowAddDistModal(true);
                                   }
                                 }}
                                 value={leg.km || ""}
@@ -1999,11 +2003,12 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                               type="number"
                               value={leg.km || ""}
                               onChange={(e) => updateLeg(idx, { km: Number(e.target.value) })}
-                              onBlur={() => {
-                                if (!findDistance(leg.from, leg.to) && leg.km > 0 && leg.from && leg.to) {
+                              onBlur={(e) => {
+                                const kmVal = Number(e.currentTarget.value);
+                                if (!findDistance(leg.from, leg.to) && kmVal > 0 && leg.from && leg.to) {
                                   setAddDistFrom(leg.from);
                                   setAddDistTo(leg.to);
-                                  setAddDistKm(leg.km);
+                                  setAddDistKm(kmVal);
                                   setShowAddDistModal(true);
                                 }
                               }}
@@ -2501,7 +2506,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1 relative">
                             <span className="text-[10px] uppercase font-semibold text-slate-400">Км</span>
-                            <input type="number" value={leg.km || ""} onChange={(e) => { const nl = [...plLegs]; nl[i].km = Number(e.target.value); setPlLegs(nl); }} onBlur={() => { if (leg.from && leg.to && leg.km > 0 && !findDistance(leg.from, leg.to)) { setAddDistFrom(leg.from); setAddDistTo(leg.to); setAddDistKm(leg.km); setShowAddDistModal(true); } }} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium font-mono outline-none focus:bg-white" />
+                            <input type="number" value={leg.km || ""} onChange={(e) => { const nl = [...plLegs]; nl[i].km = Number(e.target.value); setPlLegs(nl); }} onBlur={(e) => { const kmVal = Number(e.currentTarget.value); if (leg.from && leg.to && kmVal > 0 && !findDistance(leg.from, leg.to)) { setAddDistFrom(leg.from); setAddDistTo(leg.to); setAddDistKm(kmVal); setShowAddDistModal(true); } }} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium font-mono outline-none focus:bg-white" />
                             <button onClick={() => openMapRouteModal(i, leg.from, leg.to, true)} className="absolute right-2 bottom-2 text-slate-400 hover:text-blue-500 transition"><MapPin className="w-3.5 h-3.5" /></button>
                           </div>
                           <div className="flex flex-col gap-1">
