@@ -252,7 +252,7 @@ const _mapUnitToFlat = (u: any) => {
   carNumber: u.tractor?.carNumber || u.couplingId,
   vehicleNumbers: u.tractor?.carNumber || u.couplingId,
   tractorId: u.raw?.tractorId,
-  trailerNumber: u.trailer?.trailerNumber || '',
+  trailerNumber: u.trailer?.trailerNumber || u.raw?.trailerNumber || u.tractor?.trailerNumber || '',
   trailerId: u.raw?.trailerId,
   brand: u.raw?.brand || u.tractor?.brand || u.tractor?.brandModel || '',
   brandModel: u.raw?.brandModel || u.raw?.brands || u.tractor?.brandModel || u.tractor?.brands || u.tractor?.brand || '',
