@@ -1446,7 +1446,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
     if (!matched || matched.distance !== newDist) {
       const q = matched
         ? `Изменить расстояние ${from} - ${to} в базе шаблонов с ${matched.distance} км на ${newDist} км?`
-        : `Сохранить новое плечо ${from} - ${to} (${newDist} км) в общую базу шаблонов расстояний?`;
+        : `Сохранить новое плечо ${from} - ${to} (${newDist} км) в общую базу шаблонов расстояний?\n\n📐 Вносите расстояния, которые вы считаете/знаете сами (карты, опыт), а не только из путевых листов водителей. Это общая база для всех.`;
 
       setTimeout(async () => {
         if (await showConfirm(q)) {

@@ -1999,6 +1999,14 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                               type="number"
                               value={leg.km || ""}
                               onChange={(e) => updateLeg(idx, { km: Number(e.target.value) })}
+                              onBlur={() => {
+                                if (!findDistance(leg.from, leg.to) && leg.km > 0 && leg.from && leg.to) {
+                                  setAddDistFrom(leg.from);
+                                  setAddDistTo(leg.to);
+                                  setAddDistKm(leg.km);
+                                  setShowAddDistModal(true);
+                                }
+                              }}
                               className="w-full pl-3 pr-8 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
                             />
                             <button
@@ -2493,7 +2501,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1 relative">
                             <span className="text-[10px] uppercase font-semibold text-slate-400">Км</span>
-                            <input type="number" value={leg.km || ""} onChange={(e) => { const nl = [...plLegs]; nl[i].km = Number(e.target.value); setPlLegs(nl); }} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium font-mono outline-none focus:bg-white" />
+                            <input type="number" value={leg.km || ""} onChange={(e) => { const nl = [...plLegs]; nl[i].km = Number(e.target.value); setPlLegs(nl); }} onBlur={() => { if (leg.from && leg.to && leg.km > 0 && !findDistance(leg.from, leg.to)) { setAddDistFrom(leg.from); setAddDistTo(leg.to); setAddDistKm(leg.km); setShowAddDistModal(true); } }} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium font-mono outline-none focus:bg-white" />
                             <button onClick={() => openMapRouteModal(i, leg.from, leg.to, true)} className="absolute right-2 bottom-2 text-slate-400 hover:text-blue-500 transition"><MapPin className="w-3.5 h-3.5" /></button>
                           </div>
                           <div className="flex flex-col gap-1">
@@ -3616,6 +3624,9 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-md p-6 space-y-4 my-4" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-base font-bold text-slate-900">Добавить маршрут в базу</h2>
             <p className="text-xs text-slate-500">Маршрут «{addDistFrom} → {addDistTo}» не найден в базе расстояний. Добавить?</p>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5 text-xs text-amber-800 font-medium">
+              <strong>📐 Самостоятельный расчёт:</strong> Вносите расстояния, которые вы считаете/знаете сами (карты, опыт), а не только из путевых листов водителей. Это общая база для всех.
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>

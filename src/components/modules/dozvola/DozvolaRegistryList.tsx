@@ -83,7 +83,13 @@ const DozvolaRow = React.memo(({
       used: 'Сдан в ТИ', expired: 'Аннулирован', lost: 'Утерян'
     };
     return (
-      <tr data-nav-item className={`border-b border-slate-100/70 hover:bg-slate-50/60 transition ${        item.isCopy && item.status !== 'office_return' && item.status !== 'used' && item.status !== 'expired'
+      <tr data-nav-item
+        onClick={(e) => {
+          const target = e.target as HTMLElement;
+          if (target.closest('input, button, select, .coupling-picker')) return;
+          onEdit();
+        }}
+        className={`border-b border-slate-100/70 hover:bg-slate-50/60 transition cursor-pointer ${item.isCopy && item.status !== 'office_return' && item.status !== 'used' && item.status !== 'expired'
           ? 'bg-amber-50/30' : ''}`}>
         <td className="px-3 py-2.5 align-middle">
           <input type="checkbox" className="w-4 h-4 rounded border-slate-200 text-[#3765F6] accent-slate-900 cursor-pointer" checked={isChecked} onChange={(e) => onCheckboxChange(e.target.checked)} />
@@ -166,7 +172,12 @@ const DozvolaRow = React.memo(({
   }
   return (
         <div
-      className={`rounded-2xl border border-slate-200/60 bg-white p-4 flex flex-col gap-3 transition hover:shadow-sm ${
+      onClick={(e) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('input, button, select, .coupling-picker')) return;
+        onEdit();
+      }}
+      className={`rounded-2xl border border-slate-200/60 bg-white p-4 flex flex-col gap-3 transition hover:shadow-sm cursor-pointer ${
         item.isCopy &&
         item.status !== "office_return" &&
         item.status !== "used" &&

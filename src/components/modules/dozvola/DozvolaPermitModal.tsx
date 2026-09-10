@@ -102,7 +102,7 @@ export default function DozvolaPermitModal({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/45 flex justify-center items-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl max-w-md w-full shadow-sm border border-slate-200/50 my-4">
+      <div className="bg-white rounded-2xl max-w-2xl w-full shadow-sm border border-slate-200/50 my-4">
         <div className="p-5 border-b border-slate-100 flex items-center justify-between select-none">
           <div>
             <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest block">
@@ -305,6 +305,7 @@ export default function DozvolaPermitModal({
                 </div>
               )}
 
+              
               {/* HISTORY TIMELINE */}
               <div className="border-t border-slate-100 pt-3 mt-3">
                 <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-2">
