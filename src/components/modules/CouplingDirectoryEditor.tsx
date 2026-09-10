@@ -46,6 +46,28 @@ const DISP_COLORS: Record<string, string> = {
 };
 const dispColor = (key?: string) => DISP_COLORS[(key || '').toLowerCase()] || '#64748b';
 
+function useLockBodyScroll(open: boolean) {
+  React.useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden';
+      document.querySelectorAll('main, .overflow-y-auto').forEach((el) => {
+        (el as HTMLElement).style.overflow = 'hidden';
+      });
+    } else {
+      document.body.style.overflow = '';
+      document.querySelectorAll('main, .overflow-y-auto').forEach((el) => {
+        (el as HTMLElement).style.overflow = '';
+      });
+    }
+    return () => {
+      document.body.style.overflow = '';
+      document.querySelectorAll('main, .flex-1\.overflow-y-auto').forEach((el) => {
+        (el as HTMLElement).style.overflow = '';
+      });
+    };
+  }, [open]);
+}
+
 export default function CouplingDirectoryEditor({ user, isWritePermitted }: CouplingDirectoryEditorProps) {
   const { showConfirm } = useDialog();
   const { toast } = useToast();
@@ -65,6 +87,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   const [focusIdx, setFocusIdx] = useState(-1);
   const [activeDisp, setActiveDisp] = useState<string>('all');
   const [modalOpen, setModalOpen] = useState(false);
+  useLockBodyScroll(modalOpen);
   const [editing, setEditing] = useState<CouplingRow | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [viewCard, setViewCard] = useState<{ type: 'coupling' | 'driver'; carNumber?: string; driverId?: string; driverName?: string; record?: any } | null>(null);
@@ -505,8 +528,8 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
 
       {/* MODAL add/edit */}
       {modalOpen && createPortal(
- <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 p-4 overflow-y-auto" onClick={() => setModalOpen(false)}>
-          <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 my-4" onClick={(e) => e.stopPropagation()}>
+ <div className="fixed inset-0 z-[2000] flex items-start justify-center bg-slate-950/70 p-4 overflow-y-auto" onClick={() => setModalOpen(false)}>
+          <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Link2 className="w-4 h-4 text-[#3765F6]" />
@@ -549,8 +572,8 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
 
       {/* BULK modal */}
       {bulkOpen && createPortal(
- <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 p-4 overflow-y-auto" onClick={() => setBulkOpen(false)}>
-          <div className="w-full max-w-sm bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 my-4" onClick={(e) => e.stopPropagation()}>
+ <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/70 p-4 overflow-y-auto" onClick={() => setBulkOpen(false)}>
+          <div className="w-full max-w-sm bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Layers className="w-4 h-4 text-[#3765F6]" />

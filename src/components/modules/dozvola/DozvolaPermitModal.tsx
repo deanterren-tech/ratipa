@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useToast } from '../../ToastProvider'
 import CouplingPicker from '../../common/CouplingPicker'
 
@@ -25,6 +26,24 @@ interface DozvolaPermitModalProps {
   }) => Promise<void>;
 }
 
+// Prevent body scroll when modal is open
+function useLockBodyScroll(open: boolean) {
+  React.useEffect(() => {
+    const main = document.querySelector('main');
+    if (open) {
+      document.body.style.overflow = 'hidden';
+      if (main) main.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+      if (main) main.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+      if (main) main.style.overflow = '';
+    };
+  }, [open]);
+}
+
 export default function DozvolaPermitModal({
   isOpen,
   onClose,
@@ -35,6 +54,7 @@ export default function DozvolaPermitModal({
   dozvolsHistory = {},
   onSave,
 }: DozvolaPermitModalProps) {
+  useLockBodyScroll(isOpen);
   const { toast } = useToast();
 
   const [type, setType] = useState("Транзитный двусторонний");
@@ -100,9 +120,9 @@ export default function DozvolaPermitModal({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-950/45 flex justify-center items-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl max-w-2xl w-full shadow-sm border border-slate-200/50 my-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[5000] bg-slate-950/60 flex justify-center items-start p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-2xl w-full shadow-sm border border-slate-200/50 my-auto max-h-[90vh] overflow-y-auto">
         <div className="p-5 border-b border-slate-100 flex items-center justify-between select-none">
           <div>
             <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest block">
@@ -373,6 +393,7 @@ export default function DozvolaPermitModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
