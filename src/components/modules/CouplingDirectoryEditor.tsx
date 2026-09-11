@@ -47,7 +47,7 @@ const DISP_COLORS: Record<string, string> = {
 const dispColor = (key?: string) => DISP_COLORS[(key || '').toLowerCase()] || '#64748b';
 
 function useLockBodyScroll(open: boolean) {
-  React.useEffect(() => {
+  useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden';
       document.querySelectorAll('main, .overflow-y-auto').forEach((el) => {
