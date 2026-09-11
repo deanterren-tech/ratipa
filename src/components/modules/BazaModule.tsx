@@ -638,7 +638,7 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
       // Only write fields the user actually edited. Untouched date/comment fields are NEVER
       // written, so changing the car coupling can never wipe existing dates.
       if (!touchedFields[field]) continue;
-      if (!isRootAdmin && !currentUserPermissions[field]) continue;
+      if (!canEditField(field)) continue;
       let oldValue = targetCar[field] || '';
       let val = (modalData as any)[field] || '';
       if (field === 'carNumber') val = val.toUpperCase();

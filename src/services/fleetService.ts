@@ -195,7 +195,7 @@ export const getFleetUnitsOnce = (callback: (units: any[]) => void): void => {
         driver: driver || null,
         dispatcher: dispatcher || (c.dispatcherName ? { name: c.dispatcherName } : null),
         status: c.status || 'base',
-        raw: { tractorId: c.tractorId ?? null, trailerId: c.trailerId ?? null, driverId: c.driverId ?? null, dispatcherName: c.dispatcherName ?? null, status: c.status },
+        raw: { tractorId: c.tractorId ?? null, trailerId: c.trailerId ?? null, trailerNumber: c.trailerNumber ?? null, trailerBrand: c.trailerBrand ?? null, driverId: c.driverId ?? null, dispatcherName: c.dispatcherName ?? null, status: c.status },
       };
     });
     callback(units.map(_mapUnitToFlat));

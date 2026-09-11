@@ -528,8 +528,8 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
 
       {/* MODAL add/edit */}
       {modalOpen && createPortal(
- <div className="fixed inset-0 z-[2000] flex items-start justify-center bg-slate-950/70 p-4 overflow-y-auto" onClick={() => setModalOpen(false)}>
-          <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+ <div className="fixed inset-0 z-[2000] flex items-start justify-center bg-slate-950 overflow-y-auto" onClick={() => setModalOpen(false)}>
+          <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[85vh] overflow-y-auto my-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Link2 className="w-4 h-4 text-[#3765F6]" />

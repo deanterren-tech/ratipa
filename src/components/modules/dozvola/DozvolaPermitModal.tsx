@@ -121,8 +121,8 @@ export default function DozvolaPermitModal({
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[5000] bg-slate-950/60 flex justify-center items-start p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl max-w-2xl w-full shadow-sm border border-slate-200/50 my-auto max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-[5000] bg-slate-950 flex justify-center items-start overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-2xl w-full shadow-sm border border-slate-200/50 my-4 max-h-[90vh] overflow-y-auto">
         <div className="p-5 border-b border-slate-100 flex items-center justify-between select-none">
           <div>
             <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest block">
