@@ -1414,7 +1414,7 @@ export const dbService = {
         А:"A",В:"B",Е:"E",К:"K",М:"M",Н:"H",О:"O",Р:"P",С:"C",Т:"T",У:"Y",Х:"X",
         а:"a",в:"b",е:"e",к:"k",м:"m",н:"h",о:"o",р:"p",с:"c",т:"t",у:"y",х:"x",
       };
-      const normSafeId = safeId.split('').map((ch: string) => CYR_TO_LAT[ch] ?? ch).join('').replace(/[^A-Z0-9]/g, '');
+      const normSafeId = safeId.split('').map((ch: string) => CYR_TO_LAT[ch] ?? ch).join('').replace(/[^A-Z0-9_-]/g, '');
       if (safeId !== normSafeId) {
         console.warn('[saveVehicleDriverRecord] id нормализован:', safeId, '→', normSafeId);
       }
