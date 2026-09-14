@@ -1231,7 +1231,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
 
       {/* Annual Passport Verification Pop-up Prompt */}
       {currentVerification && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-slate-950 animate-fade-in overflow-y-auto">
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-slate-950/10 backdrop-blur-sm animate-fade-in overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-full md:max-w-md shadow-2xl p-6 border border-slate-200 flex flex-col gap-5 text-center font-sans my-4 mx-4">
             <div className="mx-auto bg-amber-50 text-amber-500 p-3.5 rounded-full shadow-2xs w-max">
               <AlertTriangle className="w-8 h-8 animate-bounce" />
@@ -1282,7 +1282,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
 
       {/* Edit / Add Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-slate-950 overflow-y-auto animate-fade-in font-sans">
+        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-slate-950/10 backdrop-blur-sm overflow-y-auto animate-fade-in font-sans">
           <div className="bg-white rounded-3xl w-full max-w-full md:max-w-2xl shadow-2xl flex flex-col pt-1 my-4 mx-4 border border-slate-200/60">
             {/* Modal Header */}
             <div className="px-6 py-4.5 border-b border-slate-100 flex items-center justify-between bg-white">

@@ -1,4 +1,4 @@
-import {useState, useEffect, useMemo} from 'react'
+import {useState, useEffect, useMemo, useRef} from 'react'
 import {createPortal} from 'react-dom'
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
@@ -61,7 +61,7 @@ function useLockBodyScroll(open: boolean) {
     }
     return () => {
       document.body.style.overflow = '';
-      document.querySelectorAll('main, .flex-1\.overflow-y-auto').forEach((el) => {
+      document.querySelectorAll('main, .overflow-y-auto').forEach((el) => {
         (el as HTMLElement).style.overflow = '';
       });
     };
@@ -82,6 +82,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   const [statusTypes, setStatusTypes] = useState<any[]>([]);
   // Номера авто из «Учёта выезда» (baza) для статуса «На базе / В рейса»
   const [bazaCars, setBazaCars] = useState<string[]>([]);
+  const savedMapRef = useRef<Record<string, any>>({});
 
   const [search, setSearch] = useState('');
   const [focusIdx, setFocusIdx] = useState(-1);
@@ -99,23 +100,26 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
 
   useEffect(() => {
     const u1 = getCouplingsFlat((list: any[]) => {
-      setCouplings((list || []).map((c) => ({
-        id: c.id,
-        carNumber: c.carNumber || c.vehicleNumbers || '',
-        trailerNumber: c.trailerNumber || '',
-        brand: c.brand || c.brandModel || '',
-        trailerBrand: c.trailerBrand || c.trailerMake || '',
-        brandRu: c.brandRu || '',
-        vehicleType: c.vehicleType || '',
-        dimensions: c.dimensions || '',
-        weight: c.weight || '',
-        driverId: c.driverId || '',
-        driverName: c.driverNameRu || c.driverName || c.driverShortNameRu || '',
-        driver2: c.driver2 || '',
-        dispatcher: c.dispatcher || '',
-        rateGroupId: c.rateGroupId || '',
-        status: c.status || 'base',
-      })));
+      setCouplings((list || []).map((c) => {
+        const saved = savedMapRef.current[c.id];
+        return {
+          id: c.id,
+          carNumber: c.carNumber || c.vehicleNumbers || '',
+          trailerNumber: saved?.trailerNumber || c.trailerNumber || '',
+          brand: saved?.brand || c.brand || c.brandModel || '',
+          trailerBrand: saved?.trailerBrand || c.trailerBrand || c.trailerMake || '',
+          brandRu: c.brandRu || '',
+          vehicleType: c.vehicleType || '',
+          dimensions: c.dimensions || '',
+          weight: c.weight || '',
+          driverId: c.driverId || '',
+          driverName: c.driverNameRu || c.driverName || c.driverShortNameRu || '',
+          driver2: c.driver2 || '',
+          dispatcher: c.dispatcher || '',
+          rateGroupId: c.rateGroupId || '',
+          status: c.status || 'base',
+        };
+      }));
     });
     const u2 = getDriversFlat((l: any[]) => setDrivers(l || []));
     const u3 = getDispatchersFlat((l: any[]) => setDispatchers(l || []));
@@ -241,29 +245,23 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
     try {
       await dbService.saveVehicleDriverRecord(rec, user.name, user.role);
       console.log('[handleSave] saved ok');
+      // Немедленно обновляем локальный список, чтобы избежать гонки с кешем getCouplingsFlat
+      savedMapRef.current[id] = {
+        trailerNumber: (rec.trailerNumber || '').toUpperCase(),
+        trailerBrand: rec.trailerBrand || '',
+        brand: rec.brand || '',
+        carNumber: rec.carNumber || '',
+      };
+      setCouplings((prev) => prev.map((c) =>
+        c.id === id ? {
+          ...c,
+          trailerNumber: (rec.trailerNumber || c.trailerNumber || '').toUpperCase(),
+          trailerBrand: (rec.trailerBrand || c.trailerBrand || ''),
+          brand: rec.brand || c.brand || '',
+          carNumber: rec.carNumber || c.carNumber || '',
+        } : c
+      ));
       toast(editing ? 'Сцепка обновлена' : 'Сцепка добавлена', 'success');
-      // Принудительно обновляем локальный список (на случай, если подписка lag-ит)
-      getCouplingsFlat((list: any[]) => {
-        console.log('[handleSave] got list len', (list || []).length);
-        const mapped = (list || []).map((c) => ({
-          id: c.id,
-          carNumber: c.carNumber || c.vehicleNumbers || '',
-          trailerNumber: c.trailerNumber || '',
-          brand: c.brand || c.brandModel || '',
-          trailerBrand: c.trailerBrand || '',
-          brandRu: c.brandRu || '',
-          vehicleType: c.vehicleType || '',
-          dimensions: c.dimensions || '',
-          weight: c.weight || '',
-          driverId: c.driverId || '',
-          driverName: c.driverNameRu || c.driverName || c.driverShortNameRu || '',
-          driver2: c.driver2 || '',
-          dispatcher: c.dispatcher || '',
-          rateGroupId: c.rateGroupId || '',
-          status: c.status || 'base',
-        }));
-        setCouplings(mapped);
-      });
     } catch (err: any) {
       console.error('[handleSave] saveVehicleDriverRecord failed:', err);
       toast('Ошибка сохранения: ' + (err?.message || err), 'error');
@@ -528,8 +526,8 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
 
       {/* MODAL add/edit */}
       {modalOpen && createPortal(
- <div className="fixed inset-0 z-[2000] flex items-start justify-center bg-slate-950 overflow-y-auto" onClick={() => setModalOpen(false)}>
-          <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[85vh] overflow-y-auto my-4" onClick={(e) => e.stopPropagation()}>
+ <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/10 backdrop-blur-sm overflow-y-auto py-4" onClick={() => setModalOpen(false)}>
+          <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[85vh] overflow-y-auto my-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <Link2 className="w-4 h-4 text-[#3765F6]" />

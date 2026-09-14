@@ -108,7 +108,7 @@ export const subscribeFleetUnits = (callback: (units: FleetUnit[]) => void): (()
 
     const units: FleetUnit[] = couplings.map((c) => {
       const tractorId = c.tractorId || c.id;
-      const tractor = tractorId ? (tractors.find((t) => norm(t.id) === norm(tractorId)) || null) : null;
+      const tractor = tractorId ? (tractors.find((t) => t.id === tractorId || norm(t.id) === norm(tractorId)) || null) : null;
       let trailer = c.trailerId ? (trailerById.get(norm(c.trailerId)) || null) : null;
       // Fallback: ищем прицеп по госномеру, если не нашли по ID
       if (!trailer && c.trailerNumber) {
@@ -180,7 +180,7 @@ export const getFleetUnitsOnce = (callback: (units: any[]) => void): void => {
     const dispatcherByName = new Map<string, DispatcherRef>();
     acc.dispatchers.forEach((d) => dispatcherByName.set(norm(d.name), d));
     const units: FleetUnit[] = acc.couplings.map((c) => {
-      const tractor = c.tractorId ? (acc.tractors.find((t) => norm(t.id) === norm(c.tractorId)) || null) : null;
+      const tractor = c.tractorId ? (acc.tractors.find((t) => t.id === c.tractorId || norm(t.id) === norm(c.tractorId)) || null) : null;
       let trailer = c.trailerId ? (trailerById.get(norm(c.trailerId)) || null) : null;
       // Fallback: ищем прицеп по госномеру, если не нашли по ID
       if (!trailer && c.trailerNumber) {

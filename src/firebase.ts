@@ -1471,12 +1471,12 @@ export const dbService = {
           for (const [k, v] of Object.entries(driverData)) {
             if (v === undefined) driverData[k] = null;
           }
-          update(ref(database, `drivers/${driverId}`), driverData)
+          await update(ref(database, `drivers/${driverId}`), driverData)
             .catch((e) => console.warn('[saveVehicleDriverRecord] drivers update failed', e));
           // ВСЕГДА пишем сцепку (иначе новое авто без диспетчера не появляется в Базе сцепок)
           // ВАЖНО: используем driverId после дедупликации
           const couplingRecWithDriver = { ...couplingRec, driverId };
-          update(ref(database, `couplings/${safeId}`), couplingRecWithDriver)
+          await update(ref(database, `couplings/${safeId}`), couplingRecWithDriver)
             .catch((e) => console.warn('[saveVehicleDriverRecord] coupling update failed', e));
           // Save brand to master-nodes under directories/vehicleBrands / trailerBrands
           if (brand) {
