@@ -1122,6 +1122,8 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     undefined,
   );
   const [plReferenceCurrency, setPlReferenceCurrency] = useState("EUR");
+  const [plDateStart, setPlDateStart] = useState("");
+  const [plDateEnd, setPlDateEnd] = useState("");
 
   const getDispatcherActiveTabStyle = (d: string) => {
     if (activeDispatcherTab !== d)
@@ -1387,6 +1389,8 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     setDispatcher(trip.dispatcher || "");
     setCurrentMonth(trip.currentMonth || "");
     setPotentialLoads(trip.potentialLoads || []);
+    setPlDateStart(trip.dateStart || "");
+    setPlDateEnd(trip.dateEnd || "");
     if (trip.legs && trip.legs.length > 0) {
       setLegs(trip.legs);
       setPlLegs(trip.legs.map((l) => ({ ...l })));
@@ -1407,14 +1411,15 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     }
     setPlEditingId(null);
     setPlName("");
+    addToast("💡 Сравните варианты во вкладке «Потенц. грузы» и выберите наиболее выгодный маршрут.", 'info');
     setIsModalOpen(true);
   }, [directions]);
 
 
 
   const calculatePlTotals = () => {
-    const fin = calculateTripFinances(plLegs, "", "", Number(plExtraExpense), Number(plFerryCost), 0);
-    return { totalKm: fin.totalKm, totalFreight: fin.totalFreight, totalExpenses: fin.totalExpensesPlan, profit: fin.profitPlan };
+    const fin = calculateTripFinances(plLegs, plDateStart, plDateEnd, Number(plExtraExpense), Number(plFerryCost), 0);
+    return { totalKm: fin.totalKm, totalFreight: fin.totalFreight, totalExpenses: fin.totalExpensesPlan, profit: fin.profitPlan, days: fin.days };
   };
 
   const savePotentialLoad = () => {
@@ -1461,6 +1466,8 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     setPlExtraExpenseNote("");
     setPlReferenceRate(undefined);
     setPlReferenceCurrency("EUR");
+                        setPlDateStart(dateStart);
+                        setPlDateEnd(dateEnd);
   };
 
   const editPotentialLoad = (pl: PotentialLoad) => {
@@ -1509,6 +1516,8 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
       if (pl.referenceRate !== undefined) setReferenceRate(pl.referenceRate);
       if (pl.referenceCurrency)
         setReferenceCurrency(pl.referenceCurrency as any);
+      if (pl.dateStart) setDateStart(pl.dateStart);
+      if (pl.dateEnd) setDateEnd(pl.dateEnd);
       setModalTab("main");
     }
   };
@@ -1707,7 +1716,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 <button
                   type="button"
                   onClick={() => setModalTab("potential")}
-                  className={`px-3 md:px-4 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap ${modalTab === "potential" ? "bg-white shadow-sm text-purple-700" : "text-slate-500 hover:text-slate-800"}`}
+                  className={`px-3 md:px-4 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap ${modalTab === "potential" ? "bg-white shadow-sm text-purple-700" : "text-slate-500 hover:text-slate-800 animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.15)]"}`}
                 >
                   Потенц. грузы
                   {potentialLoads.length > 0 && (
@@ -1717,6 +1726,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                   )}
                 </button>
               </div>
+
             </div>
           </div>
 
@@ -2195,43 +2205,51 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
               </>
             ) : modalTab === "potential" ? (
 
-              <div className="flex flex-col xl:flex-row gap-6">
+              <div className="flex flex-col gap-6">
                 {/* Left side: List of saved Potential Loads */}
-                <div className="w-full xl:w-1/3 xl:max-w-[400px] bg-white rounded-2xl p-5 border border-slate-200/60 flex flex-col gap-4">
+                <div className="bg-white rounded-2xl p-5 border border-slate-200/60 flex flex-col gap-4">
                   <h3 className="text-xs font-semibold text-slate-800 tracking-tight border-b border-slate-100 pb-3 flex items-center justify-between">
-                    <span>Сохраненные просчеты</span>
-                    <span className="text-xs bg-slate-100 text-slate-600 font-mono font-semibold px-2 py-0.5 rounded-full">{potentialLoads.length}/3</span>
+                    <span>Расчеты возможных рейсов</span>
+                    <span className="text-xs bg-slate-100 text-slate-600 font-mono font-semibold px-2 py-0.5 rounded-full">{potentialLoads.length}/10</span>
                   </h3>
+                  <p className="text-[10px] text-slate-400 leading-relaxed flex items-center gap-1">
+                    <span className="text-slate-300 text-[9px]">💡</span>
+                    Здесь вы можете создать несколько вариантов маршрута. Выберите наиболее выгодный (где прибыль больше) и нажмите «Как основной».
+                  </p>
 
                   <div className="space-y-3.5 pr-1.5">
                     {potentialLoads.map((pl) => {
-                      const days = pl.totalKm
-                        ? Math.max(1, Math.round(pl.totalKm / 500))
-                        : 1;
-                      const profitPerDay = Math.round(pl.profit / days);
+                      const _plTotals = pl.dateStart && pl.dateEnd ? (() => { const dd = Math.max(1, Math.ceil((new Date(pl.dateEnd).getTime() - new Date(pl.dateStart).getTime()) / (1000*60*60*24)) + 1); return { profit: pl.profit, totalKm: pl.totalKm, totalFreight: pl.totalFreight, totalExpenses: pl.totalExpenses, days: dd }; })() : { profit: pl.profit, totalKm: pl.totalKm, totalFreight: pl.totalFreight, totalExpenses: pl.totalExpenses, days: pl.totalKm ? Math.max(1, Math.round(pl.totalKm / 500)) : 1 };
+                      const days = _plTotals.days;
+                      const profitPerDay = days > 0 ? Math.round(_plTotals.profit / days) : 0;
                       return (
                         <div
                           key={pl.id}
-                          className={`p-3.5 rounded-2xl border ${plEditingId === pl.id ? "border-slate-400 bg-slate-50/50 shadow-sm" : "border-slate-200 bg-slate-50/50 hover:border-slate-300"} transition cursor-pointer flex flex-col gap-2.5 relative`}
+                          className={`p-4 rounded-2xl border ${plEditingId === pl.id ? "border-slate-400 bg-slate-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300 shadow-sm"} transition cursor-pointer flex flex-col gap-3 relative`}
                           onClick={() => editPotentialLoad(pl)}
                         >
                           <div className="flex justify-between items-center">
-                            <span className="font-semibold text-xs text-slate-800 tracking-tight truncate max-w-[170px]">
-                              {pl.name}
-                            </span>
-                            <div
-                              className="flex gap-1"
-                              onClick={(e) => e.stopPropagation()}
-                            >
+                            <div className="flex-1 min-w-0">
+                              <span className="font-semibold text-sm text-slate-800 tracking-tight truncate block max-w-full">
+                                {pl.name}
+                              </span>
+                              {pl.dateStart && pl.dateEnd && (
+                                <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
+                                  {pl.dateStart.split('-').reverse().join('/')} → {pl.dateEnd.split('-').reverse().join('/')} · {days} дн.
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex gap-1.5 shrink-0 ml-3" onClick={(e) => e.stopPropagation()}>
                               <button
-                                className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition cursor-pointer"
-                                title="Перенести в основную форму"
+                                className="px-3 py-1.5 text-[10px] font-semibold bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+                                title="Перенести этот маршрут в основную форму"
                                 onClick={() => applyPlToMain(pl)}
                               >
-                                <Calculator className="w-4 h-4" />
+                                <Calculator className="w-3.5 h-3.5" />
+                                Как основной
                               </button>
                               <button
-                                className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-rose-100 text-rose-500 transition cursor-pointer"
+                                className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-rose-100 text-rose-500 transition cursor-pointer"
                                 title="Удалить"
                                 onClick={() => deletePotentialLoad(pl.id)}
                               >
@@ -2240,63 +2258,81 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="bg-white p-2 rounded-xl border border-slate-100/80 flex flex-col justify-center items-center text-center">
-                              <span className="text-[9px] uppercase tracking-wider font-medium text-slate-400">Прибыль</span>
-                              <span className={`text-xs font-semibold font-mono tabular-nums ${pl.profit < 3000 ? "text-rose-600" : "text-emerald-600"}`}>
-                                {Math.round(pl.profit).toLocaleString("ru-RU")} €
-                              </span>
-                            </div>
-                            <div className="bg-white p-2 rounded-xl border border-slate-100/80 flex flex-col justify-center items-center text-center">
-                              <span className="text-[9px] uppercase tracking-wider font-medium text-slate-400">В день</span>
-                              <span className={`text-xs font-semibold font-mono tabular-nums ${profitPerDay < 100 ? "text-rose-600" : "text-blue-600"}`}>
-                                {profitPerDay.toLocaleString("ru-RU")} €
-                              </span>
-                            </div>
-                            <div className="bg-white p-2 rounded-xl border border-slate-100/80 flex flex-col justify-center items-center text-center">
-                              <span className="text-[9px] uppercase tracking-wider font-medium text-slate-400">Дней в пути</span>
-                              <span className="text-xs font-semibold text-slate-700 font-mono tabular-nums">{days}</span>
-                            </div>
-                            <div className="bg-white p-2 rounded-xl border border-slate-100/80 flex flex-col justify-center items-center text-center">
-                              <span className="text-[9px] uppercase tracking-wider font-medium text-slate-400">Пробег</span>
-                              <span className="text-xs font-semibold text-slate-700 font-mono tabular-nums">
-                                {Math.round(pl.totalKm).toLocaleString("ru-RU")} км
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="mt-0.5 bg-white rounded-xl p-2.5 border border-slate-100">
-                            <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-2 font-sans">Маршрут (Плечи)</div>
-                            <div className="space-y-1 border-l border-dashed border-slate-200 ml-1 pl-2.5 relative">
-                              {pl.legs.map((leg, idx) => (
-                                <div key={idx} className="relative">
-                                  <div className="absolute -left-[13px] top-1.5 w-1.5 h-1.5 bg-slate-300 rounded-full border border-white"></div>
-                                  <div className="flex justify-between items-center text-[10px]">
-                                    <span className="font-medium text-slate-600 truncate mr-2">
-                                      {leg.from || "?"} <span className="text-slate-300 mx-1">→</span> {leg.to || "?"}
-                                    </span>
-                                    <div className="flex gap-2 font-mono whitespace-nowrap text-slate-400">
-                                      <span>{leg.km} км</span>
-                                      <span className="text-slate-700 font-semibold">{leg.rate}€</span>
+                          <div className="bg-white rounded-xl border border-slate-100/80 p-2.5">
+                            <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Маршрут</div>
+                            {pl.legs && pl.legs.length > 0 ? (
+                              <div className="space-y-1.5">
+                                {pl.legs.slice(0, 5).map((leg, idx) => (
+                                  <div key={idx} className="flex items-center gap-2 text-xs">
+                                    <span className="text-slate-500 font-mono w-5 shrink-0 text-[10px]">{idx + 1}.</span>
+                                    <span className="text-slate-700 font-medium truncate min-w-0 flex-[1.5]">{leg.from || "?"}</span>
+                                    <span className="text-slate-300 shrink-0">→</span>
+                                    <span className="text-slate-700 font-medium truncate min-w-0 flex-[1.5]">{leg.to || "?"}</span>
+                                    <div className="flex items-center gap-3 shrink-0 font-mono tabular-nums">
+                                      <span className="text-slate-500">{leg.km} <span className="text-[9px] text-slate-400">км</span></span>
+                                      <span className="text-slate-800 font-semibold">{leg.rate || 0} <span className="text-[9px] text-slate-400">€</span></span>
+                                      {leg.referenceRate && <span className="text-slate-400 text-[10px]">({leg.referenceRate} {leg.referenceCurrency})</span>}
                                     </div>
                                   </div>
-                                </div>
-                              ))}
+                                ))}
+                                {pl.legs.length > 5 && (
+                                  <div className="text-[9px] text-slate-400 font-mono pl-7">+{pl.legs.length - 5} плеч</div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-slate-400">Нет маршрута</div>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100/60 flex flex-col">
+                              <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-0.5">Прибыль</span>
+                              <span className={`text-sm font-bold font-mono tabular-nums ${pl.profit < 3000 ? "text-rose-600" : "text-emerald-600"}`}>
+                                {Math.round(pl.profit).toLocaleString("ru-RU")} <span className="text-[10px] font-semibold">€</span>
+                              </span>
+                            </div>
+                            <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100/60 flex flex-col">
+                              <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-0.5">В день</span>
+                              <span className={`text-sm font-bold font-mono tabular-nums ${profitPerDay < 100 ? "text-rose-600" : "text-blue-600"}`}>
+                                {profitPerDay.toLocaleString("ru-RU")} <span className="text-[10px] font-semibold">€</span>
+                              </span>
+                            </div>
+                            <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100/60 flex flex-col">
+                              <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-0.5">Фрахт</span>
+                              <span className="text-sm font-bold text-slate-700 font-mono tabular-nums">
+                                {Math.round(pl.totalFreight).toLocaleString("ru-RU")} <span className="text-[10px] font-semibold">€</span>
+                              </span>
+                            </div>
+                            <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100/60 flex flex-col">
+                              <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-0.5">Расходы</span>
+                              <span className="text-sm font-bold text-slate-700 font-mono tabular-nums">
+                                {Math.round(pl.totalExpenses).toLocaleString("ru-RU")} <span className="text-[10px] font-semibold">€</span>
+                              </span>
+                            </div>
+                            <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100/60 flex flex-col">
+                              <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-0.5">Пробег</span>
+                              <span className="text-sm font-bold text-slate-700 font-mono tabular-nums">
+                                {Math.round(pl.totalKm).toLocaleString("ru-RU")} <span className="text-[10px] font-semibold">км</span>
+                              </span>
+                            </div>
+                            <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100/60 flex flex-col">
+                              <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-0.5">Дней в пути</span>
+                              <span className="text-sm font-bold text-slate-700 font-mono tabular-nums">{days}</span>
                             </div>
                           </div>
                         </div>
                       );
                     })}
                     {potentialLoads.length === 0 && (
-                      <span className="text-xs text-slate-400 font-medium font-mono text-center block py-10">
+                      <span className="text-xs text-slate-400 font-medium font-mono text-center block py-6">
                         Нет сохраненных просчетов
                       </span>
                     )}
                   </div>
 
-                  {potentialLoads.length < 3 && plEditingId === null && (
+                  {potentialLoads.length < 10 && plEditingId === null && (
                     <div className="w-full mt-auto py-2 px-3 bg-slate-100 text-slate-600 border border-slate-200 font-semibold text-[11px] rounded-xl text-center cursor-default font-sans">
-                      Можно создать еще {3 - potentialLoads.length}
+                      Можно создать еще {10 - potentialLoads.length}
                     </div>
                   )}
                   {plEditingId !== null && (
@@ -2314,7 +2350,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 </div>
 
                 {/* Right side: Editor */}
-                <div className="flex-[2] bg-white rounded-2xl p-5 border border-slate-200/60 flex flex-col gap-5">
+                <div className="bg-white rounded-2xl p-5 border border-slate-200/60 flex flex-col gap-5">
                   <div className="flex items-center gap-4 border-b border-slate-100 pb-4">
                     <input
                       type="text"
@@ -2331,6 +2367,17 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     </button>
                   </div>
 
+                  <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-4">
+                    <div>
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-blue-500 mb-1.5 block">Дата старта</label>
+                      <input type="date" value={plDateStart} onChange={(e) => setPlDateStart(e.target.value)} className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all min-h-[44px]" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Дата финиша</label>
+                      <input type="date" value={plDateEnd} onChange={(e) => setPlDateEnd(e.target.value)} className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all min-h-[44px]" />
+                    </div>
+                  </div>
+
                   {/* Desktop: table */}
                   <div className="hidden lg:block overflow-x-auto pb-2">
                     <table className="w-full text-left border-collapse min-w-[600px]">
@@ -2338,10 +2385,13 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         <tr className="border-b border-slate-100">
                           <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Откуда</th>
                           <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Куда</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans w-24">КМ</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans w-24">Доезд (КМ)</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans w-28">Ставка €</th>
-                          <th></th>
+                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Км</th>
+                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Доезд (км)</th>
+                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Фрахт €</th>
+                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Инфо ставка (Доп)</th>
+                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Паром € (Доп)</th>
+                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Коэфф.</th>
+                          <th className="p-2 w-20"></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2420,6 +2470,55 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                   setPlLegs(nl);
                                 }}
                                 className="w-full bg-white hover:bg-slate-50/50 border border-slate-200 text-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all tabular-nums font-mono"
+                              />
+                            </td>
+                            <td className="p-1">
+                              <div className="flex bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg overflow-hidden focus-within:bg-white focus-within:border-slate-400 transition">
+                                <input type="text" value={leg.referenceRate || ""}
+                                  onChange={(e) => {
+                                    const nl = [...plLegs];
+                                    nl[i].referenceRate = e.target.value;
+                                    const eur = calculateEuroFreight(e.target.value, nl[i].referenceCurrency || 'EUR');
+                                    if (eur > 0) nl[i].rate = eur;
+                                    setPlLegs(nl);
+                                  }}
+                                  className="w-full px-2.5 py-1.5 bg-transparent text-xs font-medium outline-none"
+                                />
+                                <select value={leg.referenceCurrency || ""}
+                                  onChange={(e) => {
+                                    const nl = [...plLegs];
+                                    nl[i].referenceCurrency = e.target.value;
+                                    const eur = calculateEuroFreight(nl[i].referenceRate || '', e.target.value);
+                                    if (eur > 0) nl[i].rate = eur;
+                                    setPlLegs(nl);
+                                  }}
+                                  className="bg-transparent border-l border-slate-200 text-slate-500 text-[10px] font-semibold outline-none px-1 cursor-pointer"
+                                >
+                                  <option value=""></option>
+                                  {currencies.map((c) => (
+                                    <option key={c.id} value={c.code}>{c.code}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </td>
+                            <td className="p-1">
+                              <input type="number" onFocus={(e) => e.target.select()} value={leg.ferry || ""}
+                                onChange={(e) => {
+                                  const nl = [...plLegs];
+                                  nl[i].ferry = Number(e.target.value);
+                                  setPlLegs(nl);
+                                }}
+                                className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 transition"
+                              />
+                            </td>
+                            <td className="p-1">
+                              <input type="number" step="0.01" onFocus={(e) => e.target.select()} value={leg.coeff}
+                                onChange={(e) => {
+                                  const nl = [...plLegs];
+                                  nl[i].coeff = Number(e.target.value);
+                                  setPlLegs(nl);
+                                }}
+                                className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 transition"
                               />
                             </td>
                             <td className="p-1 w-20 text-right">
@@ -2534,7 +2633,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-emerald-400">
                   <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Прибыль общая</span>
                   <div className="flex items-baseline gap-1">
-                    <span className={`text-lg font-bold font-mono tabular-nums ${Math.round(profit) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(profit).toLocaleString("ru-RU")}</span>
+                    <span className={`text-lg font-bold font-mono tabular-nums ${Math.round(modalTab === "potential" ? calculatePlTotals().profit : profit) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(modalTab === "potential" ? calculatePlTotals().profit : profit).toLocaleString("ru-RU")}</span>
                     <span className="text-sm font-semibold text-emerald-500">€</span>
                   </div>
                 </div>
@@ -2542,7 +2641,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-blue-400">
                   <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Прибыль в день</span>
                   <div className="flex items-baseline gap-1">
-                    <span className={`text-lg font-bold font-mono tabular-nums ${Math.round(rawProfitPerDay) < 100 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(rawProfitPerDay).toLocaleString("ru-RU")}</span>
+                    <span className={`text-lg font-bold font-mono tabular-nums ${Math.round(modalTab === "potential" ? (calculatePlTotals().days > 0 ? Math.round(calculatePlTotals().profit / calculatePlTotals().days) : 0) : rawProfitPerDay) < 100 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(rawProfitPerDay).toLocaleString("ru-RU")}</span>
                     <span className="text-sm font-semibold text-blue-500">€</span>
                   </div>
                 </div>
@@ -2550,7 +2649,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-orange-400">
                   <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Количество дней</span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{daysPlan || daysFact || 0}</span>
+                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{modalTab === "potential" ? (calculatePlTotals().days > 0 ? calculatePlTotals().days : 1) : (daysPlan || daysFact || 0)}</span>
                     <span className="text-sm font-semibold text-orange-500">дн.</span>
                   </div>
                 </div>
@@ -2558,7 +2657,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-slate-300">
                   <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{factKm && factKm > 0 ? "Километраж" : "План км"}</span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(factKm && factKm > 0 ? factKm : totalKm).toLocaleString("ru-RU")}</span>
+                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalKm : (factKm && factKm > 0 ? factKm : totalKm)).toLocaleString("ru-RU")}</span>
                     <span className="text-sm font-semibold text-slate-500">км</span>
                     {factKm && factKm > 0 && <span className="text-[9px] uppercase tracking-wider text-emerald-500 ml-1.5 font-semibold">Факт</span>}
                   </div>
@@ -2567,7 +2666,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-blue-400">
                   <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Фрахт</span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(totalFreight).toLocaleString("ru-RU")}</span>
+                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalFreight : totalFreight).toLocaleString("ru-RU")}</span>
                     <span className="text-sm font-semibold text-blue-500">€</span>
                   </div>
                 </div>
@@ -2575,7 +2674,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-orange-400">
                   <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{factKm && factKm > 0 ? "Расходы" : "Расходы (План)"}</span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(factKm && factKm > 0 ? totalExpenses : totalExpensesPlan).toLocaleString("ru-RU")}</span>
+                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalExpenses : totalExpenses).toLocaleString("ru-RU")}</span>
                     <span className="text-sm font-semibold text-orange-500">€</span>
                     {factKm && factKm > 0 && <span className="text-[9px] uppercase tracking-wider text-emerald-500 ml-1.5 font-semibold">Факт</span>}
                   </div>
@@ -2705,9 +2804,9 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
           valA = a.profitFact || 0;
           valB = b.profitFact || 0;
         } else if (sortConfig.key === "profitDay") {
-          valA = (a.profitFact || 0) / (a.days || 1);
-          valB = (b.profitFact || 0) / (b.days || 1);
-        }
+                  valA = ((a.profitFact !== undefined ? a.profitFact : a.profit) || 0) / (a.days || 1);
+                  valB = ((b.profitFact !== undefined ? b.profitFact : b.profit) || 0) / (b.days || 1);
+                }
 
         if (valA < valB) return sortConfig.dir === "asc" ? -1 : 1;
         if (valA > valB) return sortConfig.dir === "asc" ? 1 : -1;
@@ -2943,7 +3042,12 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
               Прибыль {renderSortIndicator("profit")}
             </span>
             <span className="w-12 text-right">Дни</span>
-            <span className="w-20 text-right">В день</span>
+            <span
+              className="w-20 text-right hover:text-slate-700 transition flex items-center gap-1 justify-end"
+              onClick={() => handleSort("profitDay")}
+            >
+              В день {renderSortIndicator("profitDay")}
+            </span>
           </div>
         </div>
 
@@ -3254,7 +3358,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
               </div>
             ))}
           {logs.length === 0 && (
-            <div className="text-xs text-slate-400 font-medium py-10 text-center bg-slate-50/50 border border-dashed border-slate-200 rounded-2xl font-mono">
+            <div className="text-xs text-slate-400 font-medium py-6 text-center bg-slate-50/50 border border-dashed border-slate-200 rounded-2xl font-mono">
               История пуста
             </div>
           )}

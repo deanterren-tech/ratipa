@@ -26,6 +26,8 @@ import {
   Map,
   Settings,
   ShieldAlert,
+  Pencil,
+  Bell,
 
 } from 'lucide-react';
 
@@ -139,6 +141,39 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
       if (typeof unsubscribeTrips === 'function') unsubscribeTrips();
       if (typeof unsubscribePermits === 'function') unsubscribePermits();
     };
+  }, []);
+
+  // Fetch bamap.org news
+  useEffect(() => {
+    let cancelled = false;
+    // Try multiple CORS proxies
+    const proxies = [
+      (url: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+      (url: string) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+    ];
+    async function fetchBamap() {
+      for (const makeUrl of proxies) {
+        try {
+          const res = await fetch(makeUrl('https://bamap.org/'), { signal: AbortSignal.timeout(8000) });
+          if (!res.ok) continue;
+          const data = await res.json();
+          const html = data.contents || data.body || '';
+          // Parse news items
+          const regex = /<div class="date">([\d.]+)<\/div>[\s\S]*?<div class="item"[^>]*>[\s\S]*?<a href="([^"]+)">([^<]+)/g;
+          const items: {title: string; date: string; href: string}[] = [];
+          let match;
+          while ((match = regex.exec(html)) !== null) {
+            if (items.length >= 8) break;
+            items.push({ date: match[1], href: 'https://bamap.org' + match[2], title: match[3].replace(/<[^>]+>/g, '').trim() });
+          }
+          if (items.length > 0 && !cancelled) { setBamapNews(items); setBamapError(false); return; }
+        } catch {}
+      }
+      if (!cancelled) setBamapError(true);
+    }
+    fetchBamap();
+    const interval = setInterval(fetchBamap, 30 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
   const isAdmin = user.role === 'admin' || user.role === 'root_admin';
@@ -434,23 +469,41 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
 
         {/* Announcements from admin */}
         {settings?.announcements && settings.announcements.length > 0 && (
-          <div className="w-full max-w-2xl space-y-1.5 mb-6">
-            <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-              <span>Объявления</span>
-            </div>
-            {settings.announcements.slice(0, 4).map((ann) => (
-              <div 
-                key={ann.id}
-                className={"flex items-start gap-2.5 px-4 py-2.5 rounded-xl text-xs " + (
-                  ann.important 
-                    ? "bg-amber-500/10 border border-amber-500/20 text-slate-800 font-semibold" 
-                    : "bg-white/70 border border-slate-200/50 text-slate-600 font-medium"
-                )}
-              >
-                <span className="leading-relaxed flex-1">{ann.text}</span>
-                <span className="text-[9px] text-slate-400 whitespace-nowrap mt-0.5">{ann.author} • {ann.date}</span>
+          <div className="w-full max-w-2xl mb-6">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <Bell size={14} className="text-slate-400" />
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Объявления</span>
               </div>
-            ))}
+              {isAdmin && (
+                <button
+                  onClick={() => onNavigate('admin')}
+                  className="flex items-center gap-1 text-[9px] font-semibold text-slate-400 hover:text-slate-600 bg-white border border-slate-200 px-2 py-1 rounded-lg transition cursor-pointer"
+                  title="Редактировать объявления"
+                >
+                  <Pencil size={10} />
+                  Правка
+                </button>
+              )}
+            </div>
+            <div className="space-y-2">
+              {settings.announcements.slice(0, 5).map((ann) => (
+                <div
+                  key={ann.id}
+                  className={"flex items-start gap-3 px-4 py-3 rounded-xl text-sm border " + (
+                    ann.important
+                      ? "bg-amber-500/10 border-amber-500/30 text-slate-900 font-semibold shadow-sm"
+                      : "bg-sky-50 border-sky-200/40 text-slate-700 font-medium"
+                  )}
+                >
+                  <span className="text-lg leading-none mt-0.5 shrink-0">{ann.important ? "🔴" : "📢"}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="leading-relaxed">{ann.text}</p>
+                    <span className="text-[9px] text-slate-400 mt-1 block">{ann.author} • {ann.date}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -481,23 +534,43 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
         
         {/* Useful Resource Links row */}
         {settings?.quickLinks && settings.quickLinks.length > 0 && (
-          <div className="w-full max-w-4xl mx-auto mb-8 p-5 bg-white/60 border border-slate-200/50 rounded-2xl shadow-2xs">
-            <span className="text-xs font-bold text-slate-800 block mb-3 text-center">
-              Рекомендуемые ресурсы и полезные ссылки
-            </span>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              {settings.quickLinks.map((link) => (
-                <a 
-                  key={link.id} 
-                  href={link.url} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-all shadow-xs group hover:scale-[1.01]"
-                >
-                  <ExternalLink size={11} className="text-slate-400 group-hover:text-slate-700 transition-colors shrink-0" />
-                  <span className="truncate max-w-[140px]">{link.title}</span>
-                </a>
-              ))}
+          <div className="w-full max-w-4xl mx-auto mb-8">
+            <div className="flex items-center gap-2 mb-3 px-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Полезные ссылки</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+              {settings.quickLinks.map((link) => {
+                const urlLower = link.url.toLowerCase();
+                let iconEl = <ExternalLink size={14} className="text-slate-400 shrink-0" />;
+                if (urlLower.includes('waze')) iconEl = <Map size={14} className="text-blue-500 shrink-0" />;
+                else if (urlLower.includes('google')) iconEl = <ExternalLink size={14} className="text-blue-500 shrink-0" />;
+                else if (urlLower.includes('yandex')) iconEl = <ExternalLink size={14} className="text-red-500 shrink-0" />;
+                else if (urlLower.includes('booking') || urlLower.includes('hotel')) iconEl = <Wallet size={14} className="text-emerald-500 shrink-0" />;
+                else if (urlLower.includes('fuel') || urlLower.includes('petrol') || urlLower.includes('gas')) iconEl = <Activity size={14} className="text-orange-500 shrink-0" />;
+                else if (urlLower.includes('map') || urlLower.includes('route')) iconEl = <Map size={14} className="text-purple-500 shrink-0" />;
+                return (
+                  <a
+                    key={link.id}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl px-4 py-3 transition-all shadow-sm group"
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-slate-100 group-hover:bg-white border border-slate-200/60 flex items-center justify-center shrink-0 transition-colors">
+                      {iconEl}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-semibold text-slate-700 group-hover:text-slate-900 transition-colors truncate block">
+                        {link.title}
+                      </span>
+                      <span className="text-[9px] text-slate-400 truncate block mt-0.5 font-mono">
+                        {link.url.replace(/https?:\/\//, '').split('/')[0]}
+                      </span>
+                    </div>
+                    <ExternalLink size={12} className="text-slate-300 group-hover:text-slate-500 shrink-0 transition-colors" />
+                  </a>
+                );
+              })}
             </div>
           </div>
         )}

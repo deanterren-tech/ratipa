@@ -49,6 +49,7 @@ import AdminAgentBlock from './AdminAgentBlock';
 import AdminAuditLogsBlock from './AdminAuditLogsBlock';
 import AdminWelcomePhrasesBlock from './AdminWelcomePhrasesBlock';
 import AdminBroadcastBlock from './AdminBroadcastBlock';import AdminLinksBlock from './AdminLinksBlock';
+import AdminAnnouncementsBlock from './AdminAnnouncementsBlock';
 import CurrentPlanningSettingsBlock from './CurrentPlanningSettingsBlock';
 import PlanZagruzokSettingsBlock from './PlanZagruzokSettingsBlock';
 import {pdService} from '../../api';
@@ -408,6 +409,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
 
           <div className={activeTab === 'broadcast' ? 'space-y-6' : 'hidden'}>
             <AdminBroadcastBlock user={user} />
+            <AdminAnnouncementsBlock user={user} settings={settings} />
           </div>
 
         </div>
