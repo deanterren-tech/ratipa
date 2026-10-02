@@ -1,5 +1,6 @@
 import {useDialog} from '../DialogProvider'
-import {useState, useEffect} from 'react'
+import { useToast } from '../ToastProvider';
+import {useState, useEffect, useRef} from 'react'
 import {UserProfile, AppSettings} from '../../types'
 import { dbService, directoryService } from '../../api';
 import {
@@ -10,6 +11,7 @@ import {
   Layers,
   ExternalLink,
   Globe,
+  Check,
 } from 'lucide-react';
 import UserManagementBlock from './UserManagementBlock';
 import AdminOnlinePresenceBlock from './AdminOnlinePresenceBlock';
@@ -34,9 +36,19 @@ type AdminTab = 'users' | 'system' | 'welcome' | 'links' | 'agent' | 'broadcast'
 
 export default function AdminModule({ user }: AdminModuleProps) {
   const { showConfirm } = useDialog();
+  const { toast } = useToast();
+
+  /** Ссылки часто вставляют без схемы — дополняем и обрезаем пробелы, чтобы адрес работал. */
+  const normalizeUrl = (raw: string) => {
+    const value = (raw || '').trim();
+    if (!value) return '';
+    return /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  };
   
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [savedFlash, setSavedFlash] = useState(false);
+  const savedFlashTimer = useRef<number | null>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [searchLogs, setSearchLogs] = useState('');
   const [userListCount, setUserListCount] = useState(0);
@@ -62,8 +74,19 @@ export default function AdminModule({ user }: AdminModuleProps) {
   }, []);
 
   const saveSettings = (newStgs: AppSettings) => {
+    const changed = JSON.stringify(newStgs) !== JSON.stringify(settings);
     setSettings(newStgs);
-    dbService.saveSettings(newStgs, user.name, user.role);
+    if (changed) {
+      // Подтверждение показываем и плашкой в разделе, и уведомлением: запись уходит в базу,
+      // а обратную связь пользователь должен увидеть сразу.
+      setSavedFlash(true);
+      if (savedFlashTimer.current) window.clearTimeout(savedFlashTimer.current);
+      savedFlashTimer.current = window.setTimeout(() => setSavedFlash(false), 3000);
+      toast('Настройки сохранены', 'success');
+    }
+    dbService.saveSettings(newStgs, user.name, user.role).catch(() => {
+      toast('Не удалось сохранить настройки. Попробуйте ещё раз.', 'error');
+    });
   };
 
   // Принудительно завершить ВСЕ активные сессии (force-logout).
@@ -211,7 +234,27 @@ export default function AdminModule({ user }: AdminModuleProps) {
         </div>
 
         {/* ССЫЛКИ И ИНТЕГРАЦИИ */}
-        <div className={activeTab === 'links' ? 'space-y-8' : 'hidden'}>
+        <div className="flex h-5 items-center justify-end">
+          {savedFlash && (
+            <span
+              aria-live="polite"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700"
+            >
+              <Check className="h-3.5 w-3.5" aria-hidden="true" />
+              Настройки сохранены
+            </span>
+          )}
+        </div>
+        <div
+          className={activeTab === 'links' ? 'space-y-8' : 'hidden'}
+          onKeyDownCapture={(e) => {
+            // Enter в поле ссылки = сохранить (уходим из поля, срабатывает onBlur)
+            const target = e.target as HTMLElement;
+            if (e.key === 'Enter' && target.tagName === 'INPUT') {
+              (target as HTMLInputElement).blur();
+            }
+          }}
+        >
           <AdminLinksBlock user={user} settings={settings} onSave={saveSettings} />
 
           {/* Интеграции: Google Sheets & GPS */}
@@ -235,7 +278,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                     <label className="text-[11px] font-medium text-[#6B7280] block">План Загрузок</label>
                     <input type="url"
                       defaultValue={settings.planZagruzokSheetUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, planZagruzokSheetUrl: e.target.value})}
+                      onBlur={(e) => saveSettings({...settings, planZagruzokSheetUrl: normalizeUrl(e.target.value)})}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>
@@ -243,7 +286,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                     <label className="text-[11px] font-medium text-[#6B7280] block">План Загрузок (чёрный список)</label>
                     <input type="url"
                       defaultValue={settings.planZagruzokBlacklistUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, planZagruzokBlacklistUrl: e.target.value})}
+                      onBlur={(e) => saveSettings({...settings, planZagruzokBlacklistUrl: normalizeUrl(e.target.value)})}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>
@@ -251,7 +294,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                     <label className="text-[11px] font-medium text-[#6B7280] block">Диспозиция</label>
                     <input type="url"
                       defaultValue={settings.dispositionSheetUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, dispositionSheetUrl: e.target.value})}
+                      onBlur={(e) => saveSettings({...settings, dispositionSheetUrl: normalizeUrl(e.target.value)})}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>
@@ -259,7 +302,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                     <label className="text-[11px] font-medium text-[#6B7280] block">Книга выдачи — Google Таблица</label>
                     <input type="url"
                       defaultValue={settings.bookIssueSheetUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, bookIssueSheetUrl: e.target.value})}
+                      onBlur={(e) => saveSettings({...settings, bookIssueSheetUrl: normalizeUrl(e.target.value)})}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>
@@ -267,7 +310,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                     <label className="text-[11px] font-medium text-[#6B7280] block">Табель — Google Таблица</label>
                     <input type="url"
                       defaultValue={settings.tabelSheetUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, tabelSheetUrl: e.target.value})}
+                      onBlur={(e) => saveSettings({...settings, tabelSheetUrl: normalizeUrl(e.target.value)})}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>
@@ -275,7 +318,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                     <label className="text-[11px] font-medium text-[#6B7280] block">Журнал МДП — Google Таблица</label>
                     <input type="url"
                       defaultValue={settings.mdpJournalSheetUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, mdpJournalSheetUrl: e.target.value})}
+                      onBlur={(e) => saveSettings({...settings, mdpJournalSheetUrl: normalizeUrl(e.target.value)})}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>
@@ -283,7 +326,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                     <label className="text-[11px] font-medium text-[#6B7280] block">Google Диск</label>
                     <input type="url"
                       defaultValue={settings.googleDriveUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, googleDriveUrl: e.target.value})}
+                      onBlur={(e) => saveSettings({...settings, googleDriveUrl: normalizeUrl(e.target.value)})}
                       className={UI.input}
                       placeholder="https://drive.google.com/drive/folders/..." />
                   </div>
@@ -291,7 +334,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                     <label className="text-[11px] font-medium text-[#6B7280] block">Google Диск — материалы к инструкциям</label>
                     <input type="url"
                       defaultValue={settings.instructionsDriveUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, instructionsDriveUrl: e.target.value})}
+                      onBlur={(e) => saveSettings({...settings, instructionsDriveUrl: normalizeUrl(e.target.value)})}
                       className={UI.input}
                       placeholder="https://drive.google.com/drive/folders/..." />
                     <p className="text-[10px] leading-relaxed text-[#9CA3AF]">
@@ -312,7 +355,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                     <label className="text-[11px] font-medium text-[#6B7280] block">Белтрансспутник</label>
                     <input type="url"
                       defaultValue={settings.gpsBeltranssputnikUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, gpsBeltranssputnikUrl: e.target.value})}
+                      onBlur={(e) => saveSettings({...settings, gpsBeltranssputnikUrl: normalizeUrl(e.target.value)})}
                       className={UI.input}
                       placeholder="https://..." />
                   </div>
@@ -320,7 +363,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                     <label className="text-[11px] font-medium text-[#6B7280] block">Wialon</label>
                     <input type="url"
                       defaultValue={settings.gpsWialonUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, gpsWialonUrl: e.target.value})}
+                      onBlur={(e) => saveSettings({...settings, gpsWialonUrl: normalizeUrl(e.target.value)})}
                       className={UI.input}
                       placeholder="https://..." />
                   </div>
@@ -328,7 +371,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
                     <label className="text-[11px] font-medium text-[#6B7280] block">ЭРА ГЛОНАСС</label>
                     <input type="url"
                       defaultValue={settings.gpsEraGlonassUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, gpsEraGlonassUrl: e.target.value})}
+                      onBlur={(e) => saveSettings({...settings, gpsEraGlonassUrl: normalizeUrl(e.target.value)})}
                       className={UI.input}
                       placeholder="https://..." />
                   </div>
