@@ -423,8 +423,10 @@ export interface AppSettings {
   highlights?: HighlightData[];
   quickLinks: QuickLink[];
   externalTabs?: ExternalTab[];
-  /** Инструкции для модуля «Инструкции» (редактируются в базе, без правки интерфейса). */
+  /** Рабочие инструкции — модуль «Инструкции» в разделе «Текущее». */
   instructions?: Instruction[];
+  /** Подсказки про сам портал — меню пользователя → «Инструкции по порталу». */
+  portalInstructions?: Instruction[];
   bamapUrl?: string;
   asmapUrl?: string;
   idleRate: number;

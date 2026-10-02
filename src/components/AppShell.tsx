@@ -16,6 +16,7 @@ import ModuleDataContainer from './common/ModuleLoadState'
 import {useNotifications} from '../hooks/useNotifications'
 import {useConverter} from '../hooks/useConverter'
 import UpdateTour from './UpdateTour'
+import PortalInstructionsModal from './PortalInstructionsModal'
 import {usePresence} from '../hooks/usePresence'
 import {useChat} from '../hooks/useChat'
 import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Truck, FileText, Files, Clock, Map, Settings, Settings2, ShieldAlert, LogOut, Menu, X, Radio, MessageSquare, Send, Trash2, Sparkles, ChevronDown, ArrowUp, Pencil, Calendar, Bell, BellRing, Check, CheckCheck, AlertTriangle, Info, LineChart, ExternalLink, Wifi, WifiOff, RefreshCw, Home, Sliders, BookOpen, ClipboardList, DollarSign, BookMarked } from 'lucide-react';
@@ -187,6 +188,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
    * Открыть повторно можно из меню пользователя — пункт «Что нового».
    */
   const [tourOpen, setTourOpen] = useState(false);
+  /** Подсказки про портал из меню пользователя. */
+  const [portalHelpOpen, setPortalHelpOpen] = useState(false);
   /**
    * Ключ версии для хранения в базе: точка в ключах Firebase Realtime Database
    * недопустима («2.0.0» → «2_0_0»), иначе запись молча отклоняется.
@@ -916,6 +919,17 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                   Что нового
                 </button>
 
+                {/* Подсказки по работе с порталом */}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setIsUserMenuOpen(false); setPortalHelpOpen(true); }}
+                  className="w-full flex items-center gap-2.5 h-9 px-3 text-[11px] tracking-tight font-medium text-[#4B5563] hover:bg-[#F3F4F6] hover:text-[#121316] transition-colors cursor-pointer text-left focus-visible:outline-none focus-visible:bg-[#F3F4F6]"
+                >
+                  <BookMarked className="h-3.5 w-3.5 text-[#9CA3AF]" aria-hidden="true" />
+                  Инструкции по порталу
+                </button>
+
                 <div className="my-1.5 h-px bg-[#F3F4F6]" />
 
                 <button
@@ -948,6 +962,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       {/* Превью обновлений: знакомство с изменениями при первом входе после
           обновления. Про акцентную тему рассказываем только как о личной
           настройке из настроек учётной записи. */}
+      <PortalInstructionsModal
+        isOpen={portalHelpOpen}
+        settings={settings}
+        onClose={() => setPortalHelpOpen(false)}
+      />
+
       <UpdateTour
         isOpen={tourOpen}
         accentAvailable={!!user?.uid}
