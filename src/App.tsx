@@ -139,13 +139,25 @@ export default function App() {
     const unsub = dbService.getUsers((users) => {
       const me = (users || []).find((u) => u.uid === user.uid);
       if (me) {
+        // Сохранённая сессия тоже обновляется: иначе после перезагрузки первым
+        // применялся бы старый профиль (акцент успевал мигнуть прежним цветом).
+        try {
+          const raw = localStorage.getItem('ratipa_user_session');
+          if (raw) {
+            const saved = JSON.parse(raw);
+            if (saved && saved.uid === me.uid) {
+              localStorage.setItem('ratipa_user_session', JSON.stringify({ ...saved, ...me }));
+            }
+          }
+        } catch { /* приватный режим или чужая сессия — не мешаем работе */ }
         setUser((prev) => {
           // Не трогаем, если ничего значимого не изменилось (избегаем лишних ре-рендеров).
-          // Цвет и фотография аватара тоже значимые: без них смена аватара
+          // Цвет, фотография и акцентная тема тоже значимые: без них смена темы
           // не применялась бы к интерфейсу без перезагрузки страницы.
           if (prev && JSON.stringify(prev.permissions) === JSON.stringify(me.permissions) &&
               prev.role === me.role && prev.customPermissions === me.customPermissions &&
               prev.color === me.color && prev.avatarPhoto === me.avatarPhoto &&
+              prev.accentColor === me.accentColor &&
               prev.name === me.name) {
             return prev;
           }

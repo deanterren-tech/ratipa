@@ -49,6 +49,8 @@ export default function AccountSettingsModal({
   const [cropSource, setCropSource] = useState<CropSource | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  /** Тема, которую только что сохранили: при закрытии окна её не откатываем. */
+  const savedAccentRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -59,9 +61,15 @@ export default function AccountSettingsModal({
     setError(null);
   }, [isOpen, user.color, user.avatarPhoto, user.accentColor]);
 
-  // Закрытие без сохранения возвращает тему, записанную в профиле
+  // Закрытие без сохранения возвращает тему, записанную в профиле.
+  // После сохранения оставляем выбранную: иначе она откатывалась к прежнему цвету,
+  // пока из профиля не подтянутся новые данные.
   useEffect(() => {
-    if (!isOpen) applyAccentTheme(user.accentColor || null);
+    if (!isOpen) {
+      const keep = savedAccentRef.current;
+      savedAccentRef.current = null;
+      applyAccentTheme(keep || user.accentColor || null);
+    }
   }, [isOpen, user.accentColor]);
 
   // Пока открыто кадрирование, окно настроек не перехватывает Escape и Enter
@@ -116,6 +124,9 @@ export default function AccountSettingsModal({
       // Сохранение через существующий механизм приложения (merge по uid).
       // Права: запись идёт в собственный профиль пользователя.
       await Promise.resolve(dbService.saveUser({ ...user, color, avatarPhoto: photo, accentColor: accent } as UserProfile));
+      // Тема применяется сразу, не дожидаясь, пока изменение профиля вернётся из базы.
+      savedAccentRef.current = accent;
+      applyAccentTheme(accent);
       dbService.logAction(user.name, user.role, 'Изменён профиль', 'Auth', user.uid, 'Настройки учётной записи');
       toast('Настройки учётной записи сохранены', 'success');
       onClose();
