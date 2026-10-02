@@ -504,6 +504,53 @@ export interface Checkpoint {
   active?: boolean;
 }
 
+// ---- AI Audit Agent System ----
+export interface AgentAuditConfig {
+  enabled: boolean;
+  agent1Enabled: boolean;
+  agent2Enabled: boolean;
+  agent1Interval: string; // e.g. "every week", "every 2 days"
+  agent2Interval: string;
+  telegramChatId: string;
+  lastRunAgent1: number;
+  lastRunAgent2: number;
+  lastErrorAgent1: string;
+  lastErrorAgent2: string;
+  cronJobIdAgent1: string;
+  cronJobIdAgent2: string;
+  suggestionsSentCount: number;
+}
+
+export interface AgentAuditRun {
+  id: string;
+  timestamp: number;
+  agent: 'portal' | 'tasks';
+  status: 'running' | 'success' | 'error';
+  error?: string;
+  suggestionsCount: number;
+  durationSec: number;
+  triggeredBy: 'schedule' | 'manual';
+}
+
+export interface AgentSuggestion {
+  id: string;
+  hash: string; // dedup key
+  timestamp: number;
+  agent: 'portal' | 'tasks';
+  title: string;
+  category: string; // portal | tasks | firebase | security | ux-ui | ai
+  description: string;
+  importance: string;
+  solution: string;
+  effect: string;
+  priority: 'high' | 'medium' | 'low';
+  complexity: string;
+  sources: string;
+  sentToTelegram: boolean;
+  sentAt?: number;
+  status: 'new' | 'reviewed' | 'accepted' | 'rejected' | 'implemented';
+}
+
 export interface CarRateGroup {
   id: string;
   name: string;

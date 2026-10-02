@@ -19,7 +19,7 @@ import UpdateTour from './UpdateTour'
 import PortalInstructionsModal from './PortalInstructionsModal'
 import {usePresence} from '../hooks/usePresence'
 import {useChat} from '../hooks/useChat'
-import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Truck, FileText, Files, Clock, Map, Settings, Settings2, ShieldAlert, LogOut, Menu, X, Radio, MessageSquare, Send, Trash2, Sparkles, ChevronDown, ArrowUp, Pencil, Calendar, Bell, BellRing, Check, CheckCheck, AlertTriangle, Info, LineChart, ExternalLink, Wifi, WifiOff, RefreshCw, Home, Sliders, BookOpen, ClipboardList, DollarSign, BookMarked } from 'lucide-react';
+import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Truck, FileText, Files, Clock, Map, Settings, Settings2, ShieldAlert, LogOut, Menu, X, Radio, MessageSquare, Send, Trash2, Sparkles, ChevronDown, ArrowUp, Pencil, Calendar, Bell, BellRing, Check, CheckCheck, AlertTriangle, Info, LineChart, ExternalLink, Wifi, WifiOff, RefreshCw, Home, Sliders, BookOpen, ClipboardList, DollarSign, BookMarked, Grid3x3 } from 'lucide-react';
 
 // Import newly created business modules
 const DashboardModule = lazy(() => import('./modules/DashboardModule'));
@@ -40,6 +40,7 @@ const VehicleDriverDataModule = lazy(() => import('./modules/VehicleDriverDataMo
 const BookIssueModule = lazy(() => import('./modules/BookIssueModule'));
 const TabelModule = lazy(() => import('./modules/TabelModule'));
 const MdpJournalModule = lazy(() => import('./modules/MdpJournalModule'));
+const AgentAuditModule = lazy(() => import('./modules/AgentAuditModule'));
 const NotFoundPage = lazy(() => import('./common/NotFoundPage'));
 
 const groupIconMap: Record<string, React.ComponentType<any>> = {
@@ -134,6 +135,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
+  const [isContextTarget, setIsContextTarget] = useState<string | null>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const lastOpenedRef = useRef<number>(0);
@@ -450,6 +453,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'bookIssue', label: 'Книга выдачи', icon: BookOpen, permissionKey: 'bookIssue' },
     { key: 'tabel', label: 'Табель', icon: ClipboardList, permissionKey: 'bookIssue' },
     { key: 'mdpJournal', label: 'Журнал МДП', icon: FileText, permissionKey: 'bookIssue' },
+    { key: 'agentAudit', label: 'AI-аудиторы', icon: Sparkles, permissionKey: 'admin' },
     { key: 'admin', label: 'Администрирование', icon: ShieldAlert, permissionKey: 'admin' }
   ];
 
@@ -586,6 +590,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         return <TabelModule user={user} settings={settings} />;
       case 'mdpJournal':
         return <MdpJournalModule user={user} settings={settings} />;
+      case 'agentAudit':
+        return <AgentAuditModule user={user} />;
       default:
         return <NotFoundPage onNavigate={handleNavigate} />;
     }
@@ -1324,12 +1330,13 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         </AnimatePresence>
       )}
 
-      {/* Mobile bottom navigation */}
-<nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-[#E5E7EB] flex items-stretch justify-around px-3 py-3 select-none" style={{paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))'}}>
+      {/* === Mobile Glass Bottom Navigation === */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[rgba(255,255,255,0.5)] backdrop-blur-[14px] border-t border-[rgba(229,229,229,0.2)] flex items-stretch justify-around px-2 pt-2 safe-bottom select-none shadow-[0_-4px_20px_rgba(0,0,0,0.06)]" style={{paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))'}}>
         {[
           { key: 'dashboard', label: 'Главная', icon: Home },
           { key: 'planZagruzok', label: 'Загрузки', icon: FileSpreadsheet },
-          { key: 'dohod', label: 'Калькуляция', icon: Calculator },
+          { key: 'disposition', label: 'Карта', icon: Map },
+          { key: 'baza', label: 'Выезд', icon: Truck },
         ].map((item) => {
           const Icon = item.icon;
           const active = activeModule === item.key;
@@ -1337,34 +1344,81 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             <button
               key={item.key}
               onClick={() => { setIsMobileMenuOpen(false); handleNavigate(item.key); }}
-              className={`flex-1 flex flex-col items-center justify-center gap-1 py-1.5 rounded-xl transition-all duration-150 ${active ? 'text-[#121316]' : 'text-[#9CA3AF] hover:text-[#4B5563]'}`}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setIsContextTarget(item.key);
+                setIsContextMenuOpen(true);
+              }}
+              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 rounded-xl transition-all duration-150 ${active ? 'text-[#121316]' : 'text-[#6B7280] hover:text-[#4B5563]'}`}
             >
-              <Icon className="h-6 w-6" strokeWidth={1.5} fill="none" />
-              <span className={`text-[11px] leading-tight text-center ${active ? 'font-semibold text-[#121316]' : 'font-normal text-[#9CA3AF]'}`}>{item.label}</span>
+              <Icon className={`h-5 w-5 ${active ? 'stroke-[2]' : 'stroke-[1.5]'}`} fill={active ? 'currentColor' : 'none'} />
+              <span className={`text-[10px] leading-tight text-center ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+              {active && <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-4.5 h-0.5 rounded-full bg-[#121316]" />}
             </button>
           );
         })}
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className={`flex-1 flex flex-col items-center justify-center gap-1 py-1.5 rounded-xl transition-all duration-150 ${isMobileMenuOpen ? 'text-[#121316]' : 'text-[#9CA3AF] hover:text-[#4B5563]'}`}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setIsContextTarget('');
+            setIsContextMenuOpen(true);
+          }}
+          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 rounded-xl transition-all duration-150 ${isMobileMenuOpen ? 'text-[#121316]' : 'text-[#6B7280] hover:text-[#4B5563]'}`}
         >
-          <Menu className="h-6 w-6" strokeWidth={1.5} fill="none" />
-          <span className={`text-[11px] leading-tight text-center ${isMobileMenuOpen ? 'font-semibold text-[#121316]' : 'font-normal text-[#9CA3AF]'}`}>Меню</span>
+          <Menu className={`h-5 w-5 ${isMobileMenuOpen ? 'stroke-[2] fill-currentColor' : 'stroke-[1.5] fill-none'}`} />
+          <span className={`text-[10px] leading-tight text-center ${isMobileMenuOpen ? 'font-semibold' : 'font-medium'}`}>Ещё</span>
         </button>
       </nav>
 
-      {/* Mobile "all tools" panel */}
+      {/* === Context Menu (right-click) === */}
+      {isContextMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-[60] bg-transparent" onClick={() => setIsContextMenuOpen(false)}>
+          <div className="absolute bottom-24 left-1/2 -translate-x-1/2 w-56 bg-[rgba(255,255,255,0.65)] backdrop-blur-[18px] border border-[rgba(229,229,229,0.15)] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] overflow-hidden">
+            <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-[#6B7280] border-b border-[rgba(229,229,229,0.15)]">
+              {isContextTarget ? (allModules.find(m => m.key === isContextTarget)?.label || 'Действия') : 'Действия'}
+            </div>
+            <div className="space-y-0.5 p-1">
+              <button
+                onClick={() => { setIsContextMenuOpen(false); setIsMobileMenuOpen(false); if (isContextTarget) handleNavigate(isContextTarget); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-medium text-[#121316] hover:bg-[rgba(0,0,0,0.04)] transition-colors cursor-pointer text-left rounded-lg"
+              >
+                <ExternalLink className="h-4 w-4" /> Открыть раздел
+              </button>
+              <button
+                onClick={() => { setIsContextMenuOpen(false); setIsMobileMenuOpen(true); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-medium text-[#121316] hover:bg-[rgba(0,0,0,0.04)] transition-colors cursor-pointer text-left rounded-lg"
+              >
+                <Grid3x3 className="h-4 w-4" /> Все инструменты
+              </button>
+              <button
+                onClick={() => { setIsContextMenuOpen(false); window.location.reload(); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-medium text-[#6B7280] hover:bg-[rgba(0,0,0,0.04)] transition-colors cursor-pointer text-left rounded-lg"
+              >
+                <RefreshCw className="h-4 w-4" /> Обновить страницу
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === Mobile Glass Все инструменты === */}
       {isMobileMenuOpen && (
-<div data-scroll-lock="modal" className="md:hidden fixed inset-0 z-40 bg-[#121316]/20 overflow-y-auto" onClick={() => setIsMobileMenuOpen(false)}>
-          <div className="min-h-full flex items-end justify-center px-2 pt-2 pb-24" onClick={(e) => e.stopPropagation()}>
-            <div className="w-full bg-white rounded-[1.75rem] border border-[#E5E7EB] shadow-[0_8px_30px_rgba(0,0,0,0.08)] p-6">
-              <div className="flex items-center justify-between mb-5 px-1">
-                <span className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-widest">Все инструменты</span>
-                <button onClick={() => setIsMobileMenuOpen(false)} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[#9CA3AF] hover:text-[#4B5563] transition cursor-pointer">
+<div data-scroll-lock="modal" className="md:hidden fixed inset-0 z-40 bg-[rgba(0,0,0,0.12)] backdrop-blur-[4px]" onClick={() => setIsMobileMenuOpen(false)}>
+          <div className="min-h-full flex items-end justify-center px-2 pt-2 pb-28" onClick={(e) => e.stopPropagation()}>
+            <motion.div
+              initial={{ y: 40, opacity: 0, scale: 0.96 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              className="w-full bg-[rgba(255,255,255,0.65)] backdrop-blur-[20px] border border-[rgba(229,229,229,0.15)] shadow-[0_8px_30px_rgba(0,0,0,0.08)] rounded-[1.75rem] p-5 overflow-hidden"
+            >
+              <div className="flex items-center justify-between mb-4 px-1">
+                <span className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-widest">Все инструменты</span>
+                <button onClick={() => setIsMobileMenuOpen(false)} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[#9CA3AF] hover:text-[#4B5563] transition cursor-pointer text-[11px] rounded-xl">
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-2.5">
               {allowedModules.map((mod) => {
                 const Icon = mod.icon || Calendar;
                 const active = activeModule === mod.key;
@@ -1372,40 +1426,44 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                   <button
                     key={mod.key}
                     onClick={() => { setIsMobileMenuOpen(false); handleNavigate(mod.key); }}
-                    className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl transition-all duration-150 active:scale-95 ${
-                      active 
-                        ? 'bg-[#121316] text-white border border-[#121316]' 
-                        : 'bg-[#F9FAFB] text-[#4B5563] hover:bg-[#F3F4F6] border border-transparent'
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setIsContextTarget(mod.key);
+                      setIsContextMenuOpen(true);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl transition-all duration-100 active:scale-95 ${
+                      active
+                        ? 'bg-[rgba(18,19,22,0.08)] text-[#121316] border border-[rgba(18,19,22,0.12)]'
+                        : 'bg-[rgba(249,250,251,0.4)] text-[#4B5563] hover:bg-[rgba(243,244,246,0.5)] border border-transparent'
                     }`}
                   >
-                    <Icon className="h-6 w-6" strokeWidth={1.5} fill="none" />
-                    <span className="text-[11px] font-medium leading-tight text-center">{mod.label}</span>
+                    <Icon className="h-5 w-5" strokeWidth={1.5} fill="none" />
+                    <span className="text-[10px] font-medium leading-tight text-center">{mod.label}</span>
                   </button>
                 );
               })}
             </div>
-            {/* Выход из аккаунта намеренно оставлен только в меню пользователя,
-                 чтобы не было двух точек выхода. Здесь — обновление и настройки учётной записи. */}
-            <div className="grid grid-cols-2 gap-3 mt-6 pt-5 border-t border-[#E5E7EB]">
+            <div className="grid grid-cols-2 gap-2.5 mt-5 pt-4 border-t border-[rgba(229,229,229,0.15)]">
               <button
                 onClick={() => window.location.reload()}
-                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-[#F3F4F6] hover:bg-[#E5E7EB] transition-colors text-[#4B5563] font-medium text-xs min-h-[44px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[rgba(243,244,246,0.5)] hover:bg-[rgba(229,229,229,0.4)] transition-colors text-[#4B5563] font-medium text-xs min-h-[44px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
               >
                 <RefreshCw className="h-4 w-4" /> Обновить
               </button>
               <button
                 onClick={() => { setIsMobileMenuOpen(false); setIsAccountOpen(true); }}
-                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-[#F3F4F6] hover:bg-[#E5E7EB] transition-colors text-[#4B5563] font-medium text-xs min-h-[44px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[rgba(243,244,246,0.5)] hover:bg-[rgba(229,229,229,0.4)] transition-colors text-[#4B5563] font-medium text-xs min-h-[44px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
               >
                 <Settings className="h-4 w-4" /> Учётная запись
               </button>
             </div>
-            <div className="mt-4 text-center">
+            <div className="mt-3 text-center">
               <span className="text-[10px] font-medium text-[#9CA3AF] tabular-nums">{APP_VERSION_LABEL}</span>
             </div>
+            </motion.div>
           </div>
         </div>
-      </div>
       )}
 
       <CommandCenter 
