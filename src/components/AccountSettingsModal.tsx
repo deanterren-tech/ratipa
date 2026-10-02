@@ -123,7 +123,15 @@ export default function AccountSettingsModal({
     try {
       // Сохранение через существующий механизм приложения (merge по uid).
       // Права: запись идёт в собственный профиль пользователя.
-      await Promise.resolve(dbService.saveUser({ ...user, color, avatarPhoto: photo, accentColor: accent } as UserProfile));
+      //
+      // Отправляем ТОЛЬКО изменённые поля: раньше уходил весь профиль, и если в
+      // окне оказывалась устаревшая копия (профиль ещё не догрузился), сохранение
+      // темы затирало аватар и цвет-подложку пустыми значениями.
+      const patch: Partial<UserProfile> = { uid: user.uid, name: user.name };
+      if (color !== (user.color || '')) patch.color = color;
+      if (photo !== (user.avatarPhoto || '')) patch.avatarPhoto = photo;
+      if (accent !== (user.accentColor || DEFAULT_ACCENT_ID)) patch.accentColor = accent;
+      await Promise.resolve(dbService.saveUser(patch as UserProfile));
       // Тема применяется сразу, не дожидаясь, пока изменение профиля вернётся из базы.
       savedAccentRef.current = accent;
       applyAccentTheme(accent);

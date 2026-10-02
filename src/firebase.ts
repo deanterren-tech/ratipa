@@ -742,14 +742,18 @@ export const dbService = {
       if (user.name) {
         const key = userKey(user.name);
         set(ref(database, `ratipa_home_known_users/${key}`), user.name);
-        set(ref(database, `ratipa_home_users/${key}`), {
-          name: user.name,
-          password: user.password || "",
-        });
-        if (user.role === "admin" || user.role === "root_admin") {
-          set(ref(database, `ratipa_home_admins/${key}`), true);
-        } else {
-          remove(ref(database, `ratipa_home_admins/${key}`));
+        // update, а не set: частичное сохранение (например смена только акцентной
+        // темы) не должно стирать пароль в служебном узле старых страниц.
+        const legacy: Record<string, string> = { name: user.name };
+        if (user.password) legacy.password = user.password;
+        update(ref(database, `ratipa_home_users/${key}`), legacy);
+        // Флаг администратора трогаем только когда роль действительно передана.
+        if (typeof user.role === "string") {
+          if (user.role === "admin" || user.role === "root_admin") {
+            set(ref(database, `ratipa_home_admins/${key}`), true);
+          } else {
+            remove(ref(database, `ratipa_home_admins/${key}`));
+          }
         }
       }
     } else {
