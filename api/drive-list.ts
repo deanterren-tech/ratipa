@@ -94,11 +94,6 @@ async function loadDriveFolder(folderId: string): Promise<DriveEntry[]> {
 export default async function handler(req: any, res: any) {
   try {
     const query = (req && req.query) || {};
-    // Диагностика: /api/drive-list?ping=1 — отвечает без обращения к Диску.
-    if (String(query.ping || '') === '1') {
-      res.status(200).json({ ok: true, ping: true, version: 2 });
-      return;
-    }
     const folder = String(query.folder || '');
     const folderId = extractFolderId(folder);
     if (!folderId) {
