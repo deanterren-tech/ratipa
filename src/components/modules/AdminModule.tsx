@@ -287,6 +287,17 @@ export default function AdminModule({ user }: AdminModuleProps) {
                       className={UI.input}
                       placeholder="https://drive.google.com/drive/folders/..." />
                   </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-medium text-[#6B7280] block">Google Диск — материалы к инструкциям</label>
+                    <input type="url"
+                      defaultValue={settings.instructionsDriveUrl || ''}
+                      onBlur={(e) => saveSettings({...settings, instructionsDriveUrl: e.target.value})}
+                      className={UI.input}
+                      placeholder="https://drive.google.com/drive/folders/..." />
+                    <p className="text-[10px] leading-relaxed text-[#9CA3AF]">
+                      Папка открывается кнопкой «Google Диск» в модуле «Инструкции». Ссылка своя, отдельная от Диска в «Авто и водителях».
+                    </p>
+                  </div>
                 </div>
               </div>
 

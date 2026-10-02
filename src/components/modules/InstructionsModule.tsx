@@ -126,7 +126,7 @@ export default function InstructionsModule({ user, settings }: Props) {
   const [isSuggestOpen, setIsSuggestOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
   const { route, navigate } = useHashRoute({ module: 'instructions' });
-  const { showConfirm } = useDialog();
+  const { showConfirm, showPrompt } = useDialog();
   const { toast } = useToast();
 
   // ——— Панель Google Диска (как в «Авто и водителях», ссылка своя) ———
@@ -144,10 +144,28 @@ export default function InstructionsModule({ user, settings }: Props) {
     try { window.localStorage.setItem('ratipa_instructions_drive_visible', 'false'); } catch { /* приватный режим */ }
   };
 
-  const toggleDrive = () => {
+  /** Пустая ссылка: предлагаем сразу её задать (право записи) — иначе подсказываем, где искать. */
+  const toggleDrive = async () => {
     if (!rawDriveUrl) {
-      toast('Ссылка на папку Диска не задана: её указывают в настройках приложения.', 'error');
-      return;
+      if (!canWrite || !settings) {
+        toast('Ссылка на папку Диска не задана: её указывают в «Администрирование» → «Ссылки и интеграции».', 'error');
+        return;
+      }
+      const entered = await showPrompt(
+        'Вставьте ссылку на папку Google Диска с материалами к инструкциям.',
+        '',
+        'Ссылка на Google Диск',
+        { confirmLabel: 'Сохранить ссылку' },
+      );
+      const value = (entered || '').trim();
+      if (!value) return;
+      try {
+        await dbService.saveSettings({ ...settings, instructionsDriveUrl: value }, user.name, user.role);
+        toast('Ссылка сохранена', 'success');
+      } catch {
+        toast('Не удалось сохранить ссылку. Попробуйте ещё раз.', 'error');
+        return;
+      }
     }
     if (isDriveOpen) { closeDrive(); return; }
     setIsDriveOpen(true);
