@@ -212,7 +212,10 @@ export function applyAccentTheme(id?: string | null, root?: HTMLElement | null):
     set('--accent-vivid', theme.vivid);
     set('--accent-ui', theme.ui);
     set('--accent-solid', theme.solid);
-    set('--accent-on', theme.on);
+    // Текст на акцентной заливке — белый (требование Сергея: везде белый вместо тёмного).
+    // Сам оттенок заливки не меняется: theme.on (вариант с лучшим контрастом) остаётся
+    // во внутренних расчётах темы — по нему считаются заливка, наведение и проверки.
+    set('--accent-on', '#FFFFFF');
     set('--accent-hover', theme.hover);
     set('--accent-ui-hover', theme.uiHover);
     for (const [level, value] of Object.entries(theme.tints)) set(`--accent-${level}`, value);
@@ -249,6 +252,9 @@ export function auditAccentTheme(id?: string | null) {
     inkOnLight: Math.min(...ACCENT_LIGHT_BACKGROUNDS.map((bg) => contrastRatio(theme.ink, bg))),
     onSolid: contrastRatio(theme.solid, theme.on),
     onHover: contrastRatio(theme.hover, theme.on),
+    // Контраст фактического цвета текста в интерфейсе — белого (--accent-on).
+    whiteOnSolid: contrastRatio(theme.solid, '#FFFFFF'),
+    whiteOnHover: contrastRatio(theme.hover, '#FFFFFF'),
     uiOnLight: contrastRatio(theme.ui, ACCENT_BASE_LIGHT),
     accentOnLight: contrastRatio(theme.hex, ACCENT_BASE_LIGHT),
     inkTarget: TEXT_TARGET,
