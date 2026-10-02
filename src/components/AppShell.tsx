@@ -191,8 +191,29 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
    * недопустима («2.0.0» → «2_0_0»), иначе запись молча отклоняется.
    */
   const tourVersionKey = APP_VERSION.replace(/[.#$/\[\]]/g, '_');
-  const tourSeen = user?.onboarding?.[tourVersionKey];
+  /**
+   * Отметка «показано» ставится СРАЗУ при показе, а не только при закрытии:
+   * иначе перезагрузка или повторный вход (например, пользователь ушёл, не закрыв окно)
+   * показывали превью второй раз.
+   *
+   * Основное хранилище — профиль (для всех устройств пользователя), страховка —
+   * localStorage на случай, если запись в базу не прошла (нет сети, нет прав на запись).
+   */
+  const tourLocalKey = user?.uid ? `ratipa_tour_seen_${tourVersionKey}_${user.uid}` : '';
+  const tourSeenLocal = (() => {
+    if (!tourLocalKey) return false;
+    try { return window.localStorage.getItem(tourLocalKey) === '1'; } catch { return false; }
+  })();
+  const tourSeen = !!user?.onboarding?.[tourVersionKey] || tourSeenLocal;
   const [tourShownThisSession, setTourShownThisSession] = useState(false);
+
+  const markTourSeen = (status: 'shown' | 'done' | 'skipped') => {
+    if (!user?.uid) return;
+    if (tourLocalKey) {
+      try { window.localStorage.setItem(tourLocalKey, '1'); } catch { /* приватный режим — не критично */ }
+    }
+    dbService.saveUserOnboarding(user.uid, tourVersionKey, status);
+  };
   useEffect(() => {
     if (tourShownThisSession || tourSeen || !user?.uid) return;
     let cancelled = false;
@@ -204,6 +225,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       if (!busy || attempts >= 6) {
         setTourShownThisSession(true);
         setTourOpen(true);
+        // отмечаем факт показа сразу — повторная загрузка страницы не покажет превью снова
+        markTourSeen('shown');
         return;
       }
       attempts += 1;
@@ -216,7 +239,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
   const closeTour = (reason: 'done' | 'skipped') => {
     setTourOpen(false);
-    if (user?.uid) dbService.saveUserOnboarding(user.uid, tourVersionKey, reason);
+    markTourSeen(reason);
   };
   const presence = usePresence(user, activeModule);
   useChat(user);

@@ -2858,7 +2858,7 @@ export const dbService = {
    * Отмечает, что пользователь прошёл (или закрыл) превью обновлений
    * конкретной версии. Merge-апдейт users_list/{uid}/onboarding/{версия}.
    */
-  saveUserOnboarding: (uid: string, version: string, status: 'done' | 'skipped') => {
+  saveUserOnboarding: (uid: string, version: string, status: 'shown' | 'done' | 'skipped') => {
     if (useFirebase) {
       const patch: Record<string, any> = {};
       patch[`onboarding/${version}`] = status;
