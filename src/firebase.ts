@@ -34,8 +34,40 @@ import {
 } from "./types";
 import { firebaseConfig } from "./firebaseConfig";
 import { registerRead, markRead, releaseRead } from "./db/moduleReadiness";
+import { handleFailure, configureErrorReporting, reportAppError, ID_KEY } from "./utils/appErrors";
 import { sharedGetDrivers, sharedGetTractors, sharedGetTrailers, sharedGetCouplings, sharedGetCarRateGroups, sharedGetCurrencies, sharedGetSettings, sharedGetFerryTemplates, sharedGetCheckpoints, sharedGetDistances, sharedGetDirections, sharedGetVehicleStatuses, sharedDirVehicleBrands, sharedDirTrailerBrands, sharedDirDispatchers, sharedDirRateGroups, sharedDirStatusTypes, sharedDirDirections } from "./db/subscriptions";
 import { DEFAULT_USERS, INITIAL_VEHICLES, INITIAL_TRIPS, INITIAL_PERMITS, INITIAL_FERRY_TEMPLATES, INITIAL_DISTANCES, INITIAL_CARS_POOL, INITIAL_DIRECTIONS, INITIAL_SETTINGS } from "./db/seed";
+
+// Доставка ошибок: в базу (для дашборда «Ошибки» в администрировании) и,
+// для критических, наружу — дежурному через /api/report-error.
+// Само уведомление пользователю показывает ToastProvider по подписке onAppError.
+configureErrorReporting((record) => {
+  if (!database) return;
+  try {
+    set(ref(database, `appErrors/${ID_KEY()}`), {
+      ts: record.ts,
+      severity: record.severity,
+      scope: record.scope,
+      message: record.message,
+      detail: record.detail || null,
+      path: record.path || null,
+      uid: record.uid || null,
+      role: record.role || null,
+      url: record.url || null,
+      build: record.build || null,
+    }).catch(() => {});
+  } catch { /* журнал не должен мешать работе */ }
+  if (record.severity === 'critical') {
+    try {
+      fetch('/api/report-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record),
+        keepalive: true,
+      }).catch(() => {});
+    } catch { /* сеть недоступна — запись в базу уже сделана */ }
+  }
+});
 
 // Resilient initialization
 let app;
@@ -434,7 +466,8 @@ export const directoryService = {
         const id = it.id || it.key;
         if (id) updates[`directories/${collection}/${id}`] = { ...it, id };
       });
-      update(ref(database, "."), updates).catch((err) => console.warn("directory reorder save failed", err));
+      update(ref(database, "."), updates).catch((err) =>
+      handleFailure("firebase", err, { path: "directories", userMessage: "Не удалось сохранить порядок справочника" }));
     } else {
       setLocalStorageData(`ratipa_dir_${collection}`, orderedItems);
     }
@@ -718,7 +751,8 @@ export const dbService = {
   saveUsersBatch: (usersMap: Record<string, any>) => {
     catalogCache.users = null;
     if (useFirebase) {
-      update(ref(database), usersMap).catch((err) => console.warn("Failed batch update:", err));
+      update(ref(database), usersMap).catch((err) =>
+      handleFailure("firebase", err, { path: "users_list", userMessage: "Не удалось применить изменения сотрудников" }));
     }
   },
   saveUser: (user: UserProfile) => {
@@ -739,6 +773,10 @@ export const dbService = {
       // иначе при быстрой смене прав одного блока затираются права других блоков
       // (selectedUser — старая копия, set перезаписывает весь профиль).
       update(ref(database, `users_list/${user.uid}`), user as any).catch((err) => {
+        handleFailure("firebase", err, {
+          path: `users_list/${user.uid}`,
+          userMessage: "Не удалось сохранить сотрудника — изменения могут не примениться",
+        });
         console.warn("Failed live save user:", err);
         const users = getLocalStorageData<UserProfile[]>(
           "ratipa_users",
@@ -794,6 +832,10 @@ export const dbService = {
     catalogCache.users = null;
     if (useFirebase) {
       remove(ref(database, `users_list/${uid}`)).catch((err) => {
+        handleFailure("firebase", err, {
+          path: `users_list/${uid}`,
+          userMessage: "Не удалось удалить учётную запись — сотрудник остался в списке",
+        });
         console.warn("Failed live remove user:", err);
         const users = getLocalStorageData<UserProfile[]>(
           "ratipa_users",
@@ -850,6 +892,10 @@ export const dbService = {
     if (useFirebase) {
       // update() вместо set() — не затирает поля трактора, которых нет в normalized
       update(ref(database, `tractors/${vehicle.id}`), normalized).catch((err) => {
+        handleFailure("firebase", err, {
+          path: `tractors/${vehicle.id}`,
+          userMessage: "Не удалось сохранить транспорт — карточка может остаться прежней",
+        });
         console.warn("Live write vehicle Fleet failed:", err);
       });
     } else {
@@ -1037,7 +1083,8 @@ export const dbService = {
     role: string,
   ) => {
     if (useFirebase) {
-      update(ref(database, `calculationsHistory/${id}`), updates).catch((err) => console.warn("calculations history update failed", err));
+      update(ref(database, `calculationsHistory/${id}`), updates).catch((err) =>
+      handleFailure("firebase", err, { path: `calculationsHistory/${id}`, silent: true }));
     } else {
       const local = getLocalStorageData<RouteCalculation[]>(
         "ratipa_calculations",
@@ -1147,8 +1194,7 @@ export const dbService = {
         [`salaryHistory/${logId}`]: cleanLog
       };
       update(ref(database), updates).catch(err => {
-        console.error('[saveSalary] FAILED:', err);
-        alert('Ошибка сохранения выплаты: ' + (err?.message || err));
+        handleFailure("firebase", err, { path: "salaryHistory", userMessage: "Не удалось сохранить выплату — данные не записаны" });
       });
     } else {
       const local = getLocalStorageData<SalaryLog[]>("ratipa_salaries", []);
@@ -1201,13 +1247,15 @@ export const dbService = {
           [`salaryHistory/byDispatcher/${dispatcher}/${id}`]: null,
           [`salaryHistory/${id}`]: null
         };
-        update(ref(database), updates).catch((err) => console.warn("salary delete (root_admin) failed", err));
+        update(ref(database), updates).catch((err) =>
+        handleFailure("firebase", err, { path: "salaryHistory", userMessage: "Не удалось удалить запись — данные остались на месте" }));
       } else {
         const updates: Record<string, any> = {
           [`salaryHistory/${id}`]: null,
           [`salaryHistory/flat/${id}`]: null
         };
-        update(ref(database), updates).catch((err) => console.warn("salary delete failed", err));
+        update(ref(database), updates).catch((err) =>
+        handleFailure("firebase", err, { path: "salaryHistory", userMessage: "Не удалось удалить запись — данные остались на месте" }));
       }
     } else {
       const local = getLocalStorageData<SalaryLog[]>("ratipa_salaries", []);
@@ -1518,12 +1566,12 @@ export const dbService = {
             if (v === undefined) driverData[k] = null;
           }
           await update(ref(database, `drivers/${driverId}`), driverData)
-            .catch((e) => console.warn('[saveVehicleDriverRecord] drivers update failed', e));
+            .catch((e) => handleFailure('firebase', e, { path: 'drivers', userMessage: 'Не удалось сохранить водителя' }));
           // ВСЕГДА пишем сцепку (иначе новое авто без диспетчера не появляется в Базе сцепок)
           // ВАЖНО: используем driverId после дедупликации
           const couplingRecWithDriver = { ...couplingRec, driverId };
           await update(ref(database, `couplings/${safeId}`), couplingRecWithDriver)
-            .catch((e) => console.warn('[saveVehicleDriverRecord] coupling update failed', e));
+            .catch((e) => handleFailure('firebase', e, { path: 'couplings', userMessage: 'Не удалось сохранить сцепку' }));
           // Save brand to master-nodes under directories/vehicleBrands / trailerBrands
           if (brand) {
             const brandKey = brand.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_');
@@ -1562,10 +1610,10 @@ export const dbService = {
   deleteVehicleDriverRecord: (id: string, user: string, role: string) => {
     if (useFirebase) {
       remove(ref(database, `tractors/${id}`)).catch((err) =>
-        console.warn(err),
+        handleFailure('firebase', err, { path: `tractors/${id}`, userMessage: 'Не удалось удалить транспорт — запись осталась' }),
       );
       remove(ref(database, `couplings/${id}`)).catch((err) =>
-        console.warn(err),
+        handleFailure('firebase', err, { path: `couplings/${id}`, userMessage: 'Не удалось удалить сцепку — запись осталась' }),
       );
     } else {
       const local = getLocalStorageData<any[]>("ratipa_vehicle_fleet", []);

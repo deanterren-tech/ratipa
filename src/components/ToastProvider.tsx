@@ -1,4 +1,5 @@
 import {createContext, useContext, useState, ReactNode, useCallback, useRef, useEffect} from 'react'
+import {onAppError} from '../utils/appErrors'
 import {motion, AnimatePresence, useReducedMotion} from 'motion/react'
 import {CheckCircle2, AlertCircle, AlertTriangle, Info, X} from 'lucide-react'
 
@@ -95,6 +96,12 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => () => {
     Object.keys(timers.current).forEach(clearTimer);
   }, []);
+
+  // Ошибки из общего слоя (firebase, рендер, сеть) показываются тем же уведомлением,
+  // что и обычные: пользователь узнаёт о неудачном сохранении сразу, а не по факту потери данных.
+  useEffect(() => onAppError((record) => {
+    if (record.notify) toast(record.notify, 'error');
+  }), [toast]);
 
   return (
     <ToastContext.Provider value={{ toast }}>

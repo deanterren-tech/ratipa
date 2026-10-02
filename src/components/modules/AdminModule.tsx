@@ -14,6 +14,7 @@ import {
   Check,
 } from 'lucide-react';
 import UserManagementBlock from './UserManagementBlock';
+import ErrorsBlock from './ErrorsBlock';
 import AdminOnlinePresenceBlock from './AdminOnlinePresenceBlock';
 
 import AdminFirebaseConfigBlock from './AdminFirebaseConfigBlock';
@@ -32,7 +33,7 @@ interface AdminModuleProps {
   user: UserProfile;
 }
 
-type AdminTab = 'users' | 'system' | 'welcome' | 'links' | 'agent' | 'broadcast';
+type AdminTab = 'users' | 'errors' | 'system' | 'welcome' | 'links' | 'agent' | 'broadcast';
 
 export default function AdminModule({ user }: AdminModuleProps) {
   const { showConfirm } = useDialog();
@@ -163,6 +164,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
 
   const tabsList = [
     { key: 'users', label: 'Пользователи и Сессии', count: userListCount },
+    { key: 'errors', label: 'Ошибки', count: 0 },
     { key: 'welcome', label: 'Бегущая строка', count: settings?.customPhrases?.length || 0 },
     { key: 'links', label: 'Ссылки и интеграции', count: (settings?.quickLinks?.length || 0) + (settings?.externalTabs?.length || 0) },
     { key: 'system', label: 'Система и Настройки', count: 0 },
@@ -190,6 +192,11 @@ export default function AdminModule({ user }: AdminModuleProps) {
         <div className={activeTab === 'users' ? 'space-y-8' : 'hidden'}>
           <UserManagementBlock user={user} />
           <AdminOnlinePresenceBlock user={user} />
+        </div>
+
+        {/* ОШИБКИ: дашборд сбоев портала */}
+        <div className={activeTab === 'errors' ? 'space-y-8' : 'hidden'}>
+          <ErrorsBlock user={user} />
         </div>
 
         {/* СИСТЕМА И НАСТРОЙКИ */}

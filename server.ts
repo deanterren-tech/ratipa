@@ -1182,6 +1182,42 @@ async function startServer() {
     }
   });
 
+  // Уведомление дежурного о критических ошибках портала.
+  // В продакшене работает api/report-error.ts (функция Vercel); этот маршрут — для локального запуска.
+  app.post("/api/report-error", async (req, res) => {
+    const token = process.env.TELEGRAM_BOT_TOKEN || "";
+    const chatId = process.env.TELEGRAM_CHAT_ID || "";
+    if (!token || !chatId) {
+      res.json({ ok: true, notified: false, reason: "not_configured" });
+      return;
+    }
+    const b = req.body && typeof req.body === "object" ? req.body : {};
+    const cut = (v: unknown, max: number) => {
+      const t = String(v ?? "").replace(/\s+/g, " ").trim();
+      return t.length > max ? t.slice(0, max - 1) + "…" : t;
+    };
+    const lines = [
+      "🔴 Ошибка в портале Ratipa",
+      `Когда: ${new Date().toLocaleString("ru-RU", { timeZone: "Europe/Minsk" })}`,
+      `Раздел: ${cut(b.scope, 60)}`,
+      `Что: ${cut(b.message, 300)}`,
+      b.path ? `Узел: ${cut(b.path, 120)}` : "",
+      b.role ? `Роль: ${cut(b.role, 40)}` : "",
+      b.build ? `Версия: ${cut(b.build, 20)}` : "",
+    ].filter(Boolean);
+    try {
+      const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text: lines.join("\n"), disable_web_page_preview: true }),
+      });
+      const data = await r.json().catch(() => null);
+      res.json({ ok: true, notified: Boolean(data && data.ok) });
+    } catch {
+      res.json({ ok: true, notified: false, reason: "telegram_unreachable" });
+    }
+  });
+
   // API Route for proxying OSRM route requests to avoid CORS / VPN issues
   app.get("/api/osrm-route", async (req, res) => {
     try {

@@ -1,5 +1,6 @@
 import { Component, ReactNode } from 'react';
 import ErrorPage from './components/common/ErrorPage';
+import { reportAppError } from './utils/appErrors';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -32,6 +33,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     this.setState({ errorInfo });
     // Подробности — в журнал, не в интерфейс
     console.error('Uncaught error:', error, errorInfo);
+    // Падение рендера — критическое событие: попадает в appErrors и к дежурному.
+    reportAppError({
+      scope: 'render',
+      severity: 'critical',
+      message: `${error.name}: ${error.message}`,
+      detail: errorInfo?.componentStack || undefined,
+    });
   }
 
   render() {
