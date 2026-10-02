@@ -195,7 +195,13 @@ export default function InstructionsModule({ user, settings }: Props) {
   const driveEmbedUrl = driveCurrentUrl ? getEmbeddableDriveUrl(driveCurrentUrl) : '';
   const driveQueryText = driveQuery.trim().toLowerCase();
   const driveMatches = driveQueryText && driveFiles
-    ? driveFiles.filter((f) => f.name.toLowerCase().includes(driveQueryText))
+    ? driveFiles
+        .filter((f) => f.name.toLowerCase().includes(driveQueryText))
+        .sort((a, b) => {
+          const ai = a.name.toLowerCase().indexOf(driveQueryText);
+          const bi = b.name.toLowerCase().indexOf(driveQueryText);
+          return ai - bi || a.name.localeCompare(b.name, 'ru');
+        })
     : null;
 
   const closeDrive = () => {
@@ -313,16 +319,32 @@ export default function InstructionsModule({ user, settings }: Props) {
   }, [instructions, query, theme]);
 
   const suggestions = useMemo(() => {
-    const q = query.trim();
+    const q = query.trim().toLowerCase();
     if (!q) return [];
-    return instructions.filter((i) => searchBlob(i).includes(q.toLowerCase())).slice(0, 8);
+    // Показываем ВСЕ варианты, которые есть: сначала совпадение в названии, затем в содержимом.
+    return instructions
+      .filter((i) => searchBlob(i).includes(q))
+      .sort((a, b) => {
+        const aTitle = (a.title || '').toLowerCase().includes(q) ? 0 : 1;
+        const bTitle = (b.title || '').toLowerCase().includes(q) ? 0 : 1;
+        return aTitle - bTitle || (a.title || '').localeCompare(b.title || '', 'ru');
+      });
   }, [instructions, query]);
 
   const grouped = useMemo(
-    () => themes
-      .map((t) => ({ theme: t, items: found.filter((i) => (i.theme || 'Прочее') === t) }))
-      .filter((g) => g.items.length > 0),
-    [found, themes],
+    () => {
+      const q = query.trim().toLowerCase();
+      const rank = (i: Instruction) => (q && (i.title || '').toLowerCase().includes(q) ? 0 : 1);
+      return themes
+        .map((t) => ({
+          theme: t,
+          items: found
+            .filter((i) => (i.theme || 'Прочее') === t)
+            .sort((a, b) => rank(a) - rank(b) || (a.title || '').localeCompare(b.title || '', 'ru')),
+        }))
+        .filter((g) => g.items.length > 0);
+    },
+    [found, themes, query],
   );
 
   const open = openId ? instructions.find((i) => i.id === openId) || null : null;
@@ -408,21 +430,8 @@ export default function InstructionsModule({ user, settings }: Props) {
   const labelCls = 'block text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]';
 
   /** Панель Диска: на широких экранах — сбоку, на узких — на весь экран. */
-  const drivePanel = isDriveOpen && (
+  const drivePanelContent = (
     <>
-      <div
-        className="fixed inset-0 z-[4000] bg-black/40 backdrop-blur-[2px] xl:hidden"
-        onClick={closeDrive}
-        aria-hidden="true"
-      />
-      <aside
-        aria-label="Google Диск — материалы по инструкциям"
-        className={
-          isDriveFocus
-            ? 'fixed inset-0 z-[4100] flex flex-col bg-white'
-            : 'fixed inset-x-3 bottom-3 top-20 z-[4100] flex flex-col overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_25px_60px_rgba(0,0,0,0.25)] xl:inset-x-auto xl:bottom-4 xl:right-4 xl:top-20 xl:w-[520px]'
-        }
-      >
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#E5E7EB] bg-white p-3">
           <div className="flex min-w-0 items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded-md border border-[#E5E7EB] bg-[#F3F4F6] px-2 py-0.5 text-[10px] font-medium uppercase text-[#4B5563]">
@@ -620,6 +629,25 @@ export default function InstructionsModule({ user, settings }: Props) {
             </>
           )}
         </div>
+    </>
+  );
+
+  const drivePanel = isDriveOpen && (
+    <>
+      <div
+        className="fixed inset-0 z-[4000] bg-black/40 backdrop-blur-[2px] xl:hidden"
+        onClick={closeDrive}
+        aria-hidden="true"
+      />
+      <aside
+        aria-label="Google Диск — материалы по инструкциям"
+        className={
+          isDriveFocus
+            ? 'fixed inset-0 z-[4100] flex flex-col bg-white'
+            : 'fixed inset-x-3 bottom-3 top-20 z-[4100] flex flex-col overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_25px_60px_rgba(0,0,0,0.25)] xl:hidden'
+        }
+      >
+        {drivePanelContent}
       </aside>
     </>
   );
@@ -932,7 +960,8 @@ export default function InstructionsModule({ user, settings }: Props) {
 
   // ——— Список ———
   return (
-    <div className="flex h-full min-h-0 w-full flex-col">
+    <div className="flex h-full min-h-0 w-full">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <div className="px-4 pt-5 sm:px-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -1021,7 +1050,12 @@ export default function InstructionsModule({ user, settings }: Props) {
                     </p>
                   </div>
                 ) : (
-                  suggestions.map((s, i) => {
+                  <>
+                    <div className="flex items-center justify-between gap-2 border-b border-[#F3F4F6] bg-[#FCFCFD] px-3.5 py-2 text-[10px] font-medium uppercase tracking-wider text-[#9CA3AF]">
+                      <span>Найдено: {suggestions.length}</span>
+                      <span className="normal-case tracking-normal">↓ выбор · Enter открыть</span>
+                    </div>
+                    {suggestions.map((s, i) => {
                     const frag = matchFragment(s, query);
                     return (
                       <button
@@ -1058,7 +1092,8 @@ export default function InstructionsModule({ user, settings }: Props) {
                         </div>
                       </button>
                     );
-                  })
+                    })}
+                  </>
                 )}
               </div>
             )}
@@ -1096,6 +1131,18 @@ export default function InstructionsModule({ user, settings }: Props) {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
         <div className="mx-auto w-full max-w-3xl">
+          {(query.trim() || theme !== 'all') && (
+            <div className="mb-3 flex items-center justify-between gap-2 text-[11px] text-[#6B7280]">
+              <span aria-live="polite">Найдено: {found.length} из {instructions.length}</span>
+              <button
+                type="button"
+                onClick={() => { setQuery(''); setTheme('all'); setIsSuggestOpen(false); }}
+                className="font-medium text-[var(--accent-ink)] hover:underline"
+              >
+                Сбросить
+              </button>
+            </div>
+          )}
           {grouped.length === 0 && (
             <div className="flex flex-col items-center gap-2 rounded-2xl border border-[#E5E7EB] bg-white px-6 py-10 text-center">
               <Search className="h-5 w-5 text-[#9CA3AF]" aria-hidden="true" />
@@ -1190,6 +1237,18 @@ export default function InstructionsModule({ user, settings }: Props) {
           </p>
         </div>
       </div>
+      </div>
+
+      {/* На широком экране панель Диска отжимает список инструкций, а не накрывает его */}
+      {isDriveOpen && !isDriveFocus && (
+        <aside
+          aria-label="Google Диск — боковая панель материалов"
+          className="hidden w-[520px] shrink-0 flex-col overflow-hidden border-l border-[#E5E7EB] bg-white xl:flex"
+        >
+          {drivePanelContent}
+        </aside>
+      )}
+
       {drivePanel}
     </div>
   );
