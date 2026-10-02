@@ -7,7 +7,7 @@ import fs from "fs";
 import { agentRouter } from "./agentApi.ts";
 import { agentAuthMiddleware } from "./agentAuth.ts";
 import { handleUserRequest } from "./server/ai/orchestrator.ts";
-import { loadDriveFolder, extractFolderId } from "./api/_driveList";
+import { loadDriveFolder, extractFolderId } from "./server/driveList";
 
 // Initialize Gemini safely
 let ai: GoogleGenAI | null = null;
