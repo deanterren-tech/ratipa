@@ -427,6 +427,8 @@ export interface AppSettings {
   instructions?: Instruction[];
   /** Подсказки про сам портал — меню пользователя → «Инструкции по порталу». */
   portalInstructions?: Instruction[];
+  /** Папка Google Диска с материалами к инструкциям (кнопка «Google Диск»). */
+  instructionsDriveUrl?: string;
   bamapUrl?: string;
   asmapUrl?: string;
   idleRate: number;

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Search,
   X,
@@ -13,6 +13,12 @@ import {
   Pencil,
   Trash2,
   Save,
+  Folder,
+  RefreshCw,
+  Maximize2,
+  Minimize2,
+  HardDrive,
+  Loader2,
 } from 'lucide-react';
 import { AppSettings, Instruction, UserProfile } from '../../types';
 import { useHashRoute } from '../../hooks/useHashRoute';
@@ -20,6 +26,7 @@ import { useDialog } from '../DialogProvider';
 import { useToast } from '../ToastProvider';
 import { dbService } from '../../api';
 import { resolvePermission } from '../../utils/permissions';
+import { getEmbeddableDriveUrl } from '../../utils/embed';
 import {
   EMPTY_INSTRUCTION,
   MODULE_LINKS,
@@ -83,14 +90,70 @@ const draftToInstruction = (d: Draft, id: string): Instruction => ({
   needsWork: d.needsWork || undefined,
 });
 
+/** Куда попал запрос: подпись поля и фрагмент текста с найденным словом. */
+function matchFragment(i: Instruction, q: string) {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return null;
+  const fields: [string, string[]][] = [
+    ['Название', [i.title]],
+    ['Тема', [i.theme]],
+    ['Описание', [i.summary]],
+    ['Что понадобится', i.prerequisites || []],
+    ['Порядок действий', i.steps || []],
+    ['Подсказки', i.tips || []],
+  ];
+  for (const [label, arr] of fields) {
+    for (const text of arr) {
+      const idx = (text || '').toLowerCase().indexOf(needle);
+      if (idx >= 0) {
+        return {
+          field: label,
+          before: (idx > 26 ? '…' : '') + text.slice(Math.max(0, idx - 26), idx),
+          match: text.slice(idx, idx + needle.length),
+          after: text.slice(idx + needle.length, idx + needle.length + 60),
+        };
+      }
+    }
+  }
+  return null;
+}
+
 export default function InstructionsModule({ user, settings }: Props) {
   const [query, setQuery] = useState('');
   const [theme, setTheme] = useState<string>('all');
   const [editing, setEditing] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [isSuggestOpen, setIsSuggestOpen] = useState(false);
+  const [highlighted, setHighlighted] = useState(0);
   const { route, navigate } = useHashRoute({ module: 'instructions' });
   const { showConfirm } = useDialog();
   const { toast } = useToast();
+
+  // ——— Панель Google Диска (как в «Авто и водителях», ссылка своя) ———
+  const [isDriveOpen, setIsDriveOpen] = useState(() => {
+    try { return window.localStorage.getItem('ratipa_instructions_drive_visible') === 'true'; } catch { return false; }
+  });
+  const [isDriveFocus, setIsDriveFocus] = useState(false);
+  const [isDriveLoading, setIsDriveLoading] = useState(true);
+  const [driveKey, setDriveKey] = useState(0);
+  const rawDriveUrl = settings?.instructionsDriveUrl || '';
+  const driveEmbedUrl = rawDriveUrl ? getEmbeddableDriveUrl(rawDriveUrl) : '';
+
+  const closeDrive = () => {
+    setIsDriveOpen(false);
+    try { window.localStorage.setItem('ratipa_instructions_drive_visible', 'false'); } catch { /* приватный режим */ }
+  };
+
+  const toggleDrive = () => {
+    if (!rawDriveUrl) {
+      toast('Ссылка на папку Диска не задана: её указывают в настройках приложения.', 'error');
+      return;
+    }
+    if (isDriveOpen) { closeDrive(); return; }
+    setIsDriveOpen(true);
+    setIsDriveLoading(true);
+    try { window.localStorage.setItem('ratipa_instructions_drive_visible', 'true'); } catch { /* приватный режим */ }
+  };
 
   const openId = route.tab ? decodeURIComponent(route.tab) : null;
 
@@ -113,6 +176,18 @@ export default function InstructionsModule({ user, settings }: Props) {
     return [...known, ...extra];
   }, [instructions]);
 
+  // Поле поиска по ширине надписей: меряем текст подсказки или введённый запрос.
+  const measureRef = useRef<HTMLSpanElement | null>(null);
+  const [fieldWidth, setFieldWidth] = useState(240);
+  const SEARCH_PLACEHOLDER = 'Поиск: сломался, граница, дозвол, сдача…';
+  useLayoutEffect(() => {
+    const el = measureRef.current;
+    if (!el) return;
+    el.textContent = query || SEARCH_PLACEHOLDER;
+    const w = Math.min(560, Math.max(200, Math.ceil(el.getBoundingClientRect().width) + 56));
+    setFieldWidth((prev) => (Math.abs(prev - w) > 4 ? w : prev));
+  }, [query]);
+
   const found = useMemo(() => {
     const q = query.toLowerCase().replace(/\s+/g, ' ').trim();
     return instructions.filter((i) => {
@@ -121,6 +196,12 @@ export default function InstructionsModule({ user, settings }: Props) {
       return searchBlob(i).includes(q);
     });
   }, [instructions, query, theme]);
+
+  const suggestions = useMemo(() => {
+    const q = query.trim();
+    if (!q) return [];
+    return instructions.filter((i) => searchBlob(i).includes(q.toLowerCase())).slice(0, 8);
+  }, [instructions, query]);
 
   const grouped = useMemo(
     () => themes
@@ -143,6 +224,33 @@ export default function InstructionsModule({ user, settings }: Props) {
       return false;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openInstruction = (id: string) => {
+    setIsSuggestOpen(false);
+    navigate(encodeURIComponent(id));
+  };
+
+  const onSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      if (isSuggestOpen) { e.preventDefault(); setIsSuggestOpen(false); }
+      return;
+    }
+    if (!isSuggestOpen || suggestions.length === 0) {
+      if (e.key === 'ArrowDown' && suggestions.length) { setIsSuggestOpen(true); setHighlighted(0); }
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlighted((p) => (p + 1) % suggestions.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlighted((p) => (p - 1 + suggestions.length) % suggestions.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const pick = suggestions[highlighted];
+      if (pick) openInstruction(pick.id);
     }
   };
 
@@ -183,6 +291,94 @@ export default function InstructionsModule({ user, settings }: Props) {
   const field =
     'w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5 text-xs text-[#121316] transition focus:border-[var(--accent-ui)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-30)]';
   const labelCls = 'block text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]';
+
+  /** Панель Диска: на широких экранах — сбоку, на узких — на весь экран. */
+  const drivePanel = isDriveOpen && (
+    <>
+      <div
+        className="fixed inset-0 z-[4000] bg-black/40 backdrop-blur-[2px] xl:hidden"
+        onClick={closeDrive}
+        aria-hidden="true"
+      />
+      <aside
+        aria-label="Google Диск — материалы по инструкциям"
+        className={
+          isDriveFocus
+            ? 'fixed inset-0 z-[4100] flex flex-col bg-white'
+            : 'fixed inset-x-3 bottom-3 top-20 z-[4100] flex flex-col overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_25px_60px_rgba(0,0,0,0.25)] xl:inset-x-auto xl:bottom-4 xl:right-4 xl:top-20 xl:w-[520px]'
+        }
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#E5E7EB] bg-white p-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-md border border-[#E5E7EB] bg-[#F3F4F6] px-2 py-0.5 text-[10px] font-medium uppercase text-[#4B5563]">
+              <HardDrive className="h-3 w-3" aria-hidden="true" />
+              Drive
+            </span>
+            <h3 className="hidden truncate text-xs font-semibold tracking-tight text-[#121316] sm:block">Google Диск</h3>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => { setIsDriveLoading(true); setDriveKey((k) => k + 1); }}
+              aria-label="Обновить Диск"
+              title="Обновить Диск"
+              className="rounded-lg p-1.5 text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316]"
+            >
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <a
+              href={rawDriveUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Открыть во вкладке"
+              title="Открыть во вкладке"
+              className="rounded-lg p-1.5 text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316]"
+            >
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            </a>
+            <button
+              type="button"
+              onClick={() => setIsDriveFocus((v) => !v)}
+              aria-label={isDriveFocus ? 'Свернуть' : 'Развернуть на весь экран'}
+              title={isDriveFocus ? 'Свернуть' : 'Развернуть на весь экран'}
+              className="rounded-lg p-1.5 text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316]"
+            >
+              {isDriveFocus ? <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" /> : <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />}
+            </button>
+            <button
+              type="button"
+              onClick={closeDrive}
+              aria-label="Закрыть панель"
+              title="Закрыть панель"
+              className="rounded-lg p-1.5 text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-rose-600"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+        <div className="relative min-h-0 flex-1 overflow-hidden bg-white p-2">
+          {isDriveLoading && (
+            <div className="absolute inset-2 z-10 flex flex-col items-center justify-center gap-2.5 rounded-xl bg-white p-6">
+              <Folder className="h-8 w-8 text-[#D1D5DB]" aria-hidden="true" />
+              <span className="inline-flex items-center gap-2 text-[11px] font-medium text-[#6B7280]">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--accent-ui)] motion-reduce:animate-none" aria-hidden="true" />
+                Подключение к Google Диску…
+              </span>
+              <span className="text-[11px] text-[#9CA3AF]">Загрузка папки с материалами</span>
+            </div>
+          )}
+          <iframe
+            key={driveKey}
+            src={driveEmbedUrl}
+            onLoad={() => setIsDriveLoading(false)}
+            allow="clipboard-write"
+            title="Google Диск — материалы по инструкциям"
+            className="h-full w-full rounded-xl border-0 bg-white"
+          />
+        </div>
+      </aside>
+    </>
+  );
 
   // ——— Редактор ———
   if (editing) {
@@ -501,39 +697,128 @@ export default function InstructionsModule({ user, settings }: Props) {
               Что делать в рабочих ситуациях: порядок действий, подсказки и где это в приложении.
             </p>
           </div>
-          {canWrite && (
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={startCreate}
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[var(--accent-solid)] px-4 text-xs font-semibold text-[var(--accent-on)] transition-colors hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]"
+              onClick={toggleDrive}
+              aria-pressed={isDriveOpen}
+              title={rawDriveUrl ? 'Материалы на Google Диске' : 'Ссылка на Диск не задана в настройках'}
+              className={`inline-flex min-h-[44px] items-center gap-2 rounded-xl px-4 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] ${
+                isDriveOpen
+                  ? 'bg-[#121316] text-white hover:bg-black'
+                  : 'border border-[#E5E7EB] bg-white text-[#121316] hover:bg-[#F9FAFB]'
+              } ${rawDriveUrl ? '' : 'opacity-60'}`}
             >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Добавить инструкцию
+              <Folder className="h-4 w-4" aria-hidden="true" />
+              Google Диск
             </button>
-          )}
+            {canWrite && (
+              <button
+                type="button"
+                onClick={startCreate}
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[var(--accent-solid)] px-4 text-xs font-semibold text-[var(--accent-on)] transition-colors hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]"
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Добавить инструкцию
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="relative mt-4 max-w-2xl">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" aria-hidden="true" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Поиск по названию и содержанию: сломался, граница, дозвол, сдача…"
-            aria-label="Поиск по инструкциям"
-            className="w-full rounded-xl border border-[#E5E7EB] bg-white py-2.5 pl-9 pr-9 text-xs text-[#121316] transition focus:border-[var(--accent-ui)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-30)]"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => setQuery('')}
-              aria-label="Очистить поиск"
-              title="Очистить поиск"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316]"
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-            </button>
-          )}
+        {/* Поиск: поле по ширине надписи + выпадающий список найденного */}
+        <div className="relative mt-4" style={{ maxWidth: '100%' }}>
+          <span
+            ref={measureRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute left-0 top-0 -z-10 whitespace-pre text-xs opacity-0"
+          >
+            {SEARCH_PLACEHOLDER}
+          </span>
+          <div className="relative" style={{ width: `${fieldWidth}px`, maxWidth: '100%' }}>
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" aria-hidden="true" />
+            <input
+              type="text"
+              value={query}
+              autoComplete="off"
+              onChange={(e) => { setQuery(e.target.value); setIsSuggestOpen(true); setHighlighted(0); }}
+              onFocus={() => setIsSuggestOpen(true)}
+              onKeyDown={onSearchKeyDown}
+              onBlur={() => setIsSuggestOpen(false)}
+              placeholder={SEARCH_PLACEHOLDER}
+              aria-label="Поиск по инструкциям"
+              role="combobox"
+              aria-expanded={isSuggestOpen && suggestions.length > 0}
+              aria-controls="instructions-search-results"
+              className="w-full rounded-xl border border-[#E5E7EB] bg-white py-2.5 pl-9 pr-9 text-xs text-[#121316] transition focus:border-[var(--accent-ui)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-30)]"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => { setQuery(''); setIsSuggestOpen(false); }}
+                aria-label="Очистить поиск"
+                title="Очистить поиск"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-lg p-1 text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316]"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+
+            {isSuggestOpen && query.trim() && (
+              <div
+                id="instructions-search-results"
+                role="listbox"
+                className="absolute left-0 right-0 z-[1200] mt-1.5 max-h-[360px] min-w-[320px] overflow-y-auto rounded-xl border border-[#E5E7EB] bg-white shadow-[0_12px_32px_rgba(15,23,42,0.14)]"
+              >
+                {suggestions.length === 0 ? (
+                  <div className="px-4 py-6 text-center">
+                    <p className="text-xs text-[#6B7280]">Ничего не найдено по запросу «{query.trim()}».</p>
+                    <p className="mt-1 text-[11px] text-[#9CA3AF]">
+                      Попробуйте слово из названия ситуации или из порядка действий.
+                    </p>
+                  </div>
+                ) : (
+                  suggestions.map((s, i) => {
+                    const frag = matchFragment(s, query);
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        role="option"
+                        aria-selected={i === highlighted}
+                        onMouseEnter={() => setHighlighted(i)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => openInstruction(s.id)}
+                        className={`w-full cursor-pointer border-b border-[#F3F4F6] px-3.5 py-2.5 text-left transition-colors last:border-0 ${
+                          i === highlighted ? 'bg-[var(--accent-10)]' : 'hover:bg-[#F9FAFB]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="truncate text-xs font-semibold text-[#121316]">{s.title}</span>
+                          <span className="shrink-0 text-[10px] text-[#9CA3AF]">{s.theme}</span>
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                          {frag ? (
+                            <>
+                              <span className="rounded bg-[var(--accent-15)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--accent-ink)]">
+                                {frag.field}
+                              </span>
+                              <span className="truncate text-[11px] text-[#6B7280]">
+                                {frag.before}
+                                <mark className="rounded-sm bg-[#FFE08A] px-0.5 text-[#121316]">{frag.match}</mark>
+                                {frag.after}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="truncate text-[11px] text-[#6B7280]">{s.summary}</span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="mt-3 flex w-fit max-w-full items-center gap-1.5 overflow-x-auto rounded-xl bg-[#F3F4F6]/75 p-1 scrollbar-none">
@@ -661,6 +946,7 @@ export default function InstructionsModule({ user, settings }: Props) {
           </p>
         </div>
       </div>
+      {drivePanel}
     </div>
   );
 }
