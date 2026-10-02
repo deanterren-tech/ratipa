@@ -17,6 +17,7 @@ import {
   Trash2,
   Truck,
   AlertCircle,
+  Lock,
 } from 'lucide-react';
 import {UI} from '../../ui/kit'
 import {
@@ -222,6 +223,14 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
     return Array.from(byPlate.values()).map(rec => applySharedDriverToBazaRecord(applySharedCarToBazaRecord(rec, fleetVehicles), drivers));
   }, [bazaLegacy, bazaCarsLegacy, archiveLegacy, vehicleDriverLegacy, fleetVehicles, drivers]);
 
+  // Право на «Учёт выезда» нужно знать ДО подписок на данные: если права нет,
+  // блок не читает защищённые данные (страховка к маршрутному гейту AppShell).
+  // Механик — специальное правило портала: «Учёт выезда» доступен ему всегда.
+  const earlyIsRoot = ratipaUser?.role === 'root_admin';
+  const earlyIsMechanic = ratipaUser?.role === 'mechanic';
+  const earlyBazaPerm = earlyIsRoot ? 'write' : resolvePermission(ratipaUser as any, 'baza', settings?.rolePermissions);
+  const mayReadBaza = earlyIsRoot || earlyBazaPerm !== 'none' || earlyIsMechanic;
+
   // Local state
   const [selectedDispatcher, setSelectedDispatcher] = useState<string>("Все автомобили");
   const [searchQuery, setSearchQuery] = useState('');
@@ -255,6 +264,11 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
         if (bazaUndoStack.length > 0) {
           e.preventDefault();
           const lastChange = bazaUndoStack[bazaUndoStack.length - 1];
+          // Отмена — такая же запись в базу: без права на поле она не проходит.
+          if (!canEditField(lastChange.field)) {
+            toast('Нет права изменить это поле', 'error');
+            return;
+          }
           setBazaUndoStack(prev => prev.slice(0, -1));
 
           const rootBranch = lastChange.rootBranch || "vehicleFleet";
@@ -272,10 +286,11 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
     // Capture-фаза (true) — чтобы ESC срабатывал даже когда фокус в input/select внутри модалки
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [isCarModalOpen, bazaUndoStack, currentTab, modalData]);
+  }, [isCarModalOpen, bazaUndoStack, currentTab, modalData, ratipaUser, settings]);
 
   // DB Sync for active fleet data, catalog & user listings
   useEffect(() => {
+    if (!mayReadBaza) return;
     try {
       const db = getDatabase(getApp());
       const unsubs: any[] = [];
@@ -574,10 +589,18 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
     const masterCar = fleetVehicles.find(c => (c.carNumber || c.vehicleNumbers || '').replace(/[^А-ЯA-Z0-9]/g, '') === normPlate);
     const couplingId = masterCar ? masterCar.id : null;
 
+    // Пишем только разрешённые поля: если право на поле отозвано в открытой сессии,
+    // уже введённое значение не уедет в базу (проверка на записи, не только в форме).
+    const allowedForm: Record<string, string> = {};
+    for (const f of ['dateArrival', 'dateLoading', 'dateRepairStart', 'dateRepairEnd', 'dateDeparture', 'comment']) {
+      if (canEditField(f)) allowedForm[f] = (formData as any)[f] || '';
+    }
+    if (canEditField('driverName')) allowedForm.driverName = (formData as any).driverName || '';
+
     const carData = {
       carId: newRef.key,
       couplingId: couplingId,
-      ...formData,
+      ...allowedForm,
       carNumber: cNum,
       driverName: driverShortNameRu || trimmedDriver,
       driverId: driverId || null,
@@ -799,7 +822,7 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
   };
 
   const moveCarToArchive = async () => {
-      if (isMechanic || !modalData) return;
+      if (isMechanic || !canWriteBaza || !modalData) return;
       if (!(await showConfirm(`Отправить автомобиль [${modalData.carNumber}] в рейс?\nЗапись переместится во вкладку Архив.`))) return;
 
       const db = getDatabase(getApp());
@@ -1056,6 +1079,30 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
     { key: 'archive', label: 'Архив', count: archiveCars.length > 0 ? archiveCars.length : undefined },
     { key: 'history', label: 'История', count: globalHistory.length > 0 ? globalHistory.length : undefined },
   ];
+
+  // Права нет вовсе: показываем аккуратный экран вместо содержимого блока.
+  // Данные не читаются (подписки выше не запускаются), уйти можно в доступный раздел.
+  if (!mayReadBaza) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center px-4">
+        <div className="w-full max-w-md rounded-2xl border border-[#E5E7EB] bg-white p-6 text-center shadow-sm">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#F3F4F6]">
+            <Lock size={20} className="text-[#6B7280]" aria-hidden="true" />
+          </div>
+          <h2 className="text-lg font-bold text-[#121316]">Нет доступа</h2>
+          <p className="mt-1 text-sm text-[#6B7280]">
+            Раздел «Учёт выезда» недоступен для вашей роли. Если доступ нужен — обратитесь к администратору.
+          </p>
+          <button
+            onClick={() => { window.location.hash = '#dashboard'; }}
+            className={`${UI.buttonPrimary} mt-5 w-full`}
+          >
+            Перейти на главную
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -1470,13 +1517,17 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
         maxWidth="max-w-4xl"
         footer={
           <div className="flex flex-wrap items-center justify-end gap-2 w-full">
-            {currentTab === 'base' && !isMechanic && (
+            {currentTab === 'base' && !isMechanic && canWriteBaza && (
               <button onClick={moveCarToArchive} className={`${UI.buttonGhost} mr-auto`}>
                 Выехал в рейс
               </button>
             )}
             <button onClick={() => setIsCarModalOpen(false)} className={UI.buttonGhost}>Отмена</button>
-            <button onClick={saveCarModal} className={UI.buttonPrimary}>Сохранить</button>
+            <button
+              onClick={saveCarModal}
+              disabled={!['carNumber', 'driverName', 'dateArrival', 'dateLoading', 'dateRepairStart', 'dateRepairEnd', 'dateDeparture', 'comment'].some(f => canEditField(f))}
+              className={UI.buttonPrimary}
+            >Сохранить</button>
           </div>
         }
       >
