@@ -19,6 +19,11 @@ import {
   Minimize2,
   HardDrive,
   Loader2,
+  FileText,
+  Table2,
+  Presentation,
+  Image as ImageIcon,
+  File as FileIcon,
 } from 'lucide-react';
 import { AppSettings, Instruction, UserProfile } from '../../types';
 import { useHashRoute } from '../../hooks/useHashRoute';
@@ -118,6 +123,49 @@ function matchFragment(i: Instruction, q: string) {
   return null;
 }
 
+
+/** Запись папки Google Диска (приходит с сервера: /api/drive-list). */
+export interface DriveEntry {
+  id: string;
+  name: string;
+  kind: 'folder' | 'doc' | 'sheet' | 'slide' | 'pdf' | 'image' | 'file';
+  modified?: string;
+}
+
+function DriveKindIcon({ kind, className }: { kind: DriveEntry['kind']; className?: string }) {
+  if (kind === 'folder') return <Folder className={className} aria-hidden="true" />;
+  if (kind === 'sheet') return <Table2 className={className} aria-hidden="true" />;
+  if (kind === 'slide') return <Presentation className={className} aria-hidden="true" />;
+  if (kind === 'image') return <ImageIcon className={className} aria-hidden="true" />;
+  if (kind === 'doc' || kind === 'pdf') return <FileText className={className} aria-hidden="true" />;
+  return <FileIcon className={className} aria-hidden="true" />;
+}
+
+function driveKindLabel(kind: DriveEntry['kind']) {
+  if (kind === 'folder') return 'Папка';
+  if (kind === 'doc') return 'Документ';
+  if (kind === 'sheet') return 'Таблица';
+  if (kind === 'slide') return 'Презентация';
+  if (kind === 'pdf') return 'PDF';
+  if (kind === 'image') return 'Изображение';
+  return 'Файл';
+}
+
+/** Название файла с подсвеченным совпадением. */
+function highlightName(name: string, query: string) {
+  const q = query.trim();
+  if (!q) return name;
+  const idx = name.toLowerCase().indexOf(q.toLowerCase());
+  if (idx < 0) return name;
+  return (
+    <>
+      {name.slice(0, idx)}
+      <mark className="rounded bg-[var(--accent-20)] px-0.5 text-[#121316]">{name.slice(idx, idx + q.length)}</mark>
+      {name.slice(idx + q.length)}
+    </>
+  );
+}
+
 export default function InstructionsModule({ user, settings }: Props) {
   const [query, setQuery] = useState('');
   const [theme, setTheme] = useState<string>('all');
@@ -137,13 +185,61 @@ export default function InstructionsModule({ user, settings }: Props) {
   const [isDriveLoading, setIsDriveLoading] = useState(true);
   const [driveKey, setDriveKey] = useState(0);
   const [driveQuery, setDriveQuery] = useState('');
+  const [driveFiles, setDriveFiles] = useState<DriveEntry[] | null>(null);
+  const [driveListState, setDriveListState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [driveFolderUrl, setDriveFolderUrl] = useState('');
+  const [driveFolderName, setDriveFolderName] = useState('');
+  const [drivePreview, setDrivePreview] = useState<DriveEntry | null>(null);
   const rawDriveUrl = settings?.instructionsDriveUrl || '';
-  const driveEmbedUrl = rawDriveUrl ? getEmbeddableDriveUrl(rawDriveUrl) : '';
+  const driveCurrentUrl = driveFolderUrl || rawDriveUrl;
+  const driveEmbedUrl = driveCurrentUrl ? getEmbeddableDriveUrl(driveCurrentUrl) : '';
+  const driveQueryText = driveQuery.trim().toLowerCase();
+  const driveMatches = driveQueryText && driveFiles
+    ? driveFiles.filter((f) => f.name.toLowerCase().includes(driveQueryText))
+    : null;
 
   const closeDrive = () => {
     setIsDriveOpen(false);
+    setDriveQuery('');
+    setDrivePreview(null);
+    setDriveFolderUrl('');
+    setDriveFolderName('');
     try { window.localStorage.setItem('ratipa_instructions_drive_visible', 'false'); } catch { /* приватный режим */ }
   };
+
+  /** Переход в подпапку: и список файлов, и просмотр переключаются на неё. */
+  const openDriveFolder = (folder: DriveEntry) => {
+    setDriveFolderUrl(`https://drive.google.com/drive/folders/${folder.id}`);
+    setDriveFolderName(folder.name);
+    setDriveQuery('');
+    setDrivePreview(null);
+    setIsDriveLoading(true);
+  };
+
+  /** Список файлов папки для поиска внутри панели (сервер читает папку по ссылке). */
+  useEffect(() => {
+    if (!isDriveOpen || !rawDriveUrl) return;
+    let cancelled = false;
+    setDriveListState('loading');
+    fetch(`/api/drive-list?folder=${encodeURIComponent(driveFolderUrl || rawDriveUrl)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data && data.ok && Array.isArray(data.files) && data.files.length) {
+          setDriveFiles(data.files);
+          setDriveListState('ready');
+        } else {
+          setDriveFiles(null);
+          setDriveListState('error');
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDriveFiles(null);
+        setDriveListState('error');
+      });
+    return () => { cancelled = true; };
+  }, [isDriveOpen, rawDriveUrl, driveFolderUrl, driveKey]);
 
   /** Пустая ссылка: предлагаем сразу её задать (право записи) — иначе подсказываем, где искать. */
   const toggleDrive = async () => {
@@ -336,23 +432,32 @@ export default function InstructionsModule({ user, settings }: Props) {
             <h3 className="hidden shrink-0 truncate text-xs font-semibold tracking-tight text-[#121316] sm:block">Google Диск</h3>
           </div>
 
-          {/* Поиск по папке: открывает поиск Google Диска в новой вкладке */}
+          {/* Поиск по файлам папки: результаты показываются здесь же, в этом окне */}
           <form
             className="relative min-w-0 flex-1"
             onSubmit={(e) => {
               e.preventDefault();
               const q = driveQuery.trim();
-              if (!q || !rawDriveUrl) return;
-              window.open(getDriveSearchUrl(rawDriveUrl, q), '_blank', 'noopener');
+              if (!q) return;
+              // Один вариант — открываем сразу; если список недоступен, ищем на Диске.
+              if (driveMatches && driveMatches.length === 1) {
+                const only = driveMatches[0];
+                if (only.kind === 'folder') openDriveFolder(only);
+                else setDrivePreview(only);
+                return;
+              }
+              if (driveListState === 'error' && rawDriveUrl) {
+                window.open(getDriveSearchUrl(rawDriveUrl, q), '_blank', 'noopener');
+              }
             }}
           >
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" aria-hidden="true" />
             <input
               value={driveQuery}
-              onChange={(e) => setDriveQuery(e.target.value)}
+              onChange={(e) => { setDriveQuery(e.target.value); setDrivePreview(null); }}
               placeholder="Поиск в папке…"
               aria-label="Поиск в папке Google Диска"
-              title="Найдите файл по названию — откроется поиск по этой папке в Google Диске"
+              title="Начните вводить название файла — найденное появится в этом окне"
               className="w-full rounded-lg border border-[#E5E7EB] bg-white py-1.5 pl-8 pr-2 text-[11px] text-[#121316] transition focus:border-[var(--accent-ui)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-30)]"
             />
           </form>
@@ -397,24 +502,123 @@ export default function InstructionsModule({ user, settings }: Props) {
           </div>
         </div>
         <div className="relative min-h-0 flex-1 overflow-hidden bg-white p-2">
-          {isDriveLoading && (
-            <div className="absolute inset-2 z-10 flex flex-col items-center justify-center gap-2.5 rounded-xl bg-white p-6">
-              <Folder className="h-8 w-8 text-[#D1D5DB]" aria-hidden="true" />
-              <span className="inline-flex items-center gap-2 text-[11px] font-medium text-[#6B7280]">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--accent-ui)] motion-reduce:animate-none" aria-hidden="true" />
-                Подключение к Google Диску…
-              </span>
-              <span className="text-[11px] text-[#9CA3AF]">Загрузка папки с материалами</span>
+          {drivePreview ? (
+            /* Файл открыт прямо в панели */
+            <div className="flex h-full flex-col gap-2">
+              <div className="flex shrink-0 items-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] px-2 py-1.5">
+                <button
+                  type="button"
+                  onClick={() => setDrivePreview(null)}
+                  aria-label="Вернуться к поиску"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1 text-[11px] font-medium text-[#4B5563] transition-colors hover:bg-white hover:text-[#121316]"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                  Назад
+                </button>
+                <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-[#121316]" title={drivePreview.name}>
+                  {drivePreview.name}
+                </span>
+                <a
+                  href={`https://drive.google.com/file/d/${drivePreview.id}/view`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Открыть файл в Google Диске"
+                  title="Открыть файл в Google Диске"
+                  className="shrink-0 rounded-lg p-1.5 text-[#4B5563] transition-colors hover:bg-white hover:text-[#121316]"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                </a>
+              </div>
+              <iframe
+                src={`https://drive.google.com/file/d/${drivePreview.id}/preview`}
+                title={drivePreview.name}
+                allow="autoplay"
+                className="min-h-0 w-full flex-1 rounded-xl border-0 bg-white"
+              />
             </div>
+          ) : driveMatches ? (
+            /* Результаты поиска — в этом же окне */
+            <div className="flex h-full flex-col">
+              <div className="flex shrink-0 items-center justify-between gap-2 px-1.5 pb-2">
+                <span className="text-[11px] text-[#6B7280]" aria-live="polite">
+                  {driveListState === 'loading' && 'Ищу в папке…'}
+                  {driveListState === 'error' && 'Не удалось прочитать папку'}
+                  {driveListState === 'ready' && (driveMatches.length
+                    ? `Найдено: ${driveMatches.length} из ${driveFiles ? driveFiles.length : 0}`
+                    : 'Ничего не найдено')}
+                </span>
+                {driveListState === 'error' && rawDriveUrl && (
+                  <button
+                    type="button"
+                    onClick={() => window.open(getDriveSearchUrl(rawDriveUrl, driveQuery.trim()), '_blank', 'noopener')}
+                    className="text-[11px] font-medium text-[var(--accent-ink)] hover:underline"
+                  >
+                    Искать в Google Диске
+                  </button>
+                )}
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {driveMatches.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => (f.kind === 'folder' ? openDriveFolder(f) : setDrivePreview(f))}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-[#F3F4F6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)]"
+                  >
+                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-[#F8F9FA]">
+                      <DriveKindIcon kind={f.kind} className="h-3.5 w-3.5 text-[#4B5563]" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[11.5px] font-medium text-[#121316]">{highlightName(f.name, driveQuery)}</span>
+                      <span className="block text-[10px] text-[#9CA3AF]">
+                        {driveKindLabel(f.kind)}{f.modified ? ` · ${f.modified}` : ''}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+                {driveListState === 'ready' && !driveMatches.length && (
+                  <div className="px-3 py-6 text-center text-[11px] leading-relaxed text-[#9CA3AF]">
+                    Попробуйте слово из названия файла.
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Папка целиком */
+            <>
+              {driveFolderUrl && (
+                <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white/95 px-2 py-1 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => { setDriveFolderUrl(''); setDriveFolderName(''); setIsDriveLoading(true); }}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-[#4B5563] hover:text-[#121316]"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                    В основную папку
+                  </button>
+                  {driveFolderName && <span className="max-w-[140px] truncate text-[10px] text-[#9CA3AF]" title={driveFolderName}>{driveFolderName}</span>}
+                </div>
+              )}
+              {isDriveLoading && (
+                <div className="absolute inset-2 z-10 flex flex-col items-center justify-center gap-2.5 rounded-xl bg-white p-6">
+                  <Folder className="h-8 w-8 text-[#D1D5DB]" aria-hidden="true" />
+                  <span className="inline-flex items-center gap-2 text-[11px] font-medium text-[#6B7280]">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--accent-ui)] motion-reduce:animate-none" aria-hidden="true" />
+                    Подключение к Google Диску…
+                  </span>
+                  <span className="text-[11px] text-[#9CA3AF]">Загрузка папки с материалами</span>
+                </div>
+              )}
+              <iframe
+                key={driveEmbedUrl}
+                src={driveEmbedUrl}
+                onLoad={() => setIsDriveLoading(false)}
+                allow="clipboard-write"
+                title="Google Диск — материалы по инструкциям"
+                className="h-full w-full rounded-xl border-0 bg-white"
+              />
+            </>
           )}
-          <iframe
-            key={driveKey}
-            src={driveEmbedUrl}
-            onLoad={() => setIsDriveLoading(false)}
-            allow="clipboard-write"
-            title="Google Диск — материалы по инструкциям"
-            className="h-full w-full rounded-xl border-0 bg-white"
-          />
         </div>
       </aside>
     </>

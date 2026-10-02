@@ -7,6 +7,7 @@ import fs from "fs";
 import { agentRouter } from "./agentApi.ts";
 import { agentAuthMiddleware } from "./agentAuth.ts";
 import { handleUserRequest } from "./server/ai/orchestrator.ts";
+import { loadDriveFolder, extractFolderId } from "./api/_driveList";
 
 // Initialize Gemini safely
 let ai: GoogleGenAI | null = null;
@@ -1152,6 +1153,32 @@ async function startServer() {
         { Cur_Abbreviation: "EUR", Cur_OfficialRate: 3.55, Cur_Scale: 1 },
         { Cur_Abbreviation: "RUB", Cur_OfficialRate: 3.60, Cur_Scale: 100 }
       ]);
+    }
+  });
+
+  // Список файлов папки Google Диска: поиск по содержимому папки внутри панели «Google Диск».
+  // Страница встроенного просмотра — чужой источник, из браузера её не прочитать, поэтому
+  // список забирает сервер и отдаёт приложению. Кэш 5 минут, чтобы не дёргать Диск зря.
+  const driveListCache = new Map<string, { at: number; files: any[] }>();
+  app.get("/api/drive-list", async (req, res) => {
+    const folder = String(req.query.folder || "").trim();
+    const folderId = extractFolderId(folder);
+    if (!folderId) {
+      res.status(400).json({ ok: false, error: "bad_folder", files: [] });
+      return;
+    }
+    const cached = driveListCache.get(folderId);
+    if (cached && Date.now() - cached.at < 5 * 60 * 1000) {
+      res.json({ ok: true, files: cached.files, folderId, cached: true });
+      return;
+    }
+    try {
+      const files = await loadDriveFolder(folder);
+      if (files.length) driveListCache.set(folderId, { at: Date.now(), files });
+      res.json({ ok: true, files, folderId });
+    } catch (e) {
+      console.warn("[drive-list] не удалось получить список:", e);
+      res.json({ ok: false, error: "drive_unavailable", files: [] });
     }
   });
 
