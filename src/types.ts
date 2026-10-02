@@ -48,8 +48,29 @@ export interface UserProfile {
   currentModule?: string;
   password?: string;
   color?: string;
+  /**
+   * Фотография профиля в виде data URL (уменьшенная до 256×256, обрезка по центру).
+   * Пусто или отсутствует — показываются выбранный цвет и инициалы.
+   */
+  avatarPhoto?: string;
   /** Персональный масштаб фреймов Google-таблиц по модулям: { disposition, planZagruzok, currentPlanning } -> 50..200 */
   sheetZoom?: Record<string, number>;
+  /** Выбранный пользователем режим отображения списков по модулям: { vehicles: 'grid4' | 'grid2' | 'list' } */
+  viewModes?: Record<string, string>;
+  /** Пройденные превью обновлений: { [версия приложения]: 'done' | 'skipped' } */
+  onboarding?: Record<string, string>;
+  /**
+   * Имя и фамилия — отдельные поля профиля.
+   * `name` остаётся полным отображаемым именем и логином входа («Имя Фамилия»),
+   * чтобы не ломать существующую авторизацию и старые записи.
+   */
+  firstName?: string;
+  lastName?: string;
+  /**
+   * Акцентная тема интерфейса (id варианта из src/theme/accent.ts).
+   * Личная настройка пользователя: применяется при входе и хранится в профиле.
+   */
+  accentColor?: string;
 }
 
 export interface VehicleHistoryItem {
@@ -89,6 +110,8 @@ export interface Vehicle {
   trailerNumber?: string;
   dispatcherName?: string;
   dispatcher?: string;
+  /** Идентификатор учётной записи диспетчера (стабильная связь) */
+  dispatcherId?: string;
   driverPhone?: string;
   phone?: string;
   ownerName?: string;
@@ -245,6 +268,10 @@ export interface TripPlan {
   potentialLoads?: PotentialLoad[];
   activeLegIndex?: number;
   dispatcher: string;
+  /** Имя и фамилия диспетчера из учётной записи (отображение) */
+  dispatcherName?: string;
+  /** Идентификатор учётной записи диспетчера (стабильная связь) */
+  dispatcherId?: string;
   driverName?: string;
   currentMonth: string;
   isArchived: boolean;
@@ -512,6 +539,8 @@ export interface Driver {
   birthDate?: string;
   rateGroupId?: string;
   dispatcher?: string;
+  dispatcherName?: string;
+  dispatcherId?: string;
   comment?: string;
 }
 
@@ -714,6 +743,7 @@ export interface CouplingRecord {
   rate?: number;
   dispatcher?: string;
   dispatcherName?: string;
+  dispatcherId?: string;
   driverId?: string;
   driverName?: string;
   driverNameRu?: string;

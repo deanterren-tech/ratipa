@@ -128,7 +128,7 @@ export class BazaAgent implements Agent {
           (v.carNumber || "").toLowerCase().includes(plate.toLowerCase()),
       );
       if (!entry) return { success: false, message: `ТС "${plate}" не найдено.` };
-      const [, data] = entry;
+      const [, data] = entry as [string, { carNumber?: string; status?: string; [key: string]: any }];
       const statusLabels: Record<string, string> = {
         base: "🏁 На базе",
         loading: "📦 Загрузка",

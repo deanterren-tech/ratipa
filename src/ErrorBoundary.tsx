@@ -1,4 +1,5 @@
 import { Component, ReactNode } from 'react';
+import ErrorPage from './components/common/ErrorPage';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -10,6 +11,13 @@ interface ErrorBoundaryState {
   errorInfo: { componentStack?: string } | null;
 }
 
+/**
+ * Общий экран «Что-то пошло не так».
+ *
+ * Пользователю показывается только понятное объяснение и действия.
+ * Stack trace и внутренние пути остаются в консоли и показываются в интерфейсе
+ * только в dev-режиме (ErrorPage сам проверяет import.meta.env.DEV).
+ */
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
@@ -22,44 +30,22 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   componentDidCatch(error: Error, errorInfo: { componentStack?: string }) {
     this.setState({ errorInfo });
+    // Подробности — в журнал, не в интерфейс
     console.error('Uncaught error:', error, errorInfo);
   }
 
   render() {
     if (this.state.hasError) {
+      const { error, errorInfo } = this.state;
       return (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-50 font-sans overflow-y-auto">
-          <div className="max-w-md w-full bg-white rounded-2xl p-8 border border-slate-200/60 shadow-sm flex flex-col items-center text-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-3xl select-none shadow-sm">
-              <span>😵</span>
-            </div>
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight">
-              Что-то пошло не так
-            </h2>
-            <p className="text-sm text-slate-400 leading-relaxed max-w-xs font-medium">
-              После обновления портала могла сброситься сессия. Попробуйте перезагрузить страницу.
-            </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="mt-2 px-6 py-3 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-sm font-bold transition-all active:scale-95 shadow-sm border border-transparent cursor-pointer"
-            >
-              Обновить страницу
-            </button>
-            {this.state.error && (
-              <details className="w-full mt-2 text-left text-[10px] text-slate-400 font-mono border-t border-slate-100 pt-3">
-                <summary className="cursor-pointer text-[11px] font-semibold text-slate-500 hover:text-slate-700">
-                  Технические детали
-                </summary>
-                <pre className="mt-2 whitespace-pre-wrap text-[10px] text-rose-600 leading-relaxed max-h-32 overflow-y-auto">
-                  {this.state.error.toString()}
-                </pre>
-              </details>
-            )}
-          </div>
-        </div>
+        <ErrorPage
+          code="generic"
+          onRetry={() => window.location.reload()}
+          onHome={() => { window.location.hash = '#dashboard'; window.location.reload(); }}
+          devDetails={error ? `${error.name}: ${error.message}\n${errorInfo?.componentStack || ''}` : undefined}
+        />
       );
     }
-
     return this.props.children;
   }
 }

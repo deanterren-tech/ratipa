@@ -58,7 +58,7 @@ export default function CommandCenter({ user, isOpen, onClose, onNavigate }: Com
 
   return (
     <AnimatePresence>
-      <motion.div 
+      <motion.div data-scroll-lock="modal" 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}

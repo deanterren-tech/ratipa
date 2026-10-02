@@ -1,8 +1,9 @@
 import {useToast} from '../../ToastProvider'
-import {useDialog} from '../../DialogProvider'
-import {useState, useEffect} from 'react'
+
+import { htmlToPdfBlob, downloadBlob } from '../../../utils/pdfDownload';import {useDialog} from '../../DialogProvider'
+import {useState, useEffect, useRef} from 'react'
 import {UserProfile} from '../../../types'
-import {FileText, Download, Printer, CheckCircle} from 'lucide-react'
+import {FileText, Download, Printer, CheckCircle, X, Plus, FileDown, Loader2 } from 'lucide-react'
 import { useFirebase, database, onValue } from '../../../firebase'
 import { ref, push, update } from 'firebase/database'
 import JSZip from "jszip";
@@ -23,7 +24,26 @@ interface DozvolaDocumentsProps {
 export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
   const { showConfirm, showAlert } = useDialog();
   const { toast } = useToast();
-  const [docType, setDocType] = useState("Заявление на получение разрешений");
+  const DOC_APPLICATION = 'Заявление на получение разрешений';
+  const DOC_CHINA = 'Заявление по китайским копиям';
+  const DOC_RETURN = 'Реестр возврата разрешений';
+
+  /**
+   * Названия документов так, как их видит пользователь: у заявления по китайским
+   * разрешениям внутреннее значение отличается от подписи в списке. Сообщения
+   * проверки называют документ именно подписью, иначе непонятно, о чём речь.
+   */
+  const DOC_LABELS: Record<string, string> = {
+    [DOC_APPLICATION]: 'Заявление на получение разрешений',
+    [DOC_CHINA]: 'Заявление на китайские разрешения',
+    [DOC_RETURN]: 'Реестр возврата разрешений',
+  };
+  const [docType, setDocType] = useState(DOC_APPLICATION);
+  /** Пока PDF формируется, кнопка защищена от повторного нажатия. */
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  /** Название выбранного документа так, как его видит пользователь. */
+  const docLabel = DOC_LABELS[docType] || docType;
   const [dozvolsData, setDozvolsData] = useState<any>({});
   const [todoTasks, setTodoTasks] = useState<any>({});
   const [permitPrintMappings, setPermitPrintMappings] = useState<any>({});
@@ -32,6 +52,8 @@ export default function DozvolaDocuments({ user }: DozvolaDocumentsProps) {
 
   // Document row state for interactive editing
   const [permitRows, setPermitRows] = useState<any[]>([]);
+  /** Строки собраны автоматически (пользователь их ещё не правил). */
+  const permitRowsAutoBuiltRef = useRef(true);
   const [selectedPermitTasks, setSelectedPermitTasks] = useState<Record<string, boolean>>({});
   const [taskSearchQuery, setTaskSearchQuery] = useState("");
 
@@ -102,35 +124,85 @@ const formatApplicationDate = (value: string) => {
     return map[status] || status || '—';
   };
 
+  /**
+   * Печатные данные вида разрешения: государство, категория, год бланка.
+   *
+   * В реестре встречаются написания с пробелом и без («KZ 3» и «KZ3», «AM 3» и «AM3»),
+   * а справочник печати хранит ключи с пробелом. Поэтому сравнение идёт по написанию
+   * без пробелов и дефисов — и для встроенных правил, и для поиска ключа в справочнике.
+   * Иначе строка уезжает в документ без государства и категории.
+   */
   const getPermitPrintMapping = (typeName: string) => {
-      const cleanName = String(typeName || '').trim().toUpperCase();
+      const compact = String(typeName || '').trim().toUpperCase().replace(/[\s\-_.]/g, '');
       const year = new Date().getFullYear();
       let defaultMap: any = { country: '', category: '', year };
-      if (cleanName.includes('UZ 2')) defaultMap = { country: 'Узбекистан', category: 'двухсторонн', year };
-      else if (cleanName.includes('UZ 3')) defaultMap = { country: 'Узбекистан', category: 'трехсторонн', year };
-      else if (cleanName.includes('UZ 4')) defaultMap = { country: 'Узбекистан', category: 'универсальн', year };
-      else if (cleanName.includes('CHN 2')) defaultMap = { country: 'Китай', category: 'двухсторонн', year };
-      else if (cleanName.includes('CHN 3')) defaultMap = { country: 'Китай', category: 'трехсторонн', year };
-      else if (cleanName.includes('RUS')) defaultMap = { country: 'Россия', category: '', year };
-      else if (cleanName.includes('TR A')) defaultMap = { country: 'Турция', category: 'двухсторонн', year };
-      else if (cleanName.includes('TR B')) defaultMap = { country: 'Турция', category: 'трехсторонн', year };
-      else if (cleanName.includes('GE')) defaultMap = { country: 'Грузия', category: '', year };
-      else if (cleanName.includes('KZ3')) defaultMap = { country: 'Казахстан', category: 'трехсторонн', year };
-      else if (cleanName.includes('AM3')) defaultMap = { country: 'Армения', category: 'трехсторонн', year };
-      
-      return { ...defaultMap, ...(permitPrintMappings[typeName] || {}) };
+      if (compact.includes('UZ2')) defaultMap = { country: 'Узбекистан', category: 'двухсторонн', year };
+      else if (compact.includes('UZ3')) defaultMap = { country: 'Узбекистан', category: 'трехсторонн', year };
+      else if (compact.includes('UZ4')) defaultMap = { country: 'Узбекистан', category: 'универсальн', year };
+      else if (compact.includes('CHN2')) defaultMap = { country: 'Китай', category: 'двухсторонн', year };
+      else if (compact.includes('CHN3')) defaultMap = { country: 'Китай', category: 'трехсторонн', year };
+      else if (compact.includes('RUS')) defaultMap = { country: 'Россия', category: '', year };
+      else if (compact.includes('TRA')) defaultMap = { country: 'Турция', category: 'двухсторонн', year };
+      else if (compact.includes('TRB')) defaultMap = { country: 'Турция', category: 'трехсторонн', year };
+      else if (compact.includes('GE')) defaultMap = { country: 'Грузия', category: '', year };
+      else if (compact.includes('KZ3')) defaultMap = { country: 'Казахстан', category: 'трехсторонн', year };
+      else if (compact.includes('AM3')) defaultMap = { country: 'Армения', category: 'трехсторонн', year };
+
+      // Ключ справочника: сначала точный, затем совпадающий по «сжатому» написанию
+      let stored = permitPrintMappings[typeName];
+      if (!stored) {
+        const key = Object.keys(permitPrintMappings || {}).find(
+          (k) => String(k).trim().toUpperCase().replace(/[\s\-_.]/g, '') === compact,
+        );
+        if (key) stored = permitPrintMappings[key];
+      }
+      return { ...defaultMap, ...(stored || {}) };
   };
 
-  const logDocumentHistory = (documentName: string, details: string, action: string) => {
+  /**
+   * Событие документа. Вместе с событием сохраняется СНИМОК состава документа:
+   * список дозволов на момент операции (стабильный id + вид + отображаемый номер),
+   * число бланков и имя файла. Снимок не зависит от последующих правок реестра.
+   */
+  const logDocumentHistory = (
+      documentName: string,
+      details: string,
+      action: string,
+      permitItems?: any[],
+      fileName?: string,
+  ) => {
       if (!useFirebase) return;
       const logist = localStorage.getItem('ratipa_auth_user') || user?.name || "Система";
+
+      // Снимок: только стабильные id и отображаемые значения, без ссылок на живые записи
+      const permits = (permitItems || [])
+          .map((i: any) => ({
+              id: String(i?.id ?? ''),
+              type: String(i?.type ?? ''),
+              number: String(i?.number ?? i?.permitNumber ?? ''),
+          }))
+          .filter((s) => s.id || s.number);
+
       push(ref(database, 'dozvolsDocumentsHistoryV1'), {
           time: new Date().toLocaleString("ru-RU"),
           logist,
+          userRole: user?.role || '',
           documentName,
           details,
-          action
+          action,
+          permits,
+          permitCount: permits.length,
+          fileName: fileName || '',
+          snapshotVersion: 2,
       });
+  };
+
+  /** Состав документа на текущий момент — идёт в снимок события. */
+  const getCurrentDocumentItems = (): any[] => {
+    if (docType === 'Заявление на получение разрешений') return permitRows;
+    if (docType === 'Заявление по китайским копиям') return chinaRows;
+    if (docType === 'Реестр возврата разрешений') return returnRows;
+    return [];
   };
 
   // Get active return/China items lists
@@ -190,12 +262,24 @@ const formatApplicationDate = (value: string) => {
 
   // Initial rows construction
   useEffect(() => {
-    if (docType === "Заявление на получение разрешений") {
+    if (docType === DOC_APPLICATION) {
       if (permitRows.length === 0) {
         rebuildPermitRows();
       }
     }
   }, [todoTasks, dozvolsData, docType]);
+
+  /**
+   * Справочник печати приходит из Firebase асинхронно. Строки, собранные до его
+   * загрузки, оставались без государства и категории — и заявление нельзя было
+   * сформировать. Пересобираем такие строки, как только справочник дошёл,
+   * но только пока пользователь не начал править их вручную.
+   */
+  useEffect(() => {
+    if (docType !== DOC_APPLICATION) return;
+    if (Object.keys(permitPrintMappings || {}).length === 0) return;
+    if (permitRowsAutoBuiltRef.current) rebuildPermitRows();
+  }, [permitPrintMappings, docType]);
 
   useEffect(() => {
     const returnItems = getReturnItems();
@@ -240,12 +324,16 @@ const formatApplicationDate = (value: string) => {
     const newRows = Object.entries(totals).map(([typeName, qty]) => {
       const map = getPermitPrintMapping(typeName);
       return {
+        // Вид разрешения хранится в строке, чтобы проверка знала, положена ли
+        // этому виду категория вообще. Старые строки без type открываются как есть.
+        type: typeName,
         country: map.country || typeName,
         category: map.category || '',
         year: map.year || new Date().getFullYear(),
         qty
       };
     });
+    permitRowsAutoBuiltRef.current = true;
     setPermitRows(newRows);
   };
 
@@ -350,12 +438,15 @@ const formatApplicationDate = (value: string) => {
   const updatePermitRow = (index: number, field: string, value: any) => {
     const next = [...permitRows];
     next[index] = { ...next[index], [field]: value };
+    permitRowsAutoBuiltRef.current = false; // правки пользователя не перезаписываем
     setPermitRows(next);
   };
   const addPermitRow = () => {
+    permitRowsAutoBuiltRef.current = false;
     setPermitRows(prev => [...prev, { country: '', category: '', year: new Date().getFullYear(), qty: 1 }]);
   };
   const deletePermitRow = (index: number) => {
+    permitRowsAutoBuiltRef.current = false;
     setPermitRows(prev => prev.filter((_, i) => i !== index));
   };
 
@@ -412,7 +503,11 @@ const formatApplicationDate = (value: string) => {
       await showAlert("Пожалуйста, сначала выберите хотя бы один бланк из списка возвращаемых.");
       return;
     }
-    if (!(await showConfirm(`Вы действительно хотите перевести выбранные бланки в статус “Сдан в транспортную инспекцию”? Всего к списанию: ${checkedItems.length} шт.`))) {
+    if (!(await showConfirm(
+        `Бланки перейдут в статус «Сдан в транспортную инспекцию». Всего к списанию: ${checkedItems.length} шт.`,
+        'Списать бланки в ТИ',
+        { variant: 'danger', confirmLabel: 'Списать бланки' },
+      ))) {
       return;
     }
 
@@ -431,7 +526,7 @@ const formatApplicationDate = (value: string) => {
           logist,
           doc: `${item.type} №${item.number}`,
           action: "Изменен статус",
-          meta: `Статус: [Сдан в офис] ➔ [Сдан в транспортную инспекцию]`
+          meta: `Статус: [Сдан в офис] → [Сдан в транспортную инспекцию]`
         };
       });
 
@@ -443,7 +538,7 @@ const formatApplicationDate = (value: string) => {
       });
 
       update(ref(database), updates);
-      logDocumentHistory('Реестр сдачи использованных разрешений', `Сданы в инспекцию: ${checkedItems.length} бланков, Сдача 2 → Сдача 1`, 'Сданы в ТИ');
+      logDocumentHistory('Реестр сдачи использованных разрешений', `Сданы в инспекцию: ${checkedItems.length} бланков, Сдача 2 → Сдача 1`, 'Сданы в ТИ', checkedItems);
       toast(`Успешно переведено бланков в статус "Сданы в ТИ" (Архив): ${checkedItems.length} шт.`, 'success');
       setReturnRows([]);
     }
@@ -796,7 +891,7 @@ const formatApplicationDate = (value: string) => {
         URL.revokeObjectURL(url);
         a.remove();
         
-        logDocumentHistory(docType, 'Скачан как Word (' + filename + ')', 'DOCX');
+        logDocumentHistory(docType, 'Скачан как Word (' + filename + ')', 'DOCX', getCurrentDocumentItems(), filename);
     } catch (e) {
       console.error(e);
       toast("Ошибка при генерации по шаблону. Скачивание .doc резервной копии...", 'error');
@@ -816,10 +911,170 @@ const formatApplicationDate = (value: string) => {
         a.click();
         URL.revokeObjectURL(url);
         a.remove();
-        logDocumentHistory(docType, 'Скачан резервный .doc (' + filename + ')', 'DOC');
+        logDocumentHistory(docType, 'Скачан резервный .doc (' + filename + ')', 'DOC', getCurrentDocumentItems(), filename);
       } catch (e2) {
         console.error(e2);
       }
+    }
+  };
+
+
+  /**
+   * Имя PDF-файла: тип документа + номер дозвола + дата.
+   * Недопустимые для файловой системы символы удаляются.
+   */
+  const buildPdfFilename = (): string => {
+    const date = new Date().toLocaleDateString('ru-RU').replace(/\./g, '-');
+    let unit = '';
+    try {
+      if (docType === 'Заявление на получение разрешений' && permitRows.length > 0) {
+        unit = String(permitRows[0]?.number || permitRows[0]?.permitNumber || '');
+        if (permitRows.length > 1) unit = `${unit}_и_ещё_${permitRows.length - 1}`;
+      } else if (docType === 'Заявление по китайским копиям' && chinaRows.length > 0) {
+        unit = String(chinaRows[0]?.number || '');
+      } else if (docType === 'Реестр возврата разрешений' && returnRows.length > 0) {
+        unit = String(returnRows[0]?.number || '');
+      }
+    } catch {
+      unit = '';
+    }
+    const raw = [docType, unit, date].filter(Boolean).join('_');
+    const safe = raw
+      .replace(/[\\/:*?"<>|\n\r\t]+/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
+      .slice(0, 120);
+    return `${safe || 'Документ'}.pdf`;
+  };
+
+  /**
+   * Есть ли у вида разрешения категория в справочнике печати.
+   *
+   * Категория евро-разрешения есть не у всех видов: у России её нет ни во встроенных
+   * правилах, ни в справочнике. Поэтому пустая категория в строке сама по себе
+   * не ошибка — требовать её можно только там, где она действительно определена.
+   */
+  const typeHasCategory = (typeName: any): boolean => {
+    const t = String(typeName || '').trim();
+    if (!t) return false;
+    const compact = t.toUpperCase().replace(/[\s\-_.]/g, '');
+    let stored = permitPrintMappings[t];
+    if (!stored) {
+      const key = Object.keys(permitPrintMappings || {}).find(
+        (k) => String(k).trim().toUpperCase().replace(/[\s\-_.]/g, '') === compact,
+      );
+      if (key) stored = permitPrintMappings[key];
+    }
+    return String((stored || {}).category || '').trim().length > 0;
+  };
+
+  /**
+   * Проверка обязательных полей перед формированием файла.
+   *
+   * Набор обязательных полей зависит от типа документа, потому что документы разные
+   * по смыслу:
+   *
+   *  • «Заявление на получение разрешений» формируется по активным заявкам планёрки:
+   *    в нём указывают государство, вид (категорию) разрешения, год бланка и количество.
+   *    Номеров бланков у такого заявления нет в принципе, поэтому их нельзя требовать;
+   *  • «Заявление по китайским копиям» и «Реестр возврата разрешений» перечисляют уже
+   *    имеющиеся бланки — для них номер обязателен, и проверка сохранена.
+   */
+  const validateDocument = (): string | null => {
+    const hasText = (value: any) => String(value ?? '').trim().length > 0;
+    const hasPositiveInt = (value: any) => {
+      const n = parseInt(String(value ?? ''), 10);
+      return Number.isFinite(n) && n > 0;
+    };
+
+    if (docType === DOC_APPLICATION) {
+      if (permitRows.length === 0) {
+        return 'Добавьте хотя бы одну строку — без данных PDF не формируется.';
+      }
+      for (let i = 0; i < permitRows.length; i++) {
+        const row = permitRows[i];
+        const where = `«${docLabel}», строка ${i + 1}`;
+        if (!hasText(row?.country)) {
+          return `${where}: не указано государство — заполните его перед сохранением PDF.`;
+        }
+        // Категория обязательна, только если она определена для вида в справочнике:
+        // у России категории нет, и требовать её было бы ошибкой.
+        if (!hasText(row?.category) && typeHasCategory(row?.type)) {
+          return `${where}: не указан вид (категория) разрешения — заполните его в строке или задайте категорию у вида в справочнике.`;
+        }
+        if (!hasPositiveInt(row?.year)) {
+          return `${where}: не указан год бланка — заполните его перед сохранением PDF.`;
+        }
+        if (!hasPositiveInt(row?.qty)) {
+          return `${where}: не указано количество — заполните его перед сохранением PDF.`;
+        }
+      }
+      return null;
+    }
+
+    if (docType === DOC_CHINA) {
+      if (chinaRows.length === 0) {
+        return 'Выберите хотя бы один бланк для заявления по копиям.';
+      }
+      for (let i = 0; i < chinaRows.length; i++) {
+        if (!hasText(chinaRows[i]?.numbers)) {
+          return `«${docLabel}», строка ${i + 1}: не указаны номера бланков — заполните их перед сохранением PDF.`;
+        }
+      }
+      return null;
+    }
+
+    if (docType === DOC_RETURN) {
+      if (returnRows.length === 0) {
+        return 'В реестре возврата нет строк.';
+      }
+      for (let i = 0; i < returnRows.length; i++) {
+        if (!hasText(returnRows[i]?.numbers)) {
+          return `«${docLabel}», строка ${i + 1}: не указаны номера бланков — заполните их перед сохранением PDF.`;
+        }
+      }
+      return null;
+    }
+
+    return null;
+  };
+
+  /**
+   * «Скачать PDF»: файл формируется в приложении сразу, без диалога печати.
+   * Шаблон раскладывается в PDF текстом и векторными линиями
+   * (utils/pdf/htmlToTextPdf) — в файле настоящий выделяемый текст, не снимок.
+   */
+  /**
+   * «Скачать PDF»: файл формируется в приложении и скачивается сразу.
+   * Диалог печати, предпросмотр и новая вкладка не открываются — для печати
+   * есть отдельное действие «Печать».
+   *
+   * Текст в PDF остаётся текстом: его можно выделить, скопировать и найти
+   * поиском. Файл получает осмысленное имя и скачивается сразу.
+   */
+  const handleDownloadPdf = async () => {
+    if (isGeneratingPdf) return;
+
+    // Проверка полей именно этого типа документа (номер бланка для заявления не требуется)
+    const problem = validateDocument();
+    if (problem) {
+      return toast(problem, 'info');
+    }
+
+    const filename = buildPdfFilename();
+    setIsGeneratingPdf(true);
+    try {
+      const blob = await htmlToPdfBlob(getHtmlContent());
+      downloadBlob(blob, filename);
+      logDocumentHistory(docType, 'Сформирован PDF', 'PDF', getCurrentDocumentItems(), filename);
+      toast(`PDF скачан: ${filename}`, 'success');
+    } catch (e) {
+      console.error('[pdf] не удалось сформировать документ:', e);
+      const msg = e instanceof Error ? e.message : 'неизвестная ошибка';
+      toast(`PDF не сформирован: ${msg}`, 'error');
+    } finally {
+      setIsGeneratingPdf(false);
     }
   };
 
@@ -844,7 +1099,7 @@ const formatApplicationDate = (value: string) => {
             setTimeout(() => {
                 printWindow.print();
             }, 300);
-            logDocumentHistory(docType, 'Отправлен на печать', 'Печать');
+            logDocumentHistory(docType, 'Отправлен на печать', 'Печать', getCurrentDocumentItems());
             
             if (docType === "Заявление по китайским копиям" && useFirebase) {
               const checkedItems = getChinaCopyItems().filter((item: any) => selectedChinaItems[item.id]);
@@ -935,24 +1190,25 @@ const formatApplicationDate = (value: string) => {
   });
 
   return (
-    <div className="space-y-6">
- <div className="bg-white border border-slate-200/50 shadow-sm rounded-2xl overflow-hidden">
-        <div className="p-5 border-b border-slate-100">
-          <h2 className="text-sm font-bold text-slate-800">
-            Генератор документов бланков
-          </h2>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 bg-[#F3F4F6] text-[var(--accent-ink)] rounded-lg shrink-0">
+            <FileText className="w-3.5 h-3.5" />
+          </div>
+          <h2 className="text-sm font-semibold text-[#121316]">Генератор документов</h2>
         </div>
 
-        <div className="p-6 md:p-8 flex flex-col lg:flex-row gap-8">
-          <div className="w-full lg:w-1/2 space-y-5">
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+              <label className="text-[11px] font-medium text-[#6B7280] block">
                 Тип документа
               </label>
               <select
                 value={docType}
                 onChange={(e) => setDocType(e.target.value)}
-                className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                className="block w-full mt-1.5 px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-xs text-[#121316] focus:outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition"
               >
                 <option value="Заявление на получение разрешений">
                   Заявление на получение разрешений
@@ -967,12 +1223,12 @@ const formatApplicationDate = (value: string) => {
             </div>
 
             <div>
-                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">
+                <label className="text-[11px] font-medium text-[#6B7280] block mb-1">
                     Дата заявления / документа
                 </label>
                 <input 
                     type="date"
-                    className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                    className="block w-full mt-1.5 px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-xs text-[#121316] focus:outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition"
                     value={applicationDate}
                     onChange={e => setApplicationDate(e.target.value)}
                 />
@@ -980,7 +1236,7 @@ const formatApplicationDate = (value: string) => {
 
             {/* Подписант */}
             <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1.5">
+              <label className="text-[11px] font-medium text-[#6B7280] block mb-1">
                 Подписант
               </label>
               <select
@@ -990,48 +1246,49 @@ const formatApplicationDate = (value: string) => {
                   setSelectedSignee(val);
                   localStorage.setItem('ratipa_selected_signee', val);
                 }}
-                className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition cursor-pointer"
+                className="block w-full mt-1.5 px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-xs text-[#121316] focus:outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition cursor-pointer"
               >
                 <option value="В.В.Бориско">Директор Бориско В.В.</option>
                 <option value="С.Е.Терез">Начальник транспортного отдела Терез С.Е.</option>
               </select>
             </div>
-
-            <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-200/50">
-                <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                    {docType === "Заявление на получение разрешений" && "Документ формируется на основе активных заявок блока планерки."}
-                    {docType === "Реестр возврата разрешений" && "В реестр возвращаемых бланков попадают бланки со статусом 'Сдан в офис'."}
-                    {docType === "Заявление по китайским копиям" && "Собирается из китайских дозволов (CHN 2, CHN 3) со сданной копией."}
-                </p>
-            </div>
           </div>
 
-          <div className="w-full lg:w-1/2 rounded-2xl bg-slate-50/50 border border-slate-200/50 p-6 flex flex-col justify-center items-center text-center space-y-6">
-            <div className="bg-white p-4 rounded-full border border-slate-100 shadow-sm">
-              <FileText className="h-8 w-8 text-slate-500" />
-            </div>
-            <div>
-              <h3 className="text-slate-800 font-bold text-lg">
-                Подготовка завершена
-              </h3>
-              <p className="text-slate-500 text-xs font-medium max-w-sm mt-1.5 mx-auto leading-relaxed">
-                Вы можете сформировать файл Microsoft Word формата .doc для
-                дальнейшего редактирования, или сразу вывести печатную версию в
-                браузере.
-              </p>
-            </div>
+          <p className="text-xs text-[#6B7280] leading-relaxed">
+            {docType === "Заявление на получение разрешений" && "Документ формируется на основе активных заявок блока планерки."}
+            {docType === "Реестр возврата разрешений" && "В реестр возвращаемых бланков попадают бланки со статусом «Сдан в офис»."}
+            {docType === "Заявление по китайским копиям" && "Собирается из китайских дозволов (CHN 2, CHN 3) со сданной копией."}
+          </p>
 
-            <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs mx-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-[#E5E7EB]">
+            <p className="text-xs text-[#6B7280] leading-relaxed max-w-xl">
+              Документ формируется автоматически: PDF скачивается сразу отдельным файлом, без диалога печати.
+              Печатная версия и Microsoft Word (.doc) выгружаются отдельными действиями.
+              Имя PDF-файла собирается из типа документа, номера или названия и даты.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-2 sm:shrink-0">
+              <button
+                onClick={handleDownloadPdf}
+                disabled={isGeneratingPdf}
+                aria-busy={isGeneratingPdf}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--accent-solid)] hover:bg-[var(--accent-hover)] text-[var(--accent-on)] font-medium rounded-lg text-xs transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                title="Сформировать PDF из текущего документа и скачать его"
+              >
+                {isGeneratingPdf
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Формируется…</>
+                  : <><FileDown className="h-4 w-4" /> Скачать PDF</>}
+              </button>
               <button
                 onClick={handlePrintHTML}
-                className="flex-1 flex items-center justify-center gap-2 px-4 min-h-[44px] py-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-xl text-xs transition cursor-pointer border border-slate-200 shadow-sm"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-white hover:bg-[#F3F4F6] text-[#4B5563] font-medium rounded-lg text-xs transition-colors cursor-pointer border border-[#E5E7EB]"
               >
-                <Printer className="h-4 w-4 text-slate-400" />
+                <Printer className="h-4 w-4 text-[#9CA3AF]" />
                 Печать
               </button>
               <button
                 onClick={generateDocx}
-                className="flex-1 flex items-center justify-center gap-2 px-4 min-h-[44px] py-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl text-xs transition cursor-pointer shadow-sm"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-white hover:bg-[#F3F4F6] text-[#4B5563] font-medium rounded-lg text-xs transition-colors cursor-pointer border border-[#E5E7EB]"
               >
                 <Download className="h-4 w-4" />
                 Word (doc)
@@ -1043,60 +1300,68 @@ const formatApplicationDate = (value: string) => {
 
       {/* Dynamic item selectors and editable lists */}
       {(docType === "Заявление на получение разрешений") && (
- <div className="bg-white rounded-2xl border border-slate-200/50 shadow-sm p-6 space-y-6">
+ <div className="space-y-4">
           <div className="space-y-3">
-            <h3 className="text-sm font-bold text-slate-800">1. Выбор активных заявок планерки</h3>
+            <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-md bg-[#F3F4F6] text-[#6B7280] text-[10px] font-mono font-semibold flex items-center justify-center shrink-0">1</span>
+              <h3 className="text-sm font-semibold text-[#121316]">Выбор активных заявок планерки</h3>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={() => setAllPermitsChecked(true)} className="px-3.5 min-h-[44px] py-2 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Выбрать все</button>
-              <button onClick={() => setAllPermitsChecked(false)} className="px-3.5 min-h-[44px] py-2 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Снять все</button>
-              <button onClick={rebuildPermitRows} className="px-3.5 min-h-[44px] py-2 bg-slate-900 hover:bg-slate-800 shadow-sm text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по выбранным</button>
+              <button onClick={() => setAllPermitsChecked(true)} className="px-3 py-1.5 bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] text-[11px] font-medium rounded-lg cursor-pointer transition-colors">Выбрать все</button>
+              <button onClick={() => setAllPermitsChecked(false)} className="px-3 py-1.5 bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] text-[11px] font-medium rounded-lg cursor-pointer transition-colors">Снять все</button>
+              <button onClick={rebuildPermitRows} className="px-3 py-1.5 bg-[#121316] hover:bg-black text-white text-[11px] font-medium rounded-lg cursor-pointer transition-colors">Собрать по выбранным</button>
               <div className="flex-1 min-w-[200px]">
                 <input
                   type="text"
                   placeholder="Поиск заявок по машине или виду разрешения..."
                   value={taskSearchQuery}
                   onChange={(e) => setTaskSearchQuery(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-[11px] font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                  className="w-full px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-lg text-[11px] text-[#121316] focus:outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition"
                 />
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-3 bg-slate-50/50 border border-slate-200/50 rounded-2xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl">
               {filteredActiveTasks.map((task: any) => (
-                <label key={task.id} className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-2xl cursor-pointer hover:bg-slate-50/50 transition">
+                <label key={task.id} className="flex items-start gap-3 p-3 bg-white border border-[#E5E7EB] rounded-xl cursor-pointer hover:bg-[#F9FAFB] transition-colors">
                   <input 
                     type="checkbox" 
-                    className="mt-1 accent-slate-900" 
+                    className="mt-1 accent-[var(--accent-ui)]" 
                     checked={!!selectedPermitTasks[task.id]}
                     onChange={(e) => setSelectedPermitTasks(prev => ({ ...prev, [task.id]: e.target.checked }))}
                   />
                   <div>
-                    <span className="font-bold text-slate-900 text-xs">{task.car}</span>
+                    <span className="block text-[11px] font-medium text-[#4B5563] truncate" title={task.car}>
+                      {task.car}
+                    </span>
                     {task.note && <span className="block text-[10px] text-amber-600 font-semibold mb-0.5">{task.note}</span>}
-                    <span className="block text-[10px] text-slate-500 font-semibold mt-0.5">
+                    <span className="block text-[10px] text-[#6B7280] font-semibold mt-0.5">
                       {task.items.map((i: any) => `${i.type} × ${i.qty}`).join(', ')} · {task.createdAt}
                     </span>
                   </div>
                 </label>
               ))}
               {!activeTasks.length ? (
-                <div className="col-span-2 text-center text-slate-400 font-semibold text-xs py-6">В планерке нет активных заявок</div>
+                <div className="col-span-2 text-center text-[#9CA3AF] font-semibold text-xs py-6">В планерке нет активных заявок</div>
               ) : !filteredActiveTasks.length ? (
-                <div className="col-span-2 text-center text-slate-400 font-semibold text-xs py-6">Нет заявок, соответствующих поиску</div>
+                <div className="col-span-2 text-center text-[#9CA3AF] font-semibold text-xs py-6">Нет заявок, соответствующих поиску</div>
               ) : null}
             </div>
           </div>
 
-          <div className="space-y-3 pt-4 border-t border-slate-100">
+          <div className="space-y-3 pt-4 border-t border-[#E5E7EB]">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-800">2. Содержимое заявления (Редактируемые строки)</h3>
-              <button onClick={addPermitRow} className="flex items-center gap-1 bg-slate-900 hover:bg-slate-800 text-white px-3 min-h-[44px] py-2 rounded-xl text-[10px] font-semibold transition cursor-pointer">+ Добавить строку</button>
+              <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-md bg-[#F3F4F6] text-[#6B7280] text-[10px] font-mono font-semibold flex items-center justify-center shrink-0">2</span>
+              <h3 className="text-sm font-semibold text-[#121316]">Содержимое заявления</h3>
+            </div>
+              <button onClick={addPermitRow} title="Добавить строку" className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--accent-ink)] hover:bg-[var(--accent-15)] px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0"><Plus className="w-3.5 h-3.5" />Добавить</button>
             </div>
 
-            <div className="table-responsive select-none overflow-x-auto custom-scrollbar border border-slate-200/50 rounded-2xl bg-white">
+            <div className="table-responsive select-none overflow-x-auto custom-scrollbar border border-[#E5E7EB] rounded-xl">
               <table className="main-table w-full text-xs">
                 <thead>
-                  <tr className="bg-slate-50/50 border-b border-slate-200 text-[10px] font-bold uppercase text-slate-400">
+                  <tr className="border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">
                     <th className="p-3 text-left">Государство</th>
                     <th className="p-3 text-left">Вид (категория) разрешения</th>
                     <th className="p-3 w-28 text-center">Год бланка</th>
@@ -1106,22 +1371,33 @@ const formatApplicationDate = (value: string) => {
                 </thead>
                 <tbody>
                   {permitRows.map((row, index) => (
-                    <tr key={index} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
-                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.country} onChange={e => updatePermitRow(index, 'country', e.target.value)} /></td>
-                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.category} onChange={e => updatePermitRow(index, 'category', e.target.value)} /></td>
-                      <td className="p-2 text-center"><input type="number" className="w-20 px-2 py-1 bg-transparent border-0 text-center font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.year} onChange={e => updatePermitRow(index, 'year', e.target.value)} /></td>
-                      <td className="p-2 text-center"><input type="number" min="1" className="w-20 px-2 py-1 bg-transparent border-0 text-center font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.qty} onChange={e => updatePermitRow(index, 'qty', e.target.value)} /></td>
+                    <tr key={index} className="border-b border-[#E5E7EB] last:border-0 hover:bg-[#F3F4F6]">
+                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-semibold text-[#121316] outline-none focus:bg-[#F3F4F6] rounded-md" value={row.country} onChange={e => updatePermitRow(index, 'country', e.target.value)} /></td>
+                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-semibold text-[#121316] outline-none focus:bg-[#F3F4F6] rounded-md" value={row.category} onChange={e => updatePermitRow(index, 'category', e.target.value)} /></td>
+                      <td className="p-2 text-center"><input type="number" className="w-20 px-2 py-1 bg-transparent border-0 text-center font-semibold text-[#121316] outline-none focus:bg-[#F3F4F6] rounded-md" value={row.year} onChange={e => updatePermitRow(index, 'year', e.target.value)} /></td>
+                      <td className="p-2 text-center"><input type="number" min="1" className="w-20 px-2 py-1 bg-transparent border-0 text-center font-semibold text-[#121316] outline-none focus:bg-[#F3F4F6] rounded-md" value={row.qty} onChange={e => updatePermitRow(index, 'qty', e.target.value)} /></td>
                       <td className="p-2 text-center">
-                        <button onClick={() => deletePermitRow(index)} className="min-h-[44px] min-w-[44px] rounded-lg text-rose-500 hover:bg-rose-50 transition flex items-center justify-center mx-auto cursor-pointer">✕</button>
+                        <button onClick={() => deletePermitRow(index)} className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 transition-colors flex items-center justify-center mx-auto cursor-pointer"><X className="w-3.5 h-3.5" /></button>
                       </td>
                     </tr>
                   ))}
                   {!permitRows.length && (
                     <tr>
-                      <td colSpan={5} className="text-center p-8 text-slate-400 font-semibold uppercase">Список строк заявления пуст</td>
+                      <td colSpan={5} className="text-center py-8 text-xs text-[#6B7280]">Список строк заявления пуст</td>
                     </tr>
                   )}
                 </tbody>
+                <tfoot>
+                  <tr className="bg-[#F9FAFB]">
+                    <td colSpan={3} className="px-3 py-2.5 text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">
+                      Итого
+                    </td>
+                    <td className="px-2 py-2.5 text-center text-xs font-semibold font-mono tabular-nums text-[#121316]">
+                      {permitRows.reduce((sum: number, r: any) => sum + (parseInt(r.qty) || 0), 0)}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
@@ -1129,16 +1405,19 @@ const formatApplicationDate = (value: string) => {
       )}
 
       {docType === "Реестр возврата разрешений" && (
- <div className="bg-white rounded-2xl border border-slate-200/50 shadow-sm p-6 space-y-6">
+ <div className="space-y-4">
           <div className="space-y-2">
-            <h3 className="text-sm font-bold text-slate-800">1. Выбор бланков, сданных в офис</h3>
+            <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-md bg-[#F3F4F6] text-[#6B7280] text-[10px] font-mono font-semibold flex items-center justify-center shrink-0">1</span>
+              <h3 className="text-sm font-semibold text-[#121316]">Выбор бланков, сданных в офис</h3>
+            </div>
             <div className="flex flex-wrap gap-2 items-center">
-              <button onClick={() => setAllReturnsChecked(true)} className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Выбрать все</button>
-              <button onClick={() => setAllReturnsChecked(false)} className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Снять все</button>
-              <button onClick={rebuildReturnRows} className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 shadow-sm text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по выбранным</button>
-              <button onClick={loadLastAssembledStatement} className="px-3 min-h-[44px] py-2 bg-white border border-slate-200 hover:bg-slate-50 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по предыдущим</button>
-              <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-600 bg-slate-100 px-3.5 min-h-[44px] py-2 rounded-xl cursor-pointer">
-                <input type="checkbox" checked={showArchiveReturns} onChange={(e) => setShowArchiveReturns(e.target.checked)} className="accent-slate-900" />
+              <button onClick={() => setAllReturnsChecked(true)} className="px-3 py-1.5 bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] text-[11px] font-medium rounded-lg cursor-pointer transition-colors">Выбрать все</button>
+              <button onClick={() => setAllReturnsChecked(false)} className="px-3 py-1.5 bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] text-[11px] font-medium rounded-lg cursor-pointer transition-colors">Снять все</button>
+              <button onClick={rebuildReturnRows} className="px-3 py-1.5 bg-[#121316] hover:bg-black text-white text-[11px] font-medium rounded-lg cursor-pointer transition-colors">Собрать по выбранным</button>
+              <button onClick={loadLastAssembledStatement} className="px-3 py-1.5 bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] text-[11px] font-medium rounded-lg cursor-pointer transition-colors">Собрать по предыдущим</button>
+              <label className="flex items-center gap-2 text-[10px] font-semibold text-[#4B5563] bg-[#F3F4F6] px-3.5 py-2 rounded-xl cursor-pointer">
+                <input type="checkbox" checked={showArchiveReturns} onChange={(e) => setShowArchiveReturns(e.target.checked)} className="accent-[var(--accent-ui)]" />
                 Включить уже сданные в ТИ (Архив)
               </label>
               <div className="flex-1 min-w-[200px]">
@@ -1147,53 +1426,56 @@ const formatApplicationDate = (value: string) => {
                   placeholder="Поиск бланков по номеру, типу или машине..."
                   value={returnSearchQuery}
                   onChange={(e) => setReturnSearchQuery(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-[11px] font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                  className="w-full px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-lg text-[11px] text-[#121316] focus:outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition"
                 />
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-3 bg-slate-50/50 border border-slate-200/50 rounded-2xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl">
               {filteredActiveReturns.map((item: any) => (
-                <label key={item.id} className="flex items-start gap-3 p-3 bg-white border border-slate-100 rounded-2xl cursor-pointer hover:bg-slate-50/50 transition">
+                <label key={item.id} className="flex items-start gap-3 p-3 bg-white border border-[#E5E7EB] rounded-xl cursor-pointer hover:bg-[#F9FAFB] transition-colors">
                   <input 
                      type="checkbox" 
-                     className="mt-1 accent-slate-900" 
+                     className="mt-1 accent-[var(--accent-ui)]" 
                      checked={!!selectedReturnItems[item.id]}
                      onChange={(e) => setSelectedReturnItems(prev => ({ ...prev, [item.id]: e.target.checked }))}
                   />
                   <div>
-                    <span className="font-bold text-slate-900 text-xs">{item.type} №{item.number}</span>
-                    <span className="block text-[10px] text-slate-500 font-semibold mt-0.5">
+                    <span className="font-semibold text-[#121316] text-xs">{item.type} №{item.number}</span>
+                    <span className="block text-[10px] text-[#6B7280] font-semibold mt-0.5">
                       {getPermitPrintMapping(item.type).country || item.type} · {item.car || 'без авто'} · {item.isCopy ? 'копия сдана' : 'оригинал'}
                     </span>
                   </div>
                 </label>
               ))}
               {!activeReturns.length ? (
-                <div className="col-span-2 text-center text-slate-400 font-semibold text-xs py-6">В реестре офиса нет сданных бланков</div>
+                <div className="col-span-2 text-center text-[#9CA3AF] font-semibold text-xs py-6">В реестре офиса нет сданных бланков</div>
               ) : !filteredActiveReturns.length ? (
-                <div className="col-span-2 text-center text-slate-400 font-semibold text-xs py-6">Нет бланков, соответствующих поиску</div>
+                <div className="col-span-2 text-center text-[#9CA3AF] font-semibold text-xs py-6">Нет бланков, соответствующих поиску</div>
               ) : null}
             </div>
           </div>
 
-          <div className="space-y-3 pt-4 border-t border-slate-100">
+          <div className="space-y-3 pt-4 border-t border-[#E5E7EB]">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-800">2. Содержимое реестра (Редактируемые строки)</h3>
+              <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-md bg-[#F3F4F6] text-[#6B7280] text-[10px] font-mono font-semibold flex items-center justify-center shrink-0">2</span>
+              <h3 className="text-sm font-semibold text-[#121316]">Содержимое реестра</h3>
+            </div>
               <div className="flex gap-2">
                 {user.role === 'root_admin' && (
-                  <button onClick={markCheckedOfficeReturnsAsUsed} className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-3 min-h-[44px] py-2 rounded-xl text-[10px] font-semibold transition cursor-pointer shadow-xs">
+                  <button onClick={markCheckedOfficeReturnsAsUsed} className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl text-[10px] font-semibold transition cursor-pointer shadow-xs">
                     <CheckCircle className="h-3.5 w-3.5" /> Списать (Сданы в инспекцию ТИ)
                   </button>
                 )}
-                <button onClick={addReturnRow} className="flex items-center gap-1 bg-slate-900 hover:bg-slate-800 text-white px-3 min-h-[44px] py-2 rounded-xl text-[10px] font-semibold transition cursor-pointer">+ Добавить строку</button>
+                <button onClick={addReturnRow} title="Добавить строку" className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--accent-ink)] hover:bg-[var(--accent-15)] px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0"><Plus className="w-3.5 h-3.5" />Добавить</button>
               </div>
             </div>
 
-            <div className="table-responsive select-none overflow-x-auto custom-scrollbar border border-slate-200/50 rounded-2xl bg-white">
+            <div className="table-responsive select-none overflow-x-auto custom-scrollbar border border-[#E5E7EB] rounded-xl">
               <table className="main-table w-full text-xs">
                 <thead>
-                  <tr className="bg-slate-50/50 border-b border-slate-200 text-[10px] font-bold uppercase text-slate-400">
+                  <tr className="border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">
                     <th className="p-3 text-left">Государство</th>
                     <th className="p-3 text-left">Вид бланков</th>
                     <th className="p-3 w-24 text-center">Год</th>
@@ -1204,23 +1486,34 @@ const formatApplicationDate = (value: string) => {
                 </thead>
                 <tbody>
                   {returnRows.map((row, index) => (
-                    <tr key={index} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
-                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.country} onChange={e => updateReturnRow(index, 'country', e.target.value)} /></td>
-                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.category} onChange={e => updateReturnRow(index, 'category', e.target.value)} /></td>
-                      <td className="p-2 text-center"><input type="number" className="w-16 px-2 py-1 bg-transparent border-0 text-center font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.year} onChange={e => updateReturnRow(index, 'year', e.target.value)} /></td>
-                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-mono font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.numbers} onChange={e => updateReturnRow(index, 'numbers', e.target.value)} /></td>
-                      <td className="p-2 text-center"><input type="number" min="1" className="w-16 px-2 py-1 bg-transparent border-0 text-center font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.qty} onChange={e => updateReturnRow(index, 'qty', e.target.value)} /></td>
+                    <tr key={index} className="border-b border-[#E5E7EB] last:border-0 hover:bg-[#F3F4F6]">
+                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-semibold text-[#121316] outline-none focus:bg-[#F3F4F6] rounded-md" value={row.country} onChange={e => updateReturnRow(index, 'country', e.target.value)} /></td>
+                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-semibold text-[#121316] outline-none focus:bg-[#F3F4F6] rounded-md" value={row.category} onChange={e => updateReturnRow(index, 'category', e.target.value)} /></td>
+                      <td className="p-2 text-center"><input type="number" className="w-16 px-2 py-1 bg-transparent border-0 text-center font-semibold text-[#121316] outline-none focus:bg-[#F3F4F6] rounded-md" value={row.year} onChange={e => updateReturnRow(index, 'year', e.target.value)} /></td>
+                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-mono font-semibold text-[#121316] outline-none focus:bg-[#F3F4F6] rounded-md" value={row.numbers} onChange={e => updateReturnRow(index, 'numbers', e.target.value)} /></td>
+                      <td className="p-2 text-center"><input type="number" min="1" className="w-16 px-2 py-1 bg-transparent border-0 text-center font-semibold text-[#121316] outline-none focus:bg-[#F3F4F6] rounded-md" value={row.qty} onChange={e => updateReturnRow(index, 'qty', e.target.value)} /></td>
                       <td className="p-2 text-center">
-                        <button onClick={() => deleteReturnRow(index)} className="min-h-[44px] min-w-[44px] rounded-lg text-rose-500 hover:bg-rose-50 transition flex items-center justify-center mx-auto cursor-pointer">✕</button>
+                        <button onClick={() => deleteReturnRow(index)} className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 transition-colors flex items-center justify-center mx-auto cursor-pointer"><X className="w-3.5 h-3.5" /></button>
                       </td>
                     </tr>
                   ))}
                   {!returnRows.length && (
                     <tr>
-                      <td colSpan={6} className="text-center p-8 text-slate-400 font-semibold uppercase">Список строк реестра пуст</td>
+                      <td colSpan={6} className="text-center py-8 text-xs text-[#6B7280]">Список строк реестра пуст</td>
                     </tr>
                   )}
                 </tbody>
+                <tfoot>
+                  <tr className="bg-[#F9FAFB]">
+                    <td colSpan={4} className="px-3 py-2.5 text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">
+                      Итого
+                    </td>
+                    <td className="px-2 py-2.5 text-center text-xs font-semibold font-mono tabular-nums text-[#121316]">
+                      {returnRows.reduce((sum: number, r: any) => sum + (parseInt(r.qty) || 0), 0)}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
@@ -1228,70 +1521,76 @@ const formatApplicationDate = (value: string) => {
       )}
 
       {docType === "Заявление по китайским копиям" && (
- <div className="bg-white rounded-2xl border border-slate-200/50 shadow-sm p-6 space-y-6">
+ <div className="space-y-4">
           <div className="space-y-2">
-            <h3 className="text-sm font-bold text-slate-800">1. Выбор сданных китайских копий</h3>
+            <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-md bg-[#F3F4F6] text-[#6B7280] text-[10px] font-mono font-semibold flex items-center justify-center shrink-0">1</span>
+              <h3 className="text-sm font-semibold text-[#121316]">Выбор сданных китайских копий</h3>
+            </div>
             <div className="flex flex-wrap gap-2 items-center">
-              <button onClick={() => setAllChinaChecked(true)} className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Выбрать все</button>
-              <button onClick={() => setAllChinaChecked(false)} className="px-3 py-1.5 bg-white border border-slate-200 hover:border-slate-300 shadow-sm text-slate-700 text-[10px] font-semibold rounded-xl cursor-pointer transition">Снять все</button>
-              <button onClick={rebuildChinaRows} className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 shadow-sm text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Собрать по выбранным</button>
-              <label className="flex items-center gap-2 text-[10px] font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 shadow-sm px-3.5 min-h-[44px] py-2 rounded-xl cursor-pointer transition">
-                <input type="checkbox" checked={showArchiveChina} onChange={(e) => setShowArchiveChina(e.target.checked)} className="accent-slate-900" />
+              <button onClick={() => setAllChinaChecked(true)} className="px-3 py-1.5 bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] text-[11px] font-medium rounded-lg cursor-pointer transition-colors">Выбрать все</button>
+              <button onClick={() => setAllChinaChecked(false)} className="px-3 py-1.5 bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] text-[11px] font-medium rounded-lg cursor-pointer transition-colors">Снять все</button>
+              <button onClick={rebuildChinaRows} className="px-3 py-1.5 bg-[#121316] hover:bg-black text-white text-[11px] font-medium rounded-lg cursor-pointer transition-colors">Собрать по выбранным</button>
+              <label className="flex items-center gap-2 text-[11px] font-medium text-[#4B5563] bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] px-3 py-1.5 rounded-lg cursor-pointer transition-colors">
+                <input type="checkbox" checked={showArchiveChina} onChange={(e) => setShowArchiveChina(e.target.checked)} className="accent-[var(--accent-ui)]" />
                 Включить уже сданные в ТИ (Архив)
               </label>
-              <button onClick={() => markSelectedChinaCopiesAsSubmitted(true)} className="px-3.5 min-h-[44px] py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Пометить как отправленные в ТИ</button>
-              <button onClick={() => markSelectedChinaCopiesAsSubmitted(false)} className="px-3.5 min-h-[44px] py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Сбросить отметку сдачи</button>
+              <button onClick={() => markSelectedChinaCopiesAsSubmitted(true)} className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Пометить как отправленные в ТИ</button>
+              <button onClick={() => markSelectedChinaCopiesAsSubmitted(false)} className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Сбросить отметку сдачи</button>
               <div className="flex-1 min-w-[200px]">
                 <input
                   type="text"
                   placeholder="Поиск копий по номеру или машине..."
                   value={chinaSearchQuery}
                   onChange={(e) => setChinaSearchQuery(e.target.value)}
-                  className="w-full px-3 py-1.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-[11px] font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition"
+                  className="w-full px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-lg text-[11px] text-[#121316] focus:outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition"
                 />
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-3 bg-slate-50/50 border border-slate-200/50 rounded-2xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl">
               {filteredActiveChinaCopies.map((item: any) => (
-                <label key={item.id} className={`flex items-start gap-3 p-3 border rounded-2xl cursor-pointer hover:bg-slate-50/50 transition ${item.chinaCopySubmitted ? 'bg-purple-50/20 border-purple-100/40' : 'bg-white border-slate-100'}`}>
+                <label key={item.id} className={`flex items-start gap-3 p-3 border rounded-2xl cursor-pointer hover:bg-[#F3F4F6] transition ${item.chinaCopySubmitted ? 'bg-[#F9FAFB] border-[#E5E7EB]' : 'bg-white border-[#E5E7EB]'}`}>
                   <input 
                     type="checkbox" 
-                    className="mt-1 accent-purple-600" 
+                    className="mt-1 accent-[var(--accent-ui)]" 
                     checked={!!selectedChinaItems[item.id]}
                     onChange={(e) => setSelectedChinaItems(prev => ({ ...prev, [item.id]: e.target.checked }))}
                   />
                   <div>
-                    <span className="font-bold text-slate-900 text-xs">
+                    <span className="font-semibold text-[#121316] text-xs">
                       {item.type} №{item.number}
                       {item.chinaCopySubmitted && (
-                        <span className="ml-2 bg-purple-100 text-purple-700 text-[8px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Копия сдана/отправлена</span>
+                        <span className="ml-2 bg-[#F3F4F6] text-[#4B5563] text-[8px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider">Копия сдана/отправлена</span>
                       )}
                     </span>
-                    <span className="block text-[10px] text-slate-500 font-semibold mt-0.5">
+                    <span className="block text-[10px] text-[#6B7280] font-semibold mt-0.5">
                       {item.car || 'без авто'} · {getStatusLabel(item.status)}
                     </span>
                   </div>
                 </label>
               ))}
               {!activeChinaCopies.length ? (
-                <div className="col-span-2 text-center text-slate-400 font-semibold text-xs py-6">Нет китайских дозволов с отметкой 'копия сдана'</div>
+                <div className="col-span-2 text-center text-[#9CA3AF] font-semibold text-xs py-6">Нет китайских дозволов с отметкой 'копия сдана'</div>
               ) : !filteredActiveChinaCopies.length ? (
-                <div className="col-span-2 text-center text-slate-400 font-semibold text-xs py-6 font-mono">Нет копий, соответствующих поиску</div>
+                <div className="col-span-2 text-center text-[#9CA3AF] font-semibold text-xs py-6 font-mono">Нет копий, соответствующих поиску</div>
               ) : null}
             </div>
           </div>
 
-          <div className="space-y-3 pt-4 border-t border-slate-100">
+          <div className="space-y-3 pt-4 border-t border-[#E5E7EB]">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-800">2. Содержимое заявления по копиям (Редактируемые строки)</h3>
-              <button onClick={addChinaRow} className="flex items-center gap-1 bg-slate-900 hover:bg-slate-800 text-white px-3 min-h-[44px] py-2 rounded-xl text-[10px] font-semibold transition cursor-pointer">+ Добавить строку</button>
+              <div className="flex items-center gap-2">
+              <span className="w-5 h-5 rounded-md bg-[#F3F4F6] text-[#6B7280] text-[10px] font-mono font-semibold flex items-center justify-center shrink-0">2</span>
+              <h3 className="text-sm font-semibold text-[#121316]">Содержимое заявления по копиям</h3>
+            </div>
+              <button onClick={addChinaRow} title="Добавить строку" className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--accent-ink)] hover:bg-[var(--accent-15)] px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0"><Plus className="w-3.5 h-3.5" />Добавить</button>
             </div>
 
-            <div className="table-responsive select-none overflow-x-auto custom-scrollbar border border-slate-200/50 rounded-2xl bg-white">
+            <div className="table-responsive select-none overflow-x-auto custom-scrollbar border border-[#E5E7EB] rounded-xl">
               <table className="main-table w-full text-xs">
                 <thead>
-                  <tr className="bg-slate-50/50 border-b border-slate-200 text-[10px] font-bold uppercase text-slate-400">
+                  <tr className="border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">
                     <th className="p-3 w-48 text-left">Страна</th>
                     <th className="p-3 text-left">Номера разрешений</th>
                     <th className="p-3 w-16 text-center">Убрать</th>
@@ -1299,20 +1598,36 @@ const formatApplicationDate = (value: string) => {
                 </thead>
                 <tbody>
                   {chinaRows.map((row, index) => (
-                    <tr key={index} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
-                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.country} onChange={e => updateChinaRow(index, 'country', e.target.value)} /></td>
-                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-mono font-semibold text-slate-800 outline-none focus:bg-slate-50 rounded" value={row.numbers} onChange={e => updateChinaRow(index, 'numbers', e.target.value)} /></td>
+                    <tr key={index} className="border-b border-[#E5E7EB] last:border-0 hover:bg-[#F3F4F6]">
+                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-semibold text-[#121316] outline-none focus:bg-[#F3F4F6] rounded-md" value={row.country} onChange={e => updateChinaRow(index, 'country', e.target.value)} /></td>
+                      <td className="p-2"><input className="w-full px-2 py-1 bg-transparent border-0 font-mono font-semibold text-[#121316] outline-none focus:bg-[#F3F4F6] rounded-md" value={row.numbers} onChange={e => updateChinaRow(index, 'numbers', e.target.value)} /></td>
                       <td className="p-2 text-center">
-                        <button onClick={() => deleteChinaRow(index)} className="min-h-[44px] min-w-[44px] rounded-lg text-rose-500 hover:bg-rose-50 transition flex items-center justify-center mx-auto cursor-pointer">✕</button>
+                        <button onClick={() => deleteChinaRow(index)} className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 transition-colors flex items-center justify-center mx-auto cursor-pointer"><X className="w-3.5 h-3.5" /></button>
                       </td>
                     </tr>
                   ))}
                   {!chinaRows.length && (
                     <tr>
-                      <td colSpan={3} className="text-center p-8 text-slate-400 font-semibold uppercase">Список строк заявления пуст</td>
+                      <td colSpan={3} className="text-center py-8 text-xs text-[#6B7280]">Список строк заявления пуст</td>
                     </tr>
                   )}
                 </tbody>
+                <tfoot>
+                  <tr className="bg-[#F9FAFB]">
+                    <td className="px-3 py-2.5 text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">
+                      Итого: {chinaRows.length} стр.
+                    </td>
+                    <td className="px-3 py-2.5 text-xs font-semibold font-mono tabular-nums text-[#121316]">
+                      {chinaRows.reduce(
+                        (sum: number, r: any) =>
+                          sum + String(r.numbers || '').split(',').filter((n: string) => n.trim()).length,
+                        0,
+                      )}{' '}
+                      шт.
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>

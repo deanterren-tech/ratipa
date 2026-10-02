@@ -1,5 +1,6 @@
 import {useState} from 'react'
 import {Calendar} from 'lucide-react'
+import {UI} from '../../ui/kit'
 
 export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCalculated: (days: number) => void }) {
   const [startDate, setStartDate] = useState('');
@@ -22,36 +23,43 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
   const totalDays = calculateDays(startDate, endDate);
 
   return (
- <div className="bg-white p-6 rounded-[2rem] border border-slate-200/50 h-full flex flex-col gap-4 shadow-xl shadow-slate-900/5">
-      <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-        <Calendar className="w-4 h-4 text-[#3765F6]" />
-        Калькулятор дней
-      </h3>
-      
-      <div className="grid grid-cols-2 gap-3">
+    <div className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-5 flex flex-col gap-4 h-full">
+      <div className="flex items-center gap-2.5 pb-3 border-b border-[#E5E7EB]">
+        <div className="p-2 bg-[#F3F4F6] text-[#A55329] rounded-lg shrink-0">
+          <Calendar className="w-4 h-4" aria-hidden="true" />
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-[#121316]">Калькулятор дней</h3>
+          <p className="text-xs text-[#6B7280]">Период рейса — даты начала и конца</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Дата начала</label>
-          <input 
-            type="date" 
-            value={startDate} 
-            onChange={(e) => { setStartDate(e.target.value); handleDateChange(e.target.value, endDate); }} 
-            className="w-full bg-white/45 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 focus:bg-white transition cursor-pointer shadow-inner" 
+          <label className={UI.fieldLabel} htmlFor="salary-days-start">Дата начала</label>
+          <input
+            id="salary-days-start"
+            type="date"
+            value={startDate}
+            onChange={(e) => { setStartDate(e.target.value); handleDateChange(e.target.value, endDate); }}
+            className={`${UI.input} cursor-pointer`}
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Дата конца</label>
-          <input 
-            type="date" 
-            value={endDate} 
-            onChange={(e) => { setEndDate(e.target.value); handleDateChange(startDate, e.target.value); }} 
-            className="w-full bg-white/45 border border-slate-200/50 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 focus:bg-white transition cursor-pointer shadow-inner" 
+          <label className={UI.fieldLabel} htmlFor="salary-days-end">Дата конца</label>
+          <input
+            id="salary-days-end"
+            type="date"
+            value={endDate}
+            onChange={(e) => { setEndDate(e.target.value); handleDateChange(startDate, e.target.value); }}
+            className={`${UI.input} cursor-pointer`}
           />
         </div>
       </div>
-      
-      <div className="mt-auto pt-4 border-t border-slate-200/50 flex items-center justify-between bg-slate-50/40 -mx-6 -mb-6 p-6 rounded-b-[2rem]">
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Всего дней в рейсе:</span>
-        <span className="text-2xl font-bold text-[#3765F6] font-mono tracking-tight bg-white px-3 py-1 rounded-xl border border-slate-200/30 shadow-3xs">{totalDays}</span>
+
+      <div className="mt-auto pt-4 border-t border-[#E5E7EB] flex items-center justify-between gap-3">
+        <span className={UI.caption}>Всего дней в рейсе</span>
+        <span className="text-2xl font-mono font-semibold tabular-nums text-[#121316]">{totalDays}</span>
       </div>
     </div>
   );

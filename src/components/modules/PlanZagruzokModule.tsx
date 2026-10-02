@@ -46,8 +46,6 @@ export default function PlanZagruzokModule({ user }: { user: UserProfile }) {
       title="План загрузок"
       subtitle="Планирование загрузок, чёрные списки и мониторинг"
       icon={FileSpreadsheet}
-      iconWrapClass="bg-violet-500/10 border-violet-500/20"
-      iconColorClass="text-violet-600"
       tabs={allowedTabs}
       gpsUrls={gpsUrls}
       gpsEnabled={false}

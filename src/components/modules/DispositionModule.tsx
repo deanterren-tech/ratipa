@@ -30,8 +30,6 @@ export default function DispositionModule({ user }: { user: UserProfile }) {
       title="Диспозиция"
       subtitle="Полная таблица с информацией о местонахождении авто, статусах и комментариях"
       icon={Map}
-      iconWrapClass="bg-orange-500/10 border-orange-500/20"
-      iconColorClass="text-orange-600"
       tabs={tabs}
       gpsUrls={gpsUrls}
       showTabs={false}

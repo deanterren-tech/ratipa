@@ -8,35 +8,12 @@ import CouplingDirectoryEditor from './CouplingDirectoryEditor';
 import DirectoriesModule from './DirectoriesModule';
 import DriverDirectoryBlock from './directories/DriverDirectoryBlock';
 import DistanceDirectoryBlock from './directories/DistanceDirectoryBlock';
-import { 
-  Settings, 
-  Plus,
-  Trash2,
-  Anchor,
-  Compass,
-  ExternalLink,
-  Lock,
-  Truck,
-  Wallet,
-  MapPin,
-  TrendingUp,
-  Edit2,
-  Users,
-  Search,
-  Check,
-  X,
-  Info,
-  Globe,
-  Navigation,
-  FileText,
-  Layers,
-  Link,
-  RefreshCw,
-  BookOpen
-} from 'lucide-react';
+import {Lock, Wallet, Layers, AlertTriangle} from 'lucide-react';
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
 import {formatDriverShortName} from '../../utils/driverSync'
+import {UI} from '../../ui/kit'
+import {ModuleShell, SectionHeader} from '../../ui/components'
 
 interface SettingsModuleProps {
   user: UserProfile;
@@ -50,7 +27,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const [pdSettings, setPdSettings] = useState<any>({ useDistanceLookup: false, googleMapsApiKey: '' });
   
   // Navigation Tab State
-  const [activeTab, setActiveTab] = useState<'fleet' | 'drivers' | 'system' | 'directories'>('fleet');
+  const [activeTab, setActiveTab] = useState<'fleet' | 'drivers' | 'system' | 'directories' | 'distances'>('fleet');
 
   // Search states for directories
   const [carSearch, setCarSearch] = useState('');
@@ -868,10 +845,10 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   // Guard view options
   if (user.permissions.settings === 'none') {
     return (
-      <div className="bg-white rounded-2xl p-8 shadow-sm border border-slate-200/50 text-center flex flex-col justify-center items-center py-24 select-none">
-        <Lock className="h-12 w-12 text-slate-400 mb-4" style={{ strokeWidth: 1.5 }} />
-        <span className="text-sm font-bold text-slate-900 uppercase font-mono tracking-wider">Раздел заблокирован</span>
-        <p className="text-xs text-slate-500 max-w-xs mt-2 font-medium">
+      <div className="py-24 text-center select-none flex flex-col items-center justify-center">
+        <Lock className="w-10 h-10 text-[#9CA3AF] mb-3" aria-hidden="true" />
+        <p className="text-sm font-semibold text-[#121316]">Раздел заблокирован</p>
+        <p className="text-xs text-[#6B7280] max-w-xs mt-2">
           Просмотр справочников закрыт в соответствии с политикой администратора.
         </p>
       </div>
@@ -907,140 +884,92 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     name.toLowerCase().includes(directionSearch.toLowerCase())
   );
 
-  // Tabs structure with design details and icons
+  // Tabs structure
   const tabList = [
-    { id: 'fleet', label: 'Автопарк и Водители', icon: Truck, count: filteredKnownFleet.length + filteredDrivers.length },
-    { id: 'drivers', label: 'База водителей', icon: Users, count: filteredDrivers.length },
-    { id: 'distances', label: 'Расстояния', icon: Navigation, count: distances.length },
-    { id: 'directories', label: 'Реестры данных', icon: BookOpen, count: 0 },
-    { id: 'system', label: 'Системные Настройки', icon: Settings, count: 0 }
+    { id: 'fleet', label: 'Автопарк и Водители', count: filteredKnownFleet.length + filteredDrivers.length },
+    { id: 'drivers', label: 'База водителей', count: filteredDrivers.length },
+    { id: 'distances', label: 'Расстояния', count: distances.length },
+    { id: 'directories', label: 'Реестры данных', count: 0 },
+    { id: 'system', label: 'Системные Настройки', count: 0 }
   ] as const;
 
   return (
-    <div className="w-full space-y-6 font-sans">
-      
-      {/* HEADER BAR */}
-      <div className="bg-white rounded-2xl p-6 lg:p-8 border border-slate-200/50 shadow-sm">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div>
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">Справочники</span>
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-              <Settings className="w-7 h-7 text-slate-800" />
-              <span>Справочники</span>
-            </h1>
-            <p className="text-xs text-slate-400 mt-1 font-medium">
-              Системные реестры, тарифные сетки, коэффициенты и интеграционные ключи RATIPA
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-[10px] bg-slate-100 text-slate-500 font-bold px-3 py-1.5 rounded-full font-mono uppercase border border-slate-200">
-            <Layers className="w-3.5 h-3.5 text-slate-400" />
-            <span>{isWritePermitted ? 'Редактирование' : 'Только чтение'}</span>
-          </div>
-        </div>
+    <ModuleShell
+      title="Справочники"
+      tabs={tabList.map((t) => ({ key: t.id, label: t.label, count: t.count || undefined }))}
+      activeTab={activeTab}
+      onTabChange={(key) => setActiveTab(key as typeof activeTab)}
+      tabsAriaLabel="Вкладки справочников"
+      actions={
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-[#6B7280] bg-[#F3F4F6] border border-[#E5E7EB] px-2.5 py-1 rounded-full">
+          <Layers className="w-3 h-3 text-[#9CA3AF]" aria-hidden="true" />
+          {isWritePermitted ? 'Редактирование' : 'Только чтение'}
+        </span>
+      }
+    >
+      <div className="flex flex-col gap-6">
+        {/* TAB CONTENT 1: COUPLING DIRECTORY (unified base) */}
+        {activeTab === 'fleet' && (
+          <CouplingDirectoryEditor user={user} isWritePermitted={isWritePermitted} />
+        )}
 
-        {/* MODERN SCROLLABLE TAB NAVIGATOR */}
-        <div className="mt-6 flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/60 max-w-max">
-          {tabList.map((t) => {
-            const IconComp = t.icon;
-            const isActive = activeTab === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition duration-150 select-none cursor-pointer ${
-                  isActive 
-                    ? 'bg-slate-900 text-white shadow-sm font-semibold' 
-                    : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
-                }`}
-              >
-                <IconComp className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                <span>{t.label}</span>
-                {t.count > 0 && (
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-mono font-bold ${
-                    isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
-                  }`}>
-                    {t.count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* TAB CONTENT 1: COUPLING DIRECTORY (unified base) */}
-      {activeTab === 'fleet' && (
-        <CouplingDirectoryEditor user={user} isWritePermitted={isWritePermitted} />
-      )}
-
-
-      {/* TAB CONTENT 2: DRIVERS BASE */}
-      {activeTab === 'drivers' && (
-        <div className="space-y-6">
+        {/* TAB CONTENT 2: DRIVERS BASE */}
+        {activeTab === 'drivers' && (
           <DriverDirectoryBlock user={user} />
-        </div>
-      )}
+        )}
 
-      {/* TAB CONTENT: DISTANCES */}
-      {activeTab === 'distances' && (
-        <DistanceDirectoryBlock user={user} />
-      )}
+        {/* TAB CONTENT: DISTANCES */}
+        {activeTab === 'distances' && (
+          <DistanceDirectoryBlock user={user} />
+        )}
 
-      {/* TAB CONTENT 3: SYSTEM SETTINGS */}
-      {activeTab === 'system' && (
-        <div className="space-y-6">
-          
-          {/* CORE RATES & INTEGRATION ROW */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            
-            {/* Rates setting (5 cols) */}
-            <div className="bg-white rounded-2xl p-5 lg:p-6 border border-slate-200/50 shadow-sm space-y-4 lg:col-span-5 flex flex-col">
-              <div>
-                <h3 className="text-xs font-bold uppercase text-slate-900 font-mono tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
-                  <Wallet className="h-4.5 w-4.5 text-blue-500" />
-                  <span>Глобальные нормативные ставки</span>
-                </h3>
-                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase mt-1">Базовые величины расчетов по умолчанию</span>
-              </div>
+        {/* TAB CONTENT 3: SYSTEM SETTINGS */}
+        {activeTab === 'system' && (
+          <div className="flex flex-col gap-4">
+            <SectionHeader
+              icon={<Wallet className="w-4 h-4" aria-hidden="true" />}
+              tone="graphite"
+              title="Глобальные нормативные ставки"
+              subtitle="Базовые величины расчетов по умолчанию"
+            />
 
-              {settings && (
-                <div className="space-y-4 flex-1">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Ставка простоя (€/день)</label>
-                    <input
-                      type="number"
-                      disabled={!isWritePermitted}
-                      defaultValue={settings.idleRate}
-                      onBlur={(e) => dbService.saveSettings({...settings, idleRate: Number(e.target.value)}, user.name, user.role)}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-400 font-mono text-slate-800"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block font-mono">Ставка суточных командировочных (€/день)</label>
-                    <input
-                      type="number"
-                      disabled={!isWritePermitted}
-                      defaultValue={settings.perDiemRate}
-                      onBlur={(e) => dbService.saveSettings({...settings, perDiemRate: Number(e.target.value)}, user.name, user.role)}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-slate-400 font-mono text-slate-800"
-                    />
-                  </div>
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-[10px] text-slate-400 font-medium leading-relaxed mt-2 uppercase font-mono tracking-wide">
-                    ⚠ Смена данных величин немедленно затронет новые расчеты в калькуляциях и диспетчерских планировщиках. Исторические записи останутся без изменений.
-                  </div>
+            {settings && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-2">
+                  <label className={UI.fieldLabel}>Ставка простоя (€/день)</label>
+                  <input
+                    type="number"
+                    disabled={!isWritePermitted}
+                    defaultValue={settings.idleRate}
+                    onBlur={(e) => dbService.saveSettings({...settings, idleRate: Number(e.target.value)}, user.name, user.role)}
+                    className={UI.input}
+                  />
                 </div>
-              )}
+                <div className="flex flex-col gap-2">
+                  <label className={UI.fieldLabel}>Ставка суточных командировочных (€/день)</label>
+                  <input
+                    type="number"
+                    disabled={!isWritePermitted}
+                    defaultValue={settings.perDiemRate}
+                    onBlur={(e) => dbService.saveSettings({...settings, perDiemRate: Number(e.target.value)}, user.name, user.role)}
+                    className={UI.input}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-start gap-2 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2.5 text-[11px] text-[#4B5563]">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-px shrink-0" aria-hidden="true" />
+              <span>Смена данных величин немедленно затронет новые расчеты в калькуляциях и диспетчерских планировщиках. Исторические записи останутся без изменений.</span>
             </div>
-
           </div>
-        </div>
-      )}
+        )}
 
-      {/* TAB CONTENT 5: LEGACY DIRECTORIES */}
-      {activeTab === 'directories' && (
-        <DirectoriesModule user={user} />
-      )}
-
-    </div>
+        {/* TAB CONTENT 5: LEGACY DIRECTORIES */}
+        {activeTab === 'directories' && (
+          <DirectoriesModule user={user} embedded />
+        )}
+      </div>
+    </ModuleShell>
   );
 }

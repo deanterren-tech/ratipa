@@ -1,6 +1,11 @@
-import {useState, useEffect} from 'react'
+import React, {useState, useEffect} from 'react'
 
-export default function TypingText({ phrases, className }: { phrases: string[]; className?: string }) {
+export default function TypingText({ phrases, className, style }: {
+    phrases: string[];
+    className?: string;
+    /** Цвет текста и другие оформления задаёт страница (например, по яркости фона). */
+    style?: React.CSSProperties;
+}) {
     const [text, setText] = useState('');
     const [isDeleting, setIsDeleting] = useState(false);
     const [loopNum, setLoopNum] = useState(0);
@@ -28,7 +33,7 @@ export default function TypingText({ phrases, className }: { phrases: string[]; 
     }, [text, isDeleting, loopNum, phrases, typingSpeed]);
 
     return (
-        <span className={className || "text-xl font-mono text-slate-500 font-bold ml-4 inline-block tracking-tight"}>
+        <span className={className || "text-xl font-mono text-slate-500 font-bold ml-4 inline-block tracking-tight"} style={style}>
             {text}
             <span className="">|</span>
         </span>

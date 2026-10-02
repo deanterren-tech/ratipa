@@ -4,11 +4,13 @@ import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
 import {dbService, directoryService} from '../../api'
 import {getCouplingsFlat, getDriversFlat, getDispatchersFlat} from '../../services/fleetService'
-import {Truck, Plus, Trash2, Pencil, Search, Link2, X, Check, Layers, Tag, Users} from 'lucide-react'
+import {Truck, Plus, Trash2, Pencil, Link2, Check, Layers, Tag, Users} from 'lucide-react'
 import {UserProfile} from '../../types'
-import {normalizePlate, formatPlate, formatCoupling} from '../../utils/salaryAutofill'
+import {normalizePlate, formatPlate} from '../../utils/salaryAutofill'
 import CouplingCard from './CouplingCard';
 import DriverCard from './DriverCard';
+import {UI} from '../../ui/kit'
+import {SectionHeader, SearchField, EmptyState, ModalShell} from '../../ui/components'
 
 // Дефолтные характеристики ТС (присваиваются каждому авто, пользователь может менять)
 const DEFAULT_VEHICLE = {
@@ -42,9 +44,9 @@ interface CouplingRow {
 
 // dispatcher color palette (stable per dispatcher)
 const DISP_COLORS: Record<string, string> = {
-  виталий: '#3765F6', матвей: '#8b5cf6', сергей: '#f59e0b', юрий: '#10b981',
+  виталий: '#0EA5E9', матвей: '#8B5CF6', сергей: '#F59E0B', юрий: '#10B981',
 };
-const dispColor = (key?: string) => DISP_COLORS[(key || '').toLowerCase()] || '#64748b';
+const dispColor = (key?: string) => DISP_COLORS[(key || '').toLowerCase()] || '#9CA3AF';
 
 function useLockBodyScroll(open: boolean) {
   useEffect(() => {
@@ -214,7 +216,10 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
     const normPlate = carNumber.toUpperCase().replace(/[^A-ZА-Я0-9-]/g, '');
     const id = editing ? editing.id : normPlate;
     const dispId = (form.dispatcher || '').toString();
-    const dispName = dispId ? (dispatchers.find((d) => (d.id || d.key) === dispId)?.name || dispId) : '';
+    const dispEntry = dispId ? dispatchers.find((d) => (d.id || d.key) === dispId) : null;
+    const dispName = dispId ? (dispEntry?.name || dispId) : '';
+    // Стабильная связь с учётной записью: пишем её идентификатор рядом с именем
+    const dispAccountId = dispEntry ? (dispEntry as any).id || (dispEntry as any).key || '' : '';
     const safe = (v: any) => (v ?? '').toString().trim();
     const hasEdit = !!editing;
     const editBrand = (editing as any)?.brand || (editing as any)?.brandModel || '';
@@ -238,6 +243,8 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
       driverNameRu: driverName(form.driverId) || null,
       driver2: safe(form.driver2) || null,
       dispatcher: dispName,
+      dispatcherName: dispName,
+      dispatcherId: dispAccountId || null,
       rateGroupId: form.rateGroupId || null,
       status: form.status || 'base',
     };
@@ -312,9 +319,13 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
     // Диспетчер хранится в couplings.dispatcherName как ИМЯ (не id). Резолвим id→имя.
     const patch: Record<string, any> = { [bulkField]: bulkValue };
     if (bulkField === 'dispatcher') {
-      const name = (dispatchers.find((d) => (d.id || d.key) === bulkValue)?.name) || bulkValue;
+      // Единая модель записи: имя для показа и идентификатор учётной записи для связи.
+      // Без dispatcherId запись оставалась привязанной к прежнему диспетчеру.
+      const entry = dispatchers.find((d) => (d.id || d.key) === bulkValue);
+      const name = entry?.name || bulkValue;
       patch.dispatcher = name;
       patch.dispatcherName = name;
+      patch.dispatcherId = entry ? (entry.id || entry.key) : null;
     }
     await dbService.bulkUpdateCouplings(ids, patch);
     toast(`Обновлено ${ids.length} сцепок`, 'success');
@@ -343,58 +354,51 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   };
 
   return (
-    <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between pb-5 border-b border-slate-200/60">
-        <div>
-          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">
-            База сцепок
-          </span>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <Truck className="w-7 h-7 text-slate-800" /> База сцепок (Авто + Прицеп + Водитель)
-          </h1>
-          <p className="text-[11px] text-slate-400 font-medium mt-1">
-            Единая база: тягач, прицеп, марка, водитель, диспетчер и тариф. Связана со всеми модулями.
-          </p>
-          <div className="flex flex-wrap gap-2 mt-3">
-            <div className="flex items-center gap-2 bg-slate-900 text-white rounded-xl px-3 py-1.5">
-              <Truck className="w-3.5 h-3.5 text-slate-300" />
-              <span className="text-[10px] font-semibold text-slate-300">Всего</span>
-              <span className="text-sm font-bold font-mono">{stats.total}</span>
-            </div>
-            <div className="flex items-center gap-2 bg-emerald-500 text-white rounded-xl px-3 py-1.5">
-              <span className="text-[10px] font-semibold">На базе</span>
-              <span className="text-sm font-bold font-mono">{stats.base}</span>
-            </div>
-            <div className="flex items-center gap-2 bg-amber-500 text-white rounded-xl px-3 py-1.5">
-              <span className="text-[10px] font-semibold">В рейсе</span>
-              <span className="text-sm font-bold font-mono">{stats.trip}</span>
-            </div>
-          </div>
-        </div>
+    <div className="flex flex-col gap-4 min-w-0">
+      <SectionHeader
+        icon={<Truck className="w-4 h-4" />}
+        tone="graphite"
+        title="База сцепок (Авто + Прицеп + Водитель)"
+        subtitle="Единая база: тягач, прицеп, марка, водитель, диспетчер и тариф. Связана со всеми модулями."
+      >
         {isWritePermitted && (
-          <button onClick={openAdd}
-            className="mt-3 md:mt-0 inline-flex items-center gap-2 bg-[#3765F6] text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-[#2a4fd0] shadow-sm active:scale-95">
-            <Plus className="w-4 h-4" /> Добавить сцепку
+          <button type="button" onClick={openAdd} className={UI.buttonPrimary}>
+            <Plus className="w-4 h-4" aria-hidden="true" /> Добавить сцепку
           </button>
         )}
-        </div>
+      </SectionHeader>
+
+      {/* Counters */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <StatRow color="graphite" label="Всего" value={stats.total} />
+        <StatRow color="emerald" label="На базе" value={stats.base} />
+        <StatRow color="amber" label="В рейсе" value={stats.trip} />
+      </div>
 
       {/* TABS — строим по именам диспетчеров из самих записей (как колонка «Диспетчер»),
           чтобы фильтрация делила записи правильно и счётчики совпадали с таблицей */}
-      <div className="flex flex-wrap gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/60 max-w-max">
-        <button onClick={() => setActiveDisp('all')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${activeDisp === 'all' ? 'bg-[#3765F6] text-white shadow' : 'text-slate-600 hover:bg-white'}`}>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => setActiveDisp('all')}
+          aria-pressed={activeDisp === 'all'}
+          className={`${UI.filterPill} ${activeDisp === 'all' ? UI.filterPillActive : UI.filterPillIdle}`}
+        >
           Все ({couplings.length})
         </button>
         {dispTabs.map((name) => {
           const cnt = couplings.filter((c) => (c.dispatcher || '') === name).length;
           const isActive = activeDisp === name;
-          const col = dispColor(name);
           return (
-            <button key={name} onClick={() => setActiveDisp(name)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${isActive ? 'bg-[#3765F6] text-white shadow' : 'text-slate-600 hover:bg-white'}`}>
+            <button
+              key={name}
+              type="button"
+              onClick={() => setActiveDisp(name)}
+              aria-pressed={isActive}
+              className={`${UI.filterPill} inline-flex items-center gap-1.5 ${isActive ? UI.filterPillActive : UI.filterPillIdle}`}
+            >
               {name}
-              <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-mono ${isActive ? 'bg-white/20' : 'bg-slate-200'}`}>{cnt}</span>
+              <span className={`${UI.tabBadge} ${isActive ? 'bg-white/20 text-white' : 'bg-[#E5E7EB] text-[#4B5563]'}`}>{cnt}</span>
             </button>
           );
         })}
@@ -402,197 +406,202 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
 
       {/* SEARCH + multi-select bar */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Поиск по тягачу / прицепу / водителю..."
-            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-slate-300 font-mono" />
-        </div>
+        <SearchField
+          value={search}
+          onChange={setSearch}
+          placeholder="Поиск по тягачу / прицепу / водителю…"
+          ariaLabel="Поиск по сцепкам"
+          className="max-w-md"
+        />
         {isWritePermitted && (
-          <button onClick={toggleAll}
-            className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition ${allVisibleSelected ? 'bg-[#3765F6] text-white border-[#3765F6]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
-            <Check className="w-4 h-4" /> Выбрать все (видимые)
+          <button type="button" onClick={toggleAll} className={`${allVisibleSelected ? UI.buttonDark : UI.buttonGhost}`}>
+            <Check className="w-4 h-4" aria-hidden="true" /> Выбрать все (видимые)
           </button>
         )}
         {selected.size > 0 && (
-          <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-[#3765F6]/10 text-[#3765F6] text-xs font-bold">
-            <Layers className="w-4 h-4" /> Выбрано: {selected.size}
-          </div>
+          <span className="inline-flex items-center gap-2 text-xs font-medium text-[#4B5563] px-2.5 py-1 rounded-lg bg-[#F3F4F6] border border-[#E5E7EB]">
+            <Layers className="w-3.5 h-3.5 text-[#9CA3AF]" aria-hidden="true" /> Выбрано: {selected.size}
+          </span>
         )}
       </div>
 
       {/* BULK ACTION PANEL */}
       {isWritePermitted && selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl bg-[#3765F6]/5 border border-[#3765F6]/20">
-          <span className="text-xs font-bold text-slate-700">Массово для {selected.size}:</span>
-          <button onClick={() => { setBulkField('rateGroupId'); setBulkValue(''); setBulkOpen(true); }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50">
-            <Tag className="w-3.5 h-3.5" /> Применить ставку
+        <div className="flex flex-wrap items-center gap-2 p-3 bg-white border border-[#E5E7EB] rounded-xl">
+          <span className="text-xs font-semibold text-[#121316]">Массово для {selected.size}:</span>
+          <button type="button" onClick={() => { setBulkField('rateGroupId'); setBulkValue(''); setBulkOpen(true); }} className={UI.buttonGhost}>
+            <Tag className="w-3.5 h-3.5" aria-hidden="true" /> Применить ставку
           </button>
-          <button onClick={() => { setBulkField('dispatcher'); setBulkValue(''); setBulkOpen(true); }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50">
-            <Users className="w-3.5 h-3.5" /> Назначить диспетчера
+          <button type="button" onClick={() => { setBulkField('dispatcher'); setBulkValue(''); setBulkOpen(true); }} className={UI.buttonGhost}>
+            <Users className="w-3.5 h-3.5" aria-hidden="true" /> Назначить диспетчера
           </button>
-          <button onClick={async () => {
+          <button type="button" onClick={async () => {
             if (await showConfirm(`Удалить ${selected.size} сцепок?`)) {
               for (const id of Array.from(selected)) dbService.deleteVehicleDriverRecord(id, user.name, user.role);
               toast(`Удалено ${selected.size} сцепок`, 'success');
               setSelected(new Set());
             }
-          }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-600 hover:bg-rose-100">
-            <Trash2 className="w-3.5 h-3.5" /> Удалить
+          }} className={UI.buttonDanger}>
+            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Удалить
           </button>
-          <button onClick={() => setSelected(new Set())}
-            className="ml-auto px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-100">Сбросить</button>
+          <button type="button" onClick={() => setSelected(new Set())}
+            className="ml-auto px-3 py-1.5 min-h-[44px] rounded-xl text-xs font-medium text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer">
+            Сбросить
+          </button>
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200/60 bg-white/40">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-slate-50/95">
-            <tr className="text-[9px] font-black uppercase text-slate-500 font-mono border-b border-slate-200/80">
-              {isWritePermitted && <th className="px-2 py-3 w-[36px]"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} className="accent-slate-900" /></th>}
-              <th className="px-4 py-3 whitespace-nowrap">Сцепка (Тягач / Прицеп)</th>
-              <th className="px-4 py-3 whitespace-nowrap">Марка</th>
-              <th className="px-4 py-3 whitespace-nowrap">Водитель</th>
-              <th className="px-4 py-3 whitespace-nowrap">Диспетчер</th>
-              <th className="px-4 py-3 whitespace-nowrap">Тариф</th>
-              {isWritePermitted && <th className="px-4 py-3 text-right w-[80px]"></th>}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100/80 text-xs text-slate-700 font-mono">
-            {filtered.map((c, i) => {
-              const isSel = selected.has(c.id);
-              const col = dispColor(c.dispatcher);
-              return (
-              <tr key={c.id} data-nav-item onClick={() => setViewCard({ type: 'coupling', carNumber: c.carNumber })}
-                  className={`hover:bg-slate-50/60 cursor-pointer transition ${isSel ? 'bg-[#3765F6]/10' : ''} ${focusIdx === i ? 'ring-2 ring-[#3765F6]/40 ring-inset' : ''}`} onMouseEnter={() => setFocusIdx(i)}>
+      {filtered.length === 0 ? (
+        <EmptyState
+          kind={search.trim() || activeDisp !== 'all' ? 'no-results' : 'empty'}
+          query={search}
+          title={search.trim() || activeDisp !== 'all' ? undefined : 'Сцепок пока нет'}
+          hint={search.trim() || activeDisp !== 'all' ? undefined : 'Добавьте первую сцепку — она появится в базе.'}
+          actionLabel="Обновить"
+          onAction={() => window.location.reload()}
+        />
+      ) : (
+        <div className={UI.tableWrap}>
+          <table className={UI.table}>
+            <thead>
+              <tr className={UI.theadRow}>
                 {isWritePermitted && (
-                  <td className="px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
-                    <input type="checkbox" checked={isSel} onChange={() => toggle(c.id)} className="accent-slate-900" />
-                  </td>
+                  <th className={UI.th + ' w-[36px]'}>
+                    <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} aria-label="Выбрать всех видимых" className={UI.checkbox} />
+                  </th>
                 )}
-                <td className="px-4 py-2.5 font-mono">
-                  <span className="font-semibold text-slate-900">{formatPlate(c.carNumber)}</span>
-                  {c.trailerNumber && <span className="text-slate-400"> / {formatPlate(c.trailerNumber)}</span>}
-                </td>
-                <td className="px-4 py-2.5 text-slate-500">{[c.brand, c.trailerBrand].filter(Boolean).join(' / ') || '—'}</td>
-                <td className="px-4 py-2.5">
-                  <button onClick={(e) => { e.stopPropagation(); setViewCard({ type: 'driver', driverId: c.driverId || '', driverName: c.driverName || driverName(c.driverId) }); }}
-                    className="inline-flex items-center gap-1.5 text-left hover:underline font-medium text-slate-700">
-                    <span className="w-5 h-5 rounded-full bg-[#3765F6]/15 text-[#3765F6] flex items-center justify-center text-[9px] font-semibold">
-                      {initials(c.driverName || driverName(c.driverId))}
-                    </span>
-                    {c.driverName || driverName(c.driverId) || '—'}
-                  </button>
-                </td>
-                <td className="px-4 py-2.5">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold text-white" style={{ background: col }}>
-                    {dispName(c.dispatcher)}
-                  </span>
-                </td>
-                <td className="px-4 py-2.5 text-slate-500">{rateName(c.rateGroupId)}</td>
-                {isWritePermitted && (
-                  <td className="px-4 py-2.5 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button onClick={(e) => { e.stopPropagation(); openEdit(c); }} className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDelete(c); }} className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-500">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                )}
+                <th className={UI.th}>Сцепка (Тягач / Прицеп)</th>
+                <th className={UI.th}>Марка</th>
+                <th className={UI.th}>Водитель</th>
+                <th className={UI.th}>Диспетчер</th>
+                <th className={UI.th}>Тариф</th>
+                {isWritePermitted && <th className={UI.th + ' text-right w-[80px]'}></th>}
               </tr>
-              );
-            })}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={isWritePermitted ? 9 : 8} className="px-4 py-10 text-center">
-                  <div className="flex flex-col items-center gap-2 text-xs text-slate-400">
-                    <span>Нет данных</span>
-                    <button onClick={() => window.location.reload()} className="px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium">
-                      Обновить
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filtered.map((c, i) => {
+                const isSel = selected.has(c.id);
+                return (
+                  <tr
+                    key={c.id}
+                    data-nav-item
+                    onClick={() => setViewCard({ type: 'coupling', carNumber: c.carNumber })}
+                    className={`${UI.tr} cursor-pointer ${isSel ? 'bg-[var(--accent-10)]' : ''} ${focusIdx === i ? 'ring-2 ring-[var(--accent-50)] ring-inset' : ''}`}
+                    onMouseEnter={() => setFocusIdx(i)}
+                  >
+                    {isWritePermitted && (
+                      <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={isSel} onChange={() => toggle(c.id)} aria-label={`Выбрать ${c.carNumber}`} className={UI.checkbox} />
+                      </td>
+                    )}
+                    <td className={UI.tdMono}>
+                      <span className="text-[#121316]">{formatPlate(c.carNumber)}</span>
+                      {c.trailerNumber && <span className="text-[#9CA3AF]"> / {formatPlate(c.trailerNumber)}</span>}
+                    </td>
+                    <td className={UI.td}>{[c.brand, c.trailerBrand].filter(Boolean).join(' / ') || '—'}</td>
+                    <td className={UI.td}>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setViewCard({ type: 'driver', driverId: c.driverId || '', driverName: c.driverName || driverName(c.driverId) }); }}
+                        className="inline-flex items-center gap-2 text-left hover:underline cursor-pointer max-w-[220px]"
+                      >
+                        <span className="w-5 h-5 rounded-full bg-[var(--accent-10)] text-[#A55329] flex items-center justify-center text-[10px] font-semibold shrink-0">
+                          {initials(c.driverName || driverName(c.driverId))}
+                        </span>
+                        <span className="truncate text-[#121316] font-semibold">{c.driverName || driverName(c.driverId) || '—'}</span>
+                      </button>
+                    </td>
+                    <td className={UI.td}>
+                      <span className="inline-flex items-center gap-1.5 text-xs text-[#4B5563] whitespace-nowrap">
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: dispColor(c.dispatcher) }} aria-hidden="true" />
+                        {dispName(c.dispatcher)}
+                      </span>
+                    </td>
+                    <td className={UI.td}>{rateName(c.rateGroupId)}</td>
+                    {isWritePermitted && (
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button type="button" onClick={(e) => { e.stopPropagation(); openEdit(c); }} aria-label="Изменить" title="Изменить" className={UI.buttonIcon}>
+                            <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(c); }} aria-label="Удалить" title="Удалить"
+                            className="inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer">
+                            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* MODAL add/edit */}
-      {modalOpen && createPortal(
- <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/10 backdrop-blur-sm overflow-y-auto py-4" onClick={() => setModalOpen(false)}>
-          <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[85vh] overflow-y-auto my-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Link2 className="w-4 h-4 text-[#3765F6]" />
-                {editing ? 'Редактировать сцепку' : 'Новая сцепка'}
-              </h3>
-              <button onClick={() => setModalOpen(false)} className="min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-100 text-slate-400 flex items-center justify-center">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Тягач *" value={form.carNumber} onChange={(v) => setForm({ ...form, carNumber: v })} placeholder="AB 9271-7" />
-              <p className="text-[11px] text-amber-600 -mt-2 mb-2">Госномера тягача и прицепа вносите на латинице (напр. AB 9271-7, A 1635 E-7).</p>
-              <Field label="Прицеп" value={form.trailerNumber} onChange={(v) => setForm({ ...form, trailerNumber: v })} placeholder="А 1635 Е-7" />
-              <SelectField label="Марка тягача" value={form.brand} onChange={(v) => setForm({ ...form, brand: v })}
-                options={vehicleBrands.map((b) => ({ v: b.key || b.name, l: b.name }))} allowCustom />
-              <SelectField label="Марка прицепа" value={form.trailerBrand} onChange={(v) => setForm({ ...form, trailerBrand: v })}
-                options={trailerBrands.map((b) => ({ v: b.key || b.name, l: b.name }))} allowCustom />
-              <Field label="Марка/модель (рус.)" value={form.brandRu} onChange={(v) => setForm({ ...form, brandRu: v })} placeholder="Мерседес Бенц" />
-              <SelectField label="Водитель" value={form.driverId} onChange={(v) => setForm({ ...form, driverId: v })}
-                options={drivers.map((d) => ({ v: d.id, l: d.shortNameRu || d.name || d.firstNameRu || d.id }))} />
-              <Field label="Тип ТС" value={form.vehicleType} onChange={(v) => setForm({ ...form, vehicleType: v })} placeholder="Тенты 90м3" />
-              <Field label="Габариты полуприцепа" value={form.dimensions} onChange={(v) => setForm({ ...form, dimensions: v })} placeholder="13,6м x 2,45м x 2,7м" />
-              <Field label="Вес ТС (Тягач+пп)" value={form.weight} onChange={(v) => setForm({ ...form, weight: v })} placeholder="1) 14,6т" />
-              <Field label="Водитель №2 (если есть)" value={form.driver2} onChange={(v) => setForm({ ...form, driver2: v })} placeholder="ФИО второго водителя" />
-              <SelectField label="Диспетчер" value={form.dispatcher} onChange={(v) => setForm({ ...form, dispatcher: v })}
-                options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
-              <SelectField label="Группа ставок" value={form.rateGroupId} onChange={(v) => setForm({ ...form, rateGroupId: v })}
-                options={rateGroups.map((g) => ({ v: g.id || g.key, l: `${g.name} (€${g.rate}/км)` }))} />
-            </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 mt-5">
-              <button onClick={() => setModalOpen(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl">Отмена</button>
-              <button type="button" onClick={handleSave} className="px-4 py-2 text-xs font-bold text-white bg-[#3765F6] hover:bg-[#2a4fd0] rounded-xl shadow-sm">Сохранить</button>
-            </div>
+      {createPortal(
+        <ModalShell
+          isOpen={modalOpen}
+          onClose={() => setModalOpen(false)}
+          title={editing ? 'Редактировать сцепку' : 'Новая сцепка'}
+          icon={<Link2 className="w-4 h-4" aria-hidden="true" />}
+          ariaLabel={editing ? 'Редактировать сцепку' : 'Новая сцепка'}
+          footer={
+            <>
+              <button type="button" onClick={() => setModalOpen(false)} className={UI.buttonGhost}>Отмена</button>
+              <button type="button" onClick={handleSave} className={UI.buttonPrimary}>Сохранить</button>
+            </>
+          }
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Тягач *" value={form.carNumber} onChange={(v) => setForm({ ...form, carNumber: v })} placeholder="AB 9271-7" />
+            <p className={`${UI.hint} text-amber-600 sm:col-span-2 -mt-1`}>Госномера тягача и прицепа вносите на латинице (напр. AB 9271-7, A 1635 E-7).</p>
+            <Field label="Прицеп" value={form.trailerNumber} onChange={(v) => setForm({ ...form, trailerNumber: v })} placeholder="А 1635 Е-7" />
+            <SelectField label="Марка тягача" value={form.brand} onChange={(v) => setForm({ ...form, brand: v })}
+              options={vehicleBrands.map((b) => ({ v: b.key || b.name, l: b.name }))} allowCustom />
+            <SelectField label="Марка прицепа" value={form.trailerBrand} onChange={(v) => setForm({ ...form, trailerBrand: v })}
+              options={trailerBrands.map((b) => ({ v: b.key || b.name, l: b.name }))} allowCustom />
+            <Field label="Марка/модель (рус.)" value={form.brandRu} onChange={(v) => setForm({ ...form, brandRu: v })} placeholder="Мерседес Бенц" />
+            <SelectField label="Водитель" value={form.driverId} onChange={(v) => setForm({ ...form, driverId: v })}
+              options={drivers.map((d) => ({ v: d.id, l: d.shortNameRu || d.name || d.firstNameRu || d.id }))} />
+            <Field label="Тип ТС" value={form.vehicleType} onChange={(v) => setForm({ ...form, vehicleType: v })} placeholder="Тенты 90м3" />
+            <Field label="Габариты полуприцепа" value={form.dimensions} onChange={(v) => setForm({ ...form, dimensions: v })} placeholder="13,6м x 2,45м x 2,7м" />
+            <Field label="Вес ТС (Тягач+пп)" value={form.weight} onChange={(v) => setForm({ ...form, weight: v })} placeholder="1) 14,6т" />
+            <Field label="Водитель №2 (если есть)" value={form.driver2} onChange={(v) => setForm({ ...form, driver2: v })} placeholder="ФИО второго водителя" />
+            <SelectField label="Диспетчер" value={form.dispatcher} onChange={(v) => setForm({ ...form, dispatcher: v })}
+              options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
+            <SelectField label="Группа ставок" value={form.rateGroupId} onChange={(v) => setForm({ ...form, rateGroupId: v })}
+              options={rateGroups.map((g) => ({ v: g.id || g.key, l: `${g.name} (€${g.rate}/км)` }))} />
           </div>
-        </div>,
+        </ModalShell>,
         document.body
       )}
 
       {/* BULK modal */}
-      {bulkOpen && createPortal(
- <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/70 p-4 overflow-y-auto" onClick={() => setBulkOpen(false)}>
-          <div className="w-full max-w-sm bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Layers className="w-4 h-4 text-[#3765F6]" />
-                {bulkField === 'rateGroupId' ? 'Применить ставку' : 'Назначить диспетчера'} ({selected.size})
-              </h3>
-              <button onClick={() => setBulkOpen(false)} className="min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-100 text-slate-400 flex items-center justify-center"><X className="w-4 h-4" /></button>
-            </div>
-            {bulkField === 'rateGroupId' ? (
-              <SelectField label="Группа ставок" value={bulkValue} onChange={setBulkValue}
-                options={rateGroups.map((g) => ({ v: g.id || g.key, l: `${g.name} (€${g.rate}/км)` }))} />
-            ) : (
-              <SelectField label="Диспетчер" value={bulkValue} onChange={setBulkValue}
-                options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
-            )}
-            <div className="flex items-center justify-end gap-2 mt-5">
-              <button onClick={() => setBulkOpen(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl">Отмена</button>
-              <button onClick={applyBulk} disabled={!bulkValue}
-                className="px-4 py-2 text-xs font-bold text-white bg-[#3765F6] hover:bg-[#2a4fd0] rounded-xl shadow-sm disabled:opacity-40">Применить</button>
-            </div>
-          </div>
-        </div>,
+      {createPortal(
+        <ModalShell
+          isOpen={bulkOpen}
+          onClose={() => setBulkOpen(false)}
+          title={`${bulkField === 'rateGroupId' ? 'Применить ставку' : 'Назначить диспетчера'} (${selected.size})`}
+          icon={<Layers className="w-4 h-4" aria-hidden="true" />}
+          ariaLabel={bulkField === 'rateGroupId' ? 'Применить ставку' : 'Назначить диспетчера'}
+          maxWidth="max-w-sm"
+          footer={
+            <>
+              <button type="button" onClick={() => setBulkOpen(false)} className={UI.buttonGhost}>Отмена</button>
+              <button type="button" onClick={applyBulk} disabled={!bulkValue} className={UI.buttonPrimary}>Применить</button>
+            </>
+          }
+        >
+          {bulkField === 'rateGroupId' ? (
+            <SelectField label="Группа ставок" value={bulkValue} onChange={setBulkValue}
+              options={rateGroups.map((g) => ({ v: g.id || g.key, l: `${g.name} (€${g.rate}/км)` }))} />
+          ) : (
+            <SelectField label="Диспетчер" value={bulkValue} onChange={setBulkValue}
+              options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
+          )}
+        </ModalShell>,
         document.body
       )}
 
@@ -637,12 +646,23 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   );
 }
 
+function StatRow({ color, label, value }: { color: 'graphite' | 'emerald' | 'amber'; label: string; value: number }) {
+  const dot = color === 'emerald' ? 'bg-emerald-500' : color === 'amber' ? 'bg-amber-500' : 'bg-[#121316]';
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} aria-hidden="true" />
+      <span className={UI.hint}>{label}</span>
+      <span className="text-xs font-semibold font-mono tabular-nums text-[#121316]">{value}</span>
+    </div>
+  );
+}
+
 function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
-    <div>
-      <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">{label}</label>
+    <div className="flex flex-col gap-2">
+      <label className={UI.fieldLabel}>{label}</label>
       <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono outline-none focus:border-slate-300" />
+        className={UI.input} />
     </div>
   );
 }
@@ -652,10 +672,9 @@ function SelectField({ label, value, onChange, options, allowCustom }: {
   options: { v: string; l: string }[]; allowCustom?: boolean;
 }) {
   return (
-    <div>
-      <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-slate-300">
+    <div className="flex flex-col gap-2">
+      <label className={UI.fieldLabel}>{label}</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={`${UI.select} w-full`}>
         <option value="">—</option>
         {options.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
         {allowCustom && value && !options.some((o) => o.v === value) && <option value={value}>{value}</option>}

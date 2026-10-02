@@ -15,10 +15,14 @@ import {
   Navigation,
   X,
   Loader2,
+  AlertCircle,
   type LucideIcon,
 } from "lucide-react";
 
 type GpsTab = "beltranssputnik" | "wialon" | "era_glonass";
+
+/** Столько ждём открытие таблицы, прежде чем показать сообщение об ошибке. */
+const LOAD_TIMEOUT_MS = 20000;
 
 export interface SheetTab {
   id: string;
@@ -32,8 +36,6 @@ interface SheetModuleBaseProps {
   title: string;
   subtitle: string;
   icon: LucideIcon;
-  iconWrapClass: string; // напр. "bg-orange-500/10 border-orange-500/20"
-  iconColorClass: string; // напр. "text-orange-600"
   tabs: SheetTab[];
   gpsUrls: Record<GpsTab, string>;
   gpsEnabled?: boolean;
@@ -51,8 +53,6 @@ export default function SheetModuleBase({
   title,
   subtitle,
   icon: Icon,
-  iconWrapClass,
-  iconColorClass,
   tabs,
   gpsUrls,
   gpsEnabled = true,
@@ -66,6 +66,12 @@ export default function SheetModuleBase({
   const [frameKey, setFrameKey] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Таблица не успела открыться за отведённое время — показываем понятное
+  // сообщение с повтором. Способ повтора прежний: перезагрузка кадра.
+  const [loadError, setLoadError] = useState(false);
+  // Таймер ложной ошибки: обязательно снимаем его при успешной загрузке,
+  // иначе экран ошибки появляется поверх уже работающей таблицы.
+  const loadTimerRef = useRef<number | null>(null);
 
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   useEffect(() => {
@@ -82,6 +88,33 @@ export default function SheetModuleBase({
   useEffect(() => {
     if (embedUrl) setLoading(true);
   }, [frameKey, embedUrl]);
+
+  useEffect(() => {
+    if (loadTimerRef.current) { window.clearTimeout(loadTimerRef.current); loadTimerRef.current = null; }
+    if (!embedUrl) { setLoadError(false); return; }
+    setLoadError(false);
+    loadTimerRef.current = window.setTimeout(() => {
+      loadTimerRef.current = null;
+      setLoadError(true);
+      setLoading(false);
+    }, LOAD_TIMEOUT_MS);
+    return () => {
+      if (loadTimerRef.current) { window.clearTimeout(loadTimerRef.current); loadTimerRef.current = null; }
+    };
+  }, [frameKey, embedUrl]);
+
+  /** Успешная загрузка кадра: снимаем экран загрузки И таймер ошибки. */
+  const handleFrameLoad = () => {
+    if (loadTimerRef.current) { window.clearTimeout(loadTimerRef.current); loadTimerRef.current = null; }
+    setLoading(false);
+    setLoadError(false);
+  };
+
+  const retryLoad = () => {
+    setLoadError(false);
+    setLoading(true);
+    setFrameKey((k) => k + 1);
+  };
 
   const changeZoom = (next: number) => {
     const clamped = Math.max(50, Math.min(200, next));
@@ -164,91 +197,69 @@ export default function SheetModuleBase({
   }, [isGpsDragging, isGpsResizing, gpsDragOffset, gpsResizeStart]);
 
   const iconBtn =
-    "inline-flex items-center justify-center h-7 w-7 sm:h-8 sm:w-8 rounded-lg border border-slate-200/50 bg-white text-slate-700 hover:bg-slate-100 transition";
+    "inline-flex items-center justify-center h-8 w-9 sm:w-8 rounded-lg text-[#4B5563] hover:bg-[#F3F4F6] hover:text-[#121316] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)]";
+  const iconBtnActive =
+    "inline-flex items-center justify-center h-8 w-9 sm:w-8 rounded-lg bg-[var(--accent-15)] text-[var(--accent-ink)] hover:bg-[var(--accent-20)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)]";
 
   return (
-    <div className="fixed top-16 inset-x-0 bottom-0 z-40 bg-slate-100 overflow-hidden">
-      {/* === FULL-SCREEN IFRAME === */}
-      <div className="absolute inset-0">
-        {embedUrl ? (
-          <>
-            <div
-              style={{
-                width: `${10000 / zoom}%`,
-                height: `${10000 / zoom}%`,
-                transform: `scale(${zoom / 100})`,
-                transformOrigin: "top left",
-              }}
-            >
-              <iframe
-                key={frameKey + "-" + embedUrl}
-                src={embedUrl}
-                title={activeTab?.name || title}
-                onLoad={() => setLoading(false)}
-                className="w-full h-full border-0"
-              />
-            </div>
-            {loading && (
-              <div className="absolute inset-0 z-[1] flex items-center justify-center bg-white/80">
-                <div className="flex flex-col items-center gap-3 text-slate-500">
-                  <Loader2 className="h-8 w-8 animate-spin text-[#3765F6]" />
-                  <span className="text-xs font-bold uppercase tracking-wider">Загрузка таблицы…</span>
-                </div>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-center text-slate-400 text-sm px-8">
-            Ссылка на таблицу не задана.
-            <br />
-            Укажите её в Справочниках / Настройках.
-          </div>
-        )}
-      </div>
-
-      {/* overlay при drag/resize GPS */}
-      {(isGpsDragging || isGpsResizing) && (
-        <div className="fixed inset-0 z-[99999] bg-transparent select-none pointer-events-auto" style={{ cursor: isGpsDragging ? "move" : "resize" }} />
-      )}
-
-      {/* === FLOATING HEADER OVERLAY === */}
+    <div className="fixed top-16 inset-x-0 bottom-[84px] z-40 flex flex-col overflow-hidden bg-[#F8F9FA] md:bottom-0">
+      {/* === ШАПКА МОДУЛЯ (элемент портала; таблица ниже и не перекрывается) === */}
       {collapsed ? (
-        <button
-          onClick={() => setCollapsed(false)}
-          className="absolute top-3 right-3 z-[101] inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#3765F6] text-white text-xs font-bold shadow-sm hover:bg-[#2555E5] transition active:scale-95"
-        >
-          <ChevronDown className="h-4 w-4" /> {title}
-        </button>
+        /* Свёрнутая панель: одна строка в потоке, таблица занимает всё остальное.
+           Ничего не плавает над таблицей и не перекрывает её. */
+        <div className="shrink-0 border-b border-[#E5E7EB] bg-white px-3 sm:px-4">
+          <div className="flex items-center justify-between gap-3 py-0.5">
+            <div className="flex min-w-0 items-center gap-2">
+              <Icon className="h-3.5 w-3.5 shrink-0 text-[#6B7280]" />
+              <span className="truncate text-xs font-semibold tracking-tight text-[#121316]">{title}</span>
+              {activeTab && (
+                <span className="hidden truncate text-[11px] text-[#9CA3AF] sm:inline">· {activeTab.name}</span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setCollapsed(false)}
+              title="Показать панель"
+              aria-label="Показать панель"
+              aria-expanded={false}
+              className="inline-flex h-11 min-w-[44px] shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)] sm:h-7 sm:min-w-0 sm:px-2.5 sm:text-xs"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Показать панель</span>
+            </button>
+          </div>
+        </div>
       ) : (
-        <div className="absolute top-0 left-0 right-0 z-[100] px-3 sm:px-4 py-2.5 bg-white border-b border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="shrink-0 bg-white border-b border-[#E5E7EB] px-3 sm:px-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap py-2">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className={`w-8 h-8 rounded-xl ${iconWrapClass} flex items-center justify-center shrink-0`}>
-                <Icon className={`h-4 w-4 ${iconColorClass}`} />
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6] text-[#4B5563]">
+                <Icon className="h-4 w-4" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-sm sm:text-base font-bold text-slate-950 tracking-tight leading-none">
+                <h1 className="truncate text-[15px] font-semibold leading-none tracking-tight text-[#121316]">
                   {title}
                 </h1>
-                <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 truncate hidden sm:block">
+                <p className="mt-0.5 hidden truncate text-[11px] text-[#6B7280] sm:block">
                   {subtitle}
                 </p>
               </div>
 
-              {/* Tabs inline, справа от названия */}
+              {/* Вкладки — подчёркнутая полоса как в «Учёте дозволов» */}
               {showTabs && tabs.length > 0 && (
-                <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar ml-2 sm:ml-4">
+                <div className="ml-1 flex items-center gap-4 overflow-x-auto scrollbar-none sm:ml-3">
                   {tabs.map((tab) => {
                     const active = tab.id === activeTabId;
                     return (
                       <button
                         key={tab.id}
                         onClick={() => { setActiveTabId(tab.id); setFrameKey((k) => k + 1); }}
-                        className={`px-3 py-1 text-[10px] font-bold tracking-tight rounded-lg transition-all duration-150 cursor-pointer whitespace-nowrap ${
+                        className={`-mb-2 cursor-pointer whitespace-nowrap border-b-2 px-0.5 pb-1.5 pt-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)] ${
                           active
-                            ? "bg-white text-slate-900 shadow-xs border border-slate-200/40"
-                            : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/30 border border-transparent"
+                            ? "border-[#121316] font-semibold text-[#121316]"
+                            : "border-transparent text-[#6B7280] hover:text-[#121316]"
                         }`}
+                        aria-current={active ? "page" : undefined}
                       >
                         {tab.name}
                       </button>
@@ -274,7 +285,8 @@ export default function SheetModuleBase({
               </button>
               {gpsEnabled && (
                 <button
-                  className={`${iconBtn} ${gpsOpen ? "bg-[#3765F6]/30 border-[#3765F6]/40" : ""}`}
+                  className={gpsOpen ? iconBtnActive : iconBtn}
+                  aria-pressed={gpsOpen}
                   title="GPS-блокнот"
                   onClick={() => { setGpsOpen((o) => !o); setGpsMin(false); }}
                 >
@@ -293,7 +305,12 @@ export default function SheetModuleBase({
               }}>
                 <Maximize2 className="h-4 w-4" />
               </button>
-              <button className={iconBtn} title="Скрыть плашку" onClick={() => setCollapsed(true)}>
+              <button
+                className={iconBtn}
+                title="Свернуть панель"
+                aria-expanded={true}
+                onClick={() => setCollapsed(true)}
+              >
                 <ChevronUp className="h-4 w-4" />
               </button>
             </div>
@@ -301,14 +318,89 @@ export default function SheetModuleBase({
         </div>
       )}
 
+      {/* === ОБЛАСТЬ ТАБЛИЦЫ (рамка принадлежит порталу, содержимое — Google) === */}
+      <div className="flex min-h-0 flex-1 flex-col p-1.5 sm:p-3">
+        <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
+        {embedUrl ? (
+          <>
+            <div
+              style={{
+                width: `${10000 / zoom}%`,
+                height: `${10000 / zoom}%`,
+                transform: `scale(${zoom / 100})`,
+                transformOrigin: "top left",
+              }}
+            >
+              <iframe
+                key={frameKey + "-" + embedUrl}
+                src={embedUrl}
+                title={activeTab?.name || title}
+                onLoad={handleFrameLoad}
+                className="w-full h-full border-0"
+              />
+            </div>
+            {loading && !loadError && (
+              <div className="absolute inset-0 z-[2] flex items-center justify-center bg-white">
+                <div className="flex flex-col items-center gap-3.5 px-8 text-center">
+                  <img
+                    src="/R-logo-2.svg"
+                    alt=""
+                    aria-hidden="true"
+                    className="h-9 w-9 opacity-90"
+                    draggable={false}
+                  />
+                  <div className="flex items-center gap-2 text-[#4B5563]">
+                    <Loader2 className="h-4 w-4 animate-spin text-[var(--accent-ui)] motion-reduce:animate-none" />
+                    <span className="text-[13px] font-medium">Загружаем таблицу…</span>
+                  </div>
+                  <p className="max-w-sm text-[11px] leading-relaxed text-[#9CA3AF]">
+                    {title} · данные открываются из Google Таблицы
+                  </p>
+                </div>
+              </div>
+            )}
+            {loadError && (
+              <div className="absolute inset-0 z-[2] flex items-center justify-center bg-white">
+                <div className="flex max-w-sm flex-col items-center gap-2.5 px-8 text-center">
+                  <AlertCircle className="h-5 w-5 text-[#6B7280]" />
+                  <p className="text-[13px] font-semibold text-[#121316]">Не удалось загрузить таблицу</p>
+                  <p className="text-[11px] leading-relaxed text-[#6B7280]">
+                    Проверьте подключение к интернету и попробуйте ещё раз.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={retryLoad}
+                    className="mt-1 inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[var(--accent-solid)] px-4 text-xs font-semibold text-[var(--accent-on)] transition-colors hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Повторить
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 px-8 text-center">
+            <p className="text-[13px] font-semibold text-[#121316]">Ссылка на таблицу не задана</p>
+            <p className="text-xs text-[#6B7280]">Укажите её в Справочниках или Настройках.</p>
+          </div>
+        )}
+        </div>
+      </div>
+
+      {/* overlay при drag/resize GPS */}
+      {(isGpsDragging || isGpsResizing) && (
+        <div className="fixed inset-0 z-[99999] bg-transparent select-none pointer-events-auto" style={{ cursor: isGpsDragging ? "move" : "resize" }} />
+      )}
+
       {/* === GPS-БЛОКНОТ (полный, drag + resize) === */}
       {gpsEnabled && gpsOpen &&
         (gpsMin ? (
-          <div className="fixed bottom-4 left-4 z-50 animate-[fade-in_0.2s_ease]">
+          <div className="fixed bottom-4 left-4 z-50">
             <button
               type="button"
               onClick={() => { setGpsMin(false); }}
-              className="bg-[#3765F6] hover:bg-[#2555E5] text-white rounded-xl text-xs font-semibold px-4 py-2.5 transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-2"
+              className="bg-[var(--accent-solid)] hover:bg-[var(--accent-hover)] text-[var(--accent-on)] rounded-xl text-xs font-semibold px-4 py-2.5 transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-2"
             >
               <Navigation size={13} />
               <span>GPS Мониторинг</span>
@@ -325,45 +417,45 @@ export default function SheetModuleBase({
               height: `${gpsSize.height}px`,
               zIndex: 100,
             }}
-            className="bg-white rounded-[2rem] shadow-[0_8px_30px_rgba(0,0,0,0.01)] border border-slate-200/50 overflow-hidden flex flex-col"
+            className="flex flex-col overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_25px_60px_rgba(0,0,0,0.12)]"
           >
             <div
               onMouseDown={(e) => {
                 setIsGpsDragging(true);
                 setGpsDragOffset({ x: e.clientX - gpsPos.x, y: e.clientY - gpsPos.y });
               }}
-              className="bg-white border-b border-slate-200/50 p-3 flex items-center justify-between cursor-move select-none gap-4"
+              className="flex cursor-move select-none items-center justify-between gap-4 border-b border-[#E5E7EB] bg-white px-3 py-2.5"
             >
               <div className="flex items-center gap-2 shrink-0">
-                <span className="p-1 px-2.5 bg-[#3765F6]/10 text-[#3765F6] font-bold text-[9px] rounded-lg uppercase tracking-wider font-mono">
+                <span className="rounded-lg bg-[#F3F4F6] px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-[#4B5563]">
                   GPS
                 </span>
-                <h3 className="text-xs font-bold text-slate-800 tracking-tight hidden sm:block font-sans">
+                <h3 className="hidden text-xs font-semibold tracking-tight text-[#121316] sm:block">
                   {gpsTab === "beltranssputnik" ? "Белтранс" : gpsTab === "wialon" ? "Wialon" : "ГЛОНАСС"}
                 </h3>
               </div>
 
-              <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="flex gap-1 rounded-xl bg-[#F3F4F6] p-1" onMouseDown={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => setGpsTab("beltranssputnik")}
-                  className={`px-3 py-1 text-[10px] font-bold tracking-tight rounded-lg transition-all duration-150 cursor-pointer ${
-                    gpsTab === "beltranssputnik" ? "bg-white text-slate-900 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/30"
+                  className={`cursor-pointer rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                    gpsTab === "beltranssputnik" ? "bg-[#121316] text-white" : "text-[#4B5563] hover:text-[#121316] hover:bg-[#E5E7EB]"
                   }`}
                 >
                   Белтранс
                 </button>
                 <button
                   onClick={() => setGpsTab("wialon")}
-                  className={`px-3 py-1 text-[10px] font-bold tracking-tight rounded-lg transition-all duration-150 cursor-pointer ${
-                    gpsTab === "wialon" ? "bg-white text-slate-900 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/30"
+                  className={`cursor-pointer rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                    gpsTab === "wialon" ? "bg-[#121316] text-white" : "text-[#4B5563] hover:text-[#121316] hover:bg-[#E5E7EB]"
                   }`}
                 >
                   Wialon
                 </button>
                 <button
                   onClick={() => setGpsTab("era_glonass")}
-                  className={`px-3 py-1 text-[10px] font-bold tracking-tight rounded-lg transition-all duration-150 cursor-pointer ${
-                    gpsTab === "era_glonass" ? "bg-white text-slate-900 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/30"
+                  className={`cursor-pointer rounded-lg px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                    gpsTab === "era_glonass" ? "bg-[#121316] text-white" : "text-[#4B5563] hover:text-[#121316] hover:bg-[#E5E7EB]"
                   }`}
                 >
                   ГЛОНАСС
@@ -375,7 +467,7 @@ export default function SheetModuleBase({
                   type="button"
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={() => { setGpsMin(true); }}
-                  className="text-slate-400 hover:text-slate-700 transition-all p-1.5 rounded-lg hover:bg-slate-200/30 cursor-pointer"
+                  className="cursor-pointer rounded-lg p-1.5 text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316]"
                   title="Свернуть"
                 >
                   <Minimize2 size={14} />
@@ -384,7 +476,7 @@ export default function SheetModuleBase({
                   type="button"
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={() => { setGpsOpen(false); }}
-                  className="text-slate-400 hover:text-rose-600 transition-all p-1.5 rounded-lg hover:bg-rose-50 cursor-pointer"
+                  className="cursor-pointer rounded-lg p-1.5 text-[#9CA3AF] transition-colors hover:bg-rose-50 hover:text-rose-600"
                   title="Закрыть"
                 >
                   <X size={14} />
@@ -392,8 +484,8 @@ export default function SheetModuleBase({
               </div>
             </div>
 
-            <div className="flex-1 p-2 overflow-hidden bg-white/40 flex flex-row gap-2 min-h-0">
-              <div className="flex-1 bg-white rounded-xl overflow-hidden border border-slate-200/50 relative">
+            <div className="flex min-h-0 flex-1 flex-row gap-2 overflow-hidden bg-white p-2">
+              <div className="relative flex-1 overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
                 <iframe
                   src={gpsUrls.beltranssputnik}
                   className="w-full h-full border-0 absolute inset-0"
@@ -415,7 +507,7 @@ export default function SheetModuleBase({
                   referrerPolicy="no-referrer"
                   title="ЭРА ГЛОНАСС"
                 />
-                <div className="absolute top-2 right-2 flex bg-white p-1 px-2 rounded-lg text-[9px] shadow-sm font-bold text-slate-500 pointer-events-none border border-slate-200/50">
+                <div className="absolute top-2 right-2 flex bg-white p-1 px-2 rounded-lg text-[9px] font-semibold text-[#6B7280] pointer-events-none border border-[#E5E7EB]">
                   Сайт в iframe
                 </div>
               </div>
@@ -452,7 +544,7 @@ export default function SheetModuleBase({
                 title={handle.dir === "se" ? "Растянуть GPS блокнот" : ""}
               >
                 {handle.dir === "se" && (
-                  <div className="w-2.5 h-2.5 border-r-2 border-b-2 border-slate-400 group-hover:border-slate-700 transition-colors pointer-events-none" />
+                  <div className="w-2.5 h-2.5 border-r-2 border-b-2 border-[#9CA3AF] group-hover:border-[#4B5563] transition-colors pointer-events-none" />
                 )}
               </div>
             ))}

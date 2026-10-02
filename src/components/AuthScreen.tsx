@@ -185,9 +185,14 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
             <div className="w-12 h-12 rounded-2xl bg-slate-900/10 border border-slate-900/20 flex items-center justify-center text-slate-900 mb-3 shadow-2xs">
               <Truck className="h-6 w-6 shrink-0" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 uppercase leading-none">
-              RATIPA PORTAL
-            </h1>
+            <img
+                src="/portal.svg"
+                alt="Ratipa Portal"
+                width={1261}
+                height={385}
+                className="h-7 sm:h-8 w-auto select-none"
+                draggable={false}
+              />
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2 font-mono">
               Контур управления перевозками
             </p>

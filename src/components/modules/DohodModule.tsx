@@ -752,7 +752,7 @@ const CalculationCard = React.memo(({
     <div
       className={`p-5 bg-white border rounded-2xl shadow-sm hover:shadow-md transition duration-300 flex flex-col group ${
         isSelected
-          ? "border-[#3765F6]/60 ring-2 ring-[#3765F6]/20 bg-blue-50/20"
+          ? "border-[var(--accent-60)] ring-2 ring-[var(--accent-30)] bg-blue-50/20"
           : "border-slate-200/50 hover:border-slate-300/80"
       }`}
     >
@@ -768,7 +768,7 @@ const CalculationCard = React.memo(({
             <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-150 ${
               isSelected
                 ? "bg-slate-900 border-slate-900 text-white"
-                : "border-slate-300 hover:border-[#3765F6] bg-white"
+                : "border-slate-300 hover:border-[var(--accent-ui)] bg-white"
             }`}>
               {isSelected && (
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -780,7 +780,7 @@ const CalculationCard = React.memo(({
         )}
         <div className="flex flex-col gap-1 min-w-0">
           <div className="text-sm font-bold text-slate-900 uppercase tracking-tight flex items-center gap-1.5 flex-wrap">
-            <span className="text-[#3765F6] font-mono">&rarr;</span>
+            <span className="text-[var(--accent-ink)] font-mono">&rarr;</span>
             <span className="truncate">{routeTitle || "Без названия"}</span>
           </div>
           <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider flex items-center gap-2 flex-wrap">
@@ -813,7 +813,7 @@ const CalculationCard = React.memo(({
           <button
             title="Изменить"
             onClick={() => openEditCalcModal(calc)}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-[#3765F6] hover:bg-blue-50 border border-slate-200/40 hover:border-blue-200/50 bg-white/85 shadow-2xs hover:shadow-xs transition duration-150 cursor-pointer"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-[var(--accent-ink)] hover:bg-blue-50 border border-slate-200/40 hover:border-blue-200/50 bg-white/85 shadow-2xs hover:shadow-xs transition duration-150 cursor-pointer"
           >
             <Edit className="h-4 w-4" />
           </button>
@@ -908,7 +908,7 @@ const CalculationCard = React.memo(({
                   <span className="text-emerald-600 font-bold">{Math.round(l.freight).toLocaleString("ru-RU")} €</span>
                 )}
                 {Number(l.infoRate || 0) > 0 && (
-                  <span className="text-[#3765F6]">{Math.round(l.infoRate || 0).toLocaleString("ru-RU")} {l.infoCurrency || "USD"}</span>
+                  <span className="text-[var(--accent-ink)]">{Math.round(l.infoRate || 0).toLocaleString("ru-RU")} {l.infoCurrency || "USD"}</span>
                 )}
                 {Number(l.ferryCost || 0) > 0 && (
                   <span className="text-rose-500">Паром: {Math.round(l.ferryCost).toLocaleString("ru-RU")} €</span>
@@ -1993,7 +1993,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
         <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm flex flex-col">
           <h2 className="text-sm font-bold text-slate-900 tracking-tight pb-4 border-b border-slate-200/40 mb-6 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-slate-900">
-              <MapPin className="h-5 w-5 text-[#3765F6]" />{" "}
+              <MapPin className="h-5 w-5 text-[var(--accent-ink)]" />{" "}
               Конструктор плеч маршрута
             </span>
             <select
@@ -2173,7 +2173,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                             )
                           }
                           title="Конвертировать по курсу НБРБ"
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#3765F6] transition p-1 cursor-pointer"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[var(--accent-ink)] transition p-1 cursor-pointer"
                         >
                           <RefreshCw className="h-3.5 w-3.5" />
                         </button>
@@ -2405,7 +2405,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         <button
                           type="button"
                           onClick={() => triggerConversionCheck(idx, leg.infoRate, leg.infoCurrency)}
-                          className="absolute left-[calc(50%-18px)] top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#3765F6] transition p-1 cursor-pointer"
+                          className="absolute left-[calc(50%-18px)] top-1/2 -translate-y-1/2 text-slate-400 hover:text-[var(--accent-ink)] transition p-1 cursor-pointer"
                         >
                           <RefreshCw className="h-3 w-3" />
                         </button>
@@ -2525,7 +2525,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
         <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm flex flex-col">
           <h2 className="text-sm font-bold text-slate-900 tracking-tight pb-4 border-b border-slate-200/40 mb-4 md:mb-6 flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-slate-900">
-              <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-[#3765F6]" />{" "}
+              <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-[var(--accent-ink)]" />{" "}
               Экономика рейса
             </span>
           </h2>
@@ -2551,7 +2551,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold mb-1">
                     Общий Фрахт
                   </span>
-                  <span className="text-xl font-bold tracking-tight text-[#3765F6]">
+                  <span className="text-xl font-bold tracking-tight text-[var(--accent-ink)]">
                     {totalFreight.toLocaleString("ru-RU")} €
                   </span>
                 </div>
@@ -2613,7 +2613,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
               {/* Блок Дат и Дней */}
               <div className="flex flex-col gap-3">
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-[#3765F6]" />
+                  <Clock className="w-3.5 h-3.5 text-[var(--accent-ink)]" />
                   Время в пути
                 </h3>
                 
@@ -2648,7 +2648,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         min="1"
                         value={tripDays}
                         onChange={(e) => setTripDays(Number(e.target.value))}
-                        className="w-16 bg-white/45 border border-slate-200/50 rounded-xl px-2 py-1.5 text-xs font-semibold text-[#3765F6] outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs text-center"
+                        className="w-16 bg-white/45 border border-slate-200/50 rounded-xl px-2 py-1.5 text-xs font-semibold text-[var(--accent-ink)] outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs text-center"
                       />
                       <span className="text-xs font-bold text-slate-500">дней</span>
                     </div>
@@ -2757,7 +2757,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
         >
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4 select-none">
             <h2 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
-              <Landmark className="w-4 h-4 text-[#3765F6]" /> Конвертер валют НБ РБ
+              <Landmark className="w-4 h-4 text-[var(--accent-ink)]" /> Конвертер валют НБ РБ
             </h2>
             <span className="text-[10px] md:text-xs font-semibold tracking-wider text-slate-500 bg-slate-100 px-2 py-0.5 rounded-xl border border-slate-200/60">
               API NBRB.BY
@@ -2800,7 +2800,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
             ].map((cur) => (
               <div
                 key={cur}
-                className="flex items-center w-full bg-white border border-slate-200/50 rounded-xl overflow-hidden focus-within:border-[#3765F6] focus-within:ring-2 focus-within:ring-blue-100/30 shadow-2xs transition"
+                className="flex items-center w-full bg-white border border-slate-200/50 rounded-xl overflow-hidden focus-within:border-[var(--accent-ui)] focus-within:ring-2 focus-within:ring-blue-100/30 shadow-2xs transition"
               >
                 <div className="bg-white/45 flex-shrink-0 px-4 py-3 border-r border-slate-200/50 font-semibold text-slate-700 min-w-[85px] text-center select-none flex items-center justify-center gap-2 text-sm">
                   <span className="text-[16px] leading-none">
@@ -2915,7 +2915,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
           <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-4 border-b border-slate-200/40 mb-6">
             <div>
               <h2 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                <FileSpreadsheet className="h-5 w-5 text-[#3765F6]" />
+                <FileSpreadsheet className="h-5 w-5 text-[var(--accent-ink)]" />
                 База готовых шаблонов мульти-рейсов
               </h2>
               <p className="text-xs text-slate-400 mt-1 font-medium">
@@ -2944,13 +2944,13 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 return (
                   <div
                     key={idx}
-                    className="group bg-white hover:bg-white/70 border border-slate-200/50 hover:border-[#3765F6]/50 rounded-2xl p-5 flex flex-col gap-4 transition-all duration-200 shadow-sm"
+                    className="group bg-white hover:bg-white/70 border border-slate-200/50 hover:border-[var(--accent-50)] rounded-2xl p-5 flex flex-col gap-4 transition-all duration-200 shadow-sm"
                   >
                     {/* Top Row: Info and Actions */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-slate-200/20">
                       {/* Left: Icon, Name and Badges */}
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="p-2.5 rounded-xl bg-blue-50/55 text-[#3765F6] shrink-0 border border-blue-100/20">
+                        <div className="p-2.5 rounded-xl bg-blue-50/55 text-[var(--accent-ink)] shrink-0 border border-blue-100/20">
                           <FolderOpen className="h-5 w-5" />
                         </div>
                         <div className="min-w-0">
@@ -3015,11 +3015,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
                             {i > 0 && (
                               <span className="text-slate-300 font-bold text-[11px] select-none px-0.5">&rarr;</span>
                             )}
-                            <span className="bg-white/75 px-3 py-1.5 rounded-xl border border-slate-200/40 text-[10px] sm:text-[11px] font-bold text-slate-800 flex items-center gap-2 shadow-2xs hover:border-[#3765F6] hover:shadow-xs transition duration-150">
+                            <span className="bg-white/75 px-3 py-1.5 rounded-xl border border-slate-200/40 text-[10px] sm:text-[11px] font-bold text-slate-800 flex items-center gap-2 shadow-2xs hover:border-[var(--accent-ui)] hover:shadow-xs transition duration-150">
                               <span className="truncate max-w-[140px] text-slate-900" title={l.from}>{l.from || "?"}</span>
                               <span className="text-slate-300 font-normal select-none">&bull;</span>
                               <span className="truncate max-w-[140px] text-slate-700" title={l.to}>{l.to || "?"}</span>
-                              <span className="text-[10px] text-[#3765F6] font-bold bg-blue-50/50 px-1.5 py-0.5 rounded-xl border border-blue-100/30 ml-1 shrink-0">
+                              <span className="text-[10px] text-[var(--accent-ink)] font-bold bg-blue-50/50 px-1.5 py-0.5 rounded-xl border border-blue-100/30 ml-1 shrink-0">
                                 {Number(l.dist || l.distance || 0).toLocaleString("ru-RU")} км
                               </span>
                             </span>
@@ -3045,7 +3045,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
           <div className="flex flex-col gap-4 border-b border-slate-200/40 pb-5 mb-6">
             <div className="flex justify-between items-center">
               <h2 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                <FileSpreadsheet className="h-5 w-5 text-[#3765F6]" /> Журнал расчетов
+                <FileSpreadsheet className="h-5 w-5 text-[var(--accent-ink)]" /> Журнал расчетов
               </h2>
             </div>
             <div className="relative">
@@ -3175,11 +3175,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
       />
 
       {editingCalcId && (
-        <div className="fixed inset-0 z-50 flex flex-col md:items-center md:justify-center bg-slate-900/40 animate-fade-in">
+        <div data-scroll-lock="modal" className="fixed inset-0 z-50 flex flex-col md:items-center md:justify-center bg-slate-900/40 animate-fade-in">
           <div className="bg-white w-full h-full md:h-auto md:rounded-2xl md:w-full md:max-w-lg mx-0 md:mx-4 shadow-2xl border border-slate-200 md:my-4 flex flex-col">
             <div className="p-4 md:p-6 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
               <h3 className="text-xs md:text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                <Edit className="w-4 h-4 md:w-5 md:h-5 text-[#3765F6]" /> Редактирование калькуляции
+                <Edit className="w-4 h-4 md:w-5 md:h-5 text-[var(--accent-ink)]" /> Редактирование калькуляции
               </h3>
               <button onClick={closeEditCalcModal} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer">
                 <X className="w-5 h-5" strokeWidth={2.5} />

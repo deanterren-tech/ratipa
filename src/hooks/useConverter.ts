@@ -8,6 +8,8 @@ export function useConverter() {
   const [activeCurrency, setActiveCurrency] = useState<string>(() => localStorage.getItem('ratipa_converter_currency') || 'USD');
   const [activeValue, setActiveValue] = useState<string>(() => localStorage.getItem('ratipa_converter_value') || '100');
   const [availableCurrencies, setAvailableCurrencies] = useState<any[]>([]);
+  /** Время последнего успешного обновления курсов — только для подписи в окне. */
+  const [ratesUpdatedAt, setRatesUpdatedAt] = useState<string>(() => localStorage.getItem('ratipa_converter_rates_at') || '');
 
   const [selectedCurrencyCodes, setSelectedCurrencyCodes] = useState<string[]>(() => {
     const saved = localStorage.getItem('ratipa_selected_currencies');
@@ -100,6 +102,9 @@ export function useConverter() {
             localStorage.setItem('ratipa_converter_rates', JSON.stringify(merged));
             return merged;
           });
+          const stamp = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+          localStorage.setItem('ratipa_converter_rates_at', stamp);
+          setRatesUpdatedAt(stamp);
         }
       } else {
         throw new Error('Expected data structure');
@@ -155,6 +160,7 @@ export function useConverter() {
     converterDesktopRef,
     converterPanelRef,
     fetchNbrbRates,
+    ratesUpdatedAt,
     availableCurrencies,
   };
 }

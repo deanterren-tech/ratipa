@@ -1,6 +1,31 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
+/* Акцентная тема портала: значения по умолчанию (оранжевый).
+   Переопределяются applyAccentTheme() по выбору пользователя — src/theme/accent.ts. */
+:root {
+--accent: #FF8040;
+  --accent-ink: #A55329;
+  --accent-vivid: #D46A35;
+  --accent-ui: #D46A35;
+  --accent-solid: #FF8040;
+  --accent-on: #121316;
+  --accent-hover: #FF8D53;
+  --accent-ui-hover: #BB5D2F;
+  --accent-5: rgba(255, 128, 64, 0.05);
+  --accent-8: rgba(255, 128, 64, 0.08);
+  --accent-10: rgba(255, 128, 64, 0.10);
+  --accent-15: rgba(255, 128, 64, 0.15);
+  --accent-20: rgba(255, 128, 64, 0.20);
+  --accent-25: rgba(255, 128, 64, 0.25);
+  --accent-30: rgba(255, 128, 64, 0.30);
+  --accent-40: rgba(255, 128, 64, 0.40);
+  --accent-45: rgba(255, 128, 64, 0.45);
+  --accent-50: rgba(255, 128, 64, 0.50);
+  --accent-60: rgba(255, 128, 64, 0.60);
+}
+
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
@@ -20,8 +45,8 @@
   --color-indigo-300: #a5b4fc;
   --color-indigo-400: #818cf8;
   --color-indigo-500: #5b78f7;
-  --color-indigo-600: #3765F6; /* БРЕНД Ratipa */
-  --color-indigo-700: #2c52d4;
+  --color-indigo-600: var(--accent-ui); /* БРЕНД Ratipa — следует теме пользователя */
+  --color-indigo-700: var(--accent-hover);
   --color-indigo-800: #2546b8;
   --color-indigo-900: #1f3a96;
   --color-indigo-550: #4670f8;
@@ -138,7 +163,7 @@ html, body {
 /* Keyboard navigation styles matching Ratipa aesthetic */
 .is-active {
   background-color: rgba(112, 252, 142, 0.08) !important; /* soft primary neon-mint tint */
-  box-shadow: inset 4px 0 0 0 #3765F6, 0 4px 12px rgba(55, 101, 246, 0.05) !important;
+  box-shadow: inset 4px 0 0 0 var(--accent-ui), 0 4px 12px var(--accent-5) !important;
   transition: all 0.15s ease-in-out;
 }
 .is-active td {
@@ -146,7 +171,7 @@ html, body {
   color: #1e293b !important;
 }
 .is-active span, .is-active div {
-  border-color: #3765F6 !important;
+  border-color: var(--accent-ui) !important;
 }
 
 /* Accessible focus outline — убран синий, сделан тонкий серый */
@@ -154,3 +179,54 @@ input:focus, select:focus, textarea:focus, button:focus {
   outline: none !important;
 }
 
+/* ─── Брендовый экран загрузки ────────────────────────────────────────────────
+   Сдержанная анимация: мягкое появление и лёгкая пульсация индикатора.
+   Логотип не вращается и не деформируется — только прозрачность и смещение. */
+@keyframes splashEnter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes splashMarkIn {
+  from { opacity: 0; }
+  to   { opacity: 0.9; }
+}
+@keyframes splashBar {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(360%); }
+}
+/* Знак R — центр загрузочной композиции. Медленное вращение: форма, пропорции
+   и цвета SVG не меняются, анимация плавная и без мигания. */
+@keyframes splashSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.splash-enter { animation: splashEnter 420ms ease-out both; }
+.splash-mark  { animation: splashMarkIn 600ms ease-out 120ms both; }
+.splash-spin  { animation: splashSpin 4000ms linear infinite; transform-origin: 50% 50%; }
+.splash-bar   { animation: splashBar 1250ms ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-enter { animation: splashEnter 200ms ease-out both; }
+  .splash-mark  { animation: none; opacity: 0.9; }
+  /* Уменьшение анимации: знак статичный, индикатор загрузки остаётся */
+  .splash-spin  { animation: none; }
+  .splash-bar   { animation: none; width: 100%; opacity: 0.35; }
+}
+
+/* ─── Экран ошибки: мягкое появление знака ──────────────────────────────────
+   Анимация необязательна для понимания ошибки; при reduced-motion отключается. */
+@keyframes errorEnter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes errorMarkIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 0.9; transform: scale(1); }
+}
+.error-enter { animation: errorEnter 380ms ease-out both; }
+.error-mark  { animation: errorMarkIn 520ms ease-out 80ms both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .error-enter { animation: none; }
+  .error-mark  { animation: none; opacity: 0.9; transform: none; }
+}

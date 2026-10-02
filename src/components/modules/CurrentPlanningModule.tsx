@@ -31,8 +31,6 @@ export default function CurrentPlanningModule({ user }: { user: UserProfile }) {
       title="Текущее планирование"
       subtitle="Расписание, мониторинг и управление текущими рейсами"
       icon={Table2}
-      iconWrapClass="bg-emerald-500/10 border-emerald-500/20"
-      iconColorClass="text-emerald-600"
       tabs={allowedTabs}
       gpsUrls={gpsUrls}
       gpsEnabled={false}

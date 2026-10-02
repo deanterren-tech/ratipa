@@ -1,7 +1,11 @@
 import {useState, useEffect, useRef} from 'react'
-import {UserProfile, AuditLog} from '../../types'
+
+import { getUserFullName } from '../../utils/userName';import {UserProfile, AuditLog} from '../../types'
+import UserAvatar from '../UserAvatar'
 import {dbService} from '../../api'
-import {Clock, Compass, RefreshCw, History, Activity} from 'lucide-react'
+import {Clock, Compass, RefreshCw, Activity} from 'lucide-react'
+import { UI } from '../../ui/kit';
+import { SectionHeader, StatusText } from '../../ui/components';
 
 interface Props {
   user: UserProfile;
@@ -137,7 +141,7 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
-      });
+      }).replace(/\./g, '/').replace(/,\s*/, ' ');
     } catch {
       return '—';
     }
@@ -179,106 +183,101 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
   const recentActivity = auditLogs.slice(0, 30);
 
   return (
-    <div id="admin-presence-block" className="bg-white rounded-[1.8rem] p-6 lg:p-8 border border-slate-200 shadow-sm space-y-8 select-none">
+    <div id="admin-presence-block" className="flex flex-col gap-6">
       
-      {/* Block Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/40 pb-5">
-        <div>
-          <span className="bg-slate-900/10 text-slate-700 border border-slate-900/10 font-mono text-[9px] font-semibold uppercase tracking-widest px-2.5 py-0.5 rounded-full mb-1.5 inline-block">
-            Presence Monitor
-          </span>
-          <h2 className="text-sm font-bold tracking-tight text-slate-900 flex items-center gap-1.5">
-            <Compass className="h-4.5 w-4.5 text-slate-700" />
-            Активность сотрудников
-          </h2>
-        </div>
-        <div className="flex items-center gap-2">
+      {/* Заголовок блока */}
+      <SectionHeader
+        icon={<Compass className="w-4 h-4" />}
+        tone="graphite"
+        title="Активность сотрудников"
+      >
+        <span className="inline-flex items-center gap-2">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
-          <span className="text-[10px] font-bold tracking-wider font-mono bg-white/60 border border-slate-200/50 px-3.5 py-1.5 rounded-xl text-slate-700 shadow-sm">
+          <span className="text-[11px] font-medium text-[#4B5563]">
             {onlineUsers.length} онлайн
           </span>
-        </div>
-      </div>
+        </span>
+      </SectionHeader>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-          <RefreshCw className="h-5 w-5 animate-spin mb-2 text-slate-500" />
-          <span className="text-[10px] font-semibold tracking-wider font-mono text-slate-500">Подключение к сессиям...</span>
+        <div className="flex items-center justify-center gap-2 py-10 text-xs text-[#6B7280]">
+          <RefreshCw className="h-4 w-4 animate-spin" />
+          Подключение к сессиям...
         </div>
       ) : (
-        <div className="space-y-8">
+        <div className="flex flex-col gap-8">
           
-          {/* 1. ACTIVE SESSIONS (ONLINE) */}
-          <div className="space-y-4">
-            <h3 className="text-xs font-semibold tracking-wide text-slate-500 font-mono flex items-center gap-2">
+          {/* 1. АКТИВНЫЕ СЕССИИ */}
+          <div className="flex flex-col gap-3">
+            <div className={`${UI.caption} flex items-center gap-2`}>
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               Активные сессии в системе ({onlineList.length})
-            </h3>
+            </div>
             
             {onlineList.length === 0 ? (
-              <div className="p-6 text-center bg-white/10 rounded-2xl border border-dashed border-slate-200/40 text-slate-400 text-xs font-semibold leading-relaxed">
+              <div className="py-8 text-center text-xs text-[#6B7280]">
                 В данный момент в системе нет других активных сотрудников.
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {onlineList.map(({ user: u, session }) => {
                   const isSelf = u.uid === user.uid;
                   const currentMod = session?.currentModule || 'dashboard';
                   const moduleLabel = MODULE_LABELS[currentMod] || currentMod;
-                  const initial = (u.name || "").charAt(0).toUpperCase();
                   const roleLabel = ROLE_LABELS[u.role] || u.role;
 
                   return (
                     <div 
                       key={u.uid}
-                      className={`relative p-4 rounded-[1.5rem] border transition-all duration-150 flex flex-col justify-between ${
-                        isSelf 
-                          ? 'bg-slate-900/10 border-slate-900/20 shadow-sm' 
-                          : 'bg-white/65 border-slate-200/50 shadow-xs'
+                      className={`bg-white border rounded-xl p-3.5 flex flex-col justify-between transition-colors ${
+                        isSelf ? 'border-[var(--accent-30)]' : 'border-[#E5E7EB]'
                       }`}
                     >
                       <div className="flex items-start gap-3">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-semibold text-xs shrink-0 border select-none ${
-                          isSelf ? 'bg-slate-900 text-white border-slate-900/30' : 'bg-slate-900/5 text-slate-700 border-slate-900/10'
-                        }`}>
-                          {initial}
-                        </div>
+                        <UserAvatar
+                          name={getUserFullName(u)}
+                          firstName={u.firstName}
+                          lastName={u.lastName}
+                          color={u.color}
+                          photo={u.avatarPhoto}
+                          size={36}
+                        />
                         
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-semibold text-slate-900 truncate">
-                              {u.name}
+                            <span className="text-xs font-semibold text-[#121316] truncate">
+                              {getUserFullName(u)}
                             </span>
                             {isSelf && (
-                              <span className="bg-slate-900 text-white font-mono text-[7.5px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider shrink-0 scale-95">
+                              <span className="bg-[#121316] text-white font-mono text-[10px] leading-none px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">
                                 Вы
                               </span>
                             )}
                           </div>
-                          <span className="text-[9px] font-bold font-mono uppercase tracking-widest text-slate-400 block mt-0.5">
+                          <span className="text-[10px] text-[#6B7280] block mt-0.5">
                             {roleLabel}
                           </span>
                         </div>
                       </div>
 
-                      <div className="mt-4 pt-3 border-t border-slate-200/40 flex flex-col gap-2">
-                        <div className="flex items-center justify-between text-[10px] font-medium text-slate-500">
-                          <span className="flex items-center gap-1 text-[9px] font-mono font-bold uppercase tracking-wider text-slate-400">
-                            <Clock size={11} className="text-slate-400" /> Активен в
+                      <div className="mt-3 pt-2.5 border-t border-[#E5E7EB] flex flex-col gap-2">
+                        <div className="flex items-center justify-between text-[11px] text-[#6B7280]">
+                          <span className="inline-flex items-center gap-1.5">
+                            <Clock size={11} className="text-[#9CA3AF]" /> Активен в
                           </span>
-                          <span className="font-mono font-bold text-slate-700">
+                          <span className="font-mono font-semibold text-[#4B5563]">
                             {formatTime(session?.lastActive)}
                           </span>
                         </div>
                         
-                        <div className="bg-slate-900/5 border border-slate-900/10 p-2 rounded-xl flex items-center justify-between text-[10.5px]">
-                          <span className="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1">
-                            <Compass size={11} className="text-slate-500" /> Раздел:
+                        <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg px-2 py-1.5 flex items-center justify-between gap-2 text-[11px]">
+                          <span className="inline-flex items-center gap-1.5 text-[#9CA3AF]">
+                            <Compass size={11} /> Раздел:
                           </span>
-                          <span className="font-bold text-slate-800 font-sans truncate max-w-[60%]">
+                          <span className="font-medium text-[#4B5563] truncate">
                             {moduleLabel}
                           </span>
                         </div>
@@ -290,86 +289,82 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
             )}
           </div>
 
-          {/* 2. REAL ACTIVITY HISTORY (Audit Log) */}
-          <div className="space-y-4 pt-2">
-            <h3 className="text-xs font-semibold tracking-wide text-slate-500 font-mono flex items-center gap-2">
-              <Activity size={13} className="text-slate-400" />
+          {/* 2. ПОСЛЕДНИЕ ДЕЙСТВИЯ */}
+          <div className="flex flex-col gap-3">
+            <div className={`${UI.caption} flex items-center gap-2`}>
+              <Activity size={13} className="text-[#9CA3AF]" />
               Последние действия в системе ({recentActivity.length})
-            </h3>
+            </div>
 
-            <div className="bg-white/30 rounded-2xl border border-slate-200/40 overflow-hidden shadow-xs">
-              <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
-                {recentActivity.length === 0 ? (
-                  <div className="p-6 text-center text-slate-400 text-xs font-semibold">
-                    Нет записей активности.
-                  </div>
-                ) : (
-                  <div className="divide-y divide-slate-100/40">
-                    {recentActivity.map((log, i) => {
-                      const actionType = (log.actionType || '').toLowerCase();
-                      const isCreate = actionType.includes('create') || actionType.includes('добав') || actionType.includes('созда');
-                      const isDelete = actionType.includes('delete') || actionType.includes('удал');
-                      const isEdit = actionType.includes('update') || actionType.includes('измен') || actionType.includes('сохран');
-                      
-                      const badgeColor = isCreate 
-                        ? 'bg-emerald-100 text-emerald-800' 
-                        : isDelete 
-                          ? 'bg-rose-100 text-rose-800'
-                          : isEdit
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-slate-100 text-slate-600';
+            <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
+              {recentActivity.length === 0 ? (
+                <div className="py-8 text-center text-xs text-[#6B7280]">
+                  Нет записей активности.
+                </div>
+              ) : (
+                recentActivity.map((log, i) => {
+                  const actionType = (log.actionType || '').toLowerCase();
+                  const isCreate = actionType.includes('create') || actionType.includes('добав') || actionType.includes('созда');
+                  const isDelete = actionType.includes('delete') || actionType.includes('удал');
+                  const isEdit = actionType.includes('update') || actionType.includes('измен') || actionType.includes('сохран');
+                  const actionColor = isCreate ? 'emerald' : isDelete ? 'rose' : isEdit ? 'blue' : 'grey';
 
-                      return (
-                        <div 
-                          key={log.id || i}
-                          className="flex items-start gap-3 p-3.5 hover:bg-white/40 transition duration-150"
-                        >
-                          <div className="w-1.5 h-1.5 mt-1.5 rounded-full bg-slate-300 shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-xs font-semibold text-slate-800">
-                                {log.user || 'Система'}
-                              </span>
-                              <span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded ${badgeColor}`}>
-                                {log.actionType || '—'}
-                              </span>
-                            </div>
-                            <span className="text-[10px] text-slate-500 block mt-0.5 leading-relaxed">
-                              {log.details || log.module || ''}
-                            </span>
-                            <span className="text-[9px] font-mono text-slate-400 block mt-0.5">
-                              {formatLogDate(log.date)}
-                            </span>
-                          </div>
-                          {log.module && (
-                            <span className="text-[8px] font-bold font-mono uppercase tracking-wider text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
-                              {log.module}
-                            </span>
-                          )}
+                  return (
+                    <div 
+                      key={log.id || i}
+                      className="flex items-start gap-3 px-3 py-2.5 border-b border-[#E5E7EB] last:border-0 hover:bg-[#F9FAFB] transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-semibold text-[#121316]">
+                            {log.user || 'Система'}
+                          </span>
+                          <StatusText color={actionColor as any}>
+                            {log.actionType || '—'}
+                          </StatusText>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                        <span className="text-[11px] text-[#6B7280] block mt-0.5 leading-relaxed">
+                          {log.details || log.module || ''}
+                        </span>
+                        <span className="text-[11px] font-mono text-[#9CA3AF] block mt-0.5">
+                          {formatLogDate(log.date)}
+                        </span>
+                      </div>
+                      {log.module && (
+                        <span className={`${UI.chip} shrink-0`}>
+                          {log.module}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 
-        {/* 3. ALL USERS — LAST ACTIVE TIME */}
-          <div className="space-y-4 pt-2">
-            <h3 className="text-xs font-semibold tracking-wide text-slate-500 font-mono flex items-center gap-2">
-              <Clock size={13} className="text-slate-400" />
+          {/* 3. ВСЕ СОТРУДНИКИ — ПОСЛЕДНЯЯ АКТИВНОСТЬ */}
+          <div className="flex flex-col gap-3">
+            <div className={`${UI.caption} flex items-center gap-2`}>
+              <Clock size={13} className="text-[#9CA3AF]" />
               Все сотрудники — последняя активность ({allUsers.length})
-            </h3>
+            </div>
 
-            <div className="bg-white/30 rounded-2xl border border-slate-200/40 overflow-hidden shadow-xs">
-              <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
-                {allUsers.length === 0 ? (
-                  <div className="p-6 text-center text-slate-400 text-xs font-semibold">
-                    Нет пользователей.
-                  </div>
-                ) : (
-                  <div className="divide-y divide-slate-100/40">
+            {allUsers.length === 0 ? (
+              <div className="py-8 text-center text-xs text-[#6B7280]">
+                Нет пользователей.
+              </div>
+            ) : (
+              <div className={UI.tableWrap}>
+                <table className={UI.table}>
+                  <thead>
+                    <tr className={UI.theadRow}>
+                      <th className={UI.th}>Сотрудник</th>
+                      <th className={UI.th}>Роль</th>
+                      <th className={UI.th}>Состояние</th>
+                      <th className={UI.th}>Последняя активность</th>
+                    </tr>
+                  </thead>
+                  <tbody>
                     {[...allUsers]
                       .sort((a, b) => {
                         const aOnline = onlineUids.has(a.uid) ? 1 : 0;
@@ -381,49 +376,44 @@ export default function AdminOnlinePresenceBlock({ user }: Props) {
                         const isOnline = onlineUids.has(u.uid);
                         const isSelf = u.uid === user.uid;
                         const roleLabel = ROLE_LABELS[u.role] || u.role;
-                        const initial = (u.name || "").charAt(0).toUpperCase();
 
                         return (
-                          <div
-                            key={u.uid}
-                            className="flex items-center gap-3 p-3.5 hover:bg-white/40 transition duration-150"
-                          >
-                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-semibold text-[10px] shrink-0 border select-none ${
-                              isSelf ? 'bg-slate-900 text-white border-slate-900/30' : 'bg-slate-100 text-slate-600 border-slate-200'
-                            }`}>
-                              {initial}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-xs font-semibold text-slate-800 truncate">
-                                  {u.name}
+                          <tr key={u.uid} className={UI.tr}>
+                            <td className={UI.td}>
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <UserAvatar
+                                  name={getUserFullName(u)}
+                                  firstName={u.firstName}
+                                  lastName={u.lastName}
+                                  color={u.color}
+                                  photo={u.avatarPhoto}
+                                  size={28}
+                                  textClassName="text-[10px]"
+                                />
+                                <span className="text-xs font-semibold text-[#121316] truncate">
+                                  {getUserFullName(u)}
                                 </span>
                                 {isSelf && (
-                                  <span className="bg-slate-900 text-white font-mono text-[7px] font-bold px-1 py-0.5 rounded uppercase tracking-wider shrink-0">
-                                    ВЫ
+                                  <span className="bg-[#121316] text-white font-mono text-[10px] leading-none px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                                    Вы
                                   </span>
                                 )}
-                                <span className="text-[8px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">
-                                  {roleLabel}
-                                </span>
                               </div>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                                <span className="text-[9px] font-mono text-slate-400">
-                                  {isOnline ? 'В системе' : formatLastSeen(u.lastActive)}
-                                </span>
-                              </div>
-                            </div>
-                            <span className="text-[9px] font-mono text-slate-400 shrink-0">
-                              {formatTime(u.lastActive)}
-                            </span>
-                          </div>
+                            </td>
+                            <td className={UI.td}>{roleLabel}</td>
+                            <td className={UI.td}>
+                              <StatusText color={isOnline ? 'emerald' : 'grey'}>
+                                {isOnline ? 'В системе' : formatLastSeen(u.lastActive)}
+                              </StatusText>
+                            </td>
+                            <td className={UI.tdMono}>{formatTime(u.lastActive)}</td>
+                          </tr>
                         );
                       })}
-                  </div>
-                )}
+                  </tbody>
+                </table>
               </div>
-            </div>
+            )}
           </div>
 
         </div>

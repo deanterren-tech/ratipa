@@ -2,14 +2,19 @@ import {useState, useEffect, useMemo, useRef} from 'react'
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
 import {directoryService} from '../../api'
-import {BookOpen, Trash2, Save, Plus, Search, Pencil, X} from 'lucide-react'
+import {BookOpen, Trash2, Plus, Pencil} from 'lucide-react'
 import {UserProfile} from '../../types'
 import CurrencyDirectoryBlock from './directories/CurrencyDirectoryBlock'
 import FerryDirectoryBlock from './directories/FerryDirectoryBlock'
 import CheckpointDirectoryBlock from './directories/CheckpointDirectoryBlock'
+import {UI, foundLabel} from '../../ui/kit'
+import {ModuleShell, SearchField, EmptyState, ModalShell} from '../../ui/components'
 
 interface DirectoriesModuleProps {
   user: UserProfile;
+  /** Встроенный режим: раздел открыт вкладкой внутри другого раздела —
+   *  заголовок и внешние отступы не дублируются. */
+  embedded?: boolean;
 }
 
 type DirKey = 'vehicleBrands' | 'trailerBrands' | 'rateGroups' | 'directions' | 'currencies' | 'ferries' | 'checkpoints';
@@ -49,7 +54,7 @@ const TABS: TabDef[] = [
 
 const PAGE_SIZE = 30;
 
-export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
+export default function DirectoriesModule({ user, embedded = false }: DirectoriesModuleProps) {
   const { showConfirm } = useDialog();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<DirKey>('vehicleBrands');
@@ -128,6 +133,14 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
     setEditing(it);
   };
 
+  const closeModal = async () => {
+    const hasChanges = Object.keys(draft).length > 0;
+    // Подтверждение — штатным диалогом приложения (единый язык модальных окон),
+    // а не системным окном браузера. Смысл подтверждения не меняется.
+    if (hasChanges && !(await showConfirm('Несохранённые изменения будут потеряны. Продолжить?'))) return;
+    setEditing(null);
+  };
+
   const handleSave = () => {
     if (!tab.fields || isSubmitting) return;
     const nameField = tab.nameField || 'name';
@@ -202,152 +215,164 @@ export default function DirectoriesModule({ user }: DirectoriesModuleProps) {
     }
   };
 
-  return (
-    <div key={activeTab} className="w-full space-y-6">
-      <div className="bg-white rounded-2xl p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-5">
+  const tabButtons = TABS.map((t) => {
+    const isActive = activeTab === t.key;
+    return (
+      <button
+        key={t.key}
+        type="button"
+        role="tab"
+        aria-selected={isActive}
+        onClick={() => setActiveTab(t.key)}
+        className={`${UI.tab} ${isActive ? UI.tabActive : UI.tabIdle}`}
+      >
+        {t.label}
+        {isActive ? <span className={UI.tabUnderline} aria-hidden="true" /> : null}
+      </button>
+    );
+  });
 
-        {/* Header with title + tab segment */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-          <div>
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">
-              Справочники
-            </span>
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-              <BookOpen className="w-5 h-5 text-slate-700" /> Справочники
-            </h1>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50 overflow-x-auto max-w-full items-center">
-              {TABS.map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => setActiveTab(t.key)}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all whitespace-nowrap ${
-                    activeTab === t.key
-                      ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
-                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+  const content = (
+        <div key={activeTab} className="flex flex-col gap-4 min-w-0">
+          {/* Toolbar: search + add */}
+          {!tab.block && (
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              {tab.searchable && (
+                <SearchField
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="Поиск…"
+                  ariaLabel={`Поиск в справочнике «${tab.label}»`}
+                  className="max-w-md"
+                />
+              )}
+              <button type="button" onClick={openAdd} className={UI.buttonPrimary}>
+                <Plus className="w-4 h-4" aria-hidden="true" />
+                Добавить
+              </button>
+              <span className={UI.hint}>{foundLabel(filtered.length)}</span>
             </div>
-            <span className="text-[10px] text-slate-400 font-mono hidden sm:block">{items.length} записей</span>
-          </div>
-        </div>
+          )}
 
-        {/* Toolbar: search + add */}
-        <div className="flex gap-2">
-          {tab.searchable && (
-            <div className="flex items-center flex-1 min-w-0 bg-white border border-slate-200/60 rounded-xl px-3 py-1.5">
-              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 mr-2" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Поиск…"
-                className="w-full bg-transparent text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400"
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  className="text-xs hover:bg-slate-100 p-1 rounded-lg text-slate-400 hover:text-slate-700 transition"
+          {/* List — на холсте, без карточки */}
+          {!tab.block && (paginated.length === 0 ? (
+            <EmptyState
+              kind={search.trim() ? 'no-results' : 'empty'}
+              query={search}
+              title={search.trim() ? undefined : 'Записей пока нет'}
+              hint={search.trim() ? undefined : `Добавьте первую запись в справочник «${tab.label}».`}
+              actionLabel={search.trim() ? undefined : 'Добавить запись'}
+              onAction={search.trim() ? undefined : openAdd}
+            />
+          ) : (
+            <div ref={listRef} className="w-full">
+              {paginated.map((it, idx) => (
+                <div
+                  key={it[tab.idField] || it.id || idx}
+                  className="group flex items-center justify-between gap-3 py-2.5 border-b border-[#E5E7EB] last:border-0 hover:bg-[#F9FAFB] transition-colors"
                 >
-                  <X className="w-3 h-3" />
+                  <div className="flex items-center gap-3 min-w-0">
+                    <BookOpen className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-[#121316] truncate">
+                        {it[tab.nameField] || it[tab.idField] || it.id || it.dbKey || '—'}
+                      </div>
+                      {tab.key === 'rateGroups' && (
+                        <div className="text-[11px] text-[#6B7280] font-mono">
+                          €{it.rate}/км{it.perDiemRate ? ` · суточные €${it.perDiemRate}` : ''}
+                        </div>
+                      )}
+                      {tab.key === 'directions' && it.coeff != null && (
+                        <div className="text-[11px] text-[#6B7280] font-mono">коэфф: {it.coeff}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(it)}
+                      aria-label="Изменить"
+                      title="Изменить"
+                      className={UI.buttonIcon}
+                    >
+                      <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(it)}
+                      aria-label="Удалить"
+                      title="Удалить"
+                      className="inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {hasMore && (
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => p + 1)}
+                  className="w-full py-3 min-h-[44px] text-xs font-medium text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                >
+                  Показать ещё ({filtered.length - paginated.length})
                 </button>
               )}
             </div>
-          )}
-          <button
-            onClick={openAdd}
-            className="px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 bg-slate-900 text-white hover:bg-slate-800 shadow-sm border border-slate-800 shrink-0"
-          >
-            <Plus className="w-4 h-4 shrink-0" /> Добавить
-          </button>
-        </div>
-
-        {/* List */}
-        <div ref={listRef} className="bg-white rounded-2xl border border-slate-200/60 overflow-hidden shadow-sm divide-y divide-slate-100">
-          {paginated.length === 0 && (
-            <div className="p-6 text-center text-xs text-slate-400">Пусто</div>
-          )}
-          {paginated.map((it, idx) => (
-            <div
-              key={it[tab.idField] || it.id || idx}
-              className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 group"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-800 truncate">
-                    {it[tab.nameField] || it[tab.idField] || it.id || it.dbKey || '—'}
-                  </div>
-                  {tab.key === 'rateGroups' && (
-                    <div className="text-[10px] text-slate-400">
-                      €{it.rate}/км{it.perDiemRate ? ` · суточные €${it.perDiemRate}` : ''}
-                    </div>
-                  )}
-                  {tab.key === 'directions' && it.coeff != null && (
-                    <div className="text-[10px] text-slate-400">коэфф: {it.coeff}</div>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-1 md:opacity-60 md:group-hover:opacity-100 transition">
-                <button
-                  onClick={() => openEdit(it)}
-                  className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100"
-                >
-                  <Pencil className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleDelete(it)}
-                  className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
           ))}
-          {hasMore && (
-            <button
-              onClick={() => setPage((p) => p + 1)}
-              className="w-full py-3 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition"
-            >
-              Показать ещё ({filtered.length - paginated.length})
-            </button>
-          )}
-        </div>
 
-        {/* Block components */}
-        {tab.block && <tab.block user={user} />}
-      </div>
+          {/* Block components */}
+          {tab.block && <tab.block user={user} />}
+        </div>
+  );
+
+  return (
+    <>
+      {embedded ? (
+        <div className={UI.shell}>
+          <div className="mt-1 border-b border-[#E5E7EB] overflow-x-auto scrollbar-none">
+            <nav className={UI.tabsNav} role="tablist" aria-label="Вкладки справочников">
+              {tabButtons}
+            </nav>
+          </div>
+          <div className="flex-1 pt-5">{content}</div>
+        </div>
+      ) : (
+        <ModuleShell
+          title="Справочники"
+          tabs={TABS.map((t) => ({ key: t.key, label: t.label }))}
+          activeTab={activeTab}
+          onTabChange={(key) => setActiveTab(key as DirKey)}
+          tabsAriaLabel="Вкладки справочников"
+        >
+          {content}
+        </ModuleShell>
+      )}
 
       {/* Edit/Add Modal */}
-      {editing && (
-<div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 animate-fade-in overflow-y-auto" onClick={() => {
-  const hasChanges = Object.keys(draft).length > 0;
-  if (hasChanges && !window.confirm('Несохранённые изменения будут потеряны. Продолжить?')) return;
-  setEditing(null);
-}}>
-          <div
-className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-4 sm:p-6 flex flex-col space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-slate-800">
-                {editing.__new ? 'Добавить в ' : 'Изменить · '}{tab.label}
-              </h2>
-              <button onClick={() => {
-                const hasChanges = Object.keys(draft).length > 0;
-                if (hasChanges && !window.confirm('Несохранённые изменения будут потеряны. Продолжить?')) return;
-                setEditing(null);
-              }} className="min-h-[44px] min-w-[44px] text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition flex items-center justify-center">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
+      <ModalShell
+        isOpen={!!editing && !!tab.fields}
+        onClose={closeModal}
+        title={`${editing?.__new ? 'Добавить в ' : 'Изменить · '}${tab.label}`}
+        icon={editing?.__new ? <Plus className="w-4 h-4" aria-hidden="true" /> : <Pencil className="w-4 h-4" aria-hidden="true" />}
+        ariaLabel={editing?.__new ? `Добавить в ${tab.label}` : `Изменить · ${tab.label}`}
+        maxWidth="max-w-md"
+        footer={
+          <>
+            <button type="button" onClick={closeModal} className={UI.buttonGhost}>
+              Отмена
+            </button>
+            <button type="button" onClick={handleSave} disabled={isSubmitting} className={UI.buttonPrimary}>
+              {isSubmitting ? 'Сохранение…' : 'Сохранить'}
+            </button>
+          </>
+        }
+      >
+        {tab.fields && (
+          <div className="flex flex-col gap-4">
             {tab.fields.map((f) => (
-              <div key={f.f}>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+              <div key={f.f} className="flex flex-col gap-2">
+                <label className={UI.fieldLabel}>
                   {f.label}{f.f === (tab.nameField || 'name') ? ' *' : ''}
                 </label>
                 <input
@@ -355,37 +380,13 @@ className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-4 sm:p-6 flex flex-
                   value={draft[f.f] || ''}
                   onChange={(e) => setDraft((d) => ({ ...d, [f.f]: e.target.value }))}
                   placeholder={f.ph}
-                  className="w-full mt-1 px-3 py-2 text-sm rounded-lg border border-slate-200 outline-none focus:border-slate-400 bg-white/80 transition"
+                  className={UI.input}
                 />
               </div>
             ))}
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => {
-                  const hasChanges = Object.keys(draft).length > 0;
-                  if (hasChanges && !window.confirm('Несохранённые изменения будут потеряны. Продолжить?')) return;
-                  setEditing(null);
-                }}
-                className="px-3 py-2 text-xs font-medium text-slate-500 rounded-lg hover:bg-slate-100 transition"
-              >
-                Отмена
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={isSubmitting}
-                className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg shadow-sm transition ${
-                  isSubmitting
-                    ? 'bg-slate-400 text-white cursor-not-allowed'
-                    : 'bg-slate-900 text-white hover:bg-slate-800'
-                }`}
-              >
-                <Save className="w-3.5 h-3.5" /> {isSubmitting ? 'Сохранение...' : 'Сохранить'}
-              </button>
-            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </ModalShell>
+    </>
   );
 }

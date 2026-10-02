@@ -1,17 +1,15 @@
 import {useDialog} from '../DialogProvider'
+import { buildDispatcherDirectory, dispatcherFieldsFor } from '../../utils/dispatcher';
 import React, {useState, useEffect} from 'react'
 import { 
   FileText, 
   Plus, 
-  Search, 
   Trash2, 
   Edit2, 
   Copy, 
-  Check, 
   AlertTriangle, 
   User, 
   Phone, 
-  Calendar, 
   X,
   ClipboardCheck,
   Folder,
@@ -21,7 +19,10 @@ import {
   Minimize2,
   HardDrive,
   Truck,
-  Users
+  Star,
+  LayoutGrid,
+  Columns2,
+  List
 } from 'lucide-react';
 import {dbService, database} from '../../api'
 import {pdService} from '../../api'
@@ -32,19 +33,21 @@ import {formatDriverShortName} from '../../utils/driverSync'
 import {normalizePlate, formatPlate, formatCoupling} from '../../utils/salaryAutofill'
 import CouplingPicker from '../common/CouplingPicker';
 import { useToast } from '../ToastProvider';
+import {UI} from '../../ui/kit'
+import {SectionHeader, SearchField, EmptyState, ErrorRow} from '../../ui/components'
 
 interface VehicleDriverDataModuleProps {
   user: UserProfile;
 }
 
-const VehicleDriverCard = React.memo(({ 
-  rec, 
-  copiedId, 
-  copyToClipboard, 
-  openEdit, 
-  handleDelete, 
-  showVerificationIndicator, 
-  brandModel, 
+const VehicleDriverCard = React.memo(({
+  rec,
+  copiedId,
+  copyToClipboard,
+  openEdit,
+  handleDelete,
+  showVerificationIndicator,
+  brandModel,
   trailerMake,
   matchedTariff,
   dispatchersList,
@@ -65,153 +68,173 @@ const VehicleDriverCard = React.memo(({
   bazaCars: string[];
 }) => {
   const brandsText = brandModel ? `${brandModel}${trailerMake ? ' / ' + trailerMake : ''}` : (rec.brandsLat || '');
+  const plate = normalizePlate(rec.carNumber || rec.vehicleNumbers || '');
+  const onBase = plate ? bazaCars.includes(plate) : false;
   return (
-    <div 
-            id={`vehicle-driver-card-${rec.id}`}
-            className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-300 flex flex-col overflow-hidden relative font-sans"
-        >
+    <div
+      id={`vehicle-driver-card-${rec.id}`}
+      className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs flex flex-col overflow-hidden relative"
+    >
       {showVerificationIndicator && (
-        <div className="absolute top-2 right-2 bg-amber-50 text-amber-600 border border-amber-200/60 text-[9px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 z-10 font-sans shadow-2xs">
-          <AlertTriangle className="w-3 h-3" />
+        <div className="absolute top-2 right-2 z-10 inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+          <AlertTriangle className="w-3 h-3" aria-hidden="true" />
           <span>Верификация</span>
         </div>
       )}
 
-      {/* 1. Блок Авто (Vehicle Header) - Compact & dense */}
-      <div className="px-3.5 py-2.5 border-b border-slate-100/60 bg-slate-50/30 flex items-start justify-between gap-3">
-        <div className="space-y-0.5 min-w-0 flex-1">
-          <div className="text-xs font-bold text-[#3765F6] tracking-wide font-mono bg-[#3765F6]/5 border border-[#3765F6]/10 px-2 py-0.5 rounded-lg w-fit truncate">
-            {formatCoupling(rec.coupling || `${rec.vehicleNumbers || ''}${rec.trailerNumber ? ' / ' + rec.trailerNumber : ''}`)}
+      {/* 1. Авто: номер и марка */}
+      <div className="px-3.5 py-2.5 border-b border-[#E5E7EB] flex flex-col gap-1">
+        <div
+          className={`text-xs font-semibold font-mono text-[#121316] truncate ${showVerificationIndicator ? 'pr-24' : ''}`}
+          title={formatCoupling(rec.coupling || `${rec.vehicleNumbers || ''}${rec.trailerNumber ? ' / ' + rec.trailerNumber : ''}`)}
+        >
+          {formatCoupling(rec.coupling || `${rec.vehicleNumbers || ''}${rec.trailerNumber ? ' / ' + rec.trailerNumber : ''}`)}
+        </div>
+        <div className="flex items-baseline gap-1.5 min-w-0">
+          <span className="text-[11px] font-medium text-[#6B7280] shrink-0">Марка</span>
+          <span className="text-[11px] font-mono text-[#4B5563] truncate" title={brandsText}>
+            {brandsText || '—'}
+          </span>
+        </div>
+      </div>
+
+      {/* 2. Экипаж: водитель и контакты */}
+      <div className="px-3.5 py-2.5 border-b border-[#E5E7EB] grid grid-cols-2 gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1 mb-0.5">
+            <User className="w-3 h-3 text-[#9CA3AF]" aria-hidden="true" />
+            <span className="text-[11px] font-medium text-[#6B7280]">Водитель</span>
+          </div>
+          <div className="text-xs font-semibold text-[#121316] truncate" title={rec.driverNameRu}>
+            {formatDriverShortName(rec.driverNameRu || (rec as any).driverName)}
           </div>
         </div>
-        
-        {/* Quick Dispatcher Select Dropdown - Compacted */}
-        <div className="flex flex-col items-end gap-0.5 shrink-0 select-none font-sans">
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Диспетчер</span>
-          <select
-            value={rec.dispatcher || ""}
-            onChange={(e) => onUpdateDispatcher(rec, e.target.value)}
-            className="bg-[#3765F6]/5 text-[#3765F6] hover:bg-[#3765F6]/10 border border-[#3765F6]/10 px-1.5 py-0.5 rounded-md text-[9.5px] font-extrabold outline-none focus:border-slate-300 cursor-pointer shadow-2xs transition-all"
-          >
-            <option value="" className="text-slate-800 bg-white">Без дисп.</option>
-            {dispatchersList.map((dispName) => (
-              <option key={dispName} value={dispName} className="text-slate-800 bg-white">{dispName}</option>
+
+        <div className="min-w-0">
+          <div className="flex items-center gap-1 mb-0.5">
+            <Phone className="w-3 h-3 text-[#9CA3AF]" aria-hidden="true" />
+            <span className="text-[11px] font-medium text-[#6B7280]">Контакты</span>
+          </div>
+          <div className="text-[11px] font-mono text-[#4B5563] leading-snug space-y-0.5">
+            {(rec.phones || []).slice(0, 2).map((p) => (
+              <div key={p.id} className={p.isPrimary ? "inline-flex items-center gap-1 text-[#121316] font-semibold" : ""}>
+                {p.number}
+                {p.isPrimary && <Star className="w-3 h-3 text-[var(--accent)]" aria-hidden="true" />}
+              </div>
             ))}
-          </select>
-        </div>
-      </div>
-
-      {/* 2. Блок Водителя и Телефона (Driver Profile & Phones in parallel columns) */}
-      <div className="px-3.5 py-2 flex flex-col gap-1.5 border-b border-slate-100/40">
-        <div className="grid grid-cols-2 gap-3">
-          {/* Driver Name Column */}
-          <div className="min-w-0">
-            <div className="flex items-center gap-1 mb-0.5 text-slate-400">
-              <User className="w-3 h-3 text-[#3765F6]" />
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Водитель</span>
-            </div>
-            <div className="text-[11px] font-bold text-slate-800" title={rec.driverNameRu}>
-              {formatDriverShortName(rec.driverNameRu || (rec as any).driverName)}
-            </div>
-          </div>
-
-          {/* Phones Column */}
-          <div className="min-w-0">
-            <div className="flex items-center gap-1 mb-0.5 text-slate-400">
-              <Phone className="w-3 h-3 text-[#3765F6]" />
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Связь</span>
-            </div>
-            <div className="text-[10px] font-bold text-slate-700 font-mono leading-none space-y-0.5">
-              {(rec.phones || []).slice(0, 2).map((p) => (
-                <div key={p.id} className={p.isPrimary ? "text-[#3765F6]" : ""}>
-                  {p.number} {p.isPrimary && "★"}
-                </div>
-              ))}
-              {(rec.phones || []).length === 0 && (
-                <span className="text-slate-300 font-normal italic text-[9px]">Нет телефонов</span>
-              )}
-            </div>
+            {(rec.phones || []).length === 0 && (
+              <span className="text-[#9CA3AF] italic text-[11px]">Нет телефонов</span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* 3. Блок Документов (Documents Info) - Tight multi-column grid */}
-      <div className="px-3.5 py-2 bg-slate-50/15 border-b border-slate-100/40 font-sans space-y-1">
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
-          <div>
-            <span className="text-slate-400 font-medium mr-1">Паспорт:</span>
-            <span className="font-bold text-slate-700 font-mono">{rec.passportNumber || '—'}</span>
-          </div>
-          <div>
-            <span className="text-slate-400 font-medium mr-1">Д.Рожд:</span>
-            <span className="font-bold text-slate-700 font-mono">{rec.birthDate || '—'}</span>
-          </div>
-          <div className="col-span-2" title={rec.personalId}>
-            <span className="text-slate-400 font-medium mr-1">Личный №:</span>
-            <span className="font-bold text-slate-700 font-mono tracking-tight text-[9.5px]">{rec.personalId || '—'}</span>
-          </div>
-          <div className="col-span-2">
-            <span className="text-slate-400 font-medium mr-1">Срок действия:</span>
-            <span className="font-bold text-slate-700 font-mono text-[9.5px]">{rec.passportStart || '—'} — {rec.passportEnd || '—'}</span>
-          </div>
-          <div className="col-span-2" title={rec.passportIssuedBy}>
-            <span className="text-slate-400 font-medium mr-1">Выдан:</span>
-            <span className="font-semibold text-slate-600 text-[9.5px]">{rec.passportIssuedBy || '—'}</span>
-          </div>
-        </div>
+      {/* 3. Диспетчер */}
+      <div className="px-3.5 py-2 border-b border-[#E5E7EB] flex items-center justify-between gap-3">
+        <span className="text-[11px] font-medium text-[#6B7280] shrink-0">Диспетчер</span>
+        <select
+          value={rec.dispatcher || ""}
+          onChange={(e) => onUpdateDispatcher(rec, e.target.value)}
+          aria-label="Диспетчер"
+          className="bg-white border border-[#E5E7EB] text-[#4B5563] hover:bg-[#F3F4F6] px-2 py-1 rounded-lg text-[11px] font-medium outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] cursor-pointer min-h-[44px] max-w-[68%]"
+        >
+          <option value="">Без дисп.</option>
+          {dispatchersList.map((dispName) => (
+            <option key={dispName} value={dispName}>{dispName}</option>
+          ))}
+        </select>
       </div>
 
-      {/* 3.5 Блок Тарифа (Tariff Block) - Embedded inside as tiny line */}
-      <div className="px-3.5 py-1.5 bg-blue-50/10 border-b border-slate-100/40 flex items-center justify-between gap-2 font-sans text-[10px]">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Тариф</span>
+      {/* 4. Тариф */}
+      <div className="px-3.5 py-2 border-b border-[#E5E7EB] flex items-center justify-between gap-2 text-[11px]">
+        <span className="text-[11px] font-medium text-[#6B7280] shrink-0">Тариф</span>
         {matchedTariff ? (
-          <div className="flex items-center gap-1 font-bold text-emerald-600 bg-emerald-50 border border-emerald-200/40 px-2 py-0.5 rounded-lg shadow-3xs font-sans text-[9.5px]">
-            <span>{matchedTariff.name}</span>
-            <span className="text-[8.5px] text-emerald-500 font-mono">({matchedTariff.rate} €)</span>
-          </div>
-        ) : (rec as any).rate != null && (rec as any).rate !== '' ? (
-          <div className="flex items-center gap-1 font-bold text-[#3765F6] bg-[#3765F6]/5 border border-[#3765F6]/10 px-2 py-0.5 rounded-lg shadow-3xs font-sans text-[9.5px]">
-            <span>Ставка</span>
-            <span className="text-[8.5px] text-[#3765F6] font-mono">{(rec as any).rate} €/км</span>
-          </div>
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#4B5563] min-w-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" aria-hidden="true" />
+            <span className="truncate" title={matchedTariff.name}>{matchedTariff.name}</span>
+          </span>
         ) : (
-          <span className="text-slate-400 italic font-medium text-[9.5px]">Не установлен</span>
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-[#9CA3AF] italic">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#9CA3AF] shrink-0" aria-hidden="true" />
+            Не установлен
+          </span>
         )}
       </div>
 
-      {/* 3.6 Блок Статуса (На базе / В рейса) — по «Учёту выезда» */}
-      <div className="px-3.5 py-1.5 bg-slate-50/30 border-b border-slate-100/40 flex items-center justify-between gap-2 font-sans text-[10px]">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Статус</span>
-        {(() => {
-          const plate = normalizePlate(rec.carNumber || rec.vehicleNumbers || '');
-          const onBase = plate ? bazaCars.includes(plate) : false;
-          return onBase ? (
-            <div className="flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/50 px-2 py-0.5 rounded-lg shadow-3xs font-sans text-[9.5px]">
-              <span>На базе</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1 font-bold text-slate-700 bg-slate-100 border border-slate-200/60 px-2 py-0.5 rounded-lg shadow-3xs font-sans text-[9.5px]">
-              <span>В рейсе</span>
-            </div>
-          );
-        })()}
+      {/* 5. Ставка */}
+      <div className="px-3.5 py-2 border-b border-[#E5E7EB] flex items-center justify-between gap-2">
+        <span className="text-[11px] font-medium text-[#6B7280] shrink-0">Ставка</span>
+        {matchedTariff ? (
+          <span className="text-xs font-mono font-semibold text-[#121316]">{matchedTariff.rate} €</span>
+        ) : (rec as any).rate != null && (rec as any).rate !== '' ? (
+          <span className="text-xs font-mono font-semibold text-[#121316]">{(rec as any).rate} €/км</span>
+        ) : (
+          <span className="text-xs font-mono text-[#9CA3AF]">—</span>
+        )}
       </div>
 
-      {/* 4. Копируемый блок данных (Formatted Plain Copy Area) - Compressed to save space */}
-      <div className="px-3.5 py-2 flex-1 flex flex-col justify-end bg-slate-50/5">
-        <div className="bg-slate-50 rounded-2xl p-2 font-mono text-[9.5px] text-slate-600 leading-tight relative group">
-          <div className="text-slate-400 border-b border-slate-200/40 pb-1 mb-1 flex items-center justify-between text-[8px] font-bold tracking-wider font-sans select-none">
-            <span className="text-[#3765F6] font-extrabold">ДЛЯ БУФЕРА ОБМЕНА</span>
+      {/* 6. Статус (На базе / В рейсе) — по «Учёту выезда» */}
+      <div className="px-3.5 py-2 border-b border-[#E5E7EB] flex items-center justify-between gap-2 text-[11px]">
+        <span className="text-[11px] font-medium text-[#6B7280] shrink-0">Статус</span>
+        {onBase ? (
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-600">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" aria-hidden="true" />
+            На базе
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-600">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" aria-hidden="true" />
+            В рейсе
+          </span>
+        )}
+      </div>
+
+      {/* 7. Документы водителя — структурировано: подписи 11px, значения моно/полужирным */}
+      <div className="px-3.5 py-2.5 border-b border-[#E5E7EB] flex flex-col gap-2">
+        <div className={`${UI.caption} flex items-center gap-1.5`}>
+          <FileText className="w-3.5 h-3.5" aria-hidden="true" />
+          <span>Документы водителя</span>
+        </div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+          <div className="min-w-0">
+            <div className="text-[11px] font-medium text-[#6B7280]">Паспорт</div>
+            <div className="text-xs font-mono font-semibold text-[#121316] truncate" title={rec.passportNumber}>{rec.passportNumber || '—'}</div>
+          </div>
+          <div className="min-w-0">
+            <div className="text-[11px] font-medium text-[#6B7280]">Дата рождения</div>
+            <div className="text-xs font-mono font-semibold text-[#121316] truncate">{rec.birthDate || '—'}</div>
+          </div>
+          <div className="col-span-2 min-w-0">
+            <div className="text-[11px] font-medium text-[#6B7280]">Личный №</div>
+            <div className="text-xs font-mono font-semibold text-[#121316] truncate" title={rec.personalId}>{rec.personalId || '—'}</div>
+          </div>
+          <div className="col-span-2 min-w-0">
+            <div className="text-[11px] font-medium text-[#6B7280]">Срок действия</div>
+            <div className="text-xs font-mono font-semibold text-[#121316] truncate">{rec.passportStart || '—'} — {rec.passportEnd || '—'}</div>
+          </div>
+          <div className="col-span-2 min-w-0">
+            <div className="text-[11px] font-medium text-[#6B7280]">Кем выдан</div>
+            <div className="text-xs font-mono text-[#4B5563] leading-snug" title={rec.passportIssuedBy}>{rec.passportIssuedBy || '—'}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 8. Копируемый блок данных */}
+      <div className="px-3.5 py-2.5 flex-1 flex flex-col justify-end">
+        <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-2.5 font-mono text-[10px] text-[#4B5563] leading-relaxed">
+          <div className="flex items-center justify-between gap-2 pb-1.5 mb-1.5 border-b border-[#E5E7EB]">
+            <span className="text-[10px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">Для буфера обмена</span>
             <button
+              type="button"
               onClick={() => copyToClipboard(rec)}
-              className="text-[#3765F6] hover:text-white hover:bg-[#3765F6] transition-all flex items-center gap-1 py-0.5 px-2 cursor-pointer bg-white rounded-md border border-slate-200 shadow-sm font-sans text-[8.5px] font-bold active:scale-95 min-h-[44px]"
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] text-[10px] font-medium transition-colors cursor-pointer min-h-[44px]"
               title="Скопировать весь блок"
             >
-              {copiedId === rec.id ? <ClipboardCheck className="w-2.5 h-2.5 text-emerald-500" /> : <Copy className="w-2.5 h-2.5" />}
+              {copiedId === rec.id ? <ClipboardCheck className="w-3 h-3 text-emerald-500" aria-hidden="true" /> : <Copy className="w-3 h-3" aria-hidden="true" />}
               <span>{copiedId === rec.id ? 'Готово!' : 'Коп.'}</span>
             </button>
           </div>
-          <div className="select-all font-bold text-slate-800 leading-none mb-0.5">{formatCoupling(rec.coupling || `${(rec.carNumber || rec.vehicleNumbers || '')} / ${(rec as any).trailerNumber || ''}`)}</div>
+          <div className="select-all font-semibold text-[#121316] mb-0.5">{formatCoupling(rec.coupling || `${(rec.carNumber || rec.vehicleNumbers || '')} / ${(rec as any).trailerNumber || ''}`)}</div>
           <div className="select-all truncate">Марки: {brandsText || '—'}</div>
           <div className="select-all truncate">Водитель: {(() => {
             const ru = rec.driverNameRu || (rec as any).driverName || '';
@@ -227,22 +250,160 @@ const VehicleDriverCard = React.memo(({
         </div>
       </div>
 
-      {/* 5. Действия (Card Action Bar) - Minimal height */}
-      <div className="px-3.5 py-2 border-t border-slate-100 bg-white flex justify-between gap-2 font-sans">
+      {/* 9. Действия */}
+      <div className="px-3.5 py-2 border-t border-[#E5E7EB] flex items-center gap-2">
         <button
+          type="button"
           onClick={() => openEdit(rec)}
-          className="flex-1 py-1.5 px-2.5 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200 hover:border-slate-300 font-bold text-[10px] rounded-lg transition duration-150 flex items-center justify-center gap-1 cursor-pointer font-sans active:scale-95 shadow-sm min-h-[44px]"
+          className={`${UI.buttonGhost} flex-1`}
         >
-          <Edit2 className="w-3 h-3 text-slate-400" />
+          <Edit2 className="w-3 h-3" aria-hidden="true" />
           <span>Редактировать</span>
         </button>
         <button
+          type="button"
           onClick={() => handleDelete(rec)}
-          className="py-1.5 px-2 bg-white text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg transition duration-150 flex items-center justify-center cursor-pointer active:scale-95 shadow-sm min-h-[44px] min-w-[44px]"
+          aria-label="Удалить"
           title="Удалить"
+          className="inline-flex items-center justify-center p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 border border-[#E5E7EB] hover:border-rose-200 transition-colors cursor-pointer min-h-[44px] min-w-[44px]"
         >
-          <Trash2 className="w-3.5 h-3.5" />
+          <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
         </button>
+      </div>
+    </div>
+  );
+});
+
+/**
+ * Компактная строка реестра для режима «Список»: та же информация об автомобиле
+ * и водителе и те же действия (диспетчер, копирование, редактирование, удаление),
+ * но в одну-две строки — чтобы одновременно было видно больше записей.
+ */
+const VehicleDriverRow = React.memo(({
+  rec,
+  copiedId,
+  copyToClipboard,
+  openEdit,
+  handleDelete,
+  showVerificationIndicator,
+  brandModel,
+  trailerMake,
+  matchedTariff,
+  dispatchersList,
+  onUpdateDispatcher,
+  bazaCars
+}: {
+  rec: VehicleDriverRecord;
+  copiedId: string | null;
+  copyToClipboard: (rec: VehicleDriverRecord) => void;
+  openEdit: (rec: VehicleDriverRecord) => void;
+  handleDelete: (rec: VehicleDriverRecord) => void;
+  showVerificationIndicator: boolean;
+  brandModel: string;
+  trailerMake: string;
+  matchedTariff: CarRateGroup | null;
+  dispatchersList: string[];
+  onUpdateDispatcher: (rec: VehicleDriverRecord, dispatcher: string) => void;
+  bazaCars: string[];
+}) => {
+  const brandsText = brandModel ? `${brandModel}${trailerMake ? ' / ' + trailerMake : ''}` : (rec.brandsLat || '');
+  const plate = normalizePlate(rec.carNumber || rec.vehicleNumbers || '');
+  const onBase = plate ? bazaCars.includes(plate) : false;
+  const couplingText = formatCoupling(rec.coupling || `${rec.vehicleNumbers || ''}${rec.trailerNumber ? ' / ' + rec.trailerNumber : ''}`);
+  const phonesText = (rec.phones || []).slice(0, 2).map((p) => p.number).join(', ');
+  const rateText = matchedTariff
+    ? `${matchedTariff.rate} €`
+    : (rec as any).rate != null && (rec as any).rate !== '' ? `${(rec as any).rate} €/км` : '—';
+
+  return (
+    <div
+      id={`vehicle-driver-row-${rec.id}`}
+      className="bg-white border border-[#E5E7EB] rounded-xl px-3 py-2.5 flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-4"
+    >
+      <div className="min-w-0 flex-1 flex flex-col gap-1">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-mono text-xs font-semibold text-[#121316] truncate" title={couplingText}>{couplingText}</span>
+          <span className="hidden sm:inline text-[11px] text-[#6B7280] truncate" title={brandsText}>{brandsText || '—'}</span>
+          {showVerificationIndicator && (
+            <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md">
+              <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+              <span>Верификация</span>
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-[#6B7280]">
+          <span className="text-xs font-medium text-[#121316] truncate max-w-full" title={rec.driverNameRu}>
+            {formatDriverShortName(rec.driverNameRu || (rec as any).driverName) || '—'}
+          </span>
+          {phonesText
+            ? <span className="font-mono">{phonesText}</span>
+            : <span className="italic text-[#9CA3AF]">Нет телефонов</span>}
+          <span className="inline-flex items-center gap-1.5 min-w-0">
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${matchedTariff ? 'bg-emerald-500' : 'bg-[#9CA3AF]'}`} aria-hidden="true" />
+            <span className="truncate" title={matchedTariff ? matchedTariff.name : undefined}>
+              {matchedTariff ? matchedTariff.name : 'Тариф не установлен'}
+            </span>
+          </span>
+          <span className="font-mono text-[#4B5563]">{rateText}</span>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 lg:gap-3 shrink-0">
+        <select
+          value={rec.dispatcher || ""}
+          onChange={(e) => onUpdateDispatcher(rec, e.target.value)}
+          aria-label="Диспетчер"
+          className="bg-white border border-[#E5E7EB] text-[#4B5563] hover:bg-[#F3F4F6] px-2 py-1 rounded-lg text-[11px] font-medium outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] cursor-pointer min-h-[44px] w-full sm:w-auto sm:max-w-[200px]"
+        >
+          <option value="">Без дисп.</option>
+          {dispatchersList.map((dispName) => (
+            <option key={dispName} value={dispName}>{dispName}</option>
+          ))}
+        </select>
+
+        {onBase ? (
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-600 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" aria-hidden="true" />
+            На базе
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-600 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" aria-hidden="true" />
+            В рейсе
+          </span>
+        )}
+
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => copyToClipboard(rec)}
+            title="Скопировать данные"
+            aria-label="Скопировать данные"
+            className="inline-flex items-center justify-center p-2 rounded-xl text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] border border-[#E5E7EB] transition-colors cursor-pointer min-h-[44px] min-w-[44px]"
+          >
+            {copiedId === rec.id
+              ? <ClipboardCheck className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+              : <Copy className="w-3.5 h-3.5" aria-hidden="true" />}
+          </button>
+          <button
+            type="button"
+            onClick={() => openEdit(rec)}
+            title="Редактировать"
+            className="inline-flex items-center justify-center gap-1.5 px-3 rounded-xl bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] hover:text-[#121316] text-xs font-medium transition-colors cursor-pointer min-h-[44px]"
+          >
+            <Edit2 className="w-3 h-3" aria-hidden="true" />
+            <span className="hidden xl:inline">Редактировать</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDelete(rec)}
+            aria-label="Удалить"
+            title="Удалить"
+            className="inline-flex items-center justify-center p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 border border-[#E5E7EB] hover:border-rose-200 transition-colors cursor-pointer min-h-[44px] min-w-[44px]"
+          >
+            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -288,7 +449,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [systemUsers, setSystemUsers] = useState<UserProfile[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  // «Учёт выезда» (baza) — источник статуса «На базе / В рейса» в базе сцепок
+  // «Учёт выезда» (baza) — источник статуса «На базе / В рейсе» в базе сцепок
   const [bazaCars, setBazaCars] = useState<string[]>([]);
   // Маппинг авто→диспетчер из Плана дохода / Диспозиции
   const [carDispatcherMapping, setCarDispatcherMapping] = useState<Record<string, string>>({});
@@ -305,6 +466,26 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   const [selectedDispatcherFilter, setSelectedDispatcherFilter] = useState('all');
   const [selectedTariffFilter, setSelectedTariffFilter] = useState('all');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('all');
+  /**
+   * Режим отображения реестра: сетка 4 колонки, широкие карточки (2 колонки)
+   * или компактный список строками. Выбор сохраняется в профиле пользователя
+   * (users_list/{uid}.viewModes.vehicles), как масштаб Google-таблиц.
+   */
+  const [viewMode, setViewMode] = useState<'grid4' | 'grid2' | 'list'>(
+    () => (user.viewModes?.vehicles as 'grid4' | 'grid2' | 'list') || 'grid4'
+  );
+  // Профиль мог прийти позже — подхватываем сохранённый режим, пока пользователь не переключил вручную
+  const viewModeTouched = React.useRef(false);
+  useEffect(() => {
+    if (viewModeTouched.current) return;
+    const saved = user.viewModes?.vehicles;
+    if (saved === 'grid4' || saved === 'grid2' || saved === 'list') setViewMode(saved);
+  }, [user.viewModes?.vehicles]);
+  const changeViewMode = (mode: 'grid4' | 'grid2' | 'list') => {
+    viewModeTouched.current = true;
+    setViewMode(mode);
+    if (user.uid) dbService.saveUserViewMode(user.uid, 'vehicles', mode);
+  };
   
   // Form/Modal states
   const [modalOpen, setModalOpen] = useState(false);
@@ -416,7 +597,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       setExistingTrailerBrands(prev => Array.from(new Set([...prev, ...brandsList])));
     }) : () => {};
 
-    // Подписка на «Учёт выезда» (baza) для статуса «На базе / В рейса»
+    // Подписка на «Учёт выезда» (baza) для статуса «На базе / В рейсе»
     const unsubBaza = (dbService as any).getBazaRecords
       ? (dbService as any).getBazaRecords((list: any[]) => {
           const plates = (list || [])
@@ -841,7 +1022,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   };
 
   const handleUpdateDispatcherDirectly = async (rec: VehicleDriverRecord, nextDispatcher: string) => {
-    const updatedRecord = { ...rec, dispatcher: nextDispatcher };
+    // Диспетчер выбирается из списка учётных записей: сохраняем её идентификатор
+    // и имя с фамилией, чтобы запись была надёжно связана с пользователем.
+    const dispDirectory = buildDispatcherDirectory(
+      (systemUsers || []).map((u: any) => ({ id: String(u.uid || u.id || ''), name: String(u.name || '') })),
+    );
+    const dispFields = dispatcherFieldsFor(nextDispatcher, dispDirectory);
+    const updatedRecord = { ...rec, ...dispFields };
     try {
       await dbService.saveVehicleDriverRecord(updatedRecord, user.name, user.role);
     } catch (err: unknown) {
@@ -893,10 +1080,10 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     const needsVerificationThisYear = rec.lastPassportVerificationYear !== new Date().getFullYear();
     const isVerificationRequired = isAnniversaryPassed && needsVerificationThisYear;
     
-    // Статус «На базе / В рейса»: есть номер авто в «Учёте выезда» (baza) → На базе, иначе → В рейса
+    // Статус «На базе / В рейсе»: есть номер авто в «Учёте выезда» (baza) → На базе, иначе → В рейсе
     const recPlate = normalizePlate(rec.carNumber || rec.vehicleNumbers || '');
     const isOnBase = recPlate ? bazaCars.includes(recPlate) : false;
-    const couplingStatus = isOnBase ? 'on_base' : 'in_trip'; // На базе / В рейса
+    const couplingStatus = isOnBase ? 'on_base' : 'in_trip'; // На базе / В рейсе
 
     if (selectedStatusFilter === 'verification' && !isVerificationRequired) {
       return false;
@@ -973,6 +1160,42 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     );
   };
 
+  const renderRow = (rec: VehicleDriverRecord) => {
+    const isAnniversaryPassed = rec.passportStart ? (() => {
+      const parts = rec.passportStart.split('.');
+      if (parts.length === 3) {
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const anniversary = new Date(new Date().getFullYear(), month, day);
+        return new Date() >= anniversary && new Date().getFullYear() > year;
+      }
+      return false;
+    })() : false;
+    const needsVerificationThisYear = rec.lastPassportVerificationYear !== new Date().getFullYear();
+    const showVerificationIndicator = isAnniversaryPassed && needsVerificationThisYear && (!rec.dispatcher || rec.dispatcher === user.name);
+    const { brandModel, trailerMake } = resolveBrandsForRecord(rec);
+    const matchedTariff = resolveTariffForRecord(rec);
+
+    return (
+      <VehicleDriverRow
+        key={rec.id}
+        rec={rec}
+        copiedId={copiedId}
+        copyToClipboard={copyToClipboard}
+        openEdit={openEdit}
+        handleDelete={handleDelete}
+        showVerificationIndicator={showVerificationIndicator}
+        brandModel={brandModel}
+        trailerMake={trailerMake}
+        matchedTariff={matchedTariff}
+        dispatchersList={defaultDispatchers}
+        onUpdateDispatcher={handleUpdateDispatcherDirectly}
+        bazaCars={bazaCars}
+      />
+    );
+  };
+
   const rawDriveUrl = settings?.googleDriveUrl || "https://drive.google.com/drive/folders/1qUSrRKGqqo3fZSlpZnxEw-59Y86KJ7tmSnf4liNoMM";
   
   const getEmbeddableDriveUrl = (url: string) => {
@@ -996,90 +1219,105 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   const driveEmbedUrl = getEmbeddableDriveUrl(rawDriveUrl);
 
   return (
-    <div className="space-y-6 font-sans">
-      {/* Header card styled like Ratipa Welcome Scene glass container */}
-      <div className="bg-white border border-slate-200/60 rounded-3xl p-6 lg:p-8 shadow-sm">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="space-y-1">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">Модуль ТС и Водители</span>
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-              <Truck className="w-7 h-7 text-slate-800" />
-              <span>Данные по авто и водителям</span>
-            </h1>
-            <p className="text-xs text-slate-400 font-medium tracking-normal font-sans">
+    <div className={UI.shell}>
+      {/* Шапка раздела */}
+      <div className={UI.shellHeader}>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className={UI.title}>Данные по авто и водителям</h1>
+            <p className={UI.sectionSubtitle + ' mt-1'}>
               База данных паспортных реквизитов, телефонной связи и закрепленных диспетчеров RATIPA
             </p>
           </div>
-          
-          <div className="flex items-center gap-3 flex-wrap w-full md:w-auto">
+
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               id="btn-google-drive-toggle"
+              type="button"
               onClick={() => {
                 const nextState = !isDriveOpen;
                 setIsDriveOpen(nextState);
                 localStorage.setItem('ratipa_driver_drive_visible', nextState.toString());
               }}
-              className={`px-4 py-2.5 rounded-xl font-bold text-xs transition-all duration-150 border flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 min-h-[44px] ${
-                isDriveOpen
-                  ? 'bg-[#3765F6]/10 text-[#3765F6] border-[#3765F6]/20'
-                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200/60'
-              }`}
+              className={isDriveOpen ? UI.buttonDark : UI.buttonGhost}
             >
-              <Folder className="w-4 h-4 text-[#3765F6]" />
+              <Folder className="w-4 h-4" aria-hidden="true" />
               <span>Google Диск</span>
             </button>
 
             <button
               id="btn-add-driver-record"
+              type="button"
               onClick={handleOpenAdd}
-              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition-all duration-150 border border-transparent flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 min-h-[44px]"
+              className={UI.buttonPrimary}
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4" aria-hidden="true" />
               <span>Добавить данные</span>
             </button>
           </div>
         </div>
-
       </div>
 
-      <div className={isDriveOpen ? "grid grid-cols-1 xl:grid-cols-12 gap-6" : "space-y-6"}>
-        
-        {/* Left Column (Main Drivers Database) */}
-        <div className={isDriveOpen ? "xl:col-span-7 space-y-6" : "space-y-6"}>
-          
-          {/* Unified Fleet & Crew Registry Block */}
-          <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm space-y-6">
-            <div className="flex flex-col gap-4 border-b border-slate-100 pb-5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Truck className="w-5.5 h-5.5 text-[#3765F6]" />
-                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tight font-sans">
-                    Реестр автопарка и экипажей ({filteredRecords.length})
-                  </h3>
-                </div>
-              </div>
+      <div className={`${UI.content} flex-1`}>
+        <div className={isDriveOpen ? "grid grid-cols-1 xl:grid-cols-12 gap-6" : "flex flex-col gap-6"}>
 
-              {/* Dynamic Filters Bar */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 font-sans">
-                {/* 1. Main Search Input */}
-                <div className="relative col-span-1 sm:col-span-2 lg:col-span-1">
-                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <Search className="w-3.5 h-3.5" />
-                  </span>
-                  <input
-                    type="text"
-                    value={carSearchQuery}
-                    onChange={e => setCarSearchQuery(e.target.value)}
-                    placeholder="Поиск по номерам, ФИО..."
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-xs font-semibold pl-9 pr-3 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition placeholder-slate-400"
-                  />
-                </div>
+          {/* Основная колонка */}
+          <div className={isDriveOpen ? "xl:col-span-7 flex flex-col gap-6" : "flex flex-col gap-6"}>
 
-                {/* 2. Dispatcher Filter */}
+            {/* Реестр автопарка и экипажей */}
+            <div className="flex flex-col gap-4">
+              <SectionHeader
+                icon={<Truck className="w-4 h-4" />}
+                tone="graphite"
+                title={`Реестр автопарка и экипажей (${filteredRecords.length})`}
+              >
+                {/* Вид списка: 4 колонки / широкие карточки / компактные строки */}
+                <div
+                  role="group"
+                  aria-label="Вид списка"
+                  className="inline-flex items-center gap-0.5 rounded-xl border border-[#E5E7EB] bg-[#F3F4F6] p-0.5 select-none"
+                >
+                  {([
+                    { key: 'grid4', label: 'Сетка из четырёх колонок', Icon: LayoutGrid },
+                    { key: 'grid2', label: 'Широкие карточки', Icon: Columns2 },
+                    { key: 'list', label: 'Компактный список', Icon: List },
+                  ] as const).map(({ key, label, Icon }) => {
+                    const active = viewMode === key;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => changeViewMode(key)}
+                        title={label}
+                        aria-label={label}
+                        aria-pressed={active}
+                        className={`inline-flex h-8 w-9 items-center justify-center rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)] ${
+                          active
+                            ? 'bg-[#121316] text-white'
+                            : 'text-[#4B5563] hover:text-[#121316] hover:bg-[#E5E7EB]'
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </SectionHeader>
+
+              {/* Фильтры */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <SearchField
+                  value={carSearchQuery}
+                  onChange={setCarSearchQuery}
+                  placeholder="Поиск по номерам, ФИО…"
+                  ariaLabel="Поиск по автопарку"
+                  className="col-span-1 sm:col-span-2 lg:col-span-1 max-w-none"
+                />
                 <select
                   value={selectedDispatcherFilter}
                   onChange={e => setSelectedDispatcherFilter(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold px-3 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition cursor-pointer"
+                  aria-label="Фильтр по диспетчеру"
+                  className={`${UI.select} w-full`}
                 >
                   <option value="all">Все диспетчеры</option>
                   <option value="none">Без диспетчера</option>
@@ -1087,12 +1325,11 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
-
-                {/* 3. Tariff Filter */}
                 <select
                   value={selectedTariffFilter}
                   onChange={e => setSelectedTariffFilter(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold px-3 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition cursor-pointer"
+                  aria-label="Фильтр по тарифной группе"
+                  className={`${UI.select} w-full`}
                 >
                   <option value="all">Все тарифные группы</option>
                   <option value="none">Без тарифа</option>
@@ -1100,12 +1337,11 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     <option key={g.id} value={g.id}>{g.name}</option>
                   ))}
                 </select>
-
-                {/* 4. Status Filter */}
                 <select
                   value={selectedStatusFilter}
                   onChange={e => setSelectedStatusFilter(e.target.value)}
-                  className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold px-3 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition cursor-pointer"
+                  aria-label="Фильтр по статусу"
+                  className={`${UI.select} w-full`}
                 >
                   <option value="all">Все статусы</option>
                   <option value="verification">Требует верификации</option>
@@ -1113,164 +1349,184 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   <option value="in_trip">В рейсе</option>
                 </select>
               </div>
-            </div>
 
-            {/* List of Unified Cards */}
-            {!isDataLoaded ? (
-              <div className="bg-slate-50 rounded-2xl p-12 text-center border border-slate-200/60 text-slate-500 font-semibold text-xs italic flex flex-col items-center justify-center gap-2">
-                <div className="w-8 h-8 border-2 border-slate-300 border-t-[#3765F6] rounded-full animate-spin" />
-                <span>Загрузка данных автопарка...</span>
-              </div>
-            ) : filteredRecords.length === 0 ? (
-              <div className="bg-slate-50 rounded-2xl p-12 text-center border border-slate-200/60 text-slate-500 font-semibold text-xs italic flex flex-col items-center justify-center gap-2">
-                <Truck className="w-8 h-8 text-slate-300 stroke-1" />
-                <span>Записи автопарка не найдены с выбранными фильтрами</span>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className={`grid grid-cols-1 sm:grid-cols-2 ${isDriveOpen ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-6 pr-1 custom-scrollbar`}>
-                  {filteredRecords.slice(0, carsLimit).map(renderCard)}
+              {/* Список карточек */}
+              {!isDataLoaded ? (
+                <div className={UI.loading} role="status">
+                  <RefreshCw className="w-4 h-4 animate-spin text-[#9CA3AF]" aria-hidden="true" />
+                  <span>Загрузка данных автопарка...</span>
                 </div>
-
-                {filteredRecords.length > carsLimit && (
-                  <button
-                    id="load-more-records"
-                    onClick={() => setCarsLimit(prev => prev + 30)}
-                    className="w-full py-3 border border-dashed border-slate-200 hover:border-slate-400 text-slate-500 hover:text-slate-700 font-bold text-xs rounded-2xl transition bg-white hover:bg-slate-50 cursor-pointer text-center font-sans shadow-sm block min-h-[44px]"
-                  >
-                    Показать еще (+30)
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Column (Google Drive Iframe) — inline on desktop, modal on mobile */}
-        {isDriveOpen && (
-          <>
-            {/* Desktop: inline panel */}
-            <div className="hidden md:flex xl:col-span-5 flex-col bg-white border border-slate-200/60 rounded-2xl shadow-sm overflow-hidden transition-all duration-300">
-              {/* Drive Panel Header */}
-              <div className="p-4 bg-white border-b border-slate-200/60 flex items-center justify-between gap-4 shrink-0 select-none rounded-t-2xl font-sans">
-                <div className="flex items-center gap-2">
-                  <div className="p-1 px-2.5 bg-[#3765F6]/10 text-[#3765F6] font-bold text-[9px] rounded-full uppercase tracking-wider font-mono flex items-center gap-1 border border-[#3765F6]/10">
-                    <HardDrive className="w-3 h-3" />
-                    <span>DRIVE</span>
-                  </div>
-                  <h3 className="text-xs font-bold text-slate-800 tracking-tight hidden sm:block">Google Диск</h3>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => { setIsDriveLoading(true); setDriveIframeKey(k => k + 1); }} className="p-1.5 bg-white hover:bg-slate-50 text-slate-600 rounded-lg border border-slate-200/60 transition cursor-pointer" title="Обновить Диск">
-                    <RefreshCw className="w-3.5 h-3.5" />
-                  </button>
-                  <a href={rawDriveUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-white hover:bg-slate-50 text-slate-600 rounded-lg border border-slate-200/60 transition cursor-pointer flex items-center gap-1.5 text-[10px] font-bold px-2.5" title="Открыть во вкладке">
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span className="hidden md:inline uppercase tracking-wider text-[9px]">Вкладка</span>
-                  </a>
-                  <button
-                    onClick={() => setIsDriveFocusMode(!isDriveFocusMode)}
-                    className={`p-1.5 rounded-lg border transition cursor-pointer ${isDriveFocusMode ? 'bg-[#3765F6] border-[#3765F6] text-white shadow-xs' : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-600'}`}
-                    title={isDriveFocusMode ? "Свернуть" : "Развернуть на весь экран"}
-                  >
-                    {isDriveFocusMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                  </button>
-                  <button onClick={() => { setIsDriveOpen(false); localStorage.setItem('ratipa_driver_drive_visible', 'false'); }} className="p-1.5 bg-white hover:bg-slate-50 text-slate-400 hover:text-slate-600 rounded-lg border border-slate-200/60 transition cursor-pointer" title="Закрыть панель">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-              {/* Drive Panel Iframe Container */}
-              <div className="flex-1 bg-white p-2 relative overflow-hidden" style={{ minHeight: '600px' }}>
-                {isDriveLoading && (
-                  <div className="absolute inset-2 bg-white rounded-xl flex flex-col items-center justify-center p-6 gap-3 z-10 transition duration-300 shadow-inner">
-                    <Folder className="w-10 h-10 text-slate-300 animate-bounce" />
-                    <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Подключение к Google Диск...</span>
-                    <span className="text-[9px] text-slate-300">Загрузка защищенного хранилища сканов</span>
-                  </div>
-                )}
-                <iframe key={driveIframeKey} src={driveEmbedUrl} onLoad={() => setIsDriveLoading(false)} className="w-full h-full border-0 rounded-xl bg-white shadow-inner" allow="clipboard-write" title="Google Диск - Документы Водителей" />
-              </div>
-            </div>
-
-            {/* Mobile: full-screen modal */}
-            <div className="fixed inset-0 z-[500] bg-slate-900/60 flex md:hidden" onClick={() => { setIsDriveOpen(false); localStorage.setItem('ratipa_driver_drive_visible', 'false'); }}>
-              <div className="bg-white flex flex-col w-full h-full" onClick={(e) => e.stopPropagation()}>
-                <div className="p-4 border-b border-slate-200 flex items-center justify-between shrink-0">
-                  <div className="flex items-center gap-2">
-                    <HardDrive className="w-4 h-4 text-[#3765F6]" />
-                    <span className="text-xs font-bold text-slate-800">Google Диск</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => { setIsDriveLoading(true); setDriveIframeKey(k => k + 1); }} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition cursor-pointer">
-                      <RefreshCw className="w-4 h-4" />
-                    </button>
-                    <a href={rawDriveUrl} target="_blank" rel="noopener noreferrer" className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition">
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                    <button onClick={() => { setIsDriveOpen(false); localStorage.setItem('ratipa_driver_drive_visible', 'false'); }} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer">
-                      <X className="w-5 h-5" strokeWidth={2.5} />
-                    </button>
-                  </div>
-                </div>
-                <div className="flex-1 relative overflow-hidden bg-slate-50">
-                  {isDriveLoading && (
-                    <div className="absolute inset-0 bg-white flex flex-col items-center justify-center p-6 gap-3 z-10">
-                      <Folder className="w-10 h-10 text-slate-300 animate-bounce" />
-                      <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">Загрузка...</span>
+              ) : filteredRecords.length === 0 ? (
+                <EmptyState
+                  kind="no-results"
+                  title="Записи автопарка не найдены с выбранными фильтрами"
+                  hint="Измените фильтры или поисковый запрос."
+                />
+              ) : (
+                <div className="flex flex-col gap-6">
+                  {viewMode === 'list' ? (
+                    /* Компактный список строками: одновременно видно больше записей */
+                    <div className="flex flex-col gap-2 pr-1">
+                      {filteredRecords.slice(0, carsLimit).map(renderRow)}
+                    </div>
+                  ) : (
+                    /* Сетка: 4 колонки или более широкие карточки в 2 колонки.
+                       На узких экранах — одна колонка, карточки не сжимаются. */
+                    <div className={`grid grid-cols-1 gap-6 pr-1 ${
+                      viewMode === 'grid2'
+                        ? (isDriveOpen ? 'lg:grid-cols-2' : 'lg:grid-cols-2')
+                        : `sm:grid-cols-2 ${isDriveOpen ? 'lg:grid-cols-3' : 'lg:grid-cols-3 xl:grid-cols-4'}`
+                    }`}>
+                      {filteredRecords.slice(0, carsLimit).map(renderCard)}
                     </div>
                   )}
-                  <iframe key={driveIframeKey + '-mobile'} src={driveEmbedUrl} onLoad={() => setIsDriveLoading(false)} className="w-full h-full border-0 bg-white" allow="clipboard-write" title="Google Диск - Документы Водителей" />
+
+                  {filteredRecords.length > carsLimit && (
+                    <button
+                      id="load-more-records"
+                      type="button"
+                      onClick={() => setCarsLimit(prev => prev + 30)}
+                      className={`${UI.buttonGhost} w-full`}
+                    >
+                      Показать еще (+30)
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Правая колонка — Google Диск */}
+          {isDriveOpen && (
+            <>
+              {/* Desktop: встроенная панель */}
+              <div className="hidden md:flex xl:col-span-5 flex-col bg-white border border-[#E5E7EB] rounded-2xl shadow-xs overflow-hidden">
+                {/* Заголовок панели */}
+                <div className="p-4 bg-white border-b border-[#E5E7EB] flex items-center justify-between gap-4 shrink-0 select-none rounded-t-2xl">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-[#4B5563] bg-[#F3F4F6] border border-[#E5E7EB] px-2 py-0.5 rounded-md uppercase">
+                      <HardDrive className="w-3 h-3" aria-hidden="true" />
+                      <span>Drive</span>
+                    </span>
+                    <h3 className="text-xs font-semibold text-[#121316] tracking-tight hidden sm:block">Google Диск</h3>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button type="button" onClick={() => { setIsDriveLoading(true); setDriveIframeKey(k => k + 1); }} aria-label="Обновить Диск" title="Обновить Диск" className={UI.buttonIcon}>
+                      <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                    <a href={rawDriveUrl} target="_blank" rel="noopener noreferrer" title="Открыть во вкладке" className={UI.buttonGhost}>
+                      <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span className="hidden md:inline">Вкладка</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setIsDriveFocusMode(!isDriveFocusMode)}
+                      aria-label={isDriveFocusMode ? "Свернуть" : "Развернуть на весь экран"}
+                      title={isDriveFocusMode ? "Свернуть" : "Развернуть на весь экран"}
+                      className={isDriveFocusMode ? UI.buttonDark : UI.buttonGhost}
+                    >
+                      {isDriveFocusMode ? <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" /> : <Maximize2 className="w-3.5 h-3.5" aria-hidden="true" />}
+                    </button>
+                    <button type="button" onClick={() => { setIsDriveOpen(false); localStorage.setItem('ratipa_driver_drive_visible', 'false'); }} aria-label="Закрыть панель" title="Закрыть панель" className={UI.buttonIcon}>
+                      <X className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+                {/* iframe */}
+                <div className="flex-1 bg-white p-2 relative overflow-hidden" style={{ minHeight: '600px' }}>
+                  {isDriveLoading && (
+                    <div className="absolute inset-2 bg-white rounded-xl flex flex-col items-center justify-center p-6 gap-3 z-10">
+                      <Folder className="w-8 h-8 text-[#D1D5DB]" aria-hidden="true" />
+                      <span className="text-[11px] font-medium text-[#6B7280]">Подключение к Google Диск...</span>
+                      <span className="text-[11px] text-[#9CA3AF]">Загрузка защищенного хранилища сканов</span>
+                    </div>
+                  )}
+                  <iframe key={driveIframeKey} src={driveEmbedUrl} onLoad={() => setIsDriveLoading(false)} className="w-full h-full border-0 rounded-xl bg-white" allow="clipboard-write" title="Google Диск - Документы Водителей" />
                 </div>
               </div>
-            </div>
-          </>
-        )}
 
+              {/* Mobile: полноэкранный режим */}
+              <div data-scroll-lock="modal" className="fixed inset-0 z-[500] bg-black/40 backdrop-blur-[2px] flex md:hidden" onClick={() => { setIsDriveOpen(false); localStorage.setItem('ratipa_driver_drive_visible', 'false'); }}>
+                <div className="bg-white flex flex-col w-full h-full" onClick={(e) => e.stopPropagation()}>
+                  <div className="p-4 border-b border-[#E5E7EB] flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-2">
+                      <HardDrive className="w-4 h-4 text-[#9CA3AF]" aria-hidden="true" />
+                      <span className="text-xs font-semibold text-[#121316]">Google Диск</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => { setIsDriveLoading(true); setDriveIframeKey(k => k + 1); }} aria-label="Обновить Диск" className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-white border border-[#E5E7EB] text-[#4B5563] hover:bg-[#F3F4F6] transition-colors cursor-pointer">
+                        <RefreshCw className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                      <a href={rawDriveUrl} target="_blank" rel="noopener noreferrer" aria-label="Открыть во вкладке" className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-white border border-[#E5E7EB] text-[#4B5563] hover:bg-[#F3F4F6] transition-colors">
+                        <ExternalLink className="w-4 h-4" aria-hidden="true" />
+                      </a>
+                      <button type="button" onClick={() => { setIsDriveOpen(false); localStorage.setItem('ratipa_driver_drive_visible', 'false'); }} aria-label="Закрыть" className={`${UI.buttonIcon} min-h-[44px] min-w-[44px]`}>
+                        <X className="w-5 h-5" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex-1 relative overflow-hidden bg-[#F9FAFB]">
+                    {isDriveLoading && (
+                      <div className="absolute inset-0 bg-white flex flex-col items-center justify-center p-6 gap-3 z-10">
+                        <Folder className="w-8 h-8 text-[#D1D5DB]" aria-hidden="true" />
+                        <span className="text-[11px] font-medium text-[#6B7280]">Загрузка...</span>
+                      </div>
+                    )}
+                    <iframe key={driveIframeKey + '-mobile'} src={driveEmbedUrl} onLoad={() => setIsDriveLoading(false)} className="w-full h-full border-0 bg-white" allow="clipboard-write" title="Google Диск - Документы Водителей" />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+        </div>
       </div>
 
-      {/* Annual Passport Verification Pop-up Prompt */}
+      {/* Ежегодная проверка паспортных данных */}
       {currentVerification && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-slate-950/10 backdrop-blur-sm animate-fade-in overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-full md:max-w-md shadow-2xl p-6 border border-slate-200 flex flex-col gap-5 text-center font-sans my-4 mx-4">
-            <div className="mx-auto bg-amber-50 text-amber-500 p-3.5 rounded-full shadow-2xs w-max">
-              <AlertTriangle className="w-8 h-8 animate-bounce" />
-            </div>
-            
-            <div className="space-y-1">
-              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tight">Ежегодная проверка актуальности</h3>
-              <div className="text-[10px] font-bold uppercase text-amber-600 tracking-wider">Требуется подтверждение данных паспорта</div>
+        <div data-scroll-lock="modal" className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4 sm:p-6 overflow-y-auto">
+          <div className="relative z-10 w-full max-w-md bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] p-6 flex flex-col gap-5 text-center my-4">
+            <div className="mx-auto p-2.5 bg-amber-50 text-amber-600 rounded-xl w-max">
+              <AlertTriangle className="w-6 h-6" aria-hidden="true" />
             </div>
 
-            <p className="text-xs text-slate-500 leading-relaxed">
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-[#121316]">Ежегодная проверка актуальности</h3>
+              <div className="text-[11px] font-medium text-amber-600">Требуется подтверждение данных паспорта</div>
+            </div>
+
+            <p className="text-xs text-[#6B7280] leading-relaxed">
               Уважаемый диспетчер! Сегодня наступила дата ежегодной сверки паспортных реквизитов для водителя:
               <br />
-              <strong className="text-slate-900 text-sm block my-2 underline">
+              <strong className="text-[#121316] text-sm block my-2 underline">
                 {formatDriverShortName(currentVerification.driverNameRu || (currentVerification as any).driverName)}
               </strong>
-              Паспорт серии <span className="font-mono font-bold text-slate-800">{currentVerification.passportNumber}</span>, дата выдачи: <span className="font-mono font-bold text-slate-800">{currentVerification.passportStart}</span>.
+              Паспорт серии <span className="font-mono font-semibold text-[#121316]">{currentVerification.passportNumber}</span>, дата выдачи: <span className="font-mono font-semibold text-[#121316]">{currentVerification.passportStart}</span>.
               <br />
               Данные паспорта по-прежнему актуальны?
             </p>
 
-            <div className="flex flex-col gap-2 pt-2">
+            <div className="flex flex-col gap-2 pt-1">
               <button
+                type="button"
                 onClick={() => handleVerifySuccess(currentVerification)}
-                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition border border-transparent cursor-pointer shadow-sm min-h-[44px]"
+                className={`${UI.buttonPrimary} w-full`}
               >
                 Да, данные актуальны
               </button>
-              
+
               <div className="flex gap-2">
                 <button
+                  type="button"
                   onClick={() => handleVerifyEdit(currentVerification)}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] rounded-xl transition cursor-pointer border border-slate-200/60 shadow-sm min-h-[44px]"
+                  className={`${UI.buttonGhost} flex-1`}
                 >
                   Нет, редактировать
                 </button>
                 <button
+                  type="button"
                   onClick={() => handleVerifySkip(currentVerification)}
-                  className="flex-1 py-2.5 bg-white hover:bg-slate-50 text-slate-500 font-bold text-[11px] rounded-xl transition cursor-pointer border border-slate-200 shadow-sm min-h-[44px]"
+                  className={`${UI.buttonGhost} flex-1`}
                 >
                   Пропустить
                 </button>
@@ -1280,33 +1536,33 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
         </div>
       )}
 
-      {/* Edit / Add Modal */}
+      {/* Форма добавления / редактирования */}
       {modalOpen && (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center bg-slate-950/10 backdrop-blur-sm overflow-y-auto animate-fade-in font-sans">
-          <div className="bg-white rounded-3xl w-full max-w-full md:max-w-2xl shadow-2xl flex flex-col pt-1 my-4 mx-4 border border-slate-200/60">
-            {/* Modal Header */}
-            <div className="px-6 py-4.5 border-b border-slate-100 flex items-center justify-between bg-white">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-[#3765F6]" />
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-tight font-sans">
-                  {editingId ? 'Редактировать запись' : 'Добавить новые данные авто и водителя'}
-                </h3>
+        <div data-scroll-lock="modal" className={UI.modalBackdrop} role="presentation">
+          <div className={`${UI.modalSurface} max-w-2xl`} role="dialog" aria-modal="true" aria-label={editingId ? 'Редактировать запись' : 'Добавить новые данные авто и водителя'}>
+            {/* Заголовок */}
+            <div className={UI.modalHeader}>
+              <div className="flex items-start gap-3 min-w-0">
+                <div className={UI.modalIconTile}>
+                  <FileText className="w-4 h-4" aria-hidden="true" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className={UI.modalTitle}>
+                    {editingId ? 'Редактировать запись' : 'Добавить новые данные авто и водителя'}
+                  </h2>
+                </div>
               </div>
-              <button
-                onClick={() => setModalOpen(false)}
-                className="w-8 h-8 md:w-8 md:h-8 rounded-full bg-white border border-slate-200 hover:bg-slate-50 flex items-center justify-center transition text-slate-500 font-bold text-lg cursor-pointer active:scale-95 shadow-sm min-h-[44px] min-w-[44px]"
-              >
-                ×
+              <button type="button" onClick={() => setModalOpen(false)} aria-label="Закрыть" className={UI.modalClose}>
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
-
-            {/* Form Fields */}
-            <div className="p-6 space-y-4">
+            {/* Поля */}
+            <div className={UI.modalBody}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* 1. Номера ТС */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
+                <div className="flex flex-col gap-2">
+                  <label className={UI.fieldLabel}>
                     Гос. номера Тягач / Полуприцеп <span className="text-rose-500">*</span>
                   </label>
                   <CouplingPicker
@@ -1333,10 +1589,10 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   />
                 </div>
 
-                {/* 2. Марка тягача и прицепа */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
-                    Марка тягача <span className="text-slate-400 font-normal">(латиница)</span>
+                {/* 2. Марка тягача */}
+                <div className="flex flex-col gap-2">
+                  <label className={UI.fieldLabel}>
+                    Марка тягача <span className="text-[#9CA3AF] font-normal">(латиница)</span>
                   </label>
                   <input
                     type="text"
@@ -1347,7 +1603,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                       setFormBrandModel(val);
                     }}
                     placeholder="Например, SCANIA, VOLVO"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
+                    className={UI.input}
                   />
                   <datalist id="vehicle-brands-datalist">
                     {existingVehicleBrands.map(brand => (
@@ -1356,9 +1612,10 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   </datalist>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
-                    Марка прицепа <span className="text-slate-400 font-normal">(латиница)</span>
+                {/* 3. Марка прицепа */}
+                <div className="flex flex-col gap-2">
+                  <label className={UI.fieldLabel}>
+                    Марка прицепа <span className="text-[#9CA3AF] font-normal">(латиница)</span>
                   </label>
                   <input
                     type="text"
@@ -1369,7 +1626,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                       setFormTrailerMake(val);
                     }}
                     placeholder="Например, SCHMITZ, KRONA"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
+                    className={UI.input}
                   />
                   <datalist id="trailer-brands-datalist">
                     {existingTrailerBrands.map(brand => (
@@ -1378,9 +1635,9 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   </datalist>
                 </div>
 
-                {/* 3. Водитель */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
+                {/* 4. Водитель (рус) */}
+                <div className="flex flex-col gap-2">
+                  <label className={UI.fieldLabel}>
                     ФИО Водителя (Русский) <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1388,11 +1645,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={driverNameRu}
                     onChange={e => setDriverNameRu(e.target.value)}
                     placeholder="Устинов Олег Леонидович"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
+                    className={UI.input}
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
+
+                {/* 5. Водитель (лат) */}
+                <div className="flex flex-col gap-2">
+                  <label className={UI.fieldLabel}>
                     ФИО Водителя (Латиница)
                   </label>
                   <input
@@ -1400,13 +1659,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={driverNameLat}
                     onChange={e => setDriverNameLat(e.target.value)}
                     placeholder="USTSINAU ALEH"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
+                    className={UI.input}
                   />
                 </div>
 
-                {/* 4. Дата рождения */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
+                {/* 6. Дата рождения */}
+                <div className="flex flex-col gap-2">
+                  <label className={UI.fieldLabel}>
                     Дата рождения <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1414,13 +1673,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={birthDate}
                     onChange={e => setBirthDate(e.target.value)}
                     placeholder="08.02.1973"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
+                    className={UI.input}
                   />
                 </div>
 
-                {/* 5. Паспорт */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
+                {/* 7. Паспорт */}
+                <div className="flex flex-col gap-2">
+                  <label className={UI.fieldLabel}>
                     Серия и номер Паспорта <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1428,13 +1687,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={passportNumber}
                     onChange={e => setPassportNumber(e.target.value)}
                     placeholder="МР 5065058"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
+                    className={UI.input}
                   />
                 </div>
 
-                {/* 6. Идентификационный номер */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
+                {/* 8. Идентификационный номер */}
+                <div className="flex flex-col gap-2">
+                  <label className={UI.fieldLabel}>
                     Идентификационный номер <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1442,13 +1701,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={personalId}
                     onChange={e => setPersonalId(e.target.value)}
                     placeholder="3080273A018PB6"
-                    className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-slate-300 focus:bg-white transition font-mono uppercase"
+                    className={UI.input}
                   />
                 </div>
 
-                {/* 7. Срок начала */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
+                {/* 9. Дата выдачи */}
+                <div className="flex flex-col gap-2">
+                  <label className={UI.fieldLabel}>
                     Дата выдачи паспорта (Срок от) <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1456,13 +1715,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={passportStart}
                     onChange={e => setPassportStart(e.target.value)}
                     placeholder="09.01.2024"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
+                    className={UI.input}
                   />
                 </div>
 
-                {/* 8. Срок конца */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
+                {/* 10. Дата окончания */}
+                <div className="flex flex-col gap-2">
+                  <label className={UI.fieldLabel}>
                     Дата окончания паспорта (Срок до) <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1470,13 +1729,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={passportEnd}
                     onChange={e => setPassportEnd(e.target.value)}
                     placeholder="09.01.2034"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
+                    className={UI.input}
                   />
                 </div>
 
-                {/* 9. Выдан */}
-                <div className="space-y-1 md:col-span-2">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
+                {/* 11. Кем выдан */}
+                <div className="flex flex-col gap-2 md:col-span-2">
+                  <label className={UI.fieldLabel}>
                     Кем выдан паспорт <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1484,59 +1743,63 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={passportIssuedBy}
                     onChange={e => setPassportIssuedBy(e.target.value)}
                     placeholder="Фрунзенским РУВД г. Минска"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition"
+                    className={UI.input}
                   />
                 </div>
 
-                {/* 10. Телефоны */}
-                <div className="md:col-span-2 space-y-2 bg-white border border-slate-200/60 p-4.5 rounded-xl">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                                      <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
-                                        Телефоны связи <span className="text-rose-500">*</span>
-                                      </label>
+                {/* 12. Телефоны */}
+                <div className="md:col-span-2 flex flex-col gap-3 bg-white border border-[#E5E7EB] rounded-xl p-4">
+                  <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#E5E7EB]">
+                    <label className={UI.fieldLabel}>
+                      Телефоны связи <span className="text-rose-500">*</span>
+                    </label>
                     <button
                       type="button"
                       onClick={addPhoneField}
-                      className="text-[10px] font-bold text-white bg-slate-900 hover:bg-slate-800 px-2.5 py-1 rounded-lg flex items-center gap-1 transition shadow-sm cursor-pointer active:scale-95 min-h-[44px]"
+                      className={UI.buttonGhost}
                     >
-                      <Plus className="w-3.5 h-3.5" />
+                      <Plus className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>Добавить телефон</span>
                     </button>
                   </div>
-                  
+
                   {phones.length === 0 ? (
-                    <div className="text-xs text-slate-400 italic py-3 text-center bg-white border border-dashed border-slate-200 rounded-xl font-sans">
+                    <div className="text-xs text-[#6B7280] italic py-3 text-center border border-dashed border-[#E5E7EB] rounded-xl">
                       Нет добавленных телефонов. Нажмите "Добавить телефон" выше.
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="flex flex-col gap-2">
                       {phones.map((p) => (
-                        <div key={p.id} className="flex items-center gap-2 bg-white p-2 border border-slate-200/60 rounded-xl shadow-2xs">
+                        <div key={p.id} className="flex items-center gap-2 bg-[#F9FAFB] p-2 border border-[#E5E7EB] rounded-xl">
                           <input
                             type="text"
                             value={p.number}
                             onChange={e => updatePhoneField(p.id, e.target.value)}
                             placeholder="+375 (29) 123-45-67"
-                            className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition font-mono"
+                            aria-label="Номер телефона"
+                            className={`${UI.input} flex-1 font-mono`}
                           />
                           <button
                             type="button"
                             onClick={() => setPrimaryPhone(p.id)}
-                            className={`px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold transition cursor-pointer shrink-0 min-h-[44px] ${
-                              p.isPrimary 
-                                ? "bg-[#3765F6]/15 text-[#3765F6] border border-[#3765F6]/25" 
-                                : "bg-slate-100 text-slate-500 border border-slate-200/60 hover:bg-slate-200/80"
-                            }`}
+                            className={
+                              p.isPrimary
+                                ? "inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-[var(--accent-10)] text-[#A55329] border border-[var(--accent-30)] transition-colors cursor-pointer shrink-0 min-h-[44px]"
+                                : "inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-white text-[#4B5563] border border-[#E5E7EB] hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0 min-h-[44px]"
+                            }
                           >
-                            {p.isPrimary ? "★ Основной" : "Сделать основным"}
+                            {p.isPrimary
+                              ? <><Star className="w-3 h-3" aria-hidden="true" /> Основной</>
+                              : "Сделать основным"}
                           </button>
                           <button
                             type="button"
                             onClick={() => removePhoneField(p.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition shrink-0 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+                            aria-label="Удалить телефон"
                             title="Удалить телефон"
+                            className="inline-flex items-center justify-center p-2 rounded-lg text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0 cursor-pointer min-h-[44px] min-w-[44px]"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-4 h-4" aria-hidden="true" />
                           </button>
                         </div>
                       ))}
@@ -1544,15 +1807,15 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   )}
                 </div>
 
-                {/* 11. Диспетчер */}
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">
+                {/* 13. Диспетчер */}
+                <div className="flex flex-col gap-2">
+                  <label className={UI.fieldLabel}>
                     Закрепленный диспетчер <span className="text-rose-500">*</span>
                   </label>
                   <select
                     value={dispatcher}
                     onChange={e => setDispatcher(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition cursor-pointer"
+                    className={`${UI.select} w-full`}
                   >
                     <option value="">Выберите диспетчера...</option>
                     {defaultDispatchers.map((name) => (
@@ -1561,67 +1824,68 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   </select>
                 </div>
 
-                {/* 12. Доп. параметры авто */}
+                {/* 14. Доп. параметры авто */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Год выпуска</label>
+                  <div className="flex flex-col gap-2">
+                    <label className={UI.fieldLabel}>Год выпуска</label>
                     <input type="text" value={year} onChange={e => setYear(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition" placeholder="2018" />
+                      className={UI.input} placeholder="2018" />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Тип ТС</label>
+                  <div className="flex flex-col gap-2">
+                    <label className={UI.fieldLabel}>Тип ТС</label>
                     <input type="text" value={vehicleType} onChange={e => setVehicleType(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition" placeholder="Тягач / Прицеп / Фургон" />
+                      className={UI.input} placeholder="Тягач / Прицеп / Фургон" />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Габариты (Д×Ш×В, м)</label>
+                  <div className="flex flex-col gap-2">
+                    <label className={UI.fieldLabel}>Габариты (Д×Ш×В, м)</label>
                     <input type="text" value={dimensions} onChange={e => setDimensions(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition" placeholder="13.6 × 2.45 × 2.7" />
+                      className={UI.input} placeholder="13.6 × 2.45 × 2.7" />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Грузоподъёмность (т)</label>
+                  <div className="flex flex-col gap-2">
+                    <label className={UI.fieldLabel}>Грузоподъёмность (т)</label>
                     <input type="text" value={weight} onChange={e => setWeight(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition" placeholder="24" />
+                      className={UI.input} placeholder="24" />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Номер прицепа</label>
+                  <div className="flex flex-col gap-2">
+                    <label className={UI.fieldLabel}>Номер прицепа</label>
                     <input type="text" value={trailerNumber} onChange={e => setTrailerNumber(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition" placeholder="А 1635 Е-7" />
+                      className={UI.input} placeholder="А 1635 Е-7" />
                   </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Ставка (€/км, опц.)</label>
+                  <div className="flex flex-col gap-2 sm:col-span-2">
+                    <label className={UI.fieldLabel}>Ставка (€/км, опц.)</label>
                     <input type="text" value={rate} onChange={e => setRate(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition" placeholder="2.10" />
+                      className={UI.input} placeholder="2.10" />
                   </div>
                 </div>
               </div>
+
+              {/* Ошибка сохранения */}
+              {saveError && (
+                <div className="mt-4">
+                  <ErrorRow text={saveError} />
+                </div>
+              )}
             </div>
 
-            {/* Modal Error Banner */}
-            {saveError && (
-              <div className="mx-6 mt-4 p-4.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl flex items-start gap-2.5 text-xs font-sans shadow-sm animate-fade-in">
-                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                <div className="font-semibold leading-normal">{saveError}</div>
-              </div>
-            )}
-
-            {/* Modal Footer */}
-            <div className="p-6 border-t border-slate-100 flex justify-end gap-3 bg-white">
+            {/* Подвал */}
+            <div className={UI.modalFooter}>
               <button
+                type="button"
                 onClick={() => setModalOpen(false)}
                 disabled={isSaving}
-                className="px-6 py-2.5 rounded-xl font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition text-xs font-sans cursor-pointer shadow-sm disabled:opacity-50 min-h-[44px]"
+                className={UI.buttonGhost}
               >
                 Отмена
               </button>
               <button
+                type="button"
                 onClick={handleSave}
                 disabled={isSaving}
-                className="px-6 py-2.5 rounded-xl font-bold text-white bg-slate-900 hover:bg-slate-800 transition shadow-sm text-xs font-sans cursor-pointer active:scale-95 flex items-center justify-center gap-1.5 min-w-[150px] disabled:bg-slate-400 disabled:cursor-not-allowed min-h-[44px]"
+                className={UI.buttonPrimary}
               >
                 {isSaving ? (
                   <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
                     <span>Сохранение...</span>
                   </>
                 ) : (

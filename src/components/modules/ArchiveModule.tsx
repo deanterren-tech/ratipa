@@ -78,11 +78,11 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
       
       {/* Banner */}
       <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] select-none">
-        <span className="bg-[#3765F6] text-white font-bold text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono border border-slate-200/40">
+        <span className="bg-[var(--accent-solid)] text-[var(--accent-on)] font-bold text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono border border-slate-200/40">
           Системный Репозиторий
         </span>
         <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 mt-1.5 flex items-center gap-2 uppercase tracking-tight">
-          <Archive className="h-6 w-6 text-slate-900" style={{ fill: '#3765F6' }} />
+          <Archive className="h-6 w-6 text-slate-900" style={{ fill: 'var(--accent-ui)' }} />
           Архивные реестры
         </h1>
         <p className="text-xs text-slate-500 mt-1 font-semibold">
@@ -101,7 +101,7 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
               onClick={() => { setActiveTab('vehicles'); setSearchQuery(''); }}
               className={`flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap uppercase tracking-tight cursor-pointer ${
                 activeTab === 'vehicles' 
-                  ? 'bg-[#3765F6] text-white shadow-sm' 
+                  ? 'bg-[var(--accent-solid)] text-[var(--accent-on)] shadow-sm' 
                   : 'bg-white text-slate-600 border border-slate-200/40 hover:bg-slate-50'
               }`}
             >
@@ -112,7 +112,7 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
               onClick={() => { setActiveTab('calculations'); setSearchQuery(''); }}
               className={`flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap uppercase tracking-tight cursor-pointer ${
                 activeTab === 'calculations' 
-                  ? 'bg-[#3765F6] text-white shadow-sm' 
+                  ? 'bg-[var(--accent-solid)] text-[var(--accent-on)] shadow-sm' 
                   : 'bg-white text-slate-600 border border-slate-200/40 hover:bg-slate-50'
               }`}
             >
@@ -123,7 +123,7 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
               onClick={() => { setActiveTab('salaries'); setSearchQuery(''); }}
               className={`flex items-center gap-1.5 px-4.5 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap uppercase tracking-tight cursor-pointer ${
                 activeTab === 'salaries' 
-                  ? 'bg-[#3765F6] text-white shadow-sm' 
+                  ? 'bg-[var(--accent-solid)] text-[var(--accent-on)] shadow-sm' 
                   : 'bg-white text-slate-600 border border-slate-200/40 hover:bg-slate-50'
               }`}
             >
@@ -158,7 +158,7 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
                               <div className="flex items-center justify-between mb-2">
                                 <span className="font-mono font-bold text-slate-900 text-sm">{item.carNumber}</span>
                                 {user.permissions.archives === 'write' && (
-                                  <button onClick={() => handleRestoreVehicle(item)} className="inline-flex items-center gap-1 px-3 py-2 bg-[#3765F6] text-white hover:bg-[#2555E5] rounded-lg text-[10px] font-bold uppercase transition cursor-pointer min-h-[44px]">
+                                  <button onClick={() => handleRestoreVehicle(item)} className="inline-flex items-center gap-1 px-3 py-2 bg-[var(--accent-solid)] text-[var(--accent-on)] hover:bg-[var(--accent-hover)] rounded-lg text-[10px] font-bold uppercase transition cursor-pointer min-h-[44px]">
                                     <RefreshCcw className="h-3 w-3" /> Восстановить
                                   </button>
                                 )}
@@ -192,7 +192,7 @@ export default function ArchiveModule({ user }: ArchiveModuleProps) {
                                   {user.permissions.archives === 'write' && (
                                     <button
                                       onClick={() => handleRestoreVehicle(item)}
-                                      className="inline-flex items-center gap-1 p-2 px-3 bg-[#3765F6] text-white hover:bg-[#2555E5] rounded-lg text-[10px] font-bold uppercase transition duration-150 cursor-pointer border border-slate-200/40"
+                                      className="inline-flex items-center gap-1 p-2 px-3 bg-[var(--accent-solid)] text-[var(--accent-on)] hover:bg-[var(--accent-hover)] rounded-lg text-[10px] font-bold uppercase transition duration-150 cursor-pointer border border-slate-200/40"
                                       title="Разархивировать"
                                     >
                                       <RefreshCcw className="h-3 w-3" /> Восстановить экипаж

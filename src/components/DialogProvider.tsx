@@ -1,9 +1,20 @@
-import {createContext, useContext, useState, ReactNode, useCallback} from 'react'
+import {createContext, useContext, useState, ReactNode, useCallback, useEffect} from 'react'
 import {motion, AnimatePresence} from 'motion/react'
+import {AlertTriangle, HelpCircle, Info, PencilLine} from 'lucide-react'
 
 type DialogType = 'alert' | 'confirm' | 'prompt';
 
-interface DialogOptions {
+/** Вариант оформления и поведение подтверждения. */
+export interface DialogVariantOptions {
+  /** 'danger' — необратимое действие: кнопка подтверждения красная, Enter не подтверждает. */
+  variant?: 'default' | 'danger';
+  /** Своя подпись кнопки подтверждения — пользователь видит, ЧТО именно подтверждает. */
+  confirmLabel?: string;
+  /** Своя подпись кнопки отмены. */
+  cancelLabel?: string;
+}
+
+interface DialogOptions extends DialogVariantOptions {
   title?: string;
   message: string;
   defaultValue?: string;
@@ -17,9 +28,9 @@ interface DialogState extends DialogOptions {
 }
 
 interface DialogContextType {
-  showAlert: (message: string, title?: string) => Promise<void>;
-  showConfirm: (message: string, title?: string) => Promise<boolean>;
-  showPrompt: (message: string, defaultValue?: string, title?: string) => Promise<string | null>;
+  showAlert: (message: string, title?: string, options?: DialogVariantOptions) => Promise<void>;
+  showConfirm: (message: string, title?: string, options?: DialogVariantOptions) => Promise<boolean>;
+  showPrompt: (message: string, defaultValue?: string, title?: string, options?: DialogVariantOptions) => Promise<string | null>;
 }
 
 const DialogContext = createContext<DialogContextType | undefined>(undefined);
@@ -30,6 +41,13 @@ export const useDialog = () => {
   return context;
 };
 
+/** Заголовок по умолчанию: должен называть действие, а не просто «Подтверждение». */
+const DEFAULT_TITLE: Record<DialogType, string> = {
+  alert: 'Внимание',
+  confirm: 'Подтвердите действие',
+  prompt: 'Ввод данных',
+};
+
 export const DialogProvider = ({ children }: { children: ReactNode }) => {
   const [dialog, setDialog] = useState<DialogState>({
     isOpen: false,
@@ -37,24 +55,44 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
     message: '',
     title: '',
     inputValue: '',
+    variant: 'default',
     resolve: () => {},
   });
 
-  const showAlert = useCallback((message: string, title = 'Внимание') => {
+  const open = (next: Omit<DialogState, 'resolve' | 'isOpen'> & { resolve: (v: any) => void }) => {
+    setDialog({ ...next, isOpen: true });
+  };
+
+  const showAlert = useCallback((message: string, title?: string, options?: DialogVariantOptions) => {
     return new Promise<void>((resolve) => {
-      setDialog({ isOpen: true, type: 'alert', message, title, resolve, inputValue: '' });
+      open({
+        type: 'alert', message, title: title || DEFAULT_TITLE.alert,
+        inputValue: '', variant: options?.variant || 'default',
+        confirmLabel: options?.confirmLabel, cancelLabel: options?.cancelLabel,
+        resolve,
+      });
     });
   }, []);
 
-  const showConfirm = useCallback((message: string, title = 'Подтверждение') => {
+  const showConfirm = useCallback((message: string, title?: string, options?: DialogVariantOptions) => {
     return new Promise<boolean>((resolve) => {
-      setDialog({ isOpen: true, type: 'confirm', message, title, resolve, inputValue: '' });
+      open({
+        type: 'confirm', message, title: title || DEFAULT_TITLE.confirm,
+        inputValue: '', variant: options?.variant || 'default',
+        confirmLabel: options?.confirmLabel, cancelLabel: options?.cancelLabel,
+        resolve,
+      });
     });
   }, []);
 
-  const showPrompt = useCallback((message: string, defaultValue = '', title = 'Ввод данных') => {
+  const showPrompt = useCallback((message: string, defaultValue = '', title?: string, options?: DialogVariantOptions) => {
     return new Promise<string | null>((resolve) => {
-      setDialog({ isOpen: true, type: 'prompt', message, title, resolve, inputValue: defaultValue });
+      open({
+        type: 'prompt', message, title: title || DEFAULT_TITLE.prompt,
+        inputValue: defaultValue, variant: options?.variant || 'default',
+        confirmLabel: options?.confirmLabel, cancelLabel: options?.cancelLabel,
+        resolve,
+      });
     });
   }, []);
 
@@ -65,52 +103,94 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
+  const cancelValue = dialog.type === 'prompt' ? null : (dialog.type === 'confirm' ? false : undefined);
+  const confirmValue = dialog.type === 'prompt' ? dialog.inputValue : true;
+  const isDanger = dialog.variant === 'danger';
+  // Enter подтверждает только безопасное и однозначное действие
+  const enterConfirms = !isDanger;
+
+  useEffect(() => {
+    if (!dialog.isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleClose(cancelValue);
+      } else if (e.key === 'Enter' && dialog.type !== 'prompt' && enterConfirms) {
+        const el = e.target as HTMLElement | null;
+        if (el && el.tagName === 'TEXTAREA') return;
+        e.preventDefault();
+        handleClose(confirmValue);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [dialog.isOpen, dialog.type, enterConfirms, cancelValue, confirmValue]);
+
+  const Icon = dialog.type === 'prompt' ? PencilLine
+    : dialog.type === 'confirm' ? (isDanger ? AlertTriangle : HelpCircle)
+    : Info;
+
   return (
     <DialogContext.Provider value={{ showAlert, showConfirm, showPrompt }}>
       {children}
       <AnimatePresence>
         {dialog.isOpen && (
- <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 p-4 overflow-y-auto">
+          <div data-scroll-lock="modal" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4 overflow-y-auto">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden"
+              role="dialog"
+              aria-modal="true"
+              aria-label={dialog.title || DEFAULT_TITLE[dialog.type]}
+              initial={{ opacity: 0, scale: 0.97, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97, y: 8, transition: { duration: 0.12 } }}
+              transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+              className="bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] w-full max-w-md overflow-hidden"
             >
-              <div className="p-5">
-                <h3 className="text-lg font-bold text-slate-900 mb-2">{dialog.title}</h3>
-                <p className="text-slate-600 text-sm whitespace-pre-wrap">{dialog.message}</p>
-                
-                {dialog.type === 'prompt' && (
+              <div className="flex items-start gap-3 px-5 pt-5">
+                <div className={`p-2 rounded-lg shrink-0 ${
+                  isDanger ? 'bg-rose-50 text-rose-600' : 'bg-[#F3F4F6] text-[var(--accent-ink)]'
+                }`}>
+                  <Icon className="w-4 h-4" aria-hidden="true" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-semibold text-[#121316]">{dialog.title}</h3>
+                  <p className="text-xs text-[#4B5563] leading-relaxed whitespace-pre-wrap mt-1">
+                    {dialog.message}
+                  </p>
+                </div>
+              </div>
+
+              {dialog.type === 'prompt' && (
+                <div className="px-5 pt-4">
                   <input
                     type="text"
                     autoFocus
                     value={dialog.inputValue}
                     onChange={e => setDialog(prev => ({ ...prev, inputValue: e.target.value }))}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') handleClose(dialog.inputValue);
-                      if (e.key === 'Escape') handleClose(null);
-                    }}
-                    className="mt-4 w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-slate-300"
+                    className="w-full px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-xs text-[#121316] focus:outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition"
                   />
-                )}
-              </div>
-              
-              <div className="bg-slate-50 p-4 flex justify-end gap-2 border-t border-slate-100">
-                {(dialog.type === 'confirm' || dialog.type === 'prompt') && (
+                </div>
+              )}
+
+              <div className="px-5 py-4 mt-4 flex justify-end gap-2.5 border-t border-[#E5E7EB]">
+                {dialog.type !== 'alert' && (
                   <button
-                    onClick={() => handleClose(dialog.type === 'prompt' ? null : false)}
-                    className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/50 rounded-lg transition"
+                    type="button"
+                    onClick={() => handleClose(cancelValue)}
+                    className="px-4 py-2 text-xs font-medium text-[#4B5563] bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] rounded-lg transition-colors cursor-pointer"
                   >
-                    Отмена
+                    {dialog.cancelLabel || 'Отмена'}
                   </button>
                 )}
                 <button
-                  onClick={() => handleClose(dialog.type === 'prompt' ? dialog.inputValue : true)}
+                  type="button"
+                  onClick={() => handleClose(confirmValue)}
                   autoFocus={dialog.type !== 'prompt'}
-                  className="px-4 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition"
+                  className={`px-4 py-2 text-xs font-medium text-white rounded-lg transition-colors cursor-pointer ${
+                    isDanger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-[var(--accent-ui)] hover:bg-[var(--accent-ui-hover)]'
+                  }`}
                 >
-                  ОК
+                  {dialog.confirmLabel || (dialog.type === 'alert' ? 'Понятно' : 'Подтвердить')}
                 </button>
               </div>
             </motion.div>

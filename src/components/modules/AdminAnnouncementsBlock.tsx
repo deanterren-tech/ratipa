@@ -2,6 +2,8 @@ import React, {useState} from 'react'
 import {UserProfile, AppSettings, Announcement} from '../../types'
 import {dbService} from '../../api'
 import {Megaphone, Trash2} from 'lucide-react'
+import { UI } from '../../ui/kit';
+import { SectionHeader } from '../../ui/components';
 
 interface Props {
   user: UserProfile;
@@ -37,66 +39,60 @@ export default function AdminAnnouncementsBlock({ user, settings }: Props) {
   };
 
   return (
- <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm space-y-8 w-full select-none">
-      
-      {/* Block Header */}
-      <div className="border-b border-white/40 pb-4">
-        <span className="bg-slate-900 text-white font-bold text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-wider">
-          Dashboard Board
-        </span>
-        <h2 className="text-sm font-bold uppercase tracking-tight text-slate-900 mt-2 flex items-center gap-1.5">
-          <Megaphone className="h-4.5 w-4.5 text-slate-500" />
-          Системные уведомления (Dashboard)
-        </h2>
-        <p className="text-[10px] text-slate-500 font-medium mt-1 leading-relaxed">
-          Публикация важных инструкций, объявлений и новостей на главной панели сотрудников.
-        </p>
-      </div>
+    <div className="flex flex-col gap-4">
+      <SectionHeader
+        icon={<Megaphone className="w-4 h-4" />}
+        tone="graphite"
+        title="Системные уведомления (Dashboard)"
+        subtitle="Публикация важных инструкций, объявлений и новостей на главной панели сотрудников."
+      />
 
       {isWritePermitted && (
- <form onSubmit={handleAddAnnouncement} className="space-y-4 bg-white border border-slate-200 shadow-sm p-5 rounded-2xl">
+        <form onSubmit={handleAddAnnouncement} className="flex flex-col gap-3 bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-4">
           <textarea
-            placeholder="Инструкция: Сдавать CMR строго до вторника, 12:00..."
+            placeholder="Инструкция: сдавать CMR строго до вторника, 12:00..."
             required
             value={annText}
             onChange={(e) => setAnnText(e.target.value)}
-            className="w-full p-4 bg-white/40 border border-white/45 text-xs rounded-2xl outline-none focus:ring-2 focus:ring-slate-200/50 shadow-sm h-24 resize-none transition-all font-semibold text-slate-800"
+            className={`${UI.textarea} h-24 resize-none`}
           />
- <div className="flex justify-between items-center bg-white border border-slate-200 p-3 shadow-sm rounded-2xl">
-            <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-slate-500 select-none cursor-pointer group">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <label className="flex items-center gap-2 text-xs text-[#4B5563] select-none cursor-pointer">
               <input
                 type="checkbox"
                 checked={annImportant}
                 onChange={(e) => setAnnImportant(e.target.checked)}
-                className="rounded border border-slate-200 accent-slate-900 h-4 w-4 cursor-pointer transition"
+                className={UI.checkbox}
               />
-              <span className="group-hover:text-slate-800 transition-colors">Пометить как ВАЖНОЕ (рамка)</span>
+              <span>Пометить как важное (рамка)</span>
             </label>
-            <button type="submit" className="bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-xl shadow-sm text-[10px] font-semibold uppercase px-4 py-2 cursor-pointer transition-all">
+            <button type="submit" className={UI.buttonPrimary}>
               Опубликовать
             </button>
           </div>
         </form>
       )}
 
-      <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 text-xs">
+      <div className="flex flex-col max-h-[320px] overflow-y-auto custom-scrollbar">
         {settings?.announcements?.map((ann) => (
-          <div 
-            key={ann.id} 
-            className={`p-5 rounded-2xl border flex justify-between gap-3 transition-all ${
-              ann.important 
-                ? 'border-amber-500/30 bg-amber-500/10' 
-                : 'bg-white/40 border border-white/45 shadow-sm'
-            }`}
+          <div
+            key={ann.id}
+            className="flex items-start justify-between gap-3 py-3 border-b border-[#E5E7EB] last:border-0"
           >
-            <div className="flex-1 space-y-2">
-              <p className="text-slate-800 font-semibold leading-relaxed">{ann.text}</p>
-              <span className="text-[9px] font-bold font-mono text-slate-400 block uppercase tracking-wide">От: {ann.author} • {ann.date}</span>
+            <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+              {ann.important && (
+                <span className="self-start text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                  Важное
+                </span>
+              )}
+              <p className="text-xs text-[#4B5563] leading-relaxed whitespace-pre-wrap">{ann.text}</p>
+              <span className="text-[11px] font-mono text-[#9CA3AF] block">От: {ann.author} • {ann.date}</span>
             </div>
             {isWritePermitted && (
-              <button 
-                onClick={() => handleDeleteAnnouncement(ann.id)} 
-                className="text-slate-450 hover:text-rose-600 hover:bg-rose-500/10 border border-white/45 shadow-sm rounded-xl p-2 self-start cursor-pointer transition-all active:scale-90"
+              <button
+                onClick={() => handleDeleteAnnouncement(ann.id)}
+                className="inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
+                title="Удалить"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -104,9 +100,10 @@ export default function AdminAnnouncementsBlock({ user, settings }: Props) {
           </div>
         ))}
         {(!settings?.announcements || settings.announcements.length === 0) && (
-           <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 text-center py-6 font-mono">
-              Уведомлений нет
-           </div>
+          <div className="py-10 text-center">
+            <Megaphone className="w-6 h-6 mx-auto mb-2 text-[#D1D5DB]" />
+            <p className="text-xs text-[#6B7280]">Уведомлений нет</p>
+          </div>
         )}
       </div>
     </div>

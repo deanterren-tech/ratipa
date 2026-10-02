@@ -21,8 +21,6 @@ export default function MdpJournalModule({ user, settings }: MdpJournalModulePro
       title="Журнал МДП"
       subtitle="Учёт книжек МДП"
       icon={FileText}
-      iconWrapClass="bg-amber-500/10 border-amber-500/20"
-      iconColorClass="text-amber-600"
       tabs={tabs}
       gpsUrls={{
         beltranssputnik: settings?.gpsBeltranssputnikUrl || "",

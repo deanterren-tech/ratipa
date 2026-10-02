@@ -21,8 +21,6 @@ export default function BookIssueModule({ user, settings }: BookIssueModuleProps
       title="Книга выдачи"
       subtitle="Учет выданных документов"
       icon={BookOpen}
-      iconWrapClass="bg-indigo-500/10 border-indigo-500/20"
-      iconColorClass="text-indigo-600"
       tabs={tabs}
       gpsUrls={{
         beltranssputnik: settings?.gpsBeltranssputnikUrl || "",

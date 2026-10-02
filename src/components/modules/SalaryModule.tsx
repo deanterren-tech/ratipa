@@ -3,7 +3,9 @@ import {UserProfile, SalaryLog, CarRateGroup, AppSettings, Driver, Vehicle} from
 import { dbService, database, onValue } from '../../api'
 import {pdService} from '../../api'
 import { ref } from 'firebase/database'
-import {Wallet, Calculator, Trash2, Edit, Copy} from 'lucide-react'
+import {Wallet, Calculator, Trash2, Edit, Copy, Calendar, TrendingUp, History, ChevronDown, CheckCircle2} from 'lucide-react'
+import {UI} from '../../ui/kit'
+import {ModuleShell, SectionHeader, SearchField, FilterPills, StatusText, EmptyState, FoundCount, ModalShell} from '../../ui/components'
 import CalendarDaysCalculator from './CalendarDaysCalculator';
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
@@ -558,596 +560,631 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const uniqueDrivers = new Set(logs.map(r => r.driver || '').filter(Boolean)).size;
 
   return (
-    <div className="w-full space-y-6">
-        {/* Header Block */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm flex flex-col space-y-5">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-                <div>
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">
-                      Модуль Зарплата
-                    </span>
-                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-                      <Wallet className="w-7 h-7 text-slate-800" /> Зарплата водителей
-                    </h1>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                </div>
-            </div>
-        </div>
+    <ModuleShell title="Зарплата водителей">
+      <div className="flex flex-col gap-6">
 
-        <div className="flex flex-col gap-6">
-
-
-                {/* Calculator Form */}
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                    <div className="lg:col-span-3 bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm flex flex-col gap-5">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 pb-4">
-                            <h2 className="text-sm font-bold text-slate-900 tracking-tight">Калькулятор рейса водителя</h2>
-                            <div className="flex gap-2">
-                                 <button onClick={clearForm} className="bg-white border border-slate-200/60 hover:bg-slate-50 text-slate-700 font-bold px-4 min-h-[44px] py-2 rounded-xl text-xs transition active:scale-95 cursor-pointer shadow-sm">Очистить</button>
-                                 <button onClick={saveToHistory} className="bg-slate-900 text-white hover:bg-slate-800 shadow-sm border border-slate-800 font-bold px-4 min-h-[44px] py-2 rounded-xl text-xs uppercase tracking-wide flex items-center gap-2 transition active:scale-95 cursor-pointer">
-                                     Фиксировать выплату <Wallet className="h-4 w-4" />
-                                 </button>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Автомобиль</label>
-                                <CouplingPicker
-                                  value={carNumber}
-                                  onSelect={(rec) => {
-                                    if (rec) {
-                                      const cNum = (rec.carNumber || rec.vehicleNumbers || '').toUpperCase();
-                                      setCarNumber(cNum);
-                                      if (rec.driverName) {
-                                        setDriverName(rec.driverName);
-                                      }
-                                      handleCarNumberChange(cNum);
-                                    }
-                                  }}
-                                />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">ФИО Водителя</label>
-                                <input type="text" value={driverName} onChange={e => setDriverName(e.target.value)} placeholder="—" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs" />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Направление</label>
-                                <select value={tripDirection} onChange={e => setTripDirection(e.target.value)} className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs cursor-pointer appearance-none">
-                                    <option value="Турция">Турция</option>
-                                    <option value="Китай">Китай</option>
-                                </select>
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Круги</label>
-                                <select value={tripCircles} onChange={e => setTripCircles(e.target.value)} className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs cursor-pointer appearance-none">
-                                    <option value="">—</option>
-                                    <option value="2 круга">2 круга</option>
-                                    <option value="3 круга">3 круга</option>
-                                </select>
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Общий пробег (км)</label>
-                                <input type="number" value={totalKm} onChange={e => setTotalKm(Number(e.target.value))} placeholder="5500" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs" />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ставка за км (€)</label>
-                                <input type="number" step="0.001" value={ratePerKm} onChange={e => setRatePerKm(Number(e.target.value))} className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs" />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Дней простоя ({currentIdleRate} €/д)</label>
-                                <input type="number" value={idleDays} onChange={e => setIdleDays(Number(e.target.value))} min="0" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs" />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Дней в рейсе ({currentPerDiem} €/д)</label>
-                                <input type="number" value={totalDays} onChange={e => setTotalDays(Number(e.target.value))} min="1" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs" />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Премия (€)</label>
-                                <input type="number" value={bonus} onChange={e => setBonus(Number(e.target.value))} min="0" placeholder="0" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs" />
-                            </div>
-                            <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-2">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Комментарий к выплате</label>
-                                <input type="text" value={comment} onChange={e => setComment(e.target.value)} placeholder="Опционально (штрафы, детали, премии...)" className="w-full bg-white/45 border border-slate-200/50 rounded-xl text-xs font-semibold text-slate-800 outline-none px-3 py-2 focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition shadow-2xs" />
-                            </div>
-                        </div>
-                    </div>
-                    <div className="lg:col-span-1">
-                        <CalendarDaysCalculator onDaysCalculated={(days) => setTotalDays(days)} />
-                    </div>
-                </div>
-
-                {conflict && (
-                    <CarConflictModal
-                        isOpen={conflict.isOpen}
-                        conflicts={conflict.conflicts}
-                        onResolve={(resolution) => {
-                            // handle resolution...
-                            setConflict(null);
-                        }}
-                        onClose={() => setConflict(null)}
-                    />
-                )}
-
-                {/* Totals Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-center">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">За километраж</div>
-                        <div className="text-xl font-bold text-slate-800 tracking-tight font-mono">{Math.round(kmMoney).toLocaleString('ru-RU')} €</div>
-                    </div>
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-center">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Простой + Суточные</div>
-                        <div className="text-xl font-bold text-slate-800 tracking-tight font-mono">{Math.round(idleMoney + daysMoney).toLocaleString('ru-RU')} €</div>
-                    </div>
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-center">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Премия</div>
-                        <div className="text-xl font-bold text-slate-800 tracking-tight font-mono">{Math.round(bonus).toLocaleString('ru-RU')} €</div>
-                    </div>
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-center">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">З/П за сутки</div>
-                        <div className="text-xl font-bold text-slate-800 tracking-tight font-mono">{Math.round(salaryPerDay).toLocaleString('ru-RU')} €</div>
-                    </div>
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-center">
-                        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1 font-sans">Итого водителю</div>
-                        <div className="text-2xl font-bold text-slate-800 tracking-tight font-mono">{Math.round(totalSalary).toLocaleString('ru-RU')} €</div>
-                    </div>
-                </div>
-
-            </div>
-
-        {/* Global Statistics Grid (Full Width) */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm">
-                    <h2 className="text-sm font-bold text-slate-900 tracking-tight mb-4 flex items-center gap-2 select-none">
-                        <Calculator className="h-4 w-4 text-[#3765F6]" /> 
-                        Статистика выплат ({activeTab === 'current' ? 'Текущий месяц' : activeTab === 'archive' ? 'За выбранный месяц' : 'По выбранному логисту'})
-                    </h2>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                         <div className="bg-slate-50/50 rounded-lg px-2.5 py-1.5 flex flex-col">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Выплат всего</span>
-                            <span className="text-xs font-bold font-mono tabular-nums text-slate-800">{logs.length}</span>
-                        </div>
-                        <div className="bg-slate-50/50 rounded-lg px-2.5 py-1.5 flex flex-col">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Сумма всех выплат</span>
-                            <span className="text-xs font-bold font-mono tabular-nums text-slate-800">{Math.round(totalPaid).toLocaleString('ru-RU')} €</span>
-                        </div>
-                        <div className="bg-slate-50/50 rounded-lg px-2.5 py-1.5 flex flex-col">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Средняя выплата</span>
-                            <span className="text-xs font-bold font-mono tabular-nums text-slate-800">{Math.round(avgPaid).toLocaleString('ru-RU')} €</span>
-                        </div>
-                        <div className="bg-slate-50/50 rounded-lg px-2.5 py-1.5 flex flex-col">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Максимальная</span>
-                            <span className="text-xs font-bold font-mono tabular-nums text-slate-800">{Math.round(maxPaid).toLocaleString('ru-RU')} €</span>
-                        </div>
-                        <div className="bg-slate-50/50 rounded-lg px-2.5 py-1.5 flex flex-col">
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Уникальных водителей</span>
-                            <span className="text-xs font-bold font-mono tabular-nums text-slate-800">{uniqueDrivers}</span>
-                        </div>
-                    </div>
-                </div>
-
-        {/* History Cards / Recent Logs (Full Width) */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-                <h2 className="text-sm font-bold text-slate-900 tracking-tight">Журнал последних выплат</h2>
-                
-                {/* Available Months or Dispatchers dropdown inside header */}
-                <div className="flex flex-wrap items-center gap-3">
-                    {activeTab === 'dispatcher' && (
-                        <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Логист:</span>
-                            <select
-                                value={selectedDispatcher}
-                                onChange={(e) => setSelectedDispatcher(e.target.value)}
-                                className="bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-bold px-3 py-1.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all cursor-pointer shadow-sm"
-                            >
-                                {availableDispatchers.length === 0 ? (
-                                    <option value="">Нет данных</option>
-                                ) : (
-                                    availableDispatchers.map((d) => (
-                                        <option key={d} value={d}>
-                                            {d}
-                                        </option>
-                                    ))
-                                )}
-                            </select>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Interactive Tabs Menu */}
-            <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50 w-full sm:w-fit mb-6">
-                <button
-                    onClick={() => setActiveTab('current')}
-                    className={`flex-1 sm:flex-none px-4 min-h-[44px] py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                        activeTab === 'current'
-                            ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
-                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
-                    }`}
-                >
-                    Текущий месяц
-                </button>
-                <button
-                    onClick={() => setActiveTab('archive')}
-                    className={`flex-1 sm:flex-none px-4 min-h-[44px] py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                        activeTab === 'archive'
-                            ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
-                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
-                    }`}
-                >
-                    Архив месяцев
-                </button>
-                <button
-                    onClick={() => setActiveTab('dispatcher')}
-                    className={`flex-1 sm:flex-none px-4 min-h-[44px] py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                        activeTab === 'dispatcher'
-                            ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
-                            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
-                    }`}
-                >
-                    По диспетчерам
-                </button>
-            </div>
-            
-            <div className="mb-6">
-                <input 
-                    type="text" 
-                    value={searchQuery} 
-                    onChange={e => setSearchQuery(e.target.value)} 
-                    placeholder="Поиск по водителю, логисту, транспортному средству..." 
-                    className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+        {/* 1. Период и исходные данные */}
+        <section className="flex flex-col gap-4">
+          <SectionHeader
+            icon={<Calendar className="w-4 h-4" aria-hidden="true" />}
+            title="Период и исходные данные"
+            subtitle="Даты рейса, автомобиль, водитель и направление"
+          />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel}>Автомобиль</label>
+                <CouplingPicker
+                  value={carNumber}
+                  onSelect={(rec) => {
+                    if (!rec) {
+                      // Очистка выбора: убираем машину и авто-заполненные из сцепки поля
+                      setCarNumber('');
+                      handleCarNumberChange('');
+                      return;
+                    }
+                    const cNum = (rec.carNumber || rec.vehicleNumbers || '').toUpperCase();
+                    setCarNumber(cNum);
+                    if (rec.driverName) {
+                      setDriverName(rec.driverName);
+                    }
+                    handleCarNumberChange(cNum);
+                  }}
                 />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel} htmlFor="salary-driver-name">ФИО Водителя</label>
+                <input
+                  id="salary-driver-name"
+                  type="text"
+                  value={driverName}
+                  onChange={e => setDriverName(e.target.value)}
+                  placeholder="—"
+                  className={UI.input}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel} htmlFor="salary-trip-direction">Направление</label>
+                <select
+                  id="salary-trip-direction"
+                  value={tripDirection}
+                  onChange={e => setTripDirection(e.target.value)}
+                  className={UI.select}
+                >
+                  <option value="Турция">Турция</option>
+                  <option value="Китай">Китай</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel} htmlFor="salary-trip-circles">Круги</label>
+                <select
+                  id="salary-trip-circles"
+                  value={tripCircles}
+                  onChange={e => setTripCircles(e.target.value)}
+                  className={UI.select}
+                >
+                  <option value="">—</option>
+                  <option value="2 круга">2 круга</option>
+                  <option value="3 круга">3 круга</option>
+                </select>
+              </div>
+            </div>
+            <div className="lg:col-span-1">
+              <CalendarDaysCalculator onDaysCalculated={(days) => setTotalDays(days)} />
+            </div>
+          </div>
+        </section>
+
+        {/* 2. Параметры расчёта */}
+        <section className="flex flex-col gap-4">
+          <SectionHeader
+            icon={<Calculator className="w-4 h-4" aria-hidden="true" />}
+            title="Параметры расчёта"
+            subtitle="Пробег, ставки, дни и премия"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel} htmlFor="salary-total-km">Общий пробег (км)</label>
+              <input
+                id="salary-total-km"
+                type="number"
+                value={totalKm}
+                onChange={e => setTotalKm(Number(e.target.value))}
+                placeholder="5500"
+                className={UI.input}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel} htmlFor="salary-rate-per-km">Ставка за км (€)</label>
+              <input
+                id="salary-rate-per-km"
+                type="number"
+                step="0.001"
+                value={ratePerKm}
+                onChange={e => setRatePerKm(Number(e.target.value))}
+                className={UI.input}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel} htmlFor="salary-idle-days">Дней простоя ({currentIdleRate} €/д)</label>
+              <input
+                id="salary-idle-days"
+                type="number"
+                value={idleDays}
+                onChange={e => setIdleDays(Number(e.target.value))}
+                min="0"
+                className={UI.input}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel} htmlFor="salary-total-days">Дней в рейсе ({currentPerDiem} €/д)</label>
+              <input
+                id="salary-total-days"
+                type="number"
+                value={totalDays}
+                onChange={e => setTotalDays(Number(e.target.value))}
+                min="1"
+                className={UI.input}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel} htmlFor="salary-bonus">Премия (€)</label>
+              <input
+                id="salary-bonus"
+                type="number"
+                value={bonus}
+                onChange={e => setBonus(Number(e.target.value))}
+                min="0"
+                placeholder="0"
+                className={UI.input}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-3">
+              <label className={UI.fieldLabel} htmlFor="salary-comment">Комментарий к выплате</label>
+              <input
+                id="salary-comment"
+                type="text"
+                value={comment}
+                onChange={e => setComment(e.target.value)}
+                placeholder="Опционально (штрафы, детали, премии...)"
+                className={UI.input}
+              />
+            </div>
+          </div>
+        </section>
+
+        {conflict && (
+            <CarConflictModal
+                isOpen={conflict.isOpen}
+                conflicts={conflict.conflicts}
+                onResolve={(resolution) => {
+                    // handle resolution...
+                    setConflict(null);
+                }}
+                onClose={() => setConflict(null)}
+            />
+        )}
+
+        {/* 3. Показатели */}
+        <section className="flex flex-col gap-4">
+          <SectionHeader
+            icon={<TrendingUp className="w-4 h-4" aria-hidden="true" />}
+            title="Показатели"
+            subtitle="Начисления, из которых складывается выплата"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <StatusText color="accent">За километраж</StatusText>
+              <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(kmMoney).toLocaleString('ru-RU')} €</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <StatusText color="grey">Простой + Суточные</StatusText>
+              <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(idleMoney + daysMoney).toLocaleString('ru-RU')} €</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <StatusText color="grey">Премия</StatusText>
+              <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(bonus).toLocaleString('ru-RU')} €</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <StatusText color="grey">З/П за сутки</StatusText>
+              <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(salaryPerDay).toLocaleString('ru-RU')} €</span>
+            </div>
+          </div>
+        </section>
+
+        {/* 4. Итоговая сумма */}
+        <section className="flex flex-col gap-4">
+          <SectionHeader
+            icon={<Wallet className="w-4 h-4" aria-hidden="true" />}
+            title="Итоговая сумма"
+            subtitle="Итого к выплате за текущий расчёт"
+          />
+          <div className="flex flex-col gap-1">
+            <span className={UI.caption}>Итого водителю</span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl sm:text-4xl font-mono font-semibold tabular-nums text-[#121316]">
+                {Math.round(totalSalary).toLocaleString('ru-RU')}
+              </span>
+              <span className="text-sm text-[#6B7280]">€</span>
+            </div>
+            <p className="text-[11px] text-[#6B7280]">
+              Складывается из показателей выше: километраж, простой с суточными и премия.
+            </p>
+          </div>
+        </section>
+
+        {/* 5. Фиксация выплаты */}
+        <section className="flex flex-col gap-4">
+          <SectionHeader
+            icon={<CheckCircle2 className="w-4 h-4" aria-hidden="true" />}
+            title="Фиксация выплаты"
+            subtitle="Сохранение расчёта в журнал выплат"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={clearForm} className={UI.buttonGhost}>Очистить</button>
+            <button onClick={saveToHistory} className={UI.buttonPrimary}>
+              <Wallet className="w-4 h-4" aria-hidden="true" />
+              Фиксировать выплату
+            </button>
+            <span className={`${UI.hint} ml-1`}>Запись появится в журнале выплат ниже.</span>
+          </div>
+        </section>
+
+        {/* 6. Журнал выплат */}
+        <section className="flex flex-col gap-4">
+          <SectionHeader
+            icon={<History className="w-4 h-4" aria-hidden="true" />}
+            title="Журнал выплат"
+            subtitle="Поиск по водителю, логисту и транспорту; архив и группировка по диспетчерам"
+          />
+
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+              <FilterPills
+                items={[
+                  { key: 'current', label: 'Текущий месяц' },
+                  { key: 'archive', label: 'Архив месяцев' },
+                  { key: 'dispatcher', label: 'По диспетчерам' },
+                ]}
+                active={activeTab}
+                onChange={(key) => setActiveTab(key)}
+                ariaLabel="Период журнала выплат"
+              />
+              <SearchField
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Поиск по водителю, логисту, транспортному средству..."
+                className="lg:flex-1 lg:max-w-none"
+              />
+              {activeTab === 'dispatcher' && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={UI.fieldLabel}>Логист:</span>
+                  <select
+                    value={selectedDispatcher}
+                    onChange={(e) => setSelectedDispatcher(e.target.value)}
+                    className={`${UI.select} lg:min-w-[200px]`}
+                  >
+                    {availableDispatchers.length === 0 ? (
+                      <option value="">Нет данных</option>
+                    ) : (
+                      availableDispatchers.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+              )}
             </div>
 
-            {/* Подвкладки месяцев (Архив) / логистов (По диспетчерам) */}
             {activeTab === 'archive' && availableMonths.length > 0 && (
-                <div className="flex flex-wrap gap-1 p-1 bg-slate-100/80 rounded-xl mb-6 border border-slate-200/50">
-                    {availableMonths.map((m) => {
-                        const [year, month] = m.split('-');
-                        const monthsNamesRu = [
-                            'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-                            'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
-                        ];
-                        const mIndex = parseInt(month, 10) - 1;
-                        const humanLabel = mIndex >= 0 && mIndex < 12 ? `${monthsNamesRu[mIndex]} ${year}` : m;
-                        const isActive = selectedMonth === m;
-                        return (
-                            <button
-                                key={m}
-                                onClick={() => setSelectedMonth(m)}
-                                className={`flex-1 min-w-[120px] px-3 min-h-[44px] py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                                    isActive
-                                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
-                                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
-                                }`}
-                            >
-                                {humanLabel}
-                            </button>
-                        );
-                    })}
-                </div>
+              <FilterPills
+                items={availableMonths.map((m) => {
+                  const [year, month] = m.split('-');
+                  const monthsNamesRu = [
+                    'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+                  ];
+                  const mIndex = parseInt(month, 10) - 1;
+                  const humanLabel = mIndex >= 0 && mIndex < 12 ? `${monthsNamesRu[mIndex]} ${year}` : m;
+                  return { key: m, label: humanLabel };
+                })}
+                active={selectedMonth}
+                onChange={setSelectedMonth}
+                ariaLabel="Месяц архива"
+              />
             )}
 
             {activeTab === 'dispatcher' && availableDispatchers.length > 0 && (
-                <div className="flex flex-wrap gap-1 p-1 bg-slate-100/80 rounded-xl mb-6 border border-slate-200/50">
-                    {availableDispatchers.map((d) => {
-                        const isActive = selectedDispatcher === d;
-                        return (
-                            <button
-                                key={d}
-                                onClick={() => setSelectedDispatcher(d)}
-                                className={`flex-1 min-w-[120px] px-3 min-h-[44px] py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                                    isActive
-                                        ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
-                                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
-                                }`}
-                            >
-                                {d}
-                            </button>
-                        );
-                    })}
-                </div>
+              <FilterPills
+                items={availableDispatchers.map((d) => ({ key: d, label: d }))}
+                active={selectedDispatcher}
+                onChange={setSelectedDispatcher}
+                ariaLabel="Логист"
+              />
             )}
+          </div>
 
-            <div className="space-y-4">
-                {filteredHistory.length === 0 ? (
-                    <div className="text-center py-12 text-slate-400 font-medium text-xs bg-slate-50 rounded-xl border border-slate-200">История пустая</div>
-                ) : (
-                    filteredHistory.slice(0, logsLimit).map((rec) => (
-                        <div key={rec.id} className={`bg-white border rounded-2xl p-5 flex flex-col group hover:shadow-[0_8px_30px_rgba(0,0,0,0.01)] transition-all duration-300 ${
-                          (rec.mark || '').includes('2 круга') ? 'border-blue-300 bg-blue-50/30 hover:border-blue-400' :
-                          (rec.mark || '').includes('3 круга') ? 'border-purple-300 bg-purple-50/30 hover:border-purple-400' :
-                          'border-slate-200 hover:border-slate-300'
-                        }`}>
-                            
-                            {/* Header Row */}
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-4 border-b border-slate-200">
-                                <div className="flex flex-wrap items-center gap-3">
-                                    <div className="bg-slate-900 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider">{formatDriverShortName(rec.driver)}</div>
-                                    <div className="text-xs font-bold text-slate-500 flex items-center gap-2">
-                                       <span className="text-slate-400 uppercase tracking-wider text-[10px]">ТС:</span> 
-                                       <span className="text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 font-mono text-[11px]">{rec.car}</span>
-                                    </div>
-                                    <span className="text-slate-300 hidden sm:inline">|</span>
-                                    <div className="text-xs text-slate-400 font-medium">
-                                       {rec.datetime} · <span className="text-slate-500 font-semibold">Логист: {rec.logist || 'Система'}</span>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2 self-end sm:self-auto">
-                                     <button 
-                                         onClick={() => copyHistoryToForm(rec)} 
-                                         title="Дублировать в форму" 
-                                         className="flex items-center gap-1.5 px-3 min-h-[44px] py-2 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition border border-slate-200/50 cursor-pointer"
-                                     >
-                                         <Copy className="w-3.5 h-3.5" />
-                                         <span className="hidden md:inline">Дублировать</span>
-                                     </button>
-                                     <button 
-                                         onClick={() => openEditModal(rec)} 
-                                         title="Редактировать" 
-                                         className="flex items-center gap-1.5 px-3 min-h-[44px] py-2 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition border border-slate-200/50 cursor-pointer"
-                                     >
-                                         <Edit className="w-3.5 h-3.5" />
-                                         <span className="hidden md:inline">Править</span>
-                                     </button>
-                                     <button 
-                                         onClick={async () => { if(await showConfirm('Удалить эту выплату?')) dbService.deleteSalary(rec, user.name, user.role); }} 
-                                         title="Удалить" 
-                                         className="flex items-center gap-1.5 px-3 min-h-[44px] py-2 rounded-lg text-xs font-bold text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition border border-transparent hover:border-rose-100 cursor-pointer"
-                                     >
-                                         <Trash2 className="w-3.5 h-3.5" />
-                                         <span className="hidden md:inline">Удалить</span>
-                                     </button>
-                                </div>
-                            </div>
-
-                            {/* Details Grid */}
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                <div className="flex flex-col">
-                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Пробег</span>
-                                    <span className="text-xs font-bold text-slate-800 font-mono">{Math.round(rec.km || 0).toLocaleString('ru-RU')} км</span>
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Ставка за км</span>
-                                    <span className="text-xs font-bold text-slate-800 font-mono">{rec.rate || 0} €</span>
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">В рейсе</span>
-                                    <span className="text-xs font-bold text-slate-800 font-mono">{rec.totalDays || 0} дн.</span>
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Простой</span>
-                                    <span className="text-xs font-bold text-slate-800 font-mono">{rec.idleDays || 0} дн.</span>
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Оценка</span>
-                                    <div>
-                                        {rec.mark === 'Отлично' ? 
-                                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md shadow-sm">Отлично</span> 
-                                            : 
-                                            <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md shadow-sm">{rec.mark || 'Не оценено'}</span>
-                                        }
-                                    </div>
-                                </div>
-                                {/круг/.test(rec.mark || '') && (
-                                <div className="flex flex-col">
-                                    <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1">Круги</span>
-                                    <div>
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm ${
-                                            (rec.mark || '').includes('2 круга')
-                                                ? 'text-blue-700 bg-blue-100 border border-blue-200'
-                                                : (rec.mark || '').includes('3 круга')
-                                                ? 'text-purple-700 bg-purple-100 border border-purple-200'
-                                                : 'text-slate-600 bg-slate-100 border border-slate-200'
-                                        }`}>
-                                            {(rec.mark || '').match(/\d+\s*круг[а-я]*/i)?.[0] || '—'}
-                                        </span>
-                                    </div>
-                                </div>
-                                )}
-                            </div>
-
-                            {/* Second Row: Detailed Breakdown & Total Payment */}
-                            <div className="pt-4 border-t border-slate-200 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-                                <div className="flex flex-wrap gap-x-6 gap-y-2">
-                                    <div className="flex flex-col">
-                                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">З/П за км</span>
-                                        <span className="text-sm font-bold text-slate-700 font-mono">{Math.round(rec.kmMoney || 0).toLocaleString('ru-RU')} €</span>
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Суточные</span>
-                                        <span className="text-sm font-bold text-slate-700 font-mono">{Math.round(rec.daysMoney || 0).toLocaleString('ru-RU')} €</span>
-                                    </div>
-                                    {(rec.idleMoney || 0) > 0 && (
-                                    <div className="flex flex-col">
-                                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Простой</span>
-                                        <span className="text-sm font-bold text-slate-700 font-mono">{Math.round(rec.idleMoney || 0).toLocaleString('ru-RU')} €</span>
-                                    </div>
-                                    )}
-                                    {(rec.bonus || 0) > 0 && (
-                                    <div className="flex flex-col px-2.5 py-0.5 bg-slate-50 rounded-lg border border-slate-200">
-                                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Премия</span>
-                                        <span className="text-sm font-bold text-slate-700 font-mono">+{Math.round(rec.bonus || 0)} €</span>
-                                    </div>
-                                    )}
-                                </div>
-                                <div className="flex gap-3 w-full md:w-auto self-end md:self-auto justify-end">
-                                    {(rec.totalDays || 0) > 0 && (
-                                        <div className="flex flex-col bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl items-end min-w-[110px]">
-                                            <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5 font-sans">З/П в день</span>
-                                            <span className="text-lg font-bold text-slate-800 font-mono tracking-tight">{Math.round((rec.totalSalary || 0) / rec.totalDays).toLocaleString('ru-RU')} €</span>
-                                        </div>
-                                    )}
-                                    <div className="flex flex-col bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl items-end min-w-[120px]">
-                                        <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 mb-0.5 font-sans">Итого к выплате</span>
-                                        <span className="text-lg font-bold text-slate-800 font-mono tracking-tight">{Math.round(rec.totalSalary || 0).toLocaleString('ru-RU')} €</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {rec.comment && (
-                                <div className="mt-4 pt-3 border-t border-slate-200 text-xs text-slate-600 flex gap-2 items-start bg-slate-50 -mx-6 -mb-6 p-4 rounded-b-[2rem]">
-                                    <span className="text-slate-400 font-bold uppercase tracking-wider text-[9px] mt-0.5">Комментарий:</span>
-                                    <span className="text-slate-700 font-mono text-[11px] leading-normal">{rec.comment}</span>
-                                </div>
-                            )}
-                        </div>
-                    ))
-                )}
-                {filteredHistory.length > logsLimit && (
-                  <button onClick={() => setLogsLimit(prev => prev + 10)}
-                    className="w-full py-3 border border-dashed border-slate-200 hover:border-slate-400 text-slate-500 hover:text-slate-700 font-semibold text-xs rounded-xl transition bg-slate-50 hover:bg-slate-100 cursor-pointer text-center block mt-4">
-                    Показать еще (+10)
-                  </button>
-                )}
+          <div className="flex flex-col gap-3 pt-1">
+            <span className={UI.caption}>
+              Статистика выплат ({activeTab === 'current' ? 'Текущий месяц' : activeTab === 'archive' ? 'За выбранный месяц' : 'По выбранному логисту'})
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-x-6 gap-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <StatusText color="grey">Выплат всего</StatusText>
+                <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{logs.length}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <StatusText color="accent">Сумма всех выплат</StatusText>
+                <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(totalPaid).toLocaleString('ru-RU')} €</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <StatusText color="grey">Средняя выплата</StatusText>
+                <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(avgPaid).toLocaleString('ru-RU')} €</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <StatusText color="grey">Максимальная</StatusText>
+                <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(maxPaid).toLocaleString('ru-RU')} €</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <StatusText color="grey">Уникальных водителей</StatusText>
+                <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{uniqueDrivers}</span>
+              </div>
             </div>
-        </div>
+          </div>
+
+          <FoundCount count={filteredHistory.length} onReset={searchQuery ? () => setSearchQuery('') : undefined} />
+
+          {filteredHistory.length === 0 ? (
+            <EmptyState
+              kind={searchQuery ? 'no-results' : 'empty'}
+              title={searchQuery ? undefined : 'Выплат пока нет'}
+              hint={searchQuery ? undefined : 'Заполните расчёт и нажмите «Фиксировать выплату» — запись появится здесь.'}
+              query={searchQuery || undefined}
+            />
+          ) : (
+            <div className={UI.tableWrap}>
+              <table className={UI.table}>
+                <thead>
+                  <tr className={UI.theadRow}>
+                    <th className={`${UI.th} whitespace-nowrap`}>Дата</th>
+                    <th className={UI.th}>Водитель и ТС</th>
+                    <th className={UI.th}>Рейс</th>
+                    <th className={`${UI.th} whitespace-nowrap`}>Пробег и дни</th>
+                    <th className={UI.th}>Начислено</th>
+                    <th className={`${UI.th} text-right whitespace-nowrap`}>Итого</th>
+                    <th className={UI.th}>Комментарий</th>
+                    <th className={`${UI.th} text-right`}>
+                      <span className="sr-only">Действия</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredHistory.slice(0, logsLimit).map((rec) => (
+                    <tr key={rec.id} className={UI.tr}>
+                      <td className={UI.td}>
+                        <span className="block text-[11px] font-mono tabular-nums text-[#6B7280]">{rec.datetime || '—'}</span>
+                        <span className="block text-[10px] text-[#9CA3AF] mt-0.5">Логист: {rec.logist || 'Система'}</span>
+                      </td>
+                      <td className={UI.td}>
+                        <span className="block text-xs font-semibold text-[#121316]">{formatDriverShortName(rec.driver)}</span>
+                        <span className={`${UI.chip} inline-block mt-1 font-mono`}>{rec.car}</span>
+                      </td>
+                      <td className={UI.td}>
+                        {(() => {
+                          const mark = rec.mark || '';
+                          const circMatch = mark.match(/\d+\s*круг[а-я]*/i);
+                          const circles = circMatch ? circMatch[0] : '';
+                          const direction = mark.replace(circMatch ? circMatch[0] : '', '').replace(/[,，]/g, ' ').trim();
+                          if (!circles && direction === 'Отлично') {
+                            return (
+                              <span className="inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                {mark}
+                              </span>
+                            );
+                          }
+                          if (!direction && !circles) {
+                            return <span className="text-xs text-[#4B5563] whitespace-nowrap">{mark || '—'}</span>;
+                          }
+                          return (
+                            <span className="inline-flex items-center gap-1.5 flex-wrap">
+                              {direction ? <span className="text-xs text-[#4B5563] whitespace-nowrap">{direction}</span> : null}
+                              {circles ? <span className={UI.chip}>{circles}</span> : null}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td className={UI.td}>
+                        <span className="block text-xs font-mono tabular-nums text-[#121316] whitespace-nowrap">
+                          {Math.round(rec.km || 0).toLocaleString('ru-RU')} км · {rec.rate || 0} €/км
+                        </span>
+                        <span className="block text-[11px] text-[#6B7280] mt-0.5 whitespace-nowrap">
+                          В рейсе {rec.totalDays || 0} дн. · Простой {rec.idleDays || 0} дн.
+                        </span>
+                      </td>
+                      <td className={UI.td}>
+                        <span className="flex flex-col gap-0.5">
+                          <span className="text-[11px] text-[#6B7280]">
+                            З/П за км <span className="font-mono tabular-nums text-[#4B5563]">{Math.round(rec.kmMoney || 0).toLocaleString('ru-RU')} €</span>
+                          </span>
+                          <span className="text-[11px] text-[#6B7280]">
+                            Суточные <span className="font-mono tabular-nums text-[#4B5563]">{Math.round(rec.daysMoney || 0).toLocaleString('ru-RU')} €</span>
+                          </span>
+                          {(rec.idleMoney || 0) > 0 && (
+                            <span className="text-[11px] text-[#6B7280]">
+                              Простой <span className="font-mono tabular-nums text-[#4B5563]">{Math.round(rec.idleMoney || 0).toLocaleString('ru-RU')} €</span>
+                            </span>
+                          )}
+                          {(rec.bonus || 0) > 0 && (
+                            <span className="text-[11px] text-[#6B7280]">
+                              Премия <span className="font-mono tabular-nums text-[#4B5563]">+{Math.round(rec.bonus || 0)} €</span>
+                            </span>
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 align-middle text-right whitespace-nowrap">
+                        <span className="block text-sm font-semibold font-mono tabular-nums text-[#121316]">
+                          {Math.round(rec.totalSalary || 0).toLocaleString('ru-RU')} €
+                        </span>
+                        {(rec.totalDays || 0) > 0 && (
+                          <span className="block text-[10px] text-[#9CA3AF] mt-0.5">
+                            З/П в день {Math.round((rec.totalSalary || 0) / rec.totalDays).toLocaleString('ru-RU')} €
+                          </span>
+                        )}
+                      </td>
+                      <td className={UI.td}>
+                        {rec.comment ? (
+                          <span className="block text-[11px] text-[#6B7280] max-w-[220px] truncate" title={rec.comment}>{rec.comment}</span>
+                        ) : (
+                          <span className="text-[11px] text-[#9CA3AF]">—</span>
+                        )}
+                      </td>
+                      <td className={UI.td}>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => copyHistoryToForm(rec)}
+                            title="Дублировать в форму"
+                            className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                          >
+                            <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                          <button
+                            onClick={() => openEditModal(rec)}
+                            title="Редактировать"
+                            className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-[#6B7280] hover:text-[var(--accent-ink)] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                          >
+                            <Edit className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                          <button
+                            onClick={async () => { if(await showConfirm('Удалить эту выплату?')) dbService.deleteSalary(rec, user.name, user.role); }}
+                            title="Удалить"
+                            className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {filteredHistory.length > logsLimit && (
+            <div className="flex justify-center pt-1">
+              <button
+                onClick={() => setLogsLimit(prev => prev + 10)}
+                className={UI.buttonGhost}
+              >
+                <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+                Показать ещё (+10)
+              </button>
+            </div>
+          )}
+        </section>
 
         {editingSalaryId && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 animate-fade-in overflow-y-auto">
-                <div className="bg-white rounded-2xl w-full max-w-2xl shadow-sm border border-slate-200 my-4">
-                    <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50 rounded-t-[2rem]">
-                        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                           <Edit className="w-5 h-5 text-slate-400" /> Редактирование выплаты
-                        </h3>
-                        <button onClick={closeEditModal} className="min-h-[44px] min-w-[44px] text-slate-400 hover:text-slate-600 bg-white shadow-sm border border-slate-200 rounded-full flex items-center justify-center font-bold transition active:scale-90 cursor-pointer">×</button>
-                    </div>
-                    
-                    <div className="p-6 space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="flex flex-col gap-1.5 col-span-2">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">ФИО Водителя</label>
-                                <input type="text" list="salary-drivers-dl" value={editingSalaryData.driver || ''} onChange={e => {
-                                     const val = e.target.value;
-                                     const foundDriver = drivers.find(d => 
-                                        String(d.name || '').trim().toLowerCase() === val.trim().toLowerCase() ||
-                                        (d.shortNameRu && d.shortNameRu.trim().toLowerCase() === val.trim().toLowerCase())
-                                     );
-                                     let updatedData: Partial<SalaryLog> = { ...editingSalaryData, driver: val };
-                                     
-                                     if (foundDriver) {
-                                         updatedData.driverId = foundDriver.id;
-                                         if (foundDriver.rateGroupId) {
-                                             const group = carsPool.find(g => g.id === foundDriver.rateGroupId);
-                                             if (group) {
-                                                 updatedData.rate = group.rate;
-                                             }
-                                         }
-                                     } else {
-                                         updatedData.driverId = '';
-                                     }
-                                     setEditingSalaryData(updatedData);
-                                 }} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Транспорт</label>
-                                <input type="text" value={editingSalaryData.car || ''} onChange={e => {
-                                      const val = e.target.value;
-                                      const { matchType, matchedCars } = findCarByPlate(val, vehicles);
-                                      let updatedData: Partial<SalaryLog> = { ...editingSalaryData, car: val };
-                                      
-                                      if (matchType === 'exact' || matchType === 'partial') {
-                                          const matchedCar = matchedCars[0];
-                                          updatedData.carId = matchedCar.id;
-                                          updatedData.car = matchedCar.carNumber || matchedCar.vehicleNumbers || val;
-                                          
-                                          // Find associated driver
-                                          const matchedDriver = resolveDriverForCar(matchedCar);
-                                          if (matchedDriver) {
-                                              updatedData.driverId = matchedDriver.id;
-                                              updatedData.driver = matchedDriver.name;
-                                              
-                                              // Try updating rate
-                                              const normalizedCarPlate = normalizePlate(matchedCar.carNumber || matchedCar.vehicleNumbers || '');
-                                              const group = carsPool.find(g => 
-                                                  (g.vehicles || []).some(v => normalizePlate(v) === normalizedCarPlate)
-                                              );
-                                              if (group) {
-                                                  updatedData.rate = group.rate;
-                                              }
-                                          } else {
-                                              updatedData.driverId = '';
-                                              updatedData.driver = '';
-                                          }
-                                      } else {
-                                          updatedData.carId = '';
-                                          updatedData.driverId = '';
-                                      }
-                                      setEditingSalaryData(updatedData);
-                                 }} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all uppercase" />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Направление</label>
-                                <select value={editDirection} onChange={e => setEditDirection(e.target.value)} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all cursor-pointer appearance-none">
-                                    <option value="">—</option>
-                                    <option value="Турция">Турция</option>
-                                    <option value="Китай">Китай</option>
-                                </select>
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Круги</label>
-                                <select value={editCircles} onChange={e => setEditCircles(e.target.value)} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all cursor-pointer appearance-none">
-                                    <option value="">—</option>
-                                    <option value="2 круга">2 круга</option>
-                                    <option value="3 круга">3 круга</option>
-                                </select>
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ставка (€/км)</label>
-                                <input type="number" step="0.001" value={editingSalaryData.rate || 0} onChange={e => setEditingSalaryData({...editingSalaryData, rate: Number(e.target.value)})} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Пробег (км)</label>
-                                <input type="number" value={editingSalaryData.km || 0} onChange={e => setEditingSalaryData({...editingSalaryData, km: Number(e.target.value)})} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Простой (дней)</label>
-                                <input type="number" value={editingSalaryData.idleDays || 0} onChange={e => setEditingSalaryData({...editingSalaryData, idleDays: Number(e.target.value)})} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Дней в рейсе</label>
-                                <input type="number" value={editingSalaryData.totalDays || 1} onChange={e => setEditingSalaryData({...editingSalaryData, totalDays: Number(e.target.value)})} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
-                            </div>
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Премия (€)</label>
-                                <input type="number" value={editingSalaryData.bonus || 0} onChange={e => setEditingSalaryData({...editingSalaryData, bonus: Number(e.target.value)})} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
-                            </div>
-                            <div className="flex flex-col gap-1.5 col-span-2">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Комментарий</label>
-                                <input type="text" value={editingSalaryData.comment || ''} onChange={e => setEditingSalaryData({...editingSalaryData, comment: e.target.value})} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
-                            </div>
-                            <div className="flex flex-col gap-1.5 col-span-2">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Логист / Кто внёс</label>
-                                <input type="text" value={editingSalaryData.logist || ''} onChange={e => setEditingSalaryData({...editingSalaryData, logist: e.target.value})} className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
-                            </div>
-                            <div className="flex flex-col gap-1.5 col-span-2">
-                                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Дата</label>
-                                <input
-                                    type="date"
-                                    value={editingSalaryData.datetime ? (() => {
-                                        const p = (editingSalaryData.datetime || '').split('.');
-                                        return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : '';
-                                    })() : ''}
-                                    onChange={e => {
-                                        const v = e.target.value; // YYYY-MM-DD
-                                        const parts = v.split('-');
-                                        const ru = parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : v;
-                                        setEditingSalaryData({...editingSalaryData, datetime: ru});
-                                    }}
-                                    className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 text-xs font-semibold px-3.5 py-2.5 rounded-xl outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all" />
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div className="p-6 border-t border-slate-200 flex justify-end gap-3 bg-slate-50 rounded-b-[2rem]">
-                        <button onClick={closeEditModal} className="px-5 min-h-[44px] py-2.5 rounded-xl font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 transition cursor-pointer text-xs uppercase tracking-wider shadow-sm border border-slate-200">Отмена</button>
-                        <button onClick={saveEditModal} className="px-5 min-h-[44px] py-2.5 rounded-xl font-bold text-white bg-slate-900 hover:bg-slate-800 shadow-sm border border-slate-800 transition flex items-center justify-center gap-2 text-xs uppercase tracking-wider cursor-pointer">
-                            Сохранить изменения
-                        </button>
-                    </div>
-                </div>
+          <ModalShell
+            isOpen={!!editingSalaryId}
+            onClose={closeEditModal}
+            title="Редактирование выплаты"
+            subtitle={[editingSalaryData.car, editingSalaryData.datetime].filter(Boolean).join(' · ') || 'Сохранённая запись журнала'}
+            icon={<Edit className="w-4 h-4" aria-hidden="true" />}
+            maxWidth="max-w-2xl"
+            footer={
+              <>
+                <button onClick={closeEditModal} className={UI.buttonGhost}>Отмена</button>
+                <button onClick={saveEditModal} className={UI.buttonPrimary}>Сохранить изменения</button>
+              </>
+            }
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <label className={UI.fieldLabel} htmlFor="salary-edit-driver">ФИО Водителя</label>
+                <input id="salary-edit-driver" type="text" list="salary-drivers-dl" value={editingSalaryData.driver || ''} onChange={e => {
+                     const val = e.target.value;
+                     const foundDriver = drivers.find(d =>
+                        String(d.name || '').trim().toLowerCase() === val.trim().toLowerCase() ||
+                        (d.shortNameRu && d.shortNameRu.trim().toLowerCase() === val.trim().toLowerCase())
+                     );
+                     let updatedData: Partial<SalaryLog> = { ...editingSalaryData, driver: val };
+
+                     if (foundDriver) {
+                         updatedData.driverId = foundDriver.id;
+                         if (foundDriver.rateGroupId) {
+                             const group = carsPool.find(g => g.id === foundDriver.rateGroupId);
+                             if (group) {
+                                 updatedData.rate = group.rate;
+                             }
+                         }
+                     } else {
+                         updatedData.driverId = '';
+                     }
+                     setEditingSalaryData(updatedData);
+                }} className={UI.input} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel} htmlFor="salary-edit-car">Транспорт</label>
+                <input id="salary-edit-car" type="text" value={editingSalaryData.car || ''} onChange={e => {
+                      const val = e.target.value;
+                      const { matchType, matchedCars } = findCarByPlate(val, vehicles);
+                      let updatedData: Partial<SalaryLog> = { ...editingSalaryData, car: val };
+
+                      if (matchType === 'exact' || matchType === 'partial') {
+                          const matchedCar = matchedCars[0];
+                          updatedData.carId = matchedCar.id;
+                          updatedData.car = matchedCar.carNumber || matchedCar.vehicleNumbers || val;
+
+                          // Find associated driver
+                          const matchedDriver = resolveDriverForCar(matchedCar);
+                          if (matchedDriver) {
+                              updatedData.driverId = matchedDriver.id;
+                              updatedData.driver = matchedDriver.name;
+
+                              // Try updating rate
+                              const normalizedCarPlate = normalizePlate(matchedCar.carNumber || matchedCar.vehicleNumbers || '');
+                              const group = carsPool.find(g =>
+                                  (g.vehicles || []).some(v => normalizePlate(v) === normalizedCarPlate)
+                              );
+                              if (group) {
+                                  updatedData.rate = group.rate;
+                              }
+                          } else {
+                              updatedData.driverId = '';
+                              updatedData.driver = '';
+                          }
+                      } else {
+                          updatedData.carId = '';
+                          updatedData.driverId = '';
+                      }
+                      setEditingSalaryData(updatedData);
+                }} className={`${UI.input} uppercase`} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel} htmlFor="salary-edit-direction">Направление</label>
+                <select id="salary-edit-direction" value={editDirection} onChange={e => setEditDirection(e.target.value)} className={UI.select}>
+                    <option value="">—</option>
+                    <option value="Турция">Турция</option>
+                    <option value="Китай">Китай</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel} htmlFor="salary-edit-circles">Круги</label>
+                <select id="salary-edit-circles" value={editCircles} onChange={e => setEditCircles(e.target.value)} className={UI.select}>
+                    <option value="">—</option>
+                    <option value="2 круга">2 круга</option>
+                    <option value="3 круга">3 круга</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel} htmlFor="salary-edit-rate">Ставка (€/км)</label>
+                <input id="salary-edit-rate" type="number" step="0.001" value={editingSalaryData.rate || 0} onChange={e => setEditingSalaryData({...editingSalaryData, rate: Number(e.target.value)})} className={UI.input} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel} htmlFor="salary-edit-km">Пробег (км)</label>
+                <input id="salary-edit-km" type="number" value={editingSalaryData.km || 0} onChange={e => setEditingSalaryData({...editingSalaryData, km: Number(e.target.value)})} className={UI.input} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel} htmlFor="salary-edit-idle">Простой (дней)</label>
+                <input id="salary-edit-idle" type="number" value={editingSalaryData.idleDays || 0} onChange={e => setEditingSalaryData({...editingSalaryData, idleDays: Number(e.target.value)})} className={UI.input} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel} htmlFor="salary-edit-days">Дней в рейсе</label>
+                <input id="salary-edit-days" type="number" value={editingSalaryData.totalDays || 1} onChange={e => setEditingSalaryData({...editingSalaryData, totalDays: Number(e.target.value)})} className={UI.input} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel} htmlFor="salary-edit-bonus">Премия (€)</label>
+                <input id="salary-edit-bonus" type="number" value={editingSalaryData.bonus || 0} onChange={e => setEditingSalaryData({...editingSalaryData, bonus: Number(e.target.value)})} className={UI.input} />
+              </div>
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <label className={UI.fieldLabel} htmlFor="salary-edit-comment">Комментарий</label>
+                <input id="salary-edit-comment" type="text" value={editingSalaryData.comment || ''} onChange={e => setEditingSalaryData({...editingSalaryData, comment: e.target.value})} className={UI.input} />
+              </div>
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <label className={UI.fieldLabel} htmlFor="salary-edit-logist">Логист / Кто внёс</label>
+                <input id="salary-edit-logist" type="text" value={editingSalaryData.logist || ''} onChange={e => setEditingSalaryData({...editingSalaryData, logist: e.target.value})} className={UI.input} />
+              </div>
+              <div className="flex flex-col gap-1.5 sm:col-span-2">
+                <label className={UI.fieldLabel} htmlFor="salary-edit-date">Дата</label>
+                <input
+                    id="salary-edit-date"
+                    type="date"
+                    value={editingSalaryData.datetime ? (() => {
+                        const p = (editingSalaryData.datetime || '').split('.');
+                        return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : '';
+                    })() : ''}
+                    onChange={e => {
+                        const v = e.target.value; // YYYY-MM-DD
+                        const parts = v.split('-');
+                        const ru = parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : v;
+                        setEditingSalaryData({...editingSalaryData, datetime: ru});
+                    }}
+                    className={UI.input} />
+              </div>
             </div>
+          </ModalShell>
         )}
 
         <datalist id="salary-drivers-dl">
@@ -1156,6 +1193,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
             ))}
         </datalist>
 
-    </div>
+      </div>
+    </ModuleShell>
   );
 }

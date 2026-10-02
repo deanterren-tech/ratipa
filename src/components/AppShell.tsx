@@ -1,57 +1,24 @@
 import React, {useState, useEffect, useMemo, useRef, Suspense, lazy} from 'react'
-import {UserProfile, AppSettings} from '../types'
+import { UserProfile, AppSettings } from '../types'
+import UserAvatar from './UserAvatar'
+import TopBarCalendar from './TopBarCalendar'
+import { getUserFullName } from '../utils/userName'
+import { currencySymbol, currencyName } from '../utils/currencyMeta'
+import { APP_VERSION, APP_VERSION_LABEL } from '../version'
 import {dbService, useFirebase} from '../api'
 import {motion, AnimatePresence} from 'motion/react'
 import CommandCenter from './CommandCenter';
-import TypingText from './TypingText';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts'
 import { resolvePermission } from '../utils/permissions';
+import AccountSettingsModal from './AccountSettingsModal'
+import ErrorPage from './common/ErrorPage'
+import ModuleDataContainer from './common/ModuleLoadState'
 import {useNotifications} from '../hooks/useNotifications'
 import {useConverter} from '../hooks/useConverter'
+import UpdateTour from './UpdateTour'
 import {usePresence} from '../hooks/usePresence'
 import {useChat} from '../hooks/useChat'
-import { 
-  LayoutDashboard, 
-  Calculator, 
-  Wallet, 
-  TrendingUp, 
-  FileSpreadsheet, 
-  Truck, 
-  FileText, 
-  Files,
-  Clock, 
-  Map,
-  Settings, 
-  Settings2,
-  ShieldAlert, 
-  LogOut, 
-  Menu, 
-  X, 
-  Radio,
-  MessageSquare,
-  Send,
-  Trash2,
-  Sparkles,
-  ChevronDown,
-  ArrowUp,
-  Pencil,
-  Calendar,
-  Bell,
-  BellRing,
-  Check,
-  CheckCheck,
-  AlertTriangle,
-  Info,
-  LineChart,
-  ExternalLink,
-  Wifi,
-  WifiOff,
-  DollarSign,
-  RefreshCw,
-  Home,
-  Sliders,
-  BookOpen
-, ClipboardList} from 'lucide-react';
+import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Truck, FileText, Files, Clock, Map, Settings, Settings2, ShieldAlert, LogOut, Menu, X, Radio, MessageSquare, Send, Trash2, Sparkles, ChevronDown, ArrowUp, Pencil, Calendar, Bell, BellRing, Check, CheckCheck, AlertTriangle, Info, LineChart, ExternalLink, Wifi, WifiOff, RefreshCw, Home, Sliders, BookOpen, ClipboardList, DollarSign } from 'lucide-react';
 
 // Import newly created business modules
 const DashboardModule = lazy(() => import('./modules/DashboardModule'));
@@ -99,7 +66,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const getDefaultModule = () => {
     const hash = window.location.hash.replace('#', '');
     if (hash) {
-      return hash;
+      // Модуль — первый сегмент: #dozvola/map → модуль «dozvola», вкладка «map»
+      return hash.split('/')[0].split('?')[0];
     }
     const saved = localStorage.getItem('ratipa_last_module');
     if (saved && saved !== 'undefined') {
@@ -130,7 +98,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
       if (hash) {
-        setActiveModule(hash);
+        // Подмаршруты модуля (#dozvola/map) не меняют активный модуль
+        setActiveModule(hash.split('/')[0].split('?')[0]);
       }
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -210,6 +179,45 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   // --- Extracted logic via custom hooks ---
   const notif = useNotifications(user, settings);
   const conv = useConverter();
+  /**
+   * Превью обновлений: показывается один раз на пользователя и версию.
+   * Факт прохождения хранится в профиле (users_list/{uid}.onboarding.{версия}),
+   * поэтому повторный вход и перезагрузка страницы не показывают его снова.
+   * Открыть повторно можно из меню пользователя — пункт «Что нового».
+   */
+  const [tourOpen, setTourOpen] = useState(false);
+  /**
+   * Ключ версии для хранения в базе: точка в ключах Firebase Realtime Database
+   * недопустима («2.0.0» → «2_0_0»), иначе запись молча отклоняется.
+   */
+  const tourVersionKey = APP_VERSION.replace(/[.#$/\[\]]/g, '_');
+  const tourSeen = user?.onboarding?.[tourVersionKey];
+  const [tourShownThisSession, setTourShownThisSession] = useState(false);
+  useEffect(() => {
+    if (tourShownThisSession || tourSeen || !user?.uid) return;
+    let cancelled = false;
+    let attempts = 0;
+    // Показываем после загрузки данных: ждём, пока рабочая область перестанет грузиться
+    const tryShow = () => {
+      if (cancelled) return;
+      const busy = !!document.querySelector('[data-module-loading]');
+      if (!busy || attempts >= 6) {
+        setTourShownThisSession(true);
+        setTourOpen(true);
+        return;
+      }
+      attempts += 1;
+      window.setTimeout(tryShow, 900);
+    };
+    const timer = window.setTimeout(tryShow, 1600);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, tourSeen, tourShownThisSession, tourVersionKey]);
+
+  const closeTour = (reason: 'done' | 'skipped') => {
+    setTourOpen(false);
+    if (user?.uid) dbService.saveUserOnboarding(user.uid, tourVersionKey, reason);
+  };
   const presence = usePresence(user, activeModule);
   useChat(user);
 
@@ -246,6 +254,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     converterDesktopRef,
     converterPanelRef,
     fetchNbrbRates,
+    ratesUpdatedAt,
     availableCurrencies,
   } = conv;
 
@@ -277,16 +286,95 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     return () => el.removeEventListener('scroll', onScroll);
   }, [activeModule]);
 
+  /**
+   * Профили пользователей — тот же источник (users_list), что и в топ-баре, меню и
+   * настройках. Блок онлайна показывает настроенные фотографию или цветную иконку,
+   * отдельного набора аватаров и цветов для него нет.
+   */
+  const [profiles, setProfiles] = useState<UserProfile[]>([]);
+
+  // Живая подписка на профили: смена фотографии или цвета сразу видна в онлайне,
+  // вручную задавать аватар заново не нужно.
+  useEffect(() => {
+    const unsubscribe = dbService.getUsers((list) => setProfiles(list || []));
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, []);
+
+  /** Профиль для записи онлайна: по uid, при отсутствии — по имени. */
+  const profileFor = (online: any): UserProfile | undefined => {
+    const uid = String(online?.uid || '');
+    if (uid) {
+      const byUid = profiles.find((p) => p.uid === uid);
+      if (byUid) return byUid;
+    }
+    const name = String(online?.name || '').trim();
+    return name ? profiles.find((p) => getUserFullName(p).trim() === name) : undefined;
+  };
+
+  // Меню пользователя и окно настроек учётной записи
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isAccountOpen, setIsAccountOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
+
   const handleLogoutSequence = () => {
     dbService.logAction(user.name, user.role, "Выход", "Auth", user.uid, "Вышел из учетной записи");
     onLogout();
   };
+
+  // Escape закрывает меню пользователя
+  useEffect(() => {
+    if (!isUserMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsUserMenuOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isUserMenuOpen]);
+
+  /**
+   * Положение окна конвертера: раскрывается СЛЕВА от своей кнопки в топ-баре.
+   * Кнопок две (для узких и для широких экранов), поэтому берём ту, что видна,
+   * замеряем её прямоугольник и ставим панель так, чтобы её правый край был
+   * на 8 px левее кнопки. На узких экранах положение ограничивается отступом
+   * 12 px от края — окно не вылезает за экран.
+   */
+  const [converterPos, setConverterPos] = useState<{ right: number; top: number } | null>(null);
+  useEffect(() => {
+    if (!isConverterOpen) return;
+    const measure = () => {
+      const buttons = [converterRef.current, converterDesktopRef.current]
+        .map((wrap) => (wrap ? wrap.querySelector('button') : null))
+        .filter((btn): btn is HTMLButtonElement => !!btn && btn.getBoundingClientRect().width > 0);
+      const btn = buttons[0];
+      if (!btn) return;
+      const r = btn.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const panelW = Math.min(376, vw - 24);
+      const right = Math.max(12, Math.min(vw - r.left + 8, vw - 12 - panelW));
+      // Верх — заведомо ниже топ-бара: берём максимум из низа кнопки и низа шапки
+      const header = document.querySelector('header');
+      const headerBottom = header ? Math.round(header.getBoundingClientRect().bottom) : 0;
+      const top = Math.max(Math.round(r.bottom) + 8, headerBottom + 8);
+      setConverterPos({ right, top });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConverterOpen]);
 
   // Close notifications, converter and mobile menu dropdowns on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
         setIsNotifOpen(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
       }
       const isConverterClick = 
         (converterRef.current && converterRef.current.contains(event.target as Node)) ||
@@ -331,7 +419,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       return allModules.filter(mod => mod.key === 'baza');
     }
     return allModules.filter(mod => {
-      if (user.role === 'root_admin' || user.name.includes('Сергей Root') || user.email === 'r98ratipaby@gmail.com') return true;
+      // Доступ root — только по роли. Проверки по имени и почте убраны:
+    // это обход модели разрешений (владелец и так имеет роль root_admin).
+    if (user.role === 'root_admin') return true;
       return resolvePermission(user, mod.permissionKey, settings?.rolePermissions) !== 'none';
     });
   }, [user.role, user.name, user.email, user.permissions, settings?.rolePermissions]);
@@ -340,26 +430,19 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     return dbService.getSettings(setSettings);
   }, []);
 
-  // Redirect to first available tab
+  // Ошибки маршрута. Раньше неизвестный адрес молча подменялся первым доступным
+  // разделом, и пользователь не понимал, опечатка это или отсутствие прав.
+  // Теперь: маршрут неизвестен → 404, раздел закрыт для роли → 403.
+  // Автоматического перехода нет, поэтому цикл редиректов невозможен.
+  const [routeError, setRouteError] = useState<403 | 404 | null>(null);
   const SYSTEM_MODULE_KEYS = ['dashboard', 'settings', 'appSettings', 'admin'];
   useEffect(() => {
-    const knownKeys = allModules.map(m => m.key);
-    if (!knownKeys.includes(activeModule) && !SYSTEM_MODULE_KEYS.includes(activeModule)) {
-      if (allowedModules.length > 0) {
-        const sortedModules = [...allowedModules];
-        if (settings && settings.moduleOrder) {
-          sortedModules.sort((a,b) => {
-            const orderA = settings.moduleOrder.indexOf(a.key);
-            const orderB = settings.moduleOrder.indexOf(b.key);
-            const idxA = orderA === -1 ? 99 : orderA;
-            const idxB = orderB === -1 ? 99 : orderB;
-            return idxA - idxB;
-          });
-        }
-        setActiveModule(sortedModules[0].key);
-      }
-    }
-  }, [activeModule, allowedModules, settings]);
+    if (!activeModule) { setRouteError(null); return; }
+    const knownKeys = [...allModules.map(m => m.key), ...SYSTEM_MODULE_KEYS];
+    if (!knownKeys.includes(activeModule)) { setRouteError(404); return; }
+    if (!allowedModules.some((m: any) => m.key === activeModule)) { setRouteError(403); return; }
+    setRouteError(null);
+  }, [activeModule, allowedModules]);
 
   const navModules = useMemo(() => {
     const modules = [...allowedModules];
@@ -477,58 +560,52 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         </div>
       )}
 
-      {/* Единоразовое уведомление о новых модулях */}
-      {['dispatcher', 'root_admin'].includes(user.role) && !localStorage.getItem('ratipa_notify_new_modules') && (
-        <div className="bg-gradient-to-r from-indigo-600 via-blue-500 to-cyan-500 text-white text-xs sm:text-sm font-semibold text-center py-2.5 px-3 sm:px-6 flex items-center justify-center gap-2 sm:gap-4 flex-wrap relative shadow-md" style={{ paddingRight: '2.5rem' }}>
-          <span className="text-xl leading-none">📋</span>
-          <span>
-            <strong>Книга выдачи</strong>, <strong>Табель</strong> и <strong>Журнал МДП</strong> — теперь в портале! Находятся в меню <strong>Отчётность</strong>
-          </span>
-          <button
-            onClick={() => { localStorage.setItem('ratipa_notify_new_modules', '1'); window.location.reload(); }}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-lg hover:bg-white/20 text-white/80 hover:text-white transition shrink-0 cursor-pointer"
-            title="Закрыть"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </div>
-      )}
-
       {/* Modern Responsive Capsule Header */}
-<header className="bg-white text-slate-900 border-b border-slate-200/35 min-h-[3.5rem] py-1 md:py-0 md:h-14 flex items-center justify-between px-3 sm:px-8 shrink-0 sticky top-0 z-50 select-none gap-2 sm:gap-3 transition-colors duration-300">
+<header className="bg-white text-[#121316] border-b border-[#E5E7EB] h-14 md:h-[3.75rem] flex items-center justify-between px-3 sm:px-5 lg:px-6 shrink-0 sticky top-0 z-50 select-none gap-2 sm:gap-3">
         
-        {/* Left: Currency Converter on mobile */}
-        <div className="md:hidden flex items-center shrink-0">
+        {/* На узких экранах: конвертер валют и календарь рядом */}
+        <div className="md:hidden flex items-center gap-1.5 shrink-0">
           <div className="relative font-sans" ref={converterRef}>
             <button
               type="button"
               onClick={() => setIsConverterOpen(!isConverterOpen)}
-              className={`relative p-2 rounded-xl border transition-all duration-200 active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs ${
-                isConverterOpen 
-                  ? 'bg-slate-100 text-slate-900 border-slate-300 shadow-xs' 
-                  : 'bg-white/60 text-slate-500 hover:text-slate-900 hover:bg-white border-slate-200/40'
+              aria-haspopup="dialog"
+              aria-expanded={isConverterOpen}
+              aria-label="Конвертер валют"
+              className={`relative h-8 w-8 rounded-lg border transition-colors cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
+                isConverterOpen
+                  ? 'bg-[#F3F4F6] text-[#121316] border-[#D1D5DB]'
+                  : 'bg-white text-[#6B7280] hover:text-[#121316] border-[#E5E7EB]'
               }`}
               title="Конвертер валют"
             >
-              <DollarSign size={16} />
+              <DollarSign size={16} aria-hidden="true" />
             </button>
           </div>
+          <TopBarCalendar />
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-6 flex-1 min-w-0">
+        <div className="flex items-center gap-3 sm:gap-5 flex-1 min-w-0">
           {/* Left Brand Area */}
-          <div className="flex items-center gap-3 shrink-0 flex-1 md:flex-none justify-center md:justify-start">
+          <div className="flex items-center shrink-0 flex-1 md:flex-none justify-center md:justify-start">
             
-            <div className="flex items-center gap-3 cursor-pointer group" onClick={() => handleNavigate(user.role === 'mechanic' ? 'baza' : 'dashboard')}>
-              <div className="flex items-baseline gap-1.5 font-sans">
-                <span className="font-medium tracking-tight text-sm md:text-base uppercase text-slate-900 leading-none group-hover:text-[#3765F6] transition-colors duration-200">
-                  RATIPA PORTAL
-                </span>
-              </div>
+            <div className="flex items-center gap-2.5 cursor-pointer group rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]" tabIndex={0} role="button"
+                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleNavigate(user.role === 'mechanic' ? 'baza' : 'dashboard'); } }}
+                 onClick={() => handleNavigate(user.role === 'mechanic' ? 'baza' : 'dashboard')}>
+              {/* Полный фирменный логотип (portal.svg). Пропорции сохранены:
+                  1261×385 ≈ 3,28:1 — высота задаётся, ширина считается сама. */}
+              <img
+                src="/portal.svg"
+                alt="Ratipa Portal"
+                width={1261}
+                height={385}
+                className="h-6 md:h-7 w-auto shrink-0 select-none opacity-90 transition-opacity duration-300 ease-out group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none"
+                draggable={false}
+              />
               {activeModule !== 'dashboard' && (
                 <>
-                  <span className="text-slate-300 hidden md:inline select-none">/</span>
-                  <span className="text-xs font-bold text-slate-500 font-sans tracking-tight hidden md:inline transition-colors duration-200">
+                  <span className="text-[#D1D5DB] hidden md:inline select-none">/</span>
+                  <span className="text-xs font-medium text-[#6B7280] hidden md:inline">
                     {activeModuleMeta ? activeModuleMeta.label : 'Главная'}
                   </span>
                 </>
@@ -537,7 +614,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           </div>
 
           {/* Navigation Menu */}
-          <nav className="hidden md:flex items-center gap-1.5 p-1 rounded-2xl overflow-x-auto lg:overflow-visible whitespace-nowrap scrollbar-none max-w-[50vw] sm:max-w-[70vw] lg:max-w-none flex-nowrap shrink relative">
+          <nav className="hidden md:flex items-center gap-0.5 overflow-x-auto lg:overflow-visible whitespace-nowrap scrollbar-none max-w-[50vw] sm:max-w-[70vw] lg:max-w-none flex-nowrap shrink relative" aria-label="Разделы портала">
           {menuGroups.filter(isGroupVisible).map((group) => {
             const GroupIcon = groupIconMap[group.id] || Calendar;
             if (group.isDropdown) {
@@ -561,20 +638,20 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                       }
                       setOpenDropdownId(isOpen ? null : group.id);
                     }}
-                    className={`text-[9.5px] md:text-[10px] font-extrabold tracking-tight uppercase transition-all duration-200 py-1.5 px-3 md:px-4 rounded-xl flex items-center gap-1.5 cursor-pointer shrink-0 select-none border ${
-                      isChildActive 
-                        ? 'text-[#3765F6] bg-[#3765F6]/8 border-[#3765F6]/20 shadow-2xs font-semibold' 
-                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/40 border-transparent'
+                    className={`h-8 px-3 rounded-lg text-[11px] tracking-tight flex items-center gap-1.5 cursor-pointer shrink-0 select-none border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
+                      isChildActive
+                        ? 'text-[var(--accent-ink)] bg-[var(--accent-10)] border-[var(--accent-25)] font-semibold'
+                        : 'text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] border-transparent font-medium'
                     }`}
                   >
-                    <GroupIcon className={`h-3 w-3 ${isChildActive ? 'text-[#3765F6]' : 'text-slate-400'}`} />
+                    <GroupIcon className={`h-3 w-3 ${isChildActive ? 'text-[var(--accent-ink)]' : 'text-[#9CA3AF]'}`} />
                     <span>{group.label}</span>
-                    <ChevronDown className={`h-3 w-3 ${isChildActive ? 'text-[#3765F6]' : 'text-slate-400'} transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                    <ChevronDown className={`h-3 w-3 ${isChildActive ? 'text-[var(--accent-ink)]' : 'text-[#9CA3AF]'} transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                   </button>
                   
                   {isOpen && (
                     <div className="absolute left-0 top-full pt-1.5 min-w-[200px] z-50">
-                      <div className="bg-white border border-slate-200/60 rounded-2xl shadow-xl py-2 animate-in fade-in slide-in-from-top-1 duration-150">
+                      <div className="bg-white border border-[#E5E7EB] rounded-xl shadow-[0_8px_24px_rgba(15,23,42,0.12)] py-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
                         {allowedSubtabs.map((subKey) => {
                           const subLabel = getSubtabLabel(group, subKey);
                           const isActive = activeModule === subKey;
@@ -591,13 +668,13 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                                   setOpenDropdownId(null);
                                 }
                               }}
-                              className={`flex items-center gap-2 px-4 py-2.5 text-xs transition-all duration-200 rounded-xl mx-1 ${
-                                isActive 
-                                  ? 'bg-[#3765F6]/8 text-[#3765F6] font-semibold border border-[#3765F6]/15' 
-                                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950 border border-transparent'
+                              className={`flex items-center gap-2.5 h-9 px-3 mx-1.5 text-[11px] tracking-tight leading-snug rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
+                                isActive
+                                  ? 'bg-[var(--accent-10)] text-[var(--accent-ink)] font-semibold'
+                                  : 'text-[#4B5563] hover:bg-[#F3F4F6] hover:text-[#121316] font-medium'
                               }`}
                             >
-                              <SubIcon className={`h-3.5 w-3.5 ${isActive ? 'text-[#3765F6]' : 'text-slate-400'}`} />
+                              <SubIcon className={`h-3.5 w-3.5 ${isActive ? 'text-[var(--accent-ink)]' : 'text-[#9CA3AF]'}`} />
                               <span className="flex-1">{subLabel}</span>
                             </a>
                           );
@@ -625,13 +702,13 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                       handleNavigate(itemKey);
                     }
                   }}
-                  className={`text-[9.5px] md:text-[10px] font-extrabold tracking-tight uppercase transition-all duration-200 py-1.5 px-3 md:px-4 rounded-xl flex items-center gap-1.5 relative cursor-pointer shrink-0 border ${
-                    isActive 
-                      ? 'text-[#3765F6] bg-[#3765F6]/8 border-[#3765F6]/20 shadow-2xs font-semibold' 
-                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/40 border-transparent'
+                  className={`h-8 px-3 rounded-lg text-[11px] tracking-tight flex items-center gap-1.5 relative cursor-pointer shrink-0 border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
+                    isActive
+                      ? 'text-[var(--accent-ink)] bg-[var(--accent-10)] border-[var(--accent-25)] font-semibold'
+                      : 'text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] border-transparent font-medium'
                   }`}
                 >
-                  <ItemIcon className={`h-3 w-3 ${isActive ? 'text-[#3765F6]' : 'text-slate-400'}`} />
+                  <ItemIcon className={`h-3 w-3 ${isActive ? 'text-[var(--accent-ink)]' : 'text-[#9CA3AF]'}`} />
                   <span>{displayLabel}</span>
                 </a>
               );
@@ -644,9 +721,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
               href={extTab.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[9.5px] md:text-[10px] font-extrabold tracking-tight uppercase transition-all duration-200 py-1.5 px-3 md:px-3.5 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-200/40 flex items-center gap-1 border border-transparent cursor-pointer shrink-0"
+              className="h-8 px-3 rounded-lg text-[11px] tracking-tight font-medium text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] flex items-center gap-1.5 border border-transparent transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
             >
-              <ExternalLink className="h-3 w-3 text-slate-400" />
+              <ExternalLink className="h-3 w-3 text-[#9CA3AF]" />
               <span>{extTab.title}</span>
             </a>
           ))}
@@ -654,45 +731,53 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         </div>
 
         {/* Right Section: Avatars, Sync state + Profile badge + Logout */}
-        <div className="flex items-center gap-2 md:gap-4 shrink-0">
-          
-          {/* Animated Text in Top Bar */}
-          {settings?.customPhrases && settings.customPhrases.length > 0 && 
-           (!settings.customPhrasesRoles || settings.customPhrasesRoles.length === 0 || settings.customPhrasesRoles.includes(user.role)) && (
-            <div className="hidden lg:flex items-center mr-2 border-r border-slate-200/60 pr-4 h-6">
-              <TypingText 
-                phrases={settings.customPhrases} 
-                className="text-[11.5px] font-mono font-bold text-slate-500 tracking-tight"
-              />
-            </div>
-          )}
+        <div className="flex items-center gap-1.5 md:gap-3 shrink-0">
           
           {/* Avatar overlap stack */}
           <div className="hidden md:flex items-center -space-x-2 mr-1 relative group cursor-pointer">
-            {onlineUsers.slice(0, 3).map((u, i) => {
-               const colors = ['bg-indigo-100 text-indigo-700', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700', 'bg-sky-100 text-sky-700', 'bg-rose-100 text-rose-700'];
-               const colorClass = colors[i % colors.length];
+            {onlineUsers.slice(0, 3).map((u) => {
+               // Тот же аватар и тот же профиль, что и в остальных местах портала:
+               // фотография, если выбрана, иначе настроенная цветная иконка.
+               const profile = profileFor(u);
+               const label = getUserFullName(profile || u);
                return (
-                 <div key={u.presenceId} className={`h-7 w-7 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-bold shadow-xs ${colorClass}`}>
-                   {u.name.substring(0, 2).toUpperCase()}
-                 </div>
+                 <UserAvatar
+                   key={u.presenceId}
+                   name={label}
+                   firstName={profile?.firstName}
+                   lastName={profile?.lastName}
+                   color={profile?.color}
+                   photo={profile?.avatarPhoto}
+                   size={28}
+                   title={label}
+                   className="border-2 border-white"
+                 />
                )
             })}
             {onlineUsers.length > 3 && (
-               <div className="h-7 w-7 rounded-full bg-[#3765F6] border-2 border-white flex items-center justify-center text-[9px] font-semibold text-white shadow-xs">
+               <div className="h-7 w-7 rounded-full bg-[var(--accent-solid)] border-2 border-white flex items-center justify-center text-[10px] font-semibold text-[var(--accent-on)]">
                  +{onlineUsers.length - 3}
                </div>
             )}
             
             {/* Hover Popover with full user list */}
             {onlineUsers.length > 0 && (
-              <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-slate-200 shadow-xl rounded-xl p-3 opacity-0 group-hover:opacity-100 invisible group-hover:visible transition-all duration-200 z-50">
-                <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider mb-2 block">Пользователи онлайн</span>
+              <div className="absolute top-full right-0 mt-2 w-48 bg-white border border-[#E5E7EB] rounded-xl p-3 shadow-[0_8px_24px_rgba(15,23,42,0.12)] opacity-0 group-hover:opacity-100 invisible group-hover:visible transition-opacity z-50">
+                <span className="text-[10px] font-semibold text-[#6B7280] tracking-wider uppercase mb-2 block">Пользователи онлайн</span>
                 <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
                   {onlineUsers.map(u => (
                     <div key={u.presenceId} className="flex items-center gap-2">
                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] shrink-0"></span>
-                       <span className="text-xs font-bold text-slate-800 truncate" title={`${u.name} (${u.role})`}>{u.name}</span>
+                       <UserAvatar
+                         name={getUserFullName(profileFor(u) || u)}
+                         firstName={profileFor(u)?.firstName ?? (u as any).firstName}
+                         lastName={profileFor(u)?.lastName ?? (u as any).lastName}
+                         color={profileFor(u)?.color}
+                         photo={profileFor(u)?.avatarPhoto}
+                         size={20}
+                         textClassName="text-[9px]"
+                       />
+                       <span className="text-[11px] tracking-tight font-medium text-[#121316] truncate" title={`${getUserFullName(profileFor(u) || u)} (${u.role})`}>{getUserFullName(profileFor(u) || u)}</span>
                     </div>
                   ))}
                 </div>
@@ -700,58 +785,147 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             )}
           </div>
 
-          {/* Currency Converter Widget - desktop only */}
+          {/* Конвертер валют (широкие экраны), рядом — календарь */}
           <div className="hidden md:block relative font-sans" ref={converterDesktopRef}>
             <button
               type="button"
               onClick={() => setIsConverterOpen(!isConverterOpen)}
-              className={`relative p-2 rounded-xl border transition-all duration-200 active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs ${
-                isConverterOpen 
-                  ? 'bg-slate-100 text-slate-900 border-slate-300 shadow-xs' 
-                  : 'bg-white/60 text-slate-500 hover:text-slate-900 hover:bg-white border-slate-200/40'
+              aria-haspopup="dialog"
+              aria-expanded={isConverterOpen}
+              aria-label="Конвертер валют"
+              className={`relative h-8 w-8 rounded-lg border transition-colors cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
+                isConverterOpen
+                  ? 'bg-[#F3F4F6] text-[#121316] border-[#D1D5DB]'
+                  : 'bg-white text-[#6B7280] hover:text-[#121316] border-[#E5E7EB]'
               }`}
               title="Конвертер валют"
             >
-              <DollarSign size={16} />
+              <DollarSign size={16} aria-hidden="true" />
             </button>
+          </div>
+
+          {/* Компактный календарь */}
+          <div className="hidden md:block">
+            <TopBarCalendar />
           </div>
 
           {/* Fully featured Notifications Center dropdown */}
 
           {/* Live indicator badge */}
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-white/60 rounded-xl border border-slate-200/40 shadow-2xs">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-            </span>
-            <span className="text-[11px] font-bold text-slate-500 font-sans">
-              Активна
-            </span>
-          </div>
-
           {/* User Badge Profile info */}
-          <div className="flex items-center gap-2.5 pl-1.5 sm:pl-2.5">
-            <div className="h-7.5 w-7.5 rounded-xl bg-[#3765F6]/10 text-[#3765F6] border border-[#3765F6]/20 flex items-center justify-center text-[11px] font-semibold shadow-3xs select-none">
-              {user.name.substring(0, 2).toUpperCase()}
-            </div>
-            <div className="hidden xl:block text-left text-xs leading-none">
-              <div className="font-bold text-slate-900 tracking-tight">{user.name}</div>
-              <span className="text-[9.5px] font-bold text-slate-400 block mt-0.5 uppercase tracking-wider">
-                {user.role === 'root_admin' ? 'Админ' : 'Сотрудник'}
-              </span>
-            </div>
+          {/* Меню пользователя: имя, аватар и инициалы открывают список действий */}
+          <div className="relative" ref={userMenuRef}>
             <button
-              onClick={handleLogoutSequence}
-              className="hidden xl:flex items-center justify-center min-h-[36px] min-w-[36px] text-slate-400 hover:text-rose-600 transition cursor-pointer ml-1"
-              title="Выйти"
+              type="button"
+              onClick={() => setIsUserMenuOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={isUserMenuOpen}
+              aria-controls="user-menu"
+              title="Меню пользователя"
+              /* Наведение — как у пунктов основного меню: та же плашка #F3F4F6,
+                 прозрачная рамка, rounded-lg и transition-colors, без свечения и бордера */
+              className="group flex items-center gap-2 h-9 pl-1 pr-1.5 sm:pr-2.5 rounded-lg border border-transparent hover:bg-[#F3F4F6] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
             >
-              <LogOut className="h-4 w-4" strokeWidth={1.5} />
+              <UserAvatar firstName={user.firstName} lastName={user.lastName} name={getUserFullName(user)} color={user.color} photo={user.avatarPhoto} size={28} />
+              <span className="hidden xl:block text-left leading-tight min-w-0">
+                <span className="block text-xs font-medium text-[#121316] tracking-tight truncate max-w-[140px]">{getUserFullName(user)}</span>
+                <span className="block text-[10px] font-medium text-[#6B7280] group-hover:text-[#121316] transition-colors">
+                  {user.role === 'root_admin' ? 'Админ' : 'Сотрудник'}
+                </span>
+              </span>
+              <ChevronDown className={`hidden xl:block h-3.5 w-3.5 text-[#9CA3AF] transition-transform ${isUserMenuOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
+
+            {isUserMenuOpen && (
+              <div
+                id="user-menu"
+                role="menu"
+                aria-label="Меню пользователя"
+                className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-[#E5E7EB] rounded-xl shadow-[0_8px_24px_rgba(15,23,42,0.12)] py-1.5 z-[1200]"
+              >
+                {/* Данные пользователя — только для чтения.
+                    Почта здесь не показывается: адрес остаётся в профиле и в админке. */}
+                <div className="px-3 py-3 border-b border-[#F3F4F6]">
+                  <div className="flex items-center gap-2.5">
+                    <UserAvatar firstName={user.firstName} lastName={user.lastName} name={getUserFullName(user)} color={user.color} photo={user.avatarPhoto} size={36} textClassName="text-xs" />
+                    <div className="min-w-0">
+                      <div className="text-[11px] tracking-tight font-semibold text-[#121316] truncate">{getUserFullName(user)}</div>
+                      <div className="text-[10px] text-[#6B7280] truncate">
+                        {user.role === 'root_admin' ? 'Разработчик (Root)' : user.role === 'admin' ? 'Администратор' : 'Сотрудник'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setIsUserMenuOpen(false); setIsAccountOpen(true); }}
+                  className="w-full flex items-center gap-2.5 h-9 px-3 text-[11px] tracking-tight font-medium text-[#4B5563] hover:bg-[#F3F4F6] hover:text-[#121316] transition-colors cursor-pointer text-left focus-visible:outline-none focus-visible:bg-[#F3F4F6]"
+                >
+                  <Settings className="h-3.5 w-3.5 text-[#9CA3AF]" aria-hidden="true" />
+                  Настройки учётной записи
+                </button>
+
+                {/* Повторно открыть знакомство с обновлениями */}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setIsUserMenuOpen(false); setTourShownThisSession(true); setTourOpen(true); }}
+                  className="w-full flex items-center gap-2.5 h-9 px-3 text-[11px] tracking-tight font-medium text-[#4B5563] hover:bg-[#F3F4F6] hover:text-[#121316] transition-colors cursor-pointer text-left focus-visible:outline-none focus-visible:bg-[#F3F4F6]"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-[#9CA3AF]" aria-hidden="true" />
+                  Что нового
+                </button>
+
+                <div className="my-1.5 h-px bg-[#F3F4F6]" />
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => { setIsUserMenuOpen(false); handleLogoutSequence(); }}
+                  className="w-full flex items-center gap-2.5 h-9 px-3 text-[11px] tracking-tight font-medium text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer text-left focus-visible:outline-none focus-visible:bg-rose-50"
+                >
+                  <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+                  Выйти из системы
+                </button>
+
+                {/* Версия приложения — единый источник: package.json */}
+                <div className="mt-1 pt-2 border-t border-[#F3F4F6] px-3 pb-1.5">
+                  <span className="text-[10px] font-medium text-[#9CA3AF] tabular-nums">{APP_VERSION_LABEL}</span>
+                </div>
+              </div>
+            )}
           </div>
 
         </div>
 
-      {/* Converter Panel */}
+      {/* Настройки учётной записи */}
+      <AccountSettingsModal
+        isOpen={isAccountOpen}
+        user={user}
+        onClose={() => setIsAccountOpen(false)}
+      />
+
+      {/* Превью обновлений: знакомство с изменениями при первом входе после
+          обновления. Про акцентную тему рассказываем только как о личной
+          настройке из настроек учётной записи. */}
+      <UpdateTour
+        isOpen={tourOpen}
+        accentAvailable={!!user?.uid}
+        linksCount={Array.isArray(settings?.quickLinks) ? settings!.quickLinks.filter((l) => l && l.url).length : 0}
+        canSeeVehicles={user.role === 'root_admin' || resolvePermission(user, 'vehicleDriverData', settings?.rolePermissions) !== 'none'}
+        onClose={closeTour}
+      />
+
+      {/* Converter Panel — окно раскрывается слева от своей кнопки в топ-баре:
+          правый край панели на 8 px левее кнопки, верх — под топ-баром.
+          Положение считается по фактическому прямоугольнику видимой кнопки
+          (кнопок две: для узких и широких экранов) и пересчитывается при
+          изменении размера окна. На узких экранах окно ограничено отступом
+          12 px от краёв и не выходит за пределы экрана.
+          Расчёты полностью в useConverter: панель только показывает displayValues
+          и передаёт ввод пользователя. Ничего, что меняет результат само по себе. */}
             <AnimatePresence>
               {isConverterOpen && (
                 <motion.div
@@ -760,61 +934,96 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 12, scale: 0.96 }}
                   transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                  className="fixed md:absolute top-20 md:top-full left-4 right-4 md:left-auto md:right-8 mt-0 md:mt-2 sm:w-80 bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-900/5 z-[2000] overflow-hidden p-5 max-w-[400px] w-[calc(100vw-2rem)] sm:w-80"
+                  role="dialog"
+                  aria-label="Конвертер валют"
+                  style={{
+                    right: converterPos ? converterPos.right : 12,
+                    top: converterPos ? converterPos.top : 76,
+                  }}
+                  className="fixed w-[376px] max-w-[calc(100vw-1.5rem)] max-h-[calc(100vh-120px)] overflow-y-auto bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_16px_40px_rgba(15,23,42,0.16)] z-[2000]"
                 >
-                  <div className="border-b border-slate-100/60 pb-3 mb-4 flex justify-between items-center select-none">
-                    <div>
-                      <h3 className="text-xs font-bold text-slate-900 font-sans tracking-tight uppercase">Конвертер валют</h3>
-                      <p className="text-[10px] text-slate-400 font-sans font-bold mt-0.5">Официальные курсы НБРБ</p>
+                  {/* Заголовок: знак валюты, название, источник курса и действия */}
+                  <div className="flex items-center gap-2.5 px-4 py-3 border-b border-[#F3F4F6] select-none">
+                    <span className="w-8 h-8 rounded-lg bg-[var(--accent-8)] border border-[var(--accent-20)] text-[var(--accent-ink)] flex items-center justify-center shrink-0">
+                      <DollarSign size={15} aria-hidden="true" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-xs font-semibold text-[#121316] tracking-tight">Конвертер валют</h3>
+                      <p className="text-[10px] text-[#6B7280] mt-0.5 truncate">
+                        {isEditingCurrencies
+                          ? 'Отметьте валюты для списка'
+                          : `Курсы НБРБ${ratesUpdatedAt ? ` · обновлено ${ratesUpdatedAt}` : ''}`}
+                      </p>
                     </div>
-                    
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setIsEditingCurrencies(!isEditingCurrencies); }}
-                        title="Настройка списка валют"
-                        className={`p-1.5 rounded-xl border transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
+                        title="Выбор валют"
+                        aria-label="Выбор валют"
+                        aria-pressed={isEditingCurrencies}
+                        className={`h-7 w-7 rounded-lg border flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
                           isEditingCurrencies
-                            ? 'bg-slate-900 text-white border-slate-800'
-                            : 'bg-white/60 hover:bg-slate-100 border border-slate-200/40 text-slate-500 hover:text-slate-700 hover:border-slate-300/50'
+                            ? 'bg-[var(--accent-8)] text-[var(--accent-ink)] border-[var(--accent-25)]'
+                            : 'bg-white text-[#6B7280] border-[#E5E7EB] hover:bg-[#F3F4F6] hover:text-[#121316]'
                         }`}
                       >
-                        <Sliders size={10.5} />
+                        <Sliders size={13} aria-hidden="true" />
                       </button>
-                      
+
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); fetchNbrbRates(); }}
                         disabled={isRatesLoading}
                         title="Обновить курсы из НБРБ"
-                        className="p-1.5 rounded-xl bg-white/60 hover:bg-slate-100 border border-slate-200/40 text-slate-500 hover:text-slate-700 hover:border-slate-300/50 transition-all flex items-center justify-center cursor-pointer active:scale-95 disabled:opacity-50"
+                        aria-label="Обновить курсы из НБРБ"
+                        className="h-7 w-7 rounded-lg border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#121316] flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
                       >
-                        <RefreshCw size={10.5} className={`${isRatesLoading ? 'animate-spin' : ''}`} />
+                        <RefreshCw size={13} className={isRatesLoading ? 'animate-spin' : ''} aria-hidden="true" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setIsConverterOpen(false); }}
+                        title="Закрыть"
+                        aria-label="Закрыть конвертер"
+                        className="h-7 w-7 rounded-lg border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#121316] flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+                      >
+                        <X size={13} aria-hidden="true" />
                       </button>
                     </div>
                   </div>
 
                   {isEditingCurrencies ? (
-                    <div className="space-y-3 py-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">Выберите валюты</span>
+                    /* Выбор валют: отмечаемые строки, минимум одна остаётся */
+                    <div className="px-3 py-3">
+                      <div className="flex items-center justify-between px-1 mb-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">Валюты в списке</span>
                         <button
+                          type="button"
                           onClick={() => setIsEditingCurrencies(false)}
-                          className="text-[10px] font-bold text-slate-700 hover:underline uppercase tracking-wider cursor-pointer"
+                          className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent-ink)] hover:underline cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
                         >
                           Готово
                         </button>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                      <div className="grid grid-cols-2 gap-1.5 max-h-[300px] overflow-y-auto custom-scrollbar pr-1" role="group" aria-label="Валюты в списке">
                         {(availableCurrencies.length > 0 ? availableCurrencies : [
                           { id: "1", code: "USD" }, { id: "2", code: "EUR" }, { id: "3", code: "RUB" },
                           { id: "4", code: "BYN" }, { id: "5", code: "TRY" }, { id: "6", code: "KZT" }, { id: "7", code: "CNY" }
                         ]).map(curr => {
                           const isSelected = selectedCurrencyCodes.includes(curr.code);
+                          const isLastOne = isSelected && selectedCurrencyCodes.length === 1;
                           return (
                             <button
                               key={curr.code}
+                              type="button"
+                              role="checkbox"
+                              aria-checked={isSelected}
+                              aria-disabled={isLastOne || undefined}
+                              title={isLastOne ? 'В списке должна остаться хотя бы одна валюта' : `${currencyName(curr.code)}`}
                               onClick={() => {
+                                // Правило прежнее: последнюю валюту убрать нельзя
                                 if (isSelected) {
                                   if (selectedCurrencyCodes.length > 1) {
                                     setSelectedCurrencyCodes(prev => prev.filter(c => c !== curr.code));
@@ -823,60 +1032,102 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                                   setSelectedCurrencyCodes(prev => [...prev, curr.code]);
                                 }
                               }}
-                              className={`p-2 rounded-xl text-xs font-bold border text-left flex items-center justify-between transition-all cursor-pointer ${
-                                isSelected 
-                                  ? 'bg-slate-100 border-slate-400 text-slate-800' 
-                                  : 'bg-slate-50 border-slate-200/60 text-slate-400 hover:bg-slate-100'
-                              }`}
+                              className={`flex items-center gap-2 h-9 px-2.5 rounded-lg border text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
+                                isSelected
+                                  ? 'bg-[var(--accent-8)] border-[var(--accent-25)] text-[var(--accent-ink)] font-semibold'
+                                  : 'bg-white border-[#E5E7EB] text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#121316]'
+                              } ${isLastOne ? 'opacity-70' : ''}`}
                             >
-                              <span>{curr.code}</span>
-                              <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-slate-800' : 'bg-slate-300'}`} />
+                              <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                                isSelected ? 'bg-[var(--accent-solid)] border-[var(--accent-solid)]' : 'bg-white border-[#D1D5DB]'
+                              }`}>
+                                {isSelected && <Check size={11} className="text-[var(--accent-on)]" aria-hidden="true" />}
+                              </span>
+                              <span className="text-[11px] font-semibold tabular-nums shrink-0">{curr.code}</span>
+                              <span className={`text-[10px] truncate ${isSelected ? 'text-[#4B5563]' : 'text-[#9CA3AF]'}`}>
+                                {currencyName(curr.code)}
+                              </span>
                             </button>
                           );
                         })}
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-4 max-h-80 overflow-y-auto pr-1 custom-scrollbar">
+                    /* Значения: поле редактируемой валюты выделено, остальные пересчитаны */
+                    <div className="px-3 py-3 space-y-2 max-h-[62vh] md:max-h-[430px] overflow-y-auto custom-scrollbar">
                       {selectedCurrencyCodes.map(code => {
-                        let currencyLabel = `${code} Валюта`;
-                        let currencySymbol = code;
-                        if (code === 'USD') { currencyLabel = 'USD ($) Доллар'; currencySymbol = '$'; }
-                        else if (code === 'EUR') { currencyLabel = 'EUR (€) Евро'; currencySymbol = '€'; }
-                        else if (code === 'BYN') { currencyLabel = 'BYN (Br) Бел. рубль'; currencySymbol = 'Br'; }
-                        else if (code === 'RUB') { currencyLabel = 'RUB (₽) Рус. рубль'; currencySymbol = '₽'; }
-                        else if (code === 'TRY') { currencyLabel = 'TRY (₺) Лира'; currencySymbol = '₺'; }
-                        else if (code === 'KZT') { currencyLabel = 'KZT (₸) Тенге'; currencySymbol = '₸'; }
-                        else if (code === 'CNY') { currencyLabel = 'CNY (¥) Юань'; currencySymbol = '¥'; }
-
+                        const isActive = activeCurrency === code;
+                        const rate = rates[code];
+                        const symbol = currencySymbol(code);
+                        const value = displayValues[code] ?? '';
                         return (
-                          <div className="group relative" key={code}>
-                            <div className="flex justify-between items-center mb-1 select-none">
-                              <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest font-sans">{currencyLabel}</label>
-                              {code !== 'BYN' && rates[code] && (
-                                <span className="text-[8.5px] font-bold text-slate-400 font-mono">
-                                  1 {code} = {Number(rates[code]).toFixed(4)} BYN
+                          <div
+                            key={code}
+                            className={`rounded-xl border p-2.5 transition-colors ${
+                              isActive
+                                ? 'border-[var(--accent-30)] bg-[var(--accent-5)]'
+                                : 'border-[#F3F4F6] bg-[#F9FAFB]/70 hover:border-[#E5E7EB]'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[12px] font-bold shrink-0 transition-colors ${
+                                  isActive
+                                    ? 'bg-[var(--accent-solid)] text-[var(--accent-on)]'
+                                    : 'bg-white border border-[#E5E7EB] text-[#6B7280]'
+                                }`}>
+                                  {symbol}
                                 </span>
-                              )}
-                              {code === 'BYN' && (
-                                <span className="text-[8.5px] font-bold text-slate-400 font-mono">Базовая валюта</span>
-                              )}
+                                <span className="text-[11px] font-semibold text-[#121316] truncate">{currencyName(code)}</span>
+                                <span className="text-[10px] font-semibold text-[#9CA3AF] tabular-nums shrink-0">{code}</span>
+                              </div>
+                              <span className="text-[10px] text-[#9CA3AF] font-mono tabular-nums shrink-0">
+                                {code === 'BYN' ? 'базовая' : (rate ? `1 ${code} = ${Number(rate).toFixed(4)} BYN` : '—')}
+                              </span>
                             </div>
                             <div className="relative flex items-center">
-                              <span className="absolute left-3 text-xs font-semibold text-slate-400 group-focus-within:text-slate-700 transition-colors select-none">{currencySymbol}</span>
                               <input
-                                type="text" inputMode="decimal"
-                                value={displayValues[code]}
+                                type="text"
+                                inputMode="decimal"
+                                value={value}
                                 onChange={(e) => { setActiveCurrency(code); setActiveValue(e.target.value.replace(',', '.')); }}
-                                className="w-full pl-8 pr-3.5 py-2 bg-slate-50/40 hover:bg-slate-50/70 border border-slate-200/50 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 transition-all"
+                                aria-label={`Сумма в ${code}`}
                                 placeholder="0.00"
+                                className={`w-full h-10 pl-3 pr-9 rounded-lg border bg-white text-sm font-semibold tabular-nums text-[#121316] placeholder:text-[#D1D5DB] transition-colors focus:outline-none ${
+                                  isActive
+                                    ? 'border-[var(--accent-ui)] ring-2 ring-[var(--accent-30)]'
+                                    : 'border-[#E5E7EB] hover:border-[#D1D5DB] focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)]'
+                                }`}
                               />
+                              {value !== '' && (
+                                <button
+                                  type="button"
+                                  onClick={() => { setActiveCurrency(code); setActiveValue(''); }}
+                                  title={`Очистить сумму в ${code}`}
+                                  aria-label={`Очистить сумму в ${code}`}
+                                  className="absolute right-1.5 h-7 w-7 rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+                                >
+                                  <X size={12} aria-hidden="true" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
                       })}
                     </div>
                   )}
+
+                  {/* Подвал: что редактируется сейчас и откуда курсы */}
+                  <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-t border-[#F3F4F6] select-none">
+                    <span className="text-[10px] text-[#6B7280] truncate">
+                      {isEditingCurrencies ? (
+                        'В списке одна валюта останется всегда'
+                      ) : (
+                        <>Редактируется: <span className="font-semibold text-[var(--accent-ink)] tabular-nums">{activeCurrency}</span></>
+                      )}
+                    </span>
+                    <span className="text-[10px] text-[#9CA3AF] shrink-0">Источник: НБРБ</span>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -890,13 +1141,22 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           ref={mainScrollRef} 
           className={`flex-1 w-full max-w-full relative pb-24 md:pb-0 ${
                       activeModule === 'dashboard' 
-                        ? 'p-0 bg-slate-50 overflow-hidden' 
+                        ? 'p-0 bg-[#F9FAFB] overflow-hidden' 
                         : activeModule === 'admin'
-                        ? 'p-3 sm:p-4 lg:p-6 bg-slate-50 overflow-y-auto overflow-x-hidden'
-                        : 'p-3 sm:p-4 lg:p-6 overflow-y-auto overflow-x-hidden bg-slate-50'
+                        ? 'p-3 sm:p-4 lg:p-6 bg-[#F9FAFB] overflow-y-auto overflow-x-hidden'
+                        : 'p-3 sm:p-4 lg:p-6 overflow-y-auto overflow-x-hidden bg-[#F9FAFB]'
                     }`}
         >
-          {allModules.map((mod) => {
+          {/* Ошибка маршрута: 404 — адрес неизвестен, 403 — раздел закрыт для роли.
+              Шапка остаётся на месте, чтобы пользователь мог уйти по навигации. */}
+          {routeError && (
+            <ErrorPage
+              code={routeError}
+              onHome={() => { window.location.hash = '#dashboard'; setActiveModule('dashboard'); }}
+              onBack={() => window.history.back()}
+            />
+          )}
+          {!routeError && allModules.map((mod) => {
             const isSystemModule = ['dashboard', 'settings', 'appSettings', 'admin'].includes(mod.key);
             const isAllowed = isSystemModule
               ? true
@@ -905,22 +1165,22 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
             const isActive = activeModule === mod.key;
             if (!isActive && !loadedModules.includes(mod.key)) return null;
+            // Индикатор загрузки данных раздела: пока не получен первый ответ базы,
+            // рабочая область закрыта брендовым индикатором — пустая таблица не видна.
+            // Шапка и навигация портала остаются видимыми.
             return (
-              <div
-                key={mod.key}
-                className={`h-full ${isActive ? '' : 'hidden'}`}
-              >
+              <ModuleDataContainer key={mod.key} moduleKey={mod.key} isActive={isActive}>
                 <motion.div
                   initial={{ opacity: 0, y: 3 }}
                   animate={{ opacity: isActive ? 1 : 0, y: isActive ? 0 : 3 }}
                   transition={{ duration: 0.15, ease: "easeOut" }}
                   className="h-full"
                 >
-                  <Suspense fallback={<div className="p-8 flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900"></div></div>}>
+                  <Suspense fallback={null}>
                     {renderModuleByKey(mod.key)}
                   </Suspense>
                 </motion.div>
-              </div>
+              </ModuleDataContainer>
             );
           })}
         </main>
@@ -934,7 +1194,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          className="fixed right-4 bottom-20 md:bottom-6 z-[1000] flex items-center justify-center w-11 h-11 bg-slate-950 text-[#70FC8E] hover:bg-slate-900 transition-all duration-200 select-none cursor-pointer rounded-full shadow-lg active:scale-95"
+          className="fixed right-4 bottom-20 md:bottom-6 z-[1000] flex items-center justify-center w-11 h-11 bg-[#121316] text-[#70FC8E] hover:bg-[#121316] transition-colors select-none cursor-pointer rounded-full shadow-lg active:scale-95"
           title="Наверх"
         >
           <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
@@ -947,12 +1207,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       {activeUnreadBroadcasts.length > 0 && (
         <AnimatePresence>
           {activeUnreadBroadcasts.map((notif, notifIdx) => (
-            <motion.div
+            <motion.div data-scroll-lock="modal"
               key={notif.id}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4"
+              className="fixed inset-0 z-[9999] bg-[#121316]/80 backdrop-blur-sm flex items-center justify-center p-4"
               style={{ zIndex: 10000 + notifIdx }}
             >
               <motion.div
@@ -960,42 +1220,42 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                 animate={{ scale: 1, y: 0, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
                 transition={{ duration: 0.2 }}
-                className="bg-slate-950 text-white rounded-2xl border border-slate-700/60 shadow-[0_20px_80px_rgba(0,0,0,0.6)] p-6 sm:p-8 w-full max-w-lg relative overflow-hidden flex flex-col gap-4"
+                className="bg-[#121316] text-white rounded-xl border border-slate-700/60 shadow-[0_20px_80px_rgba(0,0,0,0.6)] p-6 sm:p-8 w-full max-w-lg relative overflow-hidden flex flex-col gap-4"
               >
                 {/* Highlight bar */}
                 <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#70FC8E]" />
 
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3">
-                    <div className="p-2 bg-slate-900 border border-slate-700 rounded-xl text-[#70FC8E]">
+                    <div className="p-2 bg-[#121316] border border-slate-700 rounded-xl text-[#70FC8E]">
                       <BellRing className="h-5 w-5" />
                     </div>
                     <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#70FC8E] block">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-[#70FC8E] block">
                         Важное Распоряжение
                       </span>
-                      <span className="text-[9px] text-slate-400 font-mono">
+                      <span className="text-[10px] text-[#9CA3AF] font-mono">
                         от {notif.createdBy} • {new Date(notif.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <h3 className="text-base font-bold text-white leading-snug">
+                <h3 className="text-base font-semibold text-white leading-snug">
                   Внимание!
                 </h3>
 
-                <p className="text-sm text-slate-100 font-medium leading-relaxed whitespace-pre-wrap select-text max-h-[40vh] overflow-y-auto custom-scrollbar">
+                <p className="text-sm text-[#F3F4F6] font-medium leading-relaxed whitespace-pre-wrap select-text max-h-[40vh] overflow-y-auto custom-scrollbar">
                   {notif.text}
                 </p>
 
-                <div className="bg-slate-900/60 border border-slate-700/40 rounded-xl px-3.5 py-2.5 text-[10px] text-slate-400 font-medium">
+                <div className="bg-[#121316]/60 border border-slate-700/40 rounded-xl px-3.5 py-2.5 text-[10px] text-[#9CA3AF] font-medium">
                   Для продолжения работы с порталом подтвердите, что вы ознакомились с уведомлением
                 </div>
 
                 <button
                   onClick={() => dbService.markBroadcastNotificationAsRead(notif.id, user.uid, user.name)}
-                  className="w-full mt-1 py-3 px-4 bg-[#70FC8E] hover:bg-[#5be277] active:scale-[0.99] text-slate-950 font-bold text-xs uppercase tracking-widest rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center gap-2 shadow-lg"
+                  className="w-full mt-1 py-3 px-4 bg-[#70FC8E] hover:bg-[#5be277] active:scale-[0.99] text-[#121316] font-semibold text-xs uppercase tracking-widest rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center gap-2 shadow-lg"
                 >
                   <Check className="h-4 w-4" strokeWidth={3} />
                   Подтвердить прочтение
@@ -1007,7 +1267,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       )}
 
       {/* Mobile bottom navigation */}
-<nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 flex items-stretch justify-around px-3 py-3 select-none" style={{paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))'}}>
+<nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-[#E5E7EB] flex items-stretch justify-around px-3 py-3 select-none" style={{paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))'}}>
         {[
           { key: 'dashboard', label: 'Главная', icon: Home },
           { key: 'planZagruzok', label: 'Загрузки', icon: FileSpreadsheet },
@@ -1019,30 +1279,30 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             <button
               key={item.key}
               onClick={() => { setIsMobileMenuOpen(false); handleNavigate(item.key); }}
-              className={`flex-1 flex flex-col items-center justify-center gap-1 py-1.5 rounded-xl transition-all duration-150 ${active ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`flex-1 flex flex-col items-center justify-center gap-1 py-1.5 rounded-xl transition-all duration-150 ${active ? 'text-[#121316]' : 'text-[#9CA3AF] hover:text-[#4B5563]'}`}
             >
               <Icon className="h-6 w-6" strokeWidth={1.5} fill="none" />
-              <span className={`text-[11px] leading-tight text-center ${active ? 'font-semibold text-slate-900' : 'font-normal text-slate-400'}`}>{item.label}</span>
+              <span className={`text-[11px] leading-tight text-center ${active ? 'font-semibold text-[#121316]' : 'font-normal text-[#9CA3AF]'}`}>{item.label}</span>
             </button>
           );
         })}
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className={`flex-1 flex flex-col items-center justify-center gap-1 py-1.5 rounded-xl transition-all duration-150 ${isMobileMenuOpen ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
+          className={`flex-1 flex flex-col items-center justify-center gap-1 py-1.5 rounded-xl transition-all duration-150 ${isMobileMenuOpen ? 'text-[#121316]' : 'text-[#9CA3AF] hover:text-[#4B5563]'}`}
         >
           <Menu className="h-6 w-6" strokeWidth={1.5} fill="none" />
-          <span className={`text-[11px] leading-tight text-center ${isMobileMenuOpen ? 'font-semibold text-slate-900' : 'font-normal text-slate-400'}`}>Меню</span>
+          <span className={`text-[11px] leading-tight text-center ${isMobileMenuOpen ? 'font-semibold text-[#121316]' : 'font-normal text-[#9CA3AF]'}`}>Меню</span>
         </button>
       </nav>
 
       {/* Mobile "all tools" panel */}
       {isMobileMenuOpen && (
-<div className="md:hidden fixed inset-0 z-40 bg-slate-950/20 overflow-y-auto" onClick={() => setIsMobileMenuOpen(false)}>
+<div data-scroll-lock="modal" className="md:hidden fixed inset-0 z-40 bg-[#121316]/20 overflow-y-auto" onClick={() => setIsMobileMenuOpen(false)}>
           <div className="min-h-full flex items-end justify-center px-2 pt-2 pb-24" onClick={(e) => e.stopPropagation()}>
-            <div className="w-full bg-white rounded-[1.75rem] border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.08)] p-6">
+            <div className="w-full bg-white rounded-[1.75rem] border border-[#E5E7EB] shadow-[0_8px_30px_rgba(0,0,0,0.08)] p-6">
               <div className="flex items-center justify-between mb-5 px-1">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Все инструменты</span>
-                <button onClick={() => setIsMobileMenuOpen(false)} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 transition cursor-pointer">
+                <span className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-widest">Все инструменты</span>
+                <button onClick={() => setIsMobileMenuOpen(false)} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[#9CA3AF] hover:text-[#4B5563] transition cursor-pointer">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -1054,10 +1314,10 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                   <button
                     key={mod.key}
                     onClick={() => { setIsMobileMenuOpen(false); handleNavigate(mod.key); }}
-                    className={`flex flex-col items-center justify-center gap-2 p-4 rounded-2xl transition-all duration-150 active:scale-95 ${
+                    className={`flex flex-col items-center justify-center gap-2 p-4 rounded-xl transition-all duration-150 active:scale-95 ${
                       active 
-                        ? 'bg-slate-900 text-white shadow-sm border border-slate-800' 
-                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent'
+                        ? 'bg-[#121316] text-white border border-[#121316]' 
+                        : 'bg-[#F9FAFB] text-[#4B5563] hover:bg-[#F3F4F6] border border-transparent'
                     }`}
                   >
                     <Icon className="h-6 w-6" strokeWidth={1.5} fill="none" />
@@ -1066,19 +1326,24 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                 );
               })}
             </div>
-            <div className="grid grid-cols-2 gap-3 mt-6 pt-5 border-t border-slate-100">
+            {/* Выход из аккаунта намеренно оставлен только в меню пользователя,
+                 чтобы не было двух точек выхода. Здесь — обновление и настройки учётной записи. */}
+            <div className="grid grid-cols-2 gap-3 mt-6 pt-5 border-t border-[#E5E7EB]">
               <button
                 onClick={() => window.location.reload()}
-                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 transition text-slate-700 font-semibold text-xs active:scale-95 min-h-[44px]"
+                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-[#F3F4F6] hover:bg-[#E5E7EB] transition-colors text-[#4B5563] font-medium text-xs min-h-[44px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
               >
-                <RefreshCw className="h-5 w-5" /> Обновить
+                <RefreshCw className="h-4 w-4" /> Обновить
               </button>
               <button
-                onClick={() => { setIsMobileMenuOpen(false); handleLogoutSequence(); }}
-                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-rose-100 hover:bg-rose-200 transition text-rose-600 font-semibold text-xs active:scale-95 min-h-[44px]"
+                onClick={() => { setIsMobileMenuOpen(false); setIsAccountOpen(true); }}
+                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-[#F3F4F6] hover:bg-[#E5E7EB] transition-colors text-[#4B5563] font-medium text-xs min-h-[44px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
               >
-                <LogOut className="h-5 w-5" /> Выход
+                <Settings className="h-4 w-4" /> Учётная запись
               </button>
+            </div>
+            <div className="mt-4 text-center">
+              <span className="text-[10px] font-medium text-[#9CA3AF] tabular-nums">{APP_VERSION_LABEL}</span>
             </div>
           </div>
         </div>

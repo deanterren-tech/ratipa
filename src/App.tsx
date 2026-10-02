@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { UserProfile } from './types';
+import { applyAccentTheme } from './theme/accent';
 import AuthScreen from './components/AuthScreen';
 import AppShell from './components/AppShell';
+import SplashScreen from './components/SplashScreen';
+import ModalScrollGuard from './components/ModalScrollGuard';
 import { dbService } from './api';
 import { MotionConfig } from 'motion/react';
 
@@ -13,6 +16,9 @@ const SESSION_VERSION_KEY = 'ratipa_session_version';
 export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isSessionRestoring, setIsSessionRestoring] = useState(true);
+  // Заставка: видна, пока идёт восстановление сессии, и ещё 300 мс на плавное исчезновение
+  const [isSplashLeaving, setIsSplashLeaving] = useState(false);
+  const [isSplashVisible, setIsSplashVisible] = useState(true);
 
   // Глобальный блокировщик скролла body при открытии модальных окон
   useEffect(() => {
@@ -30,6 +36,12 @@ export default function App() {
     observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     return () => { observer.disconnect(); document.body.style.overflow = ''; };
   }, []);
+
+  // Акцентная тема пользователя: единственное место, где акцент попадает в CSS.
+  // Нет пользователя (экран входа) — действует оранжевый акцент по умолчанию.
+  useEffect(() => {
+    applyAccentTheme(user?.accentColor);
+  }, [user?.accentColor]);
 
   useEffect(() => {
     if (!user) {
@@ -92,6 +104,14 @@ export default function App() {
     setIsSessionRestoring(false);
   }, []);
 
+  // Плавное исчезновение заставки после реальной готовности приложения
+  useEffect(() => {
+    if (isSessionRestoring) return;
+    setIsSplashLeaving(true);
+    const t = setTimeout(() => setIsSplashVisible(false), 300);
+    return () => clearTimeout(t);
+  }, [isSessionRestoring]);
+
   const handleLoginSuccess = (profile: UserProfile) => {
     const prof = ensurePermissions(profile);
     setUser(prof);
@@ -120,9 +140,13 @@ export default function App() {
       const me = (users || []).find((u) => u.uid === user.uid);
       if (me) {
         setUser((prev) => {
-          // Не трогаем, если права не изменились (избегаем лишних ре-рендеров)
+          // Не трогаем, если ничего значимого не изменилось (избегаем лишних ре-рендеров).
+          // Цвет и фотография аватара тоже значимые: без них смена аватара
+          // не применялась бы к интерфейсу без перезагрузки страницы.
           if (prev && JSON.stringify(prev.permissions) === JSON.stringify(me.permissions) &&
-              prev.role === me.role && prev.customPermissions === me.customPermissions) {
+              prev.role === me.role && prev.customPermissions === me.customPermissions &&
+              prev.color === me.color && prev.avatarPhoto === me.avatarPhoto &&
+              prev.name === me.name) {
             return prev;
           }
           return ensurePermissions(me);
@@ -134,23 +158,11 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
 
-  if (isSessionRestoring) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center font-sans">
-        <div className="space-y-4 text-center">
-          <div className="h-10 w-10 bg-slate-900 mx-auto rounded-xl flex items-center justify-center text-white font-extrabold text-lg">
-            R
-          </div>
-          <span className="text-xs font-bold text-slate-400 block uppercase tracking-widest leading-none">
-            Инициализация системной сессии...
-          </span>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <MotionConfig reducedMotion="user">
+      {/* Единая блокировка фоновой прокрутки: действует на все модальные окна
+          приложения, включая будущие — см. ModalScrollGuard. */}
+      <ModalScrollGuard />
       <ToastProvider>
         <DialogProvider>
           {!user ? (
@@ -160,6 +172,10 @@ export default function App() {
           )}
         </DialogProvider>
       </ToastProvider>
+
+      {/* Заставка лежит ПОВЕРХ уже отрисованного приложения и уходит плавно,
+          поэтому анимация не задерживает ни один реальный шаг загрузки. */}
+      {isSplashVisible && <SplashScreen isLeaving={isSplashLeaving} />}
     </MotionConfig>
   );
 }

@@ -2,28 +2,27 @@ import React, {useState, useEffect} from 'react'
 import {
   UserProfile,
   AppSettings,
-  DISPATCHER_COLORS_PRESETS,
 } from "../../types";
 import {dbService} from '../../api'
+import { getUserFullName, getUserNameParts, getUserInitials } from '../../utils/userName';
 import {
   ShieldCheck,
   UserPlus,
-  Palette,
   Trash2,
   Edit2,
   Key,
-  Search,
   ChevronRight,
-  User,
   Sliders,
   Shield,
   Users,
   Activity,
-  Clock,
+  AlertCircle,
 } from "lucide-react";
 import {useToast} from '../ToastProvider'
 import {useDialog} from '../DialogProvider'
 import { resolvePermission } from '../../utils/permissions';
+import { UI } from '../../ui/kit';
+import { SectionHeader, SearchField, FilterPills, StatusText, FoundCount, EmptyState } from '../../ui/components';
 
 interface Props {
   user: UserProfile;
@@ -64,10 +63,19 @@ export default function UserManagementBlock({ user }: Props) {
 
   const [isAdding, setIsAdding] = useState(false);
   const [newUName, setNewUName] = useState("");
+  // Имя и фамилия задаются отдельно; `name` = «Имя Фамилия» (логин входа и отображение)
+  const [newUFirstName, setNewUFirstName] = useState("");
+  const [newULastName, setNewULastName] = useState("");
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
   const [newUPassword, setNewUPassword] = useState("");
   const [newURole, setNewURole] = useState("dispatcher");
   
   const [showPassword, setShowPassword] = useState(false);
+  // Ошибки обязательных полей формы сотрудника (подписи под полями)
+  const [addErrors, setAddErrors] = useState<{ name?: string; password?: string }>({});
+  const [nameErrors, setNameErrors] = useState<{ name?: string }>({});
   const [showZagruzokSubtabs, setShowZagruzokSubtabs] = useState(false);
   const [showPlanningSubtabs, setShowPlanningSubtabs] = useState(false);
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
@@ -91,17 +99,31 @@ export default function UserManagementBlock({ user }: Props) {
 
   useEffect(() => {
     const unsub = dbService.getAuditLogs(setAuditLogs, 100);
-    return () => { unsub(); };
+    return () => { unsub(); }
   }, []);
+
+  /** Полное имя для отображения и входа: «Имя Фамилия», лишние пробелы убираются. */
+  const composeFullName = (firstName: string, lastName: string) =>
+    [firstName.trim(), lastName.trim()].filter(Boolean).join(' ');
 
   const handleRegisterUser = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUName.trim() || !newUPassword.trim() || !newURole) return;
+    const firstName = newUFirstName.trim();
+    const lastName = newULastName.trim();
+    const fullName = composeFullName(firstName, lastName);
+    // Обязательные поля: имя и пароль. Ошибки показываем у самих полей.
+    const errors: { name?: string; password?: string } = {};
+    if (!fullName) errors.name = 'Укажите имя сотрудника — под ним он входит в систему';
+    if (!newUPassword.trim()) errors.password = 'Укажите пароль для входа';
+    setAddErrors(errors);
+    if (Object.values(errors).length > 0 || !newURole) return;
 
     const newUser: UserProfile = {
       uid: "user_" + Date.now(),
-      name: newUName.trim(),
-      email: `${newUName.trim().toLowerCase()}@ratipa.com`,
+      name: fullName,
+      firstName,
+      lastName,
+      email: `${fullName.toLowerCase().replace(/\s+/g, '.')}@ratipa.com`,
       createdAt: new Date().toISOString(),
       password: newUPassword.trim(),
       role: newURole as any,
@@ -112,7 +134,10 @@ export default function UserManagementBlock({ user }: Props) {
 
     dbService.saveUser(newUser);
     setNewUName("");
+    setNewUFirstName("");
+    setNewULastName("");
     setNewUPassword("");
+    setAddErrors({});
     setIsAdding(false);
     toast(`Пользователь ${newUser.name} успешно добавлен`, "success");
   };
@@ -187,7 +212,7 @@ export default function UserManagementBlock({ user }: Props) {
 
   const filteredUsers = users.filter(
     (u) =>
-      String(u.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      getUserFullName(u).toLowerCase().includes(searchQuery.toLowerCase()) ||
       String(ROLE_LABELS[u.role] || u.role).toLowerCase().includes(searchQuery.toLowerCase()),
   );
   const selectedUser = users.find((u) => u.uid === selectedUid);
@@ -240,215 +265,276 @@ export default function UserManagementBlock({ user }: Props) {
     { key: "admin", label: "Администрирование" },
   ];
 
+  // Классы активного сегмента Нет / Чтение / Полный
+  const permBtn = 'px-2.5 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wider border border-transparent transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed';
+  const permActive = (perm: string) =>
+    perm === 'none' ? 'bg-rose-600 text-white' :
+    perm === 'read' ? 'bg-[#121316] text-white' :
+    'bg-emerald-600 text-white';
+  const permIdle = 'text-[#6B7280] hover:text-[#121316] hover:bg-[#E5E7EB]';
+
   return (
-    <div className="bg-white rounded-[2rem] border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col md:flex-row overflow-hidden min-h-[680px] mt-6">
-      {/* Left Pane */}
-      <div className="w-full md:w-5/12 lg:w-4/12 border-r border-slate-200/40 flex flex-col bg-white/20 select-none">
-        <div className="p-6 border-b border-slate-200/40 bg-white/10">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">
-                Registry
-              </span>
-              <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-                <Users className="w-7 h-7 text-slate-800" /> Доступ и Учетные записи
-              </h1>
-            </div>
-            {canEditUsers && activeMainTab === "users" && (
-              <button
-                onClick={() => {
-                  setIsAdding(true);
-                  setSelectedUid(null);
-                }}
-                className="bg-[#3765F6] hover:bg-[#2555E5] active:scale-95 text-white rounded-xl p-2.5 shadow-sm transition-all cursor-pointer flex items-center justify-center border border-[#3765F6]/15"
-                title="Добавить пользователя"
-              >
-                <UserPlus size={15} />
-              </button>
+    <div className="flex flex-col gap-4">
+      {/* Заголовок блока */}
+      <SectionHeader
+        icon={<Users className="w-4 h-4" />}
+        tone="graphite"
+        title="Доступ и учётные записи"
+        subtitle="Сотрудники, системные роли и права доступа к разделам"
+      >
+        {canEditUsers && activeMainTab === "users" && (
+          <button
+            onClick={() => {
+              setIsAdding(true);
+              setSelectedUid(null);
+            }}
+            className={UI.buttonPrimary}
+            title="Добавить пользователя"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            Сотрудник
+          </button>
+        )}
+      </SectionHeader>
+
+      <div className="flex flex-col md:flex-row min-h-[640px] overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-xs">
+        {/* Левая панель — список */}
+        <div className="w-full md:w-5/12 lg:w-4/12 border-b md:border-b-0 md:border-r border-[#E5E7EB] flex flex-col">
+          <div className="p-4 border-b border-[#E5E7EB] flex flex-col gap-3">
+            <FilterPills
+              items={[
+                { key: 'users', label: 'Сотрудники' },
+                { key: 'roles', label: 'Роли' },
+              ]}
+              active={activeMainTab}
+              onChange={(key) => {
+                setActiveMainTab(key as 'users' | 'roles');
+                setIsAdding(false);
+                if (key === 'roles') setSelectedRole(null);
+              }}
+              ariaLabel="Сотрудники или роли"
+            />
+            {activeMainTab === "users" && (
+              <>
+                <SearchField
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder="Поиск по имени, фамилии или роли…"
+                  ariaLabel="Поиск сотрудника"
+                />
+                <FoundCount count={filteredUsers.length} onReset={searchQuery ? () => setSearchQuery('') : undefined} />
+              </>
             )}
           </div>
-          
-          <div className="flex gap-2 mb-4 bg-white/50 p-1 rounded-xl shadow-inner border border-white/60">
-            <button
-              onClick={() => { setActiveMainTab("users"); setIsAdding(false); }}
-              className={`flex-1 text-[10px] font-bold uppercase tracking-wider py-2 rounded-lg transition-all ${activeMainTab === 'users' ? 'bg-white shadow-xs text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Сотрудники
-            </button>
-            <button
-              onClick={() => { setActiveMainTab("roles"); setIsAdding(false); setSelectedRole(null); }}
-              className={`flex-1 text-[10px] font-bold uppercase tracking-wider py-2 rounded-lg transition-all ${activeMainTab === 'roles' ? 'bg-white shadow-xs text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Роли
-            </button>
-          </div>
 
-          {activeMainTab === "users" && (
-            <div className="relative">
-              <Search className="absolute left-3.5 top-3.5 w-3.5 h-3.5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Поиск сотрудника..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white/50 border border-white/60 placeholder:text-slate-400 text-xs font-semibold py-2.5 pl-10 pr-4 outline-none focus:ring-4 focus:ring-slate-200/50 focus:border-slate-300 rounded-xl shadow-xs transition-all text-slate-800"
-              />
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-2 flex flex-col gap-1">
+            {activeMainTab === "users" && filteredUsers.map((u) => {
+              const isSelected = selectedUid === u.uid;
+              const roleLabel = ROLE_LABELS[u.role] || u.role;
+              const initialLetter = getUserInitials(u) || "?";
+
+              return (
+                <button
+                  key={u.uid}
+                  onClick={() => { setSelectedUid(u.uid); setIsAdding(false); }}
+                  className={`w-full group flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl border transition-colors cursor-pointer text-left ${
+                    isSelected ? "bg-[#F3F4F6] border-[#E5E7EB]" : "border-transparent hover:bg-[#F9FAFB]"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`relative w-8 h-8 rounded-lg flex items-center justify-center font-semibold text-xs shrink-0 border transition-colors ${
+                      isSelected ? "bg-[var(--accent)] text-[var(--accent-on)] border-transparent" : "bg-[#F3F4F6] text-[#4B5563] border-[#E5E7EB]"
+                    }`}>
+                      {initialLetter}
+                      {(() => {
+                        const last = u.lastActive ? new Date(u.lastActive) : null;
+                        const fresh = !!u.isOnline || (!!last && Date.now() - last.getTime() < 3 * 60 * 1000);
+                        return (
+                          <span
+                            className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${fresh ? 'bg-emerald-500' : 'bg-[#D1D5DB]'}`}
+                            title={fresh ? 'В сети' : last ? `Последняя активность: ${last.toLocaleDateString('ru-RU').replace(/\./g, '/')} ${last.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : 'Активность неизвестна'}
+                            aria-label={fresh ? 'В сети' : 'Не в сети'}
+                          />
+                        );
+                      })()}
+                    </div>
+                    <div className="flex flex-col items-start text-left min-w-0">
+                      <span className="text-xs font-medium text-[#121316] truncate flex items-center gap-1.5 max-w-full">
+                        {getUserFullName(u)}
+                        {u.uid === user.uid && <span className="bg-[#121316] text-white font-mono text-[10px] leading-none px-1.5 py-0.5 rounded-full uppercase tracking-wider shrink-0">Вы</span>}
+                      </span>
+                      <span className="text-[10px] text-[#6B7280] mt-0.5 truncate">{roleLabel}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {canEditUsers && u.uid !== user.uid && u.role !== "root_admin" && (
+                      <div
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          // SEC-4: Запретить удаление последнего администратора
+                          if (u.role === 'admin' || u.role === 'root_admin') {
+                            const adminCount = users.filter(x => x.role === 'admin' || x.role === 'root_admin').length;
+                            if (adminCount <= 1) {
+                              toast("Нельзя удалить единственного администратора", "error");
+                              return;
+                            }
+                          }
+                          if (await showConfirm(`Удалить учетную запись ${u.name}?`)) {
+                            dbService.deleteUser(u.uid, u.name);
+                            if (selectedUid === u.uid) setSelectedUid(null);
+                          }
+                        }}
+                        className="md:opacity-0 md:group-hover:opacity-100 p-1.5 text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <Trash2 size={13} />
+                      </div>
+                    )}
+                    <ChevronRight size={14} className={isSelected ? "text-[#121316]" : "text-[#D1D5DB]"} />
+                  </div>
+                </button>
+              );
+            })}
+
+            {activeMainTab === "users" && filteredUsers.length === 0 && (
+              users.length === 0
+                ? <EmptyState kind="empty" title="Сотрудников пока нет" hint="Нажмите «Сотрудник», чтобы создать первую учётную запись." />
+                : <EmptyState kind="no-results" query={searchQuery} title="Сотрудник не найден" hint="Измените запрос — ищем по имени, фамилии и названию роли." />
+            )}
+
+            {activeMainTab === "roles" && Object.entries(ROLE_LABELS).map(([rKey, rLabel]) => {
+              const isSelected = selectedRole === rKey;
+              const usersCount = users.filter(u => u.role === rKey).length;
+              return (
+                <button
+                  key={rKey}
+                  onClick={() => { setSelectedRole(rKey); setIsAdding(false); }}
+                  className={`w-full group flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl border transition-colors cursor-pointer text-left ${
+                    isSelected ? "bg-[#F3F4F6] border-[#E5E7EB]" : "border-transparent hover:bg-[#F9FAFB]"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-semibold text-xs shrink-0 border transition-colors ${
+                      isSelected ? "bg-[var(--accent)] text-[var(--accent-on)] border-transparent" : "bg-[#F3F4F6] text-[#4B5563] border-[#E5E7EB]"
+                    }`}>
+                      <Shield size={14} />
+                    </div>
+                    <div className="flex flex-col items-start text-left min-w-0">
+                      <span className="text-xs font-medium text-[#121316] truncate">
+                        {rLabel}
+                      </span>
+                      <span className="text-[10px] text-[#6B7280] mt-0.5 truncate">Пользователей: {usersCount}</span>
+                    </div>
+                  </div>
+                  <ChevronRight size={14} className={isSelected ? "text-[#121316]" : "text-[#D1D5DB]"} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Правая панель — детали */}
+        <div className="flex-1 min-w-0 flex flex-col overflow-y-auto custom-scrollbar">
+          
+          {/* ФОРМА ДОБАВЛЕНИЯ */}
+          {isAdding && activeMainTab === "users" && (
+            <div className="p-5 lg:p-7 flex flex-col">
+              <div className="flex items-center gap-2.5 pb-3 border-b border-[#E5E7EB] mb-5">
+                <div className="p-2 bg-[#F3F4F6] text-[#A55329] rounded-xl">
+                  <UserPlus className="w-4 h-4" />
+                </div>
+                <h3 className="text-sm font-semibold text-[#121316]">
+                  Новый профиль сотрудника
+                </h3>
+              </div>
+              <form onSubmit={handleRegisterUser} noValidate className="flex flex-col gap-6 max-w-md">
+                {/* Данные сотрудника */}
+                <div className="flex flex-col gap-3">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">Данные сотрудника</span>
+                  <div className="space-y-1.5">
+                    <label className={UI.fieldLabel}>
+                      Имя <span className="text-[#A55329]">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newUFirstName}
+                      onChange={(e) => { setNewUFirstName(e.target.value); if (addErrors.name) setAddErrors((s) => ({ ...s, name: undefined })); }}
+                      className={UI.input}
+                      placeholder="Например: Сергей"
+                      aria-invalid={!!addErrors.name}
+                    />
+                    {addErrors.name && (
+                      <span className="flex items-center gap-1.5 text-[11px] text-rose-600">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {addErrors.name}
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className={UI.fieldLabel}>Фамилия</label>
+                    <input type="text" value={newULastName} onChange={(e) => setNewULastName(e.target.value)} className={UI.input} placeholder="Например: Терез" />
+                  </div>
+                </div>
+
+                {/* Вход в систему */}
+                <div className="flex flex-col gap-3 pt-4 border-t border-[#E5E7EB]">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">Вход в систему</span>
+                  <div className="space-y-1.5">
+                    <label className={UI.fieldLabel}>
+                      Пароль <span className="text-[#A55329]">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newUPassword}
+                      onChange={(e) => { setNewUPassword(e.target.value); if (addErrors.password) setAddErrors((s) => ({ ...s, password: undefined })); }}
+                      className={UI.input}
+                      placeholder="Сложный пароль…"
+                      aria-invalid={!!addErrors.password}
+                    />
+                    {addErrors.password && (
+                      <span className="flex items-center gap-1.5 text-[11px] text-rose-600">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {addErrors.password}
+                      </span>
+                    )}
+                    <span className={UI.hint}>Логин — имя и фамилия сотрудника; пароль сообщите ему лично.</span>
+                  </div>
+                </div>
+
+                {/* Доступ */}
+                <div className="flex flex-col gap-3 pt-4 border-t border-[#E5E7EB]">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">Доступ</span>
+                  <div className="space-y-1.5">
+                    <label className={UI.fieldLabel}>Группа роли</label>
+                    <select value={newURole} onChange={(e) => setNewURole(e.target.value)} className={`${UI.select} w-full`}>
+                      {Object.entries(ROLE_LABELS).map(([k, v]) => (user.role !== 'root_admin' && k === 'root_admin' ? null : <option key={k} value={k}>{v}</option>))}
+                    </select>
+                    <span className={UI.hint}>Права роли можно уточнить после создания в разделе «Роли» или в карточке сотрудника.</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+                  <button type="submit" className={`${UI.buttonPrimary} flex-1`}>Зарегистрировать</button>
+                  <button type="button" onClick={() => { setAddErrors({}); setIsAdding(false); }} className={`${UI.buttonGhost} flex-1`}>Отмена</button>
+                </div>
+                <span className={`${UI.hint} -mt-2`}>Поля со звёздочкой обязательны.</span>
+              </form>
             </div>
           )}
-        </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2">
-          {activeMainTab === "users" && filteredUsers.map((u) => {
-            const isSelected = selectedUid === u.uid;
-            const roleLabel = ROLE_LABELS[u.role] || u.role;
-            const initialLetter = String(u.name || "?").charAt(0).toUpperCase();
-
-            let badgeStyles = "bg-slate-100 text-slate-700 border-slate-200";
-            if (u.role === 'root_admin') badgeStyles = "bg-rose-50 text-rose-700 border-rose-100";
-            else if (u.role === 'admin') badgeStyles = "bg-[#3765F6]/5 text-[#3765F6] border-[#3765F6]/10";
-            else if (u.role === 'manager') badgeStyles = "bg-sky-50 text-sky-700 border-sky-100";
-            else if (u.role === 'accountant') badgeStyles = "bg-purple-50 text-purple-700 border-purple-100";
-            else if (u.role === 'dispatcher') badgeStyles = "bg-emerald-50 text-emerald-700 border-emerald-100";
-            else if (u.role === 'mechanic') badgeStyles = "bg-amber-50 text-amber-700 border-amber-100";
-
-            return (
-              <button
-                key={u.uid}
-                onClick={() => { setSelectedUid(u.uid); setIsAdding(false); }}
-                className={`w-full group relative flex items-center justify-between p-3 rounded-xl transition-all border cursor-pointer ${
-                  isSelected ? "bg-white border-slate-200/80 shadow-xs text-slate-900 scale-[1.01]" : "border-transparent hover:bg-white/40 text-slate-750"
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className={`w-8.5 h-8.5 rounded-xl flex items-center justify-center font-semibold text-xs shrink-0 border transition-all ${
-                    isSelected ? "bg-[#3765F6] text-white border-[#3765F6]/20 shadow-sm" : badgeStyles
-                  }`}>
-                    {initialLetter}
-                  </div>
-                  <div className="flex flex-col items-start text-left min-w-0">
-                    <span className="text-xs font-semibold text-slate-800 truncate flex items-center gap-1.5 w-full">
-                      {u.name} 
-                      {u.uid === user.uid && <span className="bg-[#3765F6] text-white font-mono text-[7px] px-1 py-0.5 rounded font-bold uppercase tracking-wider shrink-0 scale-90">ВЫ</span>}
-                    </span>
-                    <span className="text-[9px] font-bold font-mono uppercase tracking-widest text-slate-400 mt-0.5">{roleLabel}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {canEditUsers && u.uid !== user.uid && u.role !== "root_admin" && (
-                    <div
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        // SEC-4: Запретить удаление последнего администратора
-                        if (u.role === 'admin' || u.role === 'root_admin') {
-                          const adminCount = users.filter(x => x.role === 'admin' || x.role === 'root_admin').length;
-                          if (adminCount <= 1) {
-                            toast("Нельзя удалить единственного администратора", "error");
-                            return;
-                          }
-                        }
-                        if (await showConfirm(`Удалить учетную запись ${u.name}?`)) {
-                          dbService.deleteUser(u.uid, u.name);
-                          if (selectedUid === u.uid) setSelectedUid(null);
-                        }
-                      }}
-                      className="md:opacity-0 md:group-hover:opacity-100 p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                    >
-                      <Trash2 size={13} />
-                    </div>
-                  )}
-                  <ChevronRight size={14} className={isSelected ? "text-[#3765F6] translate-x-0.5 font-bold" : "text-slate-300 group-hover:translate-x-0.5 transition-all"} />
-                </div>
-              </button>
-            );
-          })}
-
-          {activeMainTab === "roles" && Object.entries(ROLE_LABELS).map(([rKey, rLabel]) => {
-            const isSelected = selectedRole === rKey;
-            const usersCount = users.filter(u => u.role === rKey).length;
-            return (
-              <button
-                key={rKey}
-                onClick={() => { setSelectedRole(rKey); setIsAdding(false); }}
-                className={`w-full group relative flex items-center justify-between p-3 rounded-xl transition-all border cursor-pointer ${
-                  isSelected ? "bg-white border-slate-200/80 shadow-xs text-slate-900 scale-[1.01]" : "border-transparent hover:bg-white/40 text-slate-750"
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className={`w-8.5 h-8.5 rounded-xl flex items-center justify-center font-semibold text-xs shrink-0 border transition-all ${
-                    isSelected ? "bg-[#3765F6] text-white border-[#3765F6]/20 shadow-sm" : "bg-slate-100 text-slate-700 border-slate-200"
-                  }`}>
-                    <Shield size={14} />
-                  </div>
-                  <div className="flex flex-col items-start text-left min-w-0">
-                    <span className="text-xs font-semibold text-slate-800 truncate flex items-center gap-1.5 w-full">
-                      {rLabel}
-                    </span>
-                    <span className="text-[9px] font-bold font-mono uppercase tracking-widest text-slate-400 mt-0.5">Пользователей: {usersCount}</span>
-                  </div>
-                </div>
-                <ChevronRight size={14} className={isSelected ? "text-[#3765F6] translate-x-0.5 font-bold" : "text-slate-300 group-hover:translate-x-0.5 transition-all"} />
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Right Pane */}
-      <div className="w-full md:w-7/12 lg:w-8/12 flex flex-col bg-slate-50">
-        
-        {/* ADD USER FORM */}
-        {isAdding && activeMainTab === "users" && (
-          <div className="p-6 lg:p-8 animate-fade-in flex flex-col h-full">
-            <div className="border-b border-white/40 pb-4 mb-6">
-              <span className="bg-[#3765F6]/10 text-[#3765F6] border border-[#3765F6]/10 font-mono text-[9px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full mb-1.5 inline-block">
-                Registration
-              </span>
-              <h3 className="text-sm font-semibold text-slate-900 tracking-tight flex items-center gap-2 select-none">
-                <UserPlus className="text-[#3765F6] h-4.5 w-4.5" />
-                Новый профиль сотрудника
-              </h3>
-            </div>
-            <form onSubmit={handleRegisterUser} className="space-y-5 max-w-sm">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-mono block select-none">Имя (Логин)</label>
-                <input required type="text" value={newUName} onChange={(e) => setNewUName(e.target.value)} className="w-full bg-white/50 border border-slate-200/50 rounded-xl px-4 py-2.5 text-xs font-semibold outline-none focus:ring-4 focus:ring-slate-200/50 focus:border-slate-300" placeholder="Иван Петров" />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-mono block select-none">Пароль</label>
-                <input required type="text" value={newUPassword} onChange={(e) => setNewUPassword(e.target.value)} className="w-full bg-white/50 border border-slate-200/50 rounded-xl px-4 py-2.5 text-xs font-semibold outline-none focus:ring-4 focus:ring-slate-200/50 focus:border-slate-300" placeholder="Сложный пароль..." />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 font-mono block select-none">Группа роли</label>
-                <select value={newURole} onChange={(e) => setNewURole(e.target.value)} className="w-full bg-white/50 border border-slate-200/50 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:ring-4 focus:ring-slate-200/50 focus:border-slate-300 cursor-pointer">
-                  {Object.entries(ROLE_LABELS).map(([k, v]) => (user.role !== 'root_admin' && k === 'root_admin' ? null : <option key={k} value={k}>{v}</option>))}
-                </select>
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button type="submit" className="flex-1 bg-[#3765F6] hover:bg-[#2555E5] text-white shadow-xs font-semibold text-xs py-2.5 rounded-xl cursor-pointer">Зарегистрировать</button>
-                <button type="button" onClick={() => setIsAdding(false)} className="px-5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-xs py-2.5 rounded-xl cursor-pointer">Отмена</button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* ROLE VIEW */}
-        {!isAdding && activeMainTab === "roles" && selectedRole && (
-          <div className="p-6 lg:p-8 flex flex-col h-full animate-fade-in overflow-y-auto">
-             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-slate-200/40 pb-5 select-none">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+          {/* ПРОСМОТР РОЛИ */}
+          {!isAdding && activeMainTab === "roles" && selectedRole && (
+            <div className="p-5 lg:p-7 flex flex-col gap-5">
+              <div className="flex flex-col gap-1 pb-4 border-b border-[#E5E7EB]">
+                <h3 className="text-sm font-semibold text-[#121316]">
                   Шаблон роли: {ROLE_LABELS[selectedRole]}
                 </h3>
-                <span className="text-[10.5px] text-slate-500 font-medium mt-1 block">Эти базовые права применяются ко всем пользователям с данной ролью.</span>
+                <span className={UI.hint}>Эти базовые права применяются ко всем пользователям с данной ролью.</span>
               </div>
-            </div>
 
-            <div className="mt-2">
-              <h4 className="text-xs font-bold tracking-wide text-slate-550 font-mono mb-3.5 flex items-center gap-1.5 select-none">
-                <ShieldCheck size={13} className="text-[#3765F6]" />
-                Общие права доступа роли
-              </h4>
-              <div className="bg-white/20 border border-slate-200/40 rounded-[1.8rem] p-4.5 space-y-3.5 max-h-[450px] overflow-y-auto custom-scrollbar shadow-inner">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={13} className="text-[#9CA3AF]" />
+                <h4 className="text-sm font-semibold text-[#121316]">Общие права доступа роли</h4>
+              </div>
+
+              <div className="flex flex-col">
                 {MODULES_LIST.map((m) => {
                   const roleBase = settings?.rolePermissions?.[selectedRole] || DEFAULT_ROLE_PERMS[selectedRole] || DEFAULT_ROLE_PERMS['viewer'];
                   const currentPerm = roleBase[m.key] || "none";
@@ -456,26 +542,23 @@ export default function UserManagementBlock({ user }: Props) {
                   const toggleExpand = () => toggleModuleExpand(m.key);
 
                   return (
-                    <div key={m.key} className="space-y-2.5 pb-2.5 border-b border-slate-200/30 last:border-0 last:pb-0">
-                      <div className={`flex flex-col lg:flex-row lg:items-center justify-between bg-white/45 border ${m.hasSubtabs ? "border-dashed border-[#3765F6]/20/60" : "border-slate-200/40"} rounded-xl p-3 gap-3 hover:bg-white/60`}>
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                          <span className="text-[11px] font-bold text-slate-800 tracking-tight">{m.label}</span>
+                    <div key={m.key} className="flex flex-col gap-2 py-3 border-b border-[#E5E7EB] last:border-0">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-medium text-[#121316]">{m.label}</span>
                           {m.hasSubtabs && (
-                            <button type="button" onClick={toggleExpand} className={`text-[9px] font-semibold px-2.5 py-1 rounded-lg cursor-pointer ${isExpanded ? "bg-[#3765F6] text-white" : "bg-[#3765F6]/5 hover:bg-[#3765F6]/10 text-[#3765F6]"}`}>
+                            <button type="button" onClick={toggleExpand} className={UI.buttonLink}>
                               {isExpanded ? "Скрыть" : "Настроить"} ({m.subtabs.length})
                             </button>
                           )}
                         </div>
-                        <div className="flex gap-0.5 bg-slate-100 p-0.5 rounded-xl border border-slate-200/60 shrink-0 self-end lg:self-auto select-none">
+                        <div className="flex items-center gap-0.5 bg-[#F3F4F6] p-0.5 rounded-lg border border-[#E5E7EB] shrink-0 self-end lg:self-auto select-none">
                           {["none", "read", "write"].map((perm) => {
                             const isActive = currentPerm === perm;
-                            let activeColors = "bg-rose-50 text-rose-700 border-rose-100 font-bold shadow-xs";
-                            if (perm === "read") activeColors = "bg-[#3765F6]/5 text-[#3765F6] border-[#3765F6]/10 font-bold shadow-xs";
-                            else if (perm === "write") activeColors = "bg-emerald-50 text-emerald-700 border-emerald-100 font-bold shadow-xs";
 
                             return (
-                              <button key={perm} disabled={!canEditUsers || selectedRole === 'root_admin'} onClick={() => handleRolePermChange(selectedRole, m.key, perm)}
-                                className={`px-2.5 py-1 rounded-lg text-[9px] uppercase tracking-wider font-semibold border border-transparent ${isActive ? activeColors : "text-slate-500 hover:bg-white/40"} disabled:opacity-40 cursor-pointer`}
+                              <button key={perm} type="button" disabled={!canEditUsers || selectedRole === 'root_admin'} onClick={() => handleRolePermChange(selectedRole, m.key, perm)}
+                                className={`${permBtn} ${isActive ? permActive(perm) : permIdle}`}
                               >
                                 {perm === "none" ? "Нет" : perm === "read" ? "Чтение" : "Полный"}
                               </button>
@@ -485,23 +568,20 @@ export default function UserManagementBlock({ user }: Props) {
                       </div>
 
                       {m.hasSubtabs && isExpanded && (
-                        <div className="pl-4 border-l-2 border-[#3765F6]/20 space-y-2 mt-1.5 ml-3 pb-1">
+                        <div className="pl-4 border-l border-[#E5E7EB] flex flex-col gap-1.5 ml-1">
                           {m.subtabs.length === 0 ? (
-                            <div className="text-[10px] text-slate-400 font-mono py-1">Нет вкладок</div>
+                            <div className="text-[11px] text-[#9CA3AF] py-1">Нет вкладок</div>
                           ) : m.subtabs.map((subItem) => {
                               const subPerm = roleBase[subItem.key] || "none";
                               return (
-                                <div key={subItem.key} className="flex flex-col sm:flex-row sm:items-center justify-between border rounded-xl p-2.5 gap-2.5 bg-slate-50/50">
-                                  <span className="text-xs font-semibold tracking-tight">{subItem.name}</span>
-                                  <div className="flex gap-0.5 bg-slate-100/80 p-0.5 rounded-xl border border-slate-200/50">
+                                <div key={subItem.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-1">
+                                  <span className="text-xs text-[#4B5563]">{subItem.name}</span>
+                                  <div className="flex items-center gap-0.5 bg-[#F3F4F6] p-0.5 rounded-lg border border-[#E5E7EB]">
                                     {["none", "read", "write"].map((perm) => {
                                       const isActive = subPerm === perm;
-                                      let activeColors = "bg-rose-50 text-rose-750 border-rose-100 font-bold shadow-xs";
-                                      if (perm === "read") activeColors = "bg-blue-50 text-blue-750 border-blue-100 font-bold shadow-xs";
-                                      else if (perm === "write") activeColors = "bg-emerald-50 text-emerald-750 border-emerald-100 font-bold shadow-xs";
                                       return (
-                                        <button key={perm} disabled={!canEditUsers || selectedRole === 'root_admin'} onClick={() => handleRolePermChange(selectedRole, subItem.key, perm)}
-                                          className={`px-2.5 py-1 rounded-lg text-[9px] uppercase tracking-wider font-semibold border border-transparent ${isActive ? activeColors : "text-slate-500 hover:bg-white/40"} disabled:opacity-40 cursor-pointer`}
+                                        <button key={perm} type="button" disabled={!canEditUsers || selectedRole === 'root_admin'} onClick={() => handleRolePermChange(selectedRole, subItem.key, perm)}
+                                          className={`${permBtn} px-2 ${isActive ? permActive(perm) : permIdle}`}
                                         >
                                           {perm === "none" ? "Нет" : perm === "read" ? "Чтение" : "Полный"}
                                         </button>
@@ -518,118 +598,173 @@ export default function UserManagementBlock({ user }: Props) {
                 })}
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* USER VIEW */}
-        {!isAdding && activeMainTab === "users" && selectedUser && (
-          <div className="p-6 lg:p-8 flex flex-col h-full animate-fade-in overflow-y-auto">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-slate-200/40 pb-5 select-none">
-              <div>
+          {/* ПРОСМОТР СОТРУДНИКА */}
+          {!isAdding && activeMainTab === "users" && selectedUser && (
+            <div className="p-5 lg:p-7 flex flex-col gap-6">
+              <div className="flex flex-col gap-3 pb-4 border-b border-[#E5E7EB]">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                    {selectedUser.name}
+                  <h3 className="text-sm font-semibold text-[#121316]">
+                    {getUserFullName(selectedUser)}
                   </h3>
                   {canEditUsers && (
-                    <button onClick={async () => {
-                        const n = await showPrompt("Изменить имя сотрудника:", selectedUser.name);
-                        if (n && n.trim() !== "" && n !== selectedUser.name) {
-                          dbService.saveUser({ ...selectedUser, name: n.trim() });
-                        }
+                    <button onClick={() => {
+                        // Имя и фамилия правятся отдельными полями
+                        const parts = getUserNameParts(selectedUser);
+                        setEditFirstName(parts.firstName);
+                        setEditLastName(parts.lastName);
+                        setIsEditingName((prev) => !prev);
                       }}
-                      className="text-slate-400 hover:text-[#3765F6] transition-all cursor-pointer p-1 rounded-md hover:bg-white/50" title="Редактировать имя"
-                    ><Edit2 size={12} /></button>
+                      className={UI.buttonIcon} title="Редактировать имя"
+                    ><Edit2 size={13} /></button>
                   )}
                 </div>
-                <div className="text-[9px] font-mono tracking-widest mt-2 flex flex-wrap gap-2">
-                  <span className="bg-[#3765F6]/10 text-[#3765F6] border border-[#3765F6]/20 px-2.5 py-0.5 rounded-full font-semibold">{ROLE_LABELS[selectedUser.role] || selectedUser.role}</span>
-                  <span className="bg-slate-100 text-slate-500 border border-slate-200/50 px-2 py-0.5 rounded-full font-semibold">ID: {selectedUser.uid}</span>
-                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                    Активность: {new Date(selectedUser.lastActive || new Date()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
+
+                {canEditUsers && isEditingName && (
+                  <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-3 flex flex-col gap-3">
+                    <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                    <div className="flex-1 min-w-0">
+                      <label className={`${UI.fieldLabel} block mb-1.5`}>Имя</label>
+                      <input
+                        type="text"
+                        value={editFirstName}
+                        onChange={(e) => setEditFirstName(e.target.value)}
+                        className={UI.inputSm}
+                        placeholder="Имя"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <label className={`${UI.fieldLabel} block mb-1.5`}>Фамилия</label>
+                      <input
+                        type="text"
+                        value={editLastName}
+                        onChange={(e) => setEditLastName(e.target.value)}
+                        className={UI.inputSm}
+                        placeholder="Фамилия"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const firstName = editFirstName.trim();
+                          const lastName = editLastName.trim();
+                          const fullName = composeFullName(firstName, lastName);
+                          if (!fullName) {
+                            setNameErrors({ name: 'Укажите имя или фамилию сотрудника' });
+                            return;
+                          }
+                          setNameErrors({});
+                          // Роли, права и остальные данные не меняются
+                          dbService.saveUser({ ...selectedUser, firstName, lastName, name: fullName });
+                          setIsEditingName(false);
+                          toast('Имя сохранено', 'success');
+                        }}
+                        className="inline-flex items-center justify-center px-3.5 h-9 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-on)] text-xs font-semibold transition-colors cursor-pointer"
+                      >
+                        Сохранить
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setNameErrors({}); setIsEditingName(false); }}
+                        className="inline-flex items-center justify-center px-3.5 h-9 rounded-lg bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#4B5563] text-xs font-medium transition-colors cursor-pointer"
+                      >
+                        Отмена
+                      </button>
+                      </div>
+                    </div>
+                    {nameErrors.name && (
+                      <span className="flex items-center gap-1.5 text-[11px] text-rose-600">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {nameErrors.name}
+                      </span>
+                    )}
+                    <span className={UI.hint}>Как минимум одно из полей — имя или фамилия — должно быть заполнено.</span>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`${UI.chip} text-[11px]`}>{ROLE_LABELS[selectedUser.role] || selectedUser.role}</span>
+                  <span className={`${UI.chip} font-mono select-all`}>ID: {selectedUser.uid}</span>
+                  {(() => {
+                    const last = selectedUser.lastActive ? new Date(selectedUser.lastActive) : null;
+                    const fresh = !!selectedUser.isOnline || (!!last && Date.now() - last.getTime() < 3 * 60 * 1000);
+                    if (fresh) return <StatusText color="emerald">В сети</StatusText>;
+                    return (
+                      <StatusText color="grey">
+                        {last
+                          ? `Последняя активность: ${last.toLocaleDateString('ru-RU').replace(/\./g, '/')} ${last.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
+                          : 'Активность неизвестна'}
+                      </StatusText>
+                    );
+                  })()}
                 </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
-              <div className="space-y-4">
-                <div className="bg-white/45 border border-white/60 rounded-2xl p-4.5 shadow-xs">
-                  <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 font-mono mb-2 flex items-center gap-1.5 select-none">
-                    <Key size={12} className="text-[#3765F6]" /> Пароль доступа
-                  </label>
-                  <div className="flex gap-2">
-                    <input type={showPassword ? "text" : "password"} readOnly value={selectedUser.password || "—"} className="bg-white/70 border border-slate-200/60 rounded-xl px-3 py-2 text-xs font-mono font-bold w-full select-all outline-none focus:bg-white transition-all text-slate-800 shadow-inner" />
-                    <button onClick={() => setShowPassword(v => !v)}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-600 shadow-xs rounded-xl px-3 transition-all font-semibold text-xs cursor-pointer shrink-0 border border-slate-200/60"
-                      title={showPassword ? "Скрыть пароль" : "Показать пароль"}
-                    >{showPassword ? "Скрыть" : "Показать"}</button>
-                    {canEditUsers && (
-                      <button onClick={async () => {
-                          const p = await showPrompt("Новый пароль сотрудника:", selectedUser.password);
-                          if (p && p.trim() !== "") {
-                            dbService.saveUser({ ...selectedUser, password: p.trim() });
-                            toast("Пароль обновлен", "success");
-                          }
+              {/* Учётные данные */}
+              <section className="flex flex-col gap-3">
+                <div className="flex items-center gap-2 pb-2 border-b border-[#E5E7EB]">
+                  <Key size={13} className="text-[#9CA3AF]" />
+                  <h4 className="text-sm font-semibold text-[#121316]">Учётные данные</h4>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input type={showPassword ? "text" : "password"} readOnly value={selectedUser.password || "—"} className={`${UI.input} font-mono select-all`} aria-label="Пароль сотрудника" />
+                  <button onClick={() => setShowPassword(v => !v)}
+                    className={`${UI.buttonGhost} shrink-0`}
+                    title={showPassword ? "Скрыть пароль" : "Показать пароль"}
+                  >{showPassword ? "Скрыть" : "Показать"}</button>
+                  {canEditUsers && (
+                    <button onClick={async () => {
+                        const p = await showPrompt("Новый пароль сотрудника:", selectedUser.password);
+                        if (p && p.trim() !== "") {
+                          dbService.saveUser({ ...selectedUser, password: p.trim() });
+                          toast("Пароль обновлен", "success");
+                        }
+                      }}
+                      className={`${UI.buttonPrimary} shrink-0`}
+                    >Изменить</button>
+                  )}
+                </div>
+                <span className={UI.hint}>Пароль используется для входа вместе с именем и фамилией сотрудника.</span>
+              </section>
+
+              {/* Роль и доступ */}
+              <section className="flex flex-col gap-3">
+                <div className="flex items-center gap-2 pb-2 border-b border-[#E5E7EB]">
+                  <ShieldCheck size={13} className="text-[#9CA3AF]" />
+                  <h4 className="text-sm font-semibold text-[#121316]">Роль и доступ</h4>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className={UI.fieldLabel}>Системная роль</label>
+                    <select value={selectedUser.role} disabled={!canEditSelectedUser} onChange={(e) => handleUserRoleChange(selectedUser, e.target.value)}
+                      className={`${UI.select} w-full disabled:opacity-50`}
+                    >
+                      {Object.entries(ROLE_LABELS).map(([k, v]) => (user.role !== 'root_admin' && k === 'root_admin' ? null : <option key={k} value={k}>{v}</option>))}
+                    </select>
+                    <span className={UI.hint}>Роль задаёт базовые права на разделы портала.</span>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className={UI.fieldLabel}>Участие в работе</label>
+                    <label className="flex min-h-[44px] items-center gap-2.5 cursor-pointer select-none rounded-xl border border-[#E5E7EB] bg-white px-3">
+                      <input type="checkbox" checked={!!(selectedUser as any).isDispatcher}
+                        disabled={!canEditSelectedUser}
+                        onChange={(e) => {
+                          dbService.saveUser({ ...selectedUser, isDispatcher: e.target.checked });
+                          toast(e.target.checked ? 'Диспетчер включен' : 'Диспетчер выключен', 'success');
                         }}
-                        className="bg-[#3765F6] hover:bg-[#2555E5] text-white shadow-xs rounded-xl px-3.5 transition-all font-semibold text-xs cursor-pointer shrink-0 border border-[#3765F6]/10"
-                      >Изменить</button>
-                    )}
+                        className={UI.checkbox} />
+                      <span className="text-xs text-[#4B5563] font-medium">Диспетчер — показывать в списках диспетчеров</span>
+                    </label>
                   </div>
                 </div>
+              </section>
 
-                <div className="bg-white/45 border border-white/60 rounded-2xl p-4.5 shadow-xs">
-                  <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 font-mono mb-2 flex items-center gap-1.5 select-none">
-                    <ShieldCheck size={12} className="text-[#3765F6]" /> Системная роль
-                  </label>
-                  <select value={selectedUser.role} disabled={!canEditSelectedUser} onChange={(e) => handleUserRoleChange(selectedUser, e.target.value)}
-                    className="bg-white/70 border border-slate-200/60 rounded-xl px-3 py-2.5 text-xs font-bold w-full outline-none disabled:opacity-50 cursor-pointer text-slate-800 transition-all focus:border-slate-300"
-                  >
-                    {Object.entries(ROLE_LABELS).map(([k, v]) => (user.role !== 'root_admin' && k === 'root_admin' ? null : <option key={k} value={k}>{v}</option>))}
-                  </select>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2 pb-3 border-b border-[#E5E7EB]">
+                  <Sliders size={13} className="text-[#9CA3AF]" />
+                  <h4 className="text-sm font-semibold text-[#121316]">Индивидуальные права доступа (переопределения)</h4>
                 </div>
-
-                <div className="bg-white/45 border border-white/60 rounded-2xl p-4.5 shadow-xs">
-                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                    <input type="checkbox" checked={!!(selectedUser as any).isDispatcher}
-                      disabled={!canEditSelectedUser}
-                      onChange={(e) => {
-                        dbService.saveUser({ ...selectedUser, isDispatcher: e.target.checked });
-                        toast(e.target.checked ? 'Диспетчер включен' : 'Диспетчер выключен', 'success');
-                      }}
-                      className="w-4 h-4 rounded border-slate-300 text-[#3765F6] accent-slate-900 focus:ring-slate-300 cursor-pointer disabled:opacity-40" />
-                    <span className="text-[11px] font-bold text-slate-700">Диспетчер (показывать в списках диспетчеров)</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="bg-white/45 border border-white/60 rounded-2xl p-4.5 shadow-xs">
-                <label className="text-[9px] font-bold uppercase tracking-widest text-slate-400 font-mono mb-2 flex items-center gap-1.5 select-none">
-                  <Palette size={12} className="text-[#3765F6]" /> Индивидуальный цвет
-                </label>
-                <div className="grid grid-cols-6 gap-2 mt-4">
-                  {DISPATCHER_COLORS_PRESETS.map((p) => {
-                    const isSelected = selectedUser.color === p.key;
-                    return (
-                      <button key={p.key} onClick={() => { if (canEditUsers) dbService.saveUser({ ...selectedUser, color: p.key }); }}
-                        className={`w-7.5 h-7.5 rounded-lg border-2 transition-all flex items-center justify-center ${isSelected ? "border-[#3765F6] scale-110 shadow-sm" : "border-transparent hover:scale-105"} cursor-pointer`}
-                        style={{ backgroundColor: p.colorCode }} title={p.name}
-                      >
-                        {isSelected && <span className="text-[10px] text-white font-semibold drop-shadow-md">✓</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-            </div>
-
-            <div className="mt-2">
-              <h4 className="text-xs font-bold tracking-wide text-slate-550 font-mono mb-3.5 flex items-center gap-1.5 select-none">
-                <Sliders size={13} className="text-[#3765F6]" />
-                Индивидуальные права доступа (переопределения)
-              </h4>
-              <div className="bg-slate-50 border border-slate-200/50 rounded-[2rem] p-5 space-y-3 overflow-y-auto custom-scrollbar">
                 {MODULES_LIST.map((m) => {
                   const currentCustom = selectedUser.customPermissions?.[m.key] || "inherit";
                   const effectivePerm = resolvePermission(selectedUser, m.key, settings?.rolePermissions);
@@ -637,30 +772,28 @@ export default function UserManagementBlock({ user }: Props) {
                   const toggleExpand = () => toggleModuleExpand(m.key);
 
                   return (
-                    <div key={m.key} className="space-y-2.5 pb-2.5 border-b border-slate-200/30 last:border-0 last:pb-0">
-                      <div className={`flex flex-col lg:flex-row lg:items-center justify-between bg-white/45 border ${m.hasSubtabs ? "border-dashed border-[#3765F6]/20/60" : "border-slate-200/40"} rounded-xl p-3 gap-3 hover:bg-white/60`}>
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                          <span className="text-[11px] font-bold text-slate-800 tracking-tight">{m.label}</span>
+                    <div key={m.key} className="flex flex-col gap-2 py-3 border-b border-[#E5E7EB] last:border-0">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-medium text-[#121316]">{m.label}</span>
                           {m.hasSubtabs && (
-                            <button type="button" onClick={toggleExpand} className={`text-[9px] font-semibold px-2.5 py-1 rounded-lg cursor-pointer ${isExpanded ? "bg-[#3765F6] text-white" : "bg-[#3765F6]/5 hover:bg-[#3765F6]/10 text-[#3765F6]"}`}>
+                            <button type="button" onClick={toggleExpand} className={UI.buttonLink}>
                               {isExpanded ? "Скрыть" : "Настроить"} ({m.subtabs.length})
                             </button>
                           )}
                         </div>
 
-                        <div className="flex gap-0.5 bg-slate-100 p-0.5 rounded-xl border border-slate-200/60 shrink-0 self-end lg:self-auto select-none">
+                        <div className="flex items-center gap-0.5 bg-[#F3F4F6] p-0.5 rounded-lg border border-[#E5E7EB] shrink-0 self-end lg:self-auto select-none">
                           {["inherit", "none", "read", "write"].map((perm) => {
                             const isActive = currentCustom === perm;
-                            let activeColors = "bg-slate-300 text-slate-800 border-slate-400 font-bold shadow-xs";
-                            if (perm === "none") activeColors = "bg-rose-50 text-rose-700 border-rose-100 font-bold shadow-xs";
-                            else if (perm === "read") activeColors = "bg-[#3765F6]/5 text-[#3765F6] border-[#3765F6]/10 font-bold shadow-xs";
-                            else if (perm === "write") activeColors = "bg-emerald-50 text-emerald-700 border-emerald-100 font-bold shadow-xs";
-
                             const labels = perm === "inherit" ? "Наследует" : perm === "none" ? "Нет" : perm === "read" ? "Чтение" : "Полный";
-                            
+                            const activeCls = perm === "inherit"
+                              ? 'bg-white text-[#121316] border-[#E5E7EB] shadow-xs'
+                              : permActive(perm);
+
                             return (
-                              <button key={perm} disabled={!canEditSelectedUser || selectedUser.role === 'root_admin'} onClick={() => handleUserPermChange(selectedUser, m.key, perm)}
-                                className={`px-2.5 py-1 rounded-lg text-[9px] uppercase tracking-wider font-semibold border border-transparent ${isActive ? activeColors : "text-slate-500 hover:bg-white/40"} disabled:opacity-40 cursor-pointer`}
+                              <button key={perm} type="button" disabled={!canEditSelectedUser || selectedUser.role === 'root_admin'} onClick={() => handleUserPermChange(selectedUser, m.key, perm)}
+                                className={`${permBtn} ${isActive ? activeCls : permIdle}`}
                                 title={perm === 'inherit' ? `Наследует: ${effectivePerm}` : ''}
                               >
                                 {labels} {perm === 'inherit' && `(${effectivePerm === 'none' ? 'Нет' : effectivePerm === 'read' ? 'Ч' : 'П'})`}
@@ -671,27 +804,26 @@ export default function UserManagementBlock({ user }: Props) {
                       </div>
 
                       {m.hasSubtabs && isExpanded && (
-                        <div className="pl-4 border-l-2 border-[#3765F6]/20 space-y-2 mt-1.5 ml-3 pb-1">
+                        <div className="pl-4 border-l border-[#E5E7EB] flex flex-col gap-1.5 ml-1">
                           {m.subtabs.length === 0 ? (
-                            <div className="text-[10px] text-slate-400 font-mono py-1">Нет вкладок</div>
+                            <div className="text-[11px] text-[#9CA3AF] py-1">Нет вкладок</div>
                           ) : m.subtabs.map((subItem) => {
                               const subCustom = selectedUser.customPermissions?.[subItem.key] || "inherit";
                               const subEffective = resolvePermission(selectedUser, subItem.key, settings?.rolePermissions);
                               
                               return (
-                                <div key={subItem.key} className="flex flex-col sm:flex-row sm:items-center justify-between border rounded-xl p-2.5 gap-2.5 bg-slate-50/50">
-                                  <span className="text-xs font-semibold tracking-tight">{subItem.name}</span>
-                                  <div className="flex gap-0.5 bg-slate-100/80 p-0.5 rounded-xl border border-slate-200/50">
+                                <div key={subItem.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-1">
+                                  <span className="text-xs text-[#4B5563]">{subItem.name}</span>
+                                  <div className="flex items-center gap-0.5 bg-[#F3F4F6] p-0.5 rounded-lg border border-[#E5E7EB]">
                                     {["inherit", "none", "read", "write"].map((perm) => {
                                       const isActive = subCustom === perm;
-                                      let activeColors = "bg-slate-300 text-slate-800 border-slate-400 font-bold shadow-xs";
-                                      if (perm === "none") activeColors = "bg-rose-50 text-rose-750 border-rose-100 font-bold shadow-xs";
-                                      else if (perm === "read") activeColors = "bg-blue-50 text-blue-750 border-blue-100 font-bold shadow-xs";
-                                      else if (perm === "write") activeColors = "bg-emerald-50 text-emerald-750 border-emerald-100 font-bold shadow-xs";
                                       const labels = perm === "inherit" ? "Наследует" : perm === "none" ? "Нет" : perm === "read" ? "Чтение" : "Полный";
+                                      const activeCls = perm === "inherit"
+                                        ? 'bg-white text-[#121316] border-[#E5E7EB] shadow-xs'
+                                        : permActive(perm);
                                       return (
-                                        <button key={perm} disabled={!canEditSelectedUser || selectedUser.role === 'root_admin'} onClick={() => handleUserPermChange(selectedUser, subItem.key, perm)}
-                                          className={`px-2.5 py-1 rounded-lg text-[9px] uppercase tracking-wider font-semibold border border-transparent ${isActive ? activeColors : "text-slate-500 hover:bg-white/40"} disabled:opacity-40 cursor-pointer`}
+                                        <button key={perm} type="button" disabled={!canEditSelectedUser || selectedUser.role === 'root_admin'} onClick={() => handleUserPermChange(selectedUser, subItem.key, perm)}
+                                          className={`${permBtn} px-2 ${isActive ? activeCls : permIdle}`}
                                           title={perm === 'inherit' ? `Наследует: ${subEffective}` : ''}
                                         >
                                           {labels} {perm === 'inherit' && `(${subEffective === 'none' ? 'Нет' : subEffective === 'read' ? 'Ч' : 'П'})`}
@@ -708,53 +840,58 @@ export default function UserManagementBlock({ user }: Props) {
                   );
                 })}
               </div>
-            </div>
 
-            {/* Employee Activity History */}
-            {(() => {
-              const userLogs = auditLogs.filter(
-                (l: any) => l.user && selectedUser && l.user.toLowerCase() === selectedUser.name.toLowerCase()
-              ).slice(0, 15);
-              if (userLogs.length === 0) return null;
-              return (
-                <div className="mt-5 bg-slate-50/30 border border-slate-200/40 rounded-2xl p-4">
-                  <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
-                    <Activity size={12} className="text-slate-400" />
-                    История активности ({userLogs.length})
-                  </h4>
-                  <div className="space-y-1 max-h-[200px] overflow-y-auto custom-scrollbar">
-                    {userLogs.map((log: any, i: number) => (
-                      <div key={log.id || i} className="flex items-start gap-2 py-1 px-2 rounded-lg hover:bg-white/50 text-[10px]">
-                        <div className="w-1 h-1 mt-1.5 rounded-full bg-slate-300 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-slate-700 font-medium block truncate">{log.details || log.actionType}</span>
-                          <span className="text-slate-400 font-mono text-[9px]">
-                            {log.date ? new Date(log.date).toLocaleDateString('ru-RU').replace(/\./g, '/') + ' ' + new Date(log.date).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''}
-                          </span>
-                        </div>
-                        <span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${String(log.actionType || '').toLowerCase().includes('create') || String(log.actionType || '').toLowerCase().includes('добав') ? 'bg-emerald-100 text-emerald-800' : String(log.actionType || '').toLowerCase().includes('delete') || String(log.actionType || '').toLowerCase().includes('удал') ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-500'}`}>
-                            {log.actionType}
-                          </span>
-                        </div>
-                      ))}
+              {/* История активности сотрудника */}
+              {(() => {
+                const userLogs = auditLogs.filter(
+                  (l: any) => l.user && selectedUser && l.user.toLowerCase() === selectedUser.name.toLowerCase()
+                ).slice(0, 15);
+                if (userLogs.length === 0) return null;
+                return (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2 pb-3 border-b border-[#E5E7EB]">
+                      <Activity size={13} className="text-[#9CA3AF]" />
+                      <h4 className="text-sm font-semibold text-[#121316]">История активности ({userLogs.length})</h4>
+                    </div>
+                    <div className="flex flex-col max-h-[200px] overflow-y-auto custom-scrollbar">
+                      {userLogs.map((log: any, i: number) => {
+                        const act = String(log.actionType || '').toLowerCase();
+                        const isCreate = act.includes('create') || act.includes('добав');
+                        const isDelete = act.includes('delete') || act.includes('удал');
+                        return (
+                          <div key={log.id || i} className="flex items-start gap-2.5 py-1.5 px-1 border-b border-[#E5E7EB] last:border-0 hover:bg-[#F9FAFB] transition-colors">
+                            <span className={`w-1.5 h-1.5 mt-1.5 rounded-full shrink-0 ${isCreate ? 'bg-emerald-500' : isDelete ? 'bg-rose-500' : 'bg-[#D1D5DB]'}`} />
+                            <div className="flex-1 min-w-0">
+                              <span className="text-xs text-[#4B5563] font-medium block truncate">{log.details || log.actionType}</span>
+                              <span className="text-[11px] font-mono text-[#9CA3AF]">
+                                {log.date ? new Date(log.date).toLocaleDateString('ru-RU').replace(/\./g, '/') + ' ' + new Date(log.date).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''}
+                              </span>
+                            </div>
+                            <span className={`${UI.chip} shrink-0`}>
+                              {log.actionType}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              );
-            })()}
+                );
+              })()}
 
-          </div>
-        )}
-
-        {!isAdding && !selectedUser && !selectedRole && (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-12 h-full select-none text-center">
-            <div className="w-16 h-16 rounded-3xl bg-[#3765F6]/5 flex items-center justify-center mb-6 border border-[#3765F6]/10 shadow-xs relative">
-              <ShieldCheck size={32} className="text-[#3765F6] relative z-10" />
             </div>
-            <span className="text-xs font-semibold tracking-wide font-mono text-slate-800 block">
-              Выберите элемент для настройки
-            </span>
-          </div>
-        )}
+          )}
+
+          {!isAdding && !selectedUser && !selectedRole && (
+            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
+              <div className="p-3 bg-[#F3F4F6] rounded-2xl mb-3">
+                <ShieldCheck size={26} className="text-[#9CA3AF]" />
+              </div>
+              <span className="text-xs font-medium text-[#6B7280]">
+                Выберите элемент для настройки
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

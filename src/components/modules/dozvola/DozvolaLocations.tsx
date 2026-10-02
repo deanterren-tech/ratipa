@@ -1,8 +1,10 @@
+import { currentAccentColor } from '../../../theme/accent';
 import React, {useState, useEffect} from 'react'
 import {useFirebase, database, onValue} from '../../../firebase'
 import {ref, set, push, update, remove} from 'firebase/database'
-import {MapPin, Plus, Trash2, Edit, Save, X, Layers, Route, Truck, FileText} from 'lucide-react'
+import {MapPin, Plus, Trash2, Edit, Save, X, Layers, Route, Truck, FileText, ArrowRight, ArrowLeft, Search, ChevronUp, ChevronDown, Info} from 'lucide-react'
 import {UserProfile} from '../../../types'
+import { useModalKeyboard } from '../../../hooks/useModalKeyboard'
 import {MapContainer, TileLayer, Marker, Polyline, useMap} from 'react-leaflet'
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -53,13 +55,13 @@ const DozvolCommentRow: React.FC<{ d: any; isHighlighted?: boolean }> = ({ d, is
     <div className={`border rounded-xl p-2.5 flex flex-col gap-1.5 shadow-sm transition duration-150 ${
       isHighlighted 
         ? 'bg-amber-50/70 border-amber-400 ring-2 ring-amber-400/10 shadow' 
-        : 'bg-white border-slate-200 hover:border-slate-300'
+        : 'bg-white border-[#E5E7EB] hover:bg-[#F3F4F6]'
     }`}>
       <div className="flex justify-between items-center gap-2">
-        <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-100/70 px-2 py-0.5 rounded-full uppercase tracking-tight truncate max-w-[150px]" title={d.type}>
+        <span className="text-[10px] font-mono font-medium text-[#4B5563] bg-[#F3F4F6] border border-[#E5E7EB] px-2 py-0.5 rounded-md truncate max-w-[150px]" title={d.type}>
           {d.type}
         </span>
-        <span className="font-mono font-semibold text-xs bg-slate-100 text-slate-900 px-2 py-0.5 rounded border border-slate-200/50 shadow-sm shrink-0">
+        <span className="font-mono font-semibold text-xs bg-[#F3F4F6] text-[#121316] px-2 py-0.5 rounded border border-[#E5E7EB] shadow-sm shrink-0">
           {d.number}
         </span>
       </div>
@@ -69,7 +71,7 @@ const DozvolCommentRow: React.FC<{ d: any; isHighlighted?: boolean }> = ({ d, is
             type="text"
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            className="flex-1 text-[10px] px-1.5 py-0.5 border border-slate-300 rounded outline-none focus:border-slate-300"
+            className="flex-1 text-[10px] px-1.5 py-0.5 border border-[#E5E7EB] rounded outline-none focus:border-[var(--accent-ui)]"
             placeholder="Комментарий..."
             onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
             autoFocus
@@ -82,19 +84,19 @@ const DozvolCommentRow: React.FC<{ d: any; isHighlighted?: boolean }> = ({ d, is
           </button>
           <button 
             onClick={() => { setIsEditing(false); setComment(d.comment || ''); }}
-            className="p-1 bg-slate-100 text-slate-500 rounded hover:bg-slate-200"
+            className="p-1 bg-[#F3F4F6] text-[#6B7280] rounded hover:bg-[#E5E7EB]"
           >
             <X className="w-3 h-3" />
           </button>
         </div>
       ) : (
         <div className="flex justify-between items-start gap-2 mt-0.5 group/comment">
-          <div className="text-[10px] text-slate-500 italic leading-relaxed min-h-[14px] flex-1">
-            {d.comment ? d.comment : <span className="text-slate-300">Нет комментария</span>}
+          <div className="text-[10px] text-[#6B7280] italic leading-relaxed min-h-[14px] flex-1">
+            {d.comment ? d.comment : <span className="text-[#9CA3AF]">Нет комментария</span>}
           </div>
           <button 
             onClick={() => setIsEditing(true)}
-            className="opacity-0 group-hover/comment:opacity-100 p-0.5 text-slate-400 hover:text-blue-500 hover:bg-slate-50 rounded transition"
+            className="opacity-0 group-hover/comment:opacity-100 p-0.5 text-[#9CA3AF] hover:text-blue-500 hover:bg-[#F3F4F6] rounded transition"
           >
             <Edit className="w-3 h-3" />
           </button>
@@ -127,26 +129,25 @@ const MapController: React.FC<MapControllerProps> = ({ triggerCenter, locations 
 
 interface MapControlsProps {
   onCenter: () => void;
-  isLightMap: boolean;
-  setIsLightMap: (val: boolean) => void;
 }
 
-const MapControls: React.FC<MapControlsProps> = ({ onCenter, isLightMap, setIsLightMap }) => {
+const MapControls: React.FC<MapControlsProps> = ({ onCenter }) => {
   const map = useMap();
+  const [legendOpen, setLegendOpen] = React.useState(false);
   return (
-    <div className="absolute top-4 left-4 z-[1000] flex flex-col gap-2 pointer-events-auto">
- <div className="flex flex-col bg-white rounded-xl border border-slate-200/60 shadow-lg p-1">
+    <div className="absolute top-3 right-3 z-[1000] flex flex-col gap-2 pointer-events-auto">
+ <div className="flex flex-col bg-white rounded-xl border border-[#E5E7EB] shadow-lg p-1">
         <button 
           onClick={() => map.zoomIn()} 
-          className="w-8 h-8 rounded-lg text-slate-600 hover:text-[#3765F6] hover:bg-slate-50 flex items-center justify-center font-bold text-base transition cursor-pointer"
+          className="w-8 h-8 rounded-lg text-[#4B5563] hover:text-[var(--accent-ink)] hover:bg-[#F3F4F6] flex items-center justify-center font-semibold text-base transition cursor-pointer"
           title="Приблизить"
         >
           +
         </button>
-        <div className="h-[1px] bg-slate-100 mx-1" />
+        <div className="h-[1px] bg-[#F3F4F6] mx-1" />
         <button 
           onClick={() => map.zoomOut()} 
-          className="w-8 h-8 rounded-lg text-slate-600 hover:text-[#3765F6] hover:bg-slate-50 flex items-center justify-center font-bold text-base transition cursor-pointer"
+          className="w-8 h-8 rounded-lg text-[#4B5563] hover:text-[var(--accent-ink)] hover:bg-[#F3F4F6] flex items-center justify-center font-semibold text-base transition cursor-pointer"
           title="Отдалить"
         >
           −
@@ -155,28 +156,51 @@ const MapControls: React.FC<MapControlsProps> = ({ onCenter, isLightMap, setIsLi
 
       <button 
         onClick={onCenter} 
- className="w-10 h-10 bg-white rounded-xl border border-slate-200/60 shadow-lg text-slate-500 hover:text-slate-700 hover:bg-slate-50 flex items-center justify-center transition cursor-pointer"
+        className="w-10 h-10 bg-white rounded-xl border border-[#E5E7EB] shadow-[0_6px_20px_rgba(15,23,42,0.10)] text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] flex items-center justify-center transition-colors cursor-pointer"
         title="Показать все локации"
       >
         <MapPin className="w-5 h-5" />
       </button>
 
-      <button 
-        onClick={() => setIsLightMap(!isLightMap)} 
-        className={`w-10 h-10 rounded-xl border shadow-lg flex items-center justify-center transition cursor-pointer ${
-          isLightMap 
-            ? 'bg-[#3765F6] border-[#3765F6] text-white' 
-            : 'bg-white/95 border-slate-200/60 text-slate-600 hover:bg-slate-50'
+      {/* Компактная расшифровка обозначений — не занимает площадь карты */}
+      <button
+        onClick={() => setLegendOpen((v) => !v)}
+        className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-colors cursor-pointer shadow-[0_6px_20px_rgba(15,23,42,0.10)] ${
+          legendOpen ? 'bg-[#121316] border-[#121316] text-white' : 'bg-white border-[#E5E7EB] text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6]'
         }`}
-        title="Переключить стиль карты"
+        title="Обозначения на карте"
       >
-        <Layers className="w-4 h-4" />
+        <Info className="w-4 h-4" />
       </button>
+
+      {legendOpen && (
+        <div className="absolute right-12 top-[104px] w-56 bg-white/95 backdrop-blur-sm border border-[#E5E7EB] rounded-xl shadow-[0_8px_24px_rgba(15,23,42,0.12)] p-3 flex flex-col gap-1.5">
+          <span className="text-[10px] font-semibold text-[#6B7280] tracking-wider uppercase select-none mb-0.5">Обозначения</span>
+          {[
+            ['dot', currentAccentColor('ui'), 'Локация с бланками'],
+            ['line', currentAccentColor('ui'), 'Активный участок'],
+            ['line', '#10B981', 'Пройден'],
+            ['line', '#94A3B8', 'Предстоит'],
+            ['dot', '#3B82F6', 'Отправка в пути'],
+            ['dot', '#10B981', 'Доставлено'],
+          ].map(([shape, color, label]) => (
+            <span key={label} className="inline-flex items-center gap-2 text-[10px] text-[#4B5563]">
+              <span
+                className={shape === 'dot' ? 'w-2 h-2 rounded-full shrink-0' : 'w-4 h-0.5 rounded-full shrink-0'}
+                style={{ backgroundColor: color as string }}
+              />
+              {label}
+            </span>
+          ))}
+        </div>
+      )}
+
     </div>
   );
 };
 
 export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
+  const [panelsOpen, setPanelsOpen] = useState(true);
   const { showConfirm } = useDialog();
   const [locations, setLocations] = useState<Record<string, LocationItem>>({});
   const [dozvolsData, setDozvolsData] = useState<Record<string, any>>({});
@@ -197,10 +221,29 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
   const [hoveredMarker, setHoveredMarker] = useState<string | null>(null);
   const [selectedLocId, setSelectedLocId] = useState<string | null>(null);
   const [selectedDeliveryId, setSelectedDeliveryId] = useState<string | null>(null);
-  const [isLightMap, setIsLightMap] = useState(true);
   const [triggerCenter, setTriggerCenter] = useState(0);
 
   const [showDeliveryForm, setShowDeliveryForm] = useState(false);
+  const closeDeliveryFormRef = React.useRef<() => void>(() => {});
+  const closeDeliveryForm = () => {
+    setShowDeliveryForm(false);
+    setEditingDelivId(null);
+    setDelivFrom('');
+    setDelivTo('');
+    setDelivRoute(['']);
+    setDelivDozvols([]);
+    setDelivSentAt('');
+    setDelivSearchQuery('');
+  };
+  closeDeliveryFormRef.current = closeDeliveryForm;
+
+  // Клавиатура: Escape закрывает форму транзита
+  useModalKeyboard({
+    isOpen: showDeliveryForm,
+    onClose: () => closeDeliveryFormRef.current(),
+    skipInitialFocus: true,
+  });
+
   const [editingDelivId, setEditingDelivId] = useState<string | null>(null);
   const [delivFrom, setDelivFrom] = useState('');
   const [delivTo, setDelivTo] = useState('');
@@ -257,14 +300,14 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
   const handleDeleteLocation = async (id: string) => {
     if (!useFirebase) return;
-    if (await showConfirm('Удалить эту локацию?')) {
+    if (await showConfirm('Локация будет удалена со всеми привязанными данными.', 'Удалить локацию', { variant: 'danger', confirmLabel: 'Удалить' })) {
       remove(ref(database, `locationsDB/${id}`));
     }
   };
 
   const handleDeleteDelivery = async (id: string) => {
     if (!useFirebase) return;
-    if (await showConfirm('Удалить эту отправку?')) {
+    if (await showConfirm('Отправка будет удалена безвозвратно.', 'Удалить отправку', { variant: 'danger', confirmLabel: 'Удалить' })) {
       remove(ref(database, `locationsDeliveries/${id}`));
     }
   };
@@ -388,7 +431,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
   const handleRemoveDocument = async (locId: string, indexToRemove: number, currentDocs: string[]) => {
     if (!useFirebase) return;
-    if (await showConfirm('Удалить этот документ из локации?')) {
+    if (await showConfirm('Документ отвяжется от локации.', 'Удалить документ', { variant: 'danger', confirmLabel: 'Удалить' })) {
       const updatedDocs = currentDocs.filter((_, idx) => idx !== indexToRemove);
       update(ref(database, `locationsDB/${locId}`), {
         documents: updatedDocs.length > 0 ? updatedDocs : null
@@ -443,58 +486,69 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
   });
 
   return (
-    <div className="w-full flex flex-col text-slate-800 h-full max-h-full pb-3">
+    <div className="w-full flex flex-col text-[#121316] flex-1 min-h-0 h-full">
       
-          {/* 1) ВЕРХНЯЯ ПАНЕЛЬ — полная ширина, компактная */}
-          <div className="bg-white rounded-2xl p-3 border border-slate-200/50 shadow-sm flex items-center justify-between gap-2 shrink-0 w-full">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider hidden sm:inline shrink-0">Логистический узел</span>
-          <h2 className="text-[11px] sm:text-xs font-bold text-slate-800 truncate flex items-center gap-1">
-            <Route className="w-3 h-3 text-slate-500 shrink-0" />
-            <span className="truncate">Интерактивная карта и логистика дозволов</span>
-          </h2>
-        </div>
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <div className="relative w-28 sm:w-36">
-            <input type="text" placeholder="Поиск дозвола..." value={globalSearchQuery}
-              onChange={(e) => setGlobalSearchQuery(e.target.value)}
-              className="w-full text-[10px] sm:text-xs bg-slate-50 border border-slate-200/60 rounded-lg pl-2 pr-6 py-1 outline-none focus:border-slate-300 focus:bg-white transition font-medium"
-            />
-            {globalSearchQuery && (
-              <button onClick={() => setGlobalSearchQuery('')} className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                <X className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-          <button onClick={handleAddLocation} className="flex items-center justify-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold px-2 min-h-[32px] py-1.5 rounded-lg transition cursor-pointer whitespace-nowrap">
-            <Plus className="w-3 h-3" />
-            <span className="hidden sm:inline">Точка</span>
-          </button>
-          <button onClick={() => { const firstLoc = Object.keys(locations)[0]; if (firstLoc) setDelivFrom(firstLoc); setShowDeliveryForm(true); }}
-            className="flex items-center justify-center gap-1 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-semibold px-2 min-h-[32px] py-1.5 rounded-lg transition cursor-pointer shadow-sm whitespace-nowrap"
-          >
-            <Truck className="w-3 h-3" />
-            <span className="hidden sm:inline">Отправка</span>
-          </button>
-        </div>
-      </div>
-
-      {/* TWO COLUMNS: слева список локаций + транзит, справа карта */}
-      <div className="flex-1 flex flex-col md:flex-row gap-3 mt-3 min-h-0 overflow-hidden">
+{/* TWO COLUMNS: слева список локаций + транзит, справа карта */}
+      <div className="relative flex-1 min-h-0 w-full overflow-hidden">
         
         {/* SIDEBAR COL (LEFT) */}
-        <div className="w-full md:w-72 lg:w-80 flex flex-col gap-3 shrink-0 min-h-0 overflow-hidden">
+        <div className="absolute left-3 top-3 bottom-3 z-[550] flex flex-col gap-2.5 w-[calc(100%-1.5rem)] sm:w-[300px] lg:w-[340px] pointer-events-none">
+
+          {/* FLOATING PANEL — фильтры и быстрые действия */}
+          <div className="pointer-events-auto shrink-0 flex flex-wrap items-center gap-1.5 bg-white/95 backdrop-blur-sm border border-[#E5E7EB] rounded-xl shadow-[0_6px_20px_rgba(15,23,42,0.10)] p-1.5">
+            <span className="hidden lg:inline-flex items-center gap-1.5 pl-1.5 pr-1 text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none shrink-0">
+              <Route className="w-3.5 h-3.5 text-[var(--accent-ink)]" />
+              Узел
+            </span>
+            <div className="relative flex-1 min-w-[120px]">
+              <Search className="w-3.5 h-3.5 text-[#9CA3AF] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input type="text" placeholder="Поиск дозвола..." value={globalSearchQuery}
+                onChange={(e) => setGlobalSearchQuery(e.target.value)}
+                className="w-full text-[11px] bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg pl-8 pr-7 py-1.5 outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] focus:bg-white transition"
+              />
+              {globalSearchQuery && (
+                <button onClick={() => setGlobalSearchQuery('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-[#4B5563] cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+            <button onClick={handleAddLocation} title="Новая точка"
+              className="flex items-center justify-center gap-1.5 bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] text-[11px] font-medium px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer whitespace-nowrap">
+              <Plus className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Точка</span>
+            </button>
+            <button onClick={() => { const firstLoc = Object.keys(locations)[0]; if (firstLoc) setDelivFrom(firstLoc); setShowDeliveryForm(true); }} title="Новая отправка"
+              className="flex items-center justify-center gap-1.5 bg-[#121316] hover:bg-black text-white text-[11px] font-medium px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer whitespace-nowrap">
+              <Truck className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Отправка</span>
+            </button>
+            <button
+              onClick={() => setPanelsOpen((v) => !v)}
+              title={panelsOpen ? 'Скрыть списки' : 'Показать списки'}
+              className="sm:hidden flex items-center justify-center p-1.5 rounded-lg border border-[#E5E7EB] bg-white text-[#4B5563] hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0"
+            >
+              {panelsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+
+          {/* FLOATING PANELS — локации, отправки, легенда */}
+          <div className={`pointer-events-auto flex flex-col gap-2.5 min-h-0 flex-1 overflow-y-auto custom-scrollbar pb-1 ${panelsOpen ? '' : 'hidden sm:flex'}`}>
           
           {/* LOCATIONS LIST */}
-          <div className="flex-1 flex flex-col bg-white rounded-2xl border border-slate-200/50 p-4 shadow-sm min-h-0">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-[#3765F6]" />
-                Локации ({filteredLocs.length})
+          <div className="flex flex-col bg-white/95 backdrop-blur-sm rounded-xl border border-[#E5E7EB] shadow-[0_6px_20px_rgba(15,23,42,0.10)] shrink-0 max-h-[55%]">
+            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-[#E5E7EB]">
+              <h3 className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none flex items-center gap-2">
+                <span className="p-1.5 bg-[#F3F4F6] text-[var(--accent-ink)] rounded-lg">
+                  <Layers className="w-3.5 h-3.5" />
+                </span>
+                Локации
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-[#E5E7EB] text-[#4B5563]">
+                  {filteredLocs.length}
+                </span>
               </h3>
             </div>
             
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto space-y-1.5 p-4 custom-scrollbar">
               {filteredLocs.map((loc) => {
                 const isEditing = editingId === loc.id;
                 const dozvolsAtLoc = Object.keys(dozvolsData).map(key => ({ id: key, ...dozvolsData[key] })).filter((d: any) => 
@@ -533,41 +587,41 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
                 if (isEditing) {
                   return (
-                    <div key={loc.id} className="flex flex-col gap-3 bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-1 mb-1">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">Редактирование</span>
+                    <div key={loc.id} className="flex flex-col gap-3 bg-white border border-[#E5E7EB] rounded-xl p-3 shadow-sm">
+                      <div className="flex items-center justify-between border-b border-[#E5E7EB] pb-1 mb-1">
+                        <span className="text-[10px] font-semibold text-[#6B7280] uppercase">Редактирование</span>
                       </div>
                       <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-bold text-slate-400 uppercase">Название локации</label>
+                        <label className="text-[10px] font-semibold text-[#9CA3AF] uppercase">Название локации</label>
                         <input 
                           type="text" 
                           value={editName}
                           onChange={(e) => setEditName(e.target.value)}
-                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 outline-none focus:border-slate-300 focus:bg-white transition"
+                          className="w-full text-xs font-semibold bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-2 py-1 outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition"
                         />
                       </div>
                       <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-bold text-slate-400 uppercase">Страна / Регион</label>
+                        <label className="text-[10px] font-semibold text-[#9CA3AF] uppercase">Страна / Регион</label>
                         <input 
                           type="text" 
                           value={editCountry}
                           onChange={(e) => setEditCountry(e.target.value)}
-                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 outline-none focus:border-slate-300 focus:bg-white transition"
+                          className="w-full text-xs font-semibold bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-2 py-1 outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition"
                         />
                       </div>
                       <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-bold text-slate-400 uppercase">Заметки</label>
+                        <label className="text-[10px] font-semibold text-[#9CA3AF] uppercase">Заметки</label>
                         <textarea
                           value={editNotes}
                           onChange={(e) => setEditNotes(e.target.value)}
-                          className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 outline-none focus:border-slate-300 h-12 resize-none transition"
+                          className="w-full text-xs bg-white border border-[#E5E7EB] rounded-xl px-2 py-1 outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] h-12 resize-none transition"
                         />
                       </div>
                       <div className="flex justify-end gap-1.5 mt-1 font-semibold">
-                        <button onClick={() => setEditingId(null)} className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-[10px] text-slate-600 rounded-lg transition">
+                        <button onClick={() => setEditingId(null)} className="px-2.5 py-1 bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[10px] text-[#4B5563] rounded-lg transition">
                           Отмена
                         </button>
-                        <button onClick={handleSaveLocation} className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-[10px] text-white rounded-xl transition">
+                        <button onClick={handleSaveLocation} className="px-2.5 py-1 bg-[#121316] hover:bg-black text-[10px] text-white rounded-xl transition">
                           Сохранить
                         </button>
                       </div>
@@ -579,51 +633,47 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                   <div 
                     key={loc.id}
                     onClick={() => setSelectedLocId(loc.id)}
-                    className={`cursor-pointer group relative flex flex-col gap-2 p-3.5 rounded-xl border transition duration-150 ${
+                    className={`cursor-pointer group relative flex flex-col gap-2 p-3 rounded-xl border transition-colors ${
                       selectedLocId === loc.id 
-                        ? 'bg-blue-50/20 border-[#3765F6] ring-1 ring-[#3765F6]/15 shadow-sm' 
+                        ? 'bg-white border-[#121316] shadow-xs' 
                         : hasMatchingDozvol 
-                          ? 'bg-amber-50/20 border-amber-300 ring-1 ring-amber-400/10 shadow-sm' 
-                          : 'bg-white border-slate-200/60 hover:border-slate-300 shadow-sm'
+                          ? 'bg-amber-50/40 border-amber-300 shadow-xs' 
+                          : 'bg-white border-[#E5E7EB] hover:bg-[#F9FAFB]'
                     }`}
                   >
                     <div className="flex items-start justify-between pr-8">
                       <div className="flex flex-col min-w-0">
-                        <h4 className="font-bold text-slate-800 text-xs truncate group-hover:text-[#3765F6] transition">
+                        <h4 className="font-semibold text-[#121316] text-xs truncate group-hover:text-[var(--accent-ink)] transition-colors">
                           {loc.name}
                         </h4>
-                        <span className="text-[10px] text-slate-400 font-medium">{loc.country}</span>
+                        <span className="text-[10px] text-[#6B7280]">{loc.country}</span>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         {hasMatchingDozvol && (
-                          <span className="bg-amber-500 text-white px-1.5 py-0.2 rounded text-[8px] font-bold uppercase">
-                            Найдено
-                          </span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">Найдено</span>
                         )}
-                        <span className="bg-blue-50 text-[#3765F6] border border-blue-100/50 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
-                          {count} шт
-                        </span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-[#F3F4F6] border border-[#E5E7EB] text-[#4B5563]">{count} шт</span>
                       </div>
                     </div>
 
                     <div className="flex justify-between items-center text-[10px] mt-0.5">
-                      <span className="text-slate-400 font-mono flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-slate-300" />
+                      <span className="text-[#9CA3AF] font-mono flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-[#9CA3AF]" />
                         {loc.lat.toFixed(3)}, {loc.lng.toFixed(3)}
                       </span>
                     </div>
 
                     {loc.notes && (
-                      <p className="text-[10px] text-slate-500 bg-slate-50/50 p-2 rounded-lg leading-relaxed border border-slate-100/50 truncate mt-0.5">
+                      <p className="text-[10px] text-[#6B7280] bg-[#F9FAFB] p-2 rounded-lg leading-relaxed border border-[#E5E7EB] truncate mt-0.5">
                         {loc.notes}
                       </p>
                     )}
 
                     {/* Collapsible permits details */}
-                    <div className="mt-1.5 border-t border-slate-100/70 pt-2 shrink-0" onClick={e => e.stopPropagation()}>
+                    <div className="mt-1.5 border-t border-[#E5E7EB] pt-2 shrink-0" onClick={e => e.stopPropagation()}>
                       <button 
                         onClick={() => setExpandedLocId(expandedLocId === loc.id ? null : loc.id)}
-                        className="text-[9px] font-bold text-slate-500 hover:text-slate-700 uppercase tracking-wider flex items-center gap-1"
+                        className="text-[10px] font-medium text-[#6B7280] hover:text-[#121316] transition-colors flex items-center gap-1"
                       >
                         {isDozvolsExpanded ? 'Скрыть бланки' : `Показать бланки (${count})`}
                       </button>
@@ -636,10 +686,10 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                               placeholder="Быстрый поиск в точке..."
                               value={locSearchQueries[loc.id] || ''}
                               onChange={(e) => setLocSearchQueries(prev => ({ ...prev, [loc.id]: e.target.value }))}
-                              className="w-full text-[10px] bg-white border border-slate-200 rounded-xl pl-2 pr-6 py-1 outline-none focus:border-slate-300"
+                              className="w-full text-[10px] bg-white border border-[#E5E7EB] rounded-xl pl-2 pr-6 py-1 outline-none focus:border-[var(--accent-ui)]"
                             />
                             {(locSearchQueries[loc.id] || '') && (
-                              <button onClick={() => setLocSearchQueries(prev => ({ ...prev, [loc.id]: '' }))} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400">
+                              <button onClick={() => setLocSearchQueries(prev => ({ ...prev, [loc.id]: '' }))} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]">
                                 <X className="w-3 h-3" />
                               </button>
                             )}
@@ -661,7 +711,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                               );
                             })}
                             {filteredDozvols.length === 0 && (
-                              <div className="text-[10px] text-slate-400 italic py-2 text-center">
+                              <div className="text-[10px] text-[#9CA3AF] italic py-2 text-center">
                                 Бланки отсутствуют
                               </div>
                             )}
@@ -684,13 +734,13 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                           setEditNotes(loc.notes || '');
                           setEditCountry(loc.country || 'Беларусь');
                         }}
-                        className="p-1 bg-white border border-slate-200 hover:border-slate-300 rounded text-slate-500 hover:text-[#3765F6] shadow-sm transition"
+                        className="p-1 bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] rounded text-[#6B7280] hover:text-[var(--accent-ink)] shadow-sm transition"
                       >
                         <Edit className="w-3 h-3" />
                       </button>
                       <button 
                         onClick={() => handleDeleteLocation(loc.id)}
-                        className="p-1 bg-white border border-slate-200 hover:border-rose-300 rounded text-slate-500 hover:text-rose-500 shadow-sm transition"
+                        className="p-1 bg-white border border-[#E5E7EB] hover:border-rose-300 rounded text-[#6B7280] hover:text-rose-500 shadow-sm transition"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
@@ -702,13 +752,20 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
           </div>
 
           {/* DELIVERIES LIST (BOTTOM) */}
- <div className="h-2/5 flex flex-col bg-white rounded-2xl border border-slate-200/50 p-4 shadow-sm min-h-0">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 shrink-0 mb-3">
-              <Truck className="w-3.5 h-3.5 text-[#3765F6]" />
-              Транзитные отправки
-            </h3>
+ <div className="flex flex-col bg-white/95 backdrop-blur-sm rounded-xl border border-[#E5E7EB] shadow-[0_6px_20px_rgba(15,23,42,0.10)] shrink-0 max-h-[38%]">
+            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-[#E5E7EB]">
+              <h3 className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none flex items-center gap-2">
+                <span className="p-1.5 bg-[#F3F4F6] text-[var(--accent-ink)] rounded-lg">
+                  <Truck className="w-3.5 h-3.5" />
+                </span>
+                Транзитные отправки
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-[#E5E7EB] text-[#4B5563]">
+                  {Object.keys(deliveries).length}
+                </span>
+              </h3>
+            </div>
 
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto space-y-1.5 p-4 custom-scrollbar">
               {Object.values(deliveries).sort((a: DeliveryItem, b: DeliveryItem) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime()).map((d: DeliveryItem) => {
                 const hasRoute = d.routeLocIds && d.routeLocIds.length > 0;
                 const routeLocs = hasRoute ? d.routeLocIds! : [d.toLocId];
@@ -721,35 +778,35 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                 const activeToLocName = locations[activeToLocId]?.name || 'Unknown';
 
                 return (
-                  <div key={d.id} className="bg-white/90 border border-slate-200/60 p-3 rounded-xl flex flex-col gap-2 hover:border-slate-300 transition">
+                  <div key={d.id} className="border border-[#E5E7EB] p-3 rounded-xl flex flex-col gap-2 hover:bg-[#F9FAFB] transition-colors bg-white">
                     <div className="flex justify-between items-start text-xs">
                        <div className="flex flex-col min-w-0 flex-1">
-                         <span className="font-bold text-slate-800 truncate pr-2 flex items-center gap-1" title={`${locations[d.fromLocId]?.name} ➔ ${locations[routeLocs[routeLocs.length - 1]]?.name || locations[d.toLocId]?.name}`}>
-                           {locations[d.fromLocId]?.name} <span className="text-slate-400">➔</span> {locations[routeLocs[routeLocs.length - 1]]?.name || locations[d.toLocId]?.name}
+                         <span className="font-semibold text-[#121316] truncate pr-2 flex items-center gap-1" title={`${locations[d.fromLocId]?.name} → ${locations[routeLocs[routeLocs.length - 1]]?.name || locations[d.toLocId]?.name}`}>
+                           {locations[d.fromLocId]?.name} <ArrowRight className="w-3 h-3 text-[#9CA3AF] shrink-0" /> {locations[routeLocs[routeLocs.length - 1]]?.name || locations[d.toLocId]?.name}
                          </span>
                          {hasRoute && d.status === 'sent' && (
-                           <span className="text-[10px] text-slate-500 font-medium mt-1">
-                             В пути: <span className="font-bold text-[#3765F6]">{activeFromLocName}</span> ➔ <span className="font-bold text-[#3765F6]">{activeToLocName}</span>
+                           <span className="text-[10px] text-[#6B7280] font-medium mt-1">
+                             В пути: <span className="font-semibold text-[var(--accent-ink)]">{activeFromLocName}</span><ArrowRight className="w-3 h-3 text-[#9CA3AF] shrink-0" /><span className="font-semibold text-[var(--accent-ink)]">{activeToLocName}</span>
                            </span>
                          )}
                        </div>
                        
                        <div className="flex items-center gap-1 shrink-0">
-                         <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider shrink-0 ${d.status === 'sent' ? 'bg-blue-50 text-blue-700 border border-blue-100/30' : 'bg-emerald-50 text-emerald-700 border border-emerald-100/30'}`}>
+                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${d.status === 'sent' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
                            {d.status === 'sent' ? 'В пути' : 'Доставлен'}
                          </span>
-                         <button onClick={() => handleEditDelivery(d)} className="p-1 text-slate-400 hover:text-[#3765F6] hover:bg-slate-50 rounded-md transition">
+                         <button onClick={() => handleEditDelivery(d)} className="p-1 text-[#9CA3AF] hover:text-[var(--accent-ink)] hover:bg-[#F3F4F6] rounded-md transition">
                            <Edit className="w-3.5 h-3.5" />
                          </button>
-                         <button onClick={() => handleDeleteDelivery(d.id)} className="p-1 text-slate-400 hover:text-rose-500 hover:bg-slate-50 rounded-md transition">
+                         <button onClick={() => handleDeleteDelivery(d.id)} className="p-1 text-[#9CA3AF] hover:text-rose-500 hover:bg-[#F3F4F6] rounded-md transition">
                            <Trash2 className="w-3.5 h-3.5" />
                          </button>
                        </div>
                     </div>
 
-                    <div className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
-                      <FileText className="w-3 h-3 text-slate-400" />
-                      Бланков на борту: <span className="font-bold text-slate-700">{d.dozvolIds?.length || 0} шт</span>
+                    <div className="text-[10px] text-[#6B7280] font-medium flex items-center gap-1">
+                      <FileText className="w-3 h-3 text-[#9CA3AF]" />
+                      Бланков на борту: <span className="font-semibold text-[#374151]">{d.dozvolIds?.length || 0} шт</span>
                     </div>
 
                     {d.status === 'sent' && (
@@ -765,16 +822,19 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                 );
               })}
               {Object.keys(deliveries).length === 0 && (
-                <div className="text-[11px] text-slate-400 text-center py-6 italic bg-white border border-dashed border-slate-200 rounded-xl">
+                <div className="text-[11px] text-[#9CA3AF] text-center py-6 italic bg-white border border-dashed border-[#E5E7EB] rounded-xl">
                   Активных отправок нет
                 </div>
               )}
             </div>
           </div>
+
+
+          </div>
         </div>
 
         {/* MAP PANEL (RIGHT) */}
-        <div className="flex-1 min-h-[400px] md:min-h-0 h-full rounded-2xl overflow-hidden relative border border-slate-200/50 bg-slate-50 z-0">
+        <div className="absolute inset-0 z-0">
           <MapContainer
             center={[53.9006, 27.5590]}
             zoom={6}
@@ -782,27 +842,16 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
             className="w-full h-full"
             style={{ height: '100%', width: '100%', zIndex: 0 }}
           >
-            {isLightMap ? (
-              <TileLayer
-                attribution='&copy; CARTO'
-                url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-              />
-            ) : (
-              <TileLayer
-                attribution='&copy; OpenStreetMap'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-            )}
+            <TileLayer
+              attribution='&copy; OpenStreetMap'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
 
             {/* Custom map controller */}
             <MapController triggerCenter={triggerCenter} locations={locations} />
 
             {/* Custom map controls floating panel */}
-            <MapControls 
-              onCenter={() => setTriggerCenter(prev => prev + 1)} 
-              isLightMap={isLightMap} 
-              setIsLightMap={setIsLightMap} 
-            />
+            <MapControls onCenter={() => setTriggerCenter(prev => prev + 1)} />
 
             {/* Locations Markers */}
             {Object.values(locations).map((loc: LocationItem) => {
@@ -815,8 +864,8 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
               
               const isFilteredOut = !filteredLocs.some(fl => fl.id === loc.id);
               
-              let pinColor = '#3765F6'; // Default brand blue
-              let ringPulseColor = 'rgba(55, 101, 246, 0.2)';
+              let pinColor = currentAccentColor('ui'); // акцент текущей темы
+              let ringPulseColor = 'var(--accent-20)';
 
               // Highlight matching search results in vibrant blue ring
               const q = globalSearchQuery.toLowerCase().trim();
@@ -830,7 +879,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
               );
 
               if (matchesSearch) {
-                ringPulseColor = 'rgba(55, 101, 246, 0.4)';
+                ringPulseColor = 'var(--accent-40)';
               }
 
               const isHighlighted = isSelected || matchesSearch;
@@ -841,7 +890,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                   <div class="relative flex items-center justify-center transition-all duration-300 ${isHighlighted ? 'scale-125' : 'hover:scale-110'}" style="opacity: ${isFilteredOut ? 0.35 : 1.0};">
                     <div class="absolute w-8 h-8 rounded-full animate-ping opacity-75" style="background-color: ${ringPulseColor}; animation-duration: 3s;"></div>
                     <div class="relative w-6 h-6 rounded-full border-2 border-white flex items-center justify-center shadow-lg transition-all" style="background-color: ${pinColor}; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
-                      <span class="text-[9px] font-bold text-white leading-none">${count}</span>
+                      <span class="text-[10px] font-semibold text-white leading-none">${count}</span>
                     </div>
                   </div>
                 `,
@@ -891,7 +940,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                     const endLoc = locations[endLocId];
                     if (!startLoc || !endLoc) return null;
 
-                    let lineColor = '#3765F6'; // Active transit route -> Blue
+                    let lineColor = currentAccentColor('ui'); // активный маршрут
                     let lineWeight = 4;
                     let isDashed = true;
 
@@ -901,7 +950,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                         lineWeight = 3;
                         isDashed = false;
                       } else if (idx === currentStepIdx) {
-                        lineColor = '#3765F6'; // Active segment -> Bold pulsing Blue
+                        lineColor = currentAccentColor('ui'); // активный участок
                         lineWeight = 5;
                         isDashed = true;
                       } else {
@@ -939,34 +988,34 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
             const toLoc = locations[d.toLocId];
             const dozvolsInDelivery = d.dozvolIds.map((did: string) => dozvolsData[did]).filter(Boolean);
             return (
-              <div className="absolute bottom-4 left-4 z-[1001] bg-white border border-slate-200/70 shadow-2xl rounded-2xl p-4 w-80 max-w-[calc(100%-2rem)] flex flex-col gap-3 pointer-events-auto">
+              <div className="absolute bottom-4 left-4 z-[1001] bg-white border border-[#E5E7EB] shadow-[0_8px_24px_rgba(15,23,42,0.12)] rounded-xl p-4 w-80 max-w-[calc(100%-2rem)] flex flex-col gap-3 pointer-events-auto">
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] font-bold text-[#3765F6] uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded-full">Транзит</span>
-                  <button onClick={() => setSelectedDeliveryId(null)} className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer">
+                  <span className="text-[10px] font-semibold text-[var(--accent-ink)] bg-[#F3F4F6] border border-[#E5E7EB] px-2 py-0.5 rounded-full">Транзит</span>
+                  <button onClick={() => setSelectedDeliveryId(null)} className="text-[#9CA3AF] hover:text-[#121316] p-1 rounded-lg hover:bg-[#F3F4F6] transition cursor-pointer">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
                 <div className="flex flex-col gap-1.5 text-xs">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
-                    <span className="font-semibold text-slate-700">{fromLoc?.name || '?'}</span>
+                    <span className="font-semibold text-[#374151]">{fromLoc?.name || '?'}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#3765F6] shrink-0" />
-                    <span className="font-semibold text-slate-700">{toLoc?.name || '?'}</span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-[var(--accent-ui)] shrink-0" />
+                    <span className="font-semibold text-[#374151]">{toLoc?.name || '?'}</span>
                   </div>
                 </div>
-                <div className="text-[10px] text-slate-400 font-mono">Отправлено: {new Date(d.sentAt).toLocaleDateString('ru-RU').replace(/\./g, '/')}</div>
-                <div className="border-t border-slate-100 pt-2">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Дозволы в отправке ({dozvolsInDelivery.length})</span>
+                <div className="text-[10px] text-[#9CA3AF] font-mono">Отправлено: {new Date(d.sentAt).toLocaleDateString('ru-RU').replace(/\./g, '/')}</div>
+                <div className="border-t border-[#E5E7EB] pt-2">
+                  <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider">Дозволы в отправке ({dozvolsInDelivery.length})</span>
                   <div className="flex flex-wrap gap-1 mt-1.5 max-h-32 overflow-y-auto custom-scrollbar">
                     {dozvolsInDelivery.map((p: any, pi: number) => (
-                      <span key={pi} className="font-mono text-[9px] font-semibold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
+                      <span key={pi} className="font-mono text-[10px] font-semibold bg-[#F3F4F6] text-[#374151] px-1.5 py-0.5 rounded border border-[#E5E7EB]">
                         {p?.type || '?'} №{p?.number || p?.permitNumber || '—'}
                       </span>
                     ))}
                     {dozvolsInDelivery.length === 0 && (
-                      <span className="text-[10px] text-slate-400 italic">Нет данных о дозволах</span>
+                      <span className="text-[10px] text-[#9CA3AF] italic">Нет данных о дозволах</span>
                     )}
                   </div>
                 </div>
@@ -997,16 +1046,16 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
             });
 
             return (
- <div className="absolute top-4 right-4 bottom-4 w-80 bg-white border border-slate-200/50 shadow-2xl rounded-2xl p-5 z-[1000] flex flex-col gap-4 overflow-y-auto pointer-events-auto custom-scrollbar">
+ <div className="absolute top-3 right-3 bottom-3 w-80 bg-white border border-[#E5E7EB] shadow-[0_8px_24px_rgba(15,23,42,0.12)] rounded-xl p-5 z-[1000] flex flex-col gap-4 overflow-y-auto pointer-events-auto custom-scrollbar">
                  <div className="flex items-start justify-between">
                    <div className="flex flex-col">
-                     <span className="text-[9px] font-bold text-[#3765F6] bg-blue-50 border border-blue-100/50 px-2.5 py-0.5 rounded-full w-max uppercase tracking-wider">Логистический Узел</span>
-                     <h3 className="text-sm font-bold text-slate-800 mt-1.5">{loc.name}</h3>
-                     <span className="text-[11px] text-slate-400 font-medium">{loc.country || 'Беларусь'}</span>
+                     <span className="text-[10px] font-semibold text-[var(--accent-ink)] bg-[#F3F4F6] border border-[#E5E7EB] px-2.5 py-0.5 rounded-full w-max">Логистический Узел</span>
+                     <h3 className="text-sm font-semibold text-[#121316] mt-1.5">{loc.name}</h3>
+                     <span className="text-[11px] text-[#9CA3AF] font-medium">{loc.country || 'Беларусь'}</span>
                    </div>
                    <button 
                      onClick={() => setSelectedLocId(null)} 
-                     className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer shrink-0"
+                     className="w-7 h-7 flex items-center justify-center text-[#9CA3AF] hover:text-[#121316] transition cursor-pointer shrink-0"
                    >
                      <X className="w-4 h-4" />
                    </button>
@@ -1014,7 +1063,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
                  {/* Associated Permits — номера дозволов по видам */}
                                  <div className="flex flex-col gap-2">
-                                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                   <h4 className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider flex items-center gap-1">
                                      <FileText className="w-3.5 h-3.5" />
                                      <span>Дозволы на точке</span>
                                    </h4>
@@ -1028,11 +1077,11 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                                          grouped[t].push(d);
                                        });
                                        return Object.entries(grouped).map(([type, items]) => (
-                                         <div key={type} className="flex flex-col bg-white border border-slate-200 rounded-lg p-2">
-                                           <div className="text-[10px] font-bold text-slate-500 mb-1">{type} — {items.length} шт</div>
+                                         <div key={type} className="flex flex-col bg-white border border-[#E5E7EB] rounded-lg p-2">
+                                           <div className="text-[10px] font-semibold text-[#6B7280] mb-1">{type} — {items.length} шт</div>
                                            <div className="flex flex-wrap gap-1">
                                              {items.map((d: any) => (
-                                               <span key={d.id} className="font-mono text-[9px] font-semibold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
+                                               <span key={d.id} className="font-mono text-[10px] font-semibold bg-[#F3F4F6] text-[#374151] px-1.5 py-0.5 rounded border border-[#E5E7EB]">
                                                  №{d.number || d.permitNumber || '—'}
                                                </span>
                                              ))}
@@ -1041,7 +1090,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                                        ));
                                      })()}
                                      {dozvolsList.length === 0 && (
-                                       <span className="text-[11px] text-slate-400 italic text-center py-2 bg-slate-50/30 border border-dashed border-slate-200 rounded-lg">
+                                       <span className="text-[11px] text-[#9CA3AF] italic text-center py-2 bg-[#F9FAFB] border border-dashed border-[#E5E7EB] rounded-lg">
                                          Дозволов на точке нет
                                        </span>
                                      )}
@@ -1050,30 +1099,30 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
                  {/* Logs and operation journal */}
                  <div className="flex flex-col gap-2">
-                   <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Операционный журнал</h4>
+                   <h4 className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider">Операционный журнал</h4>
                    <div className="flex flex-col gap-2 max-h-40 overflow-y-auto custom-scrollbar">
                      {locOps.slice(0, 4).map((op) => {
                        const isFrom = op.fromLocId === loc.id;
                        const targetName = isFrom ? (locations[op.toLocId]?.name || 'Unknown') : (locations[op.fromLocId]?.name || 'Unknown');
                        return (
-                         <div key={op.id} className="bg-slate-50/50 border border-slate-200/70 p-2 rounded-xl text-[10px] flex flex-col gap-1 shadow-sm">
+                         <div key={op.id} className="bg-white border border-[#E5E7EB] p-2 rounded-xl text-[10px] flex flex-col gap-1 shadow-sm">
                            <div className="flex justify-between items-center">
-                             <span className={`font-bold ${isFrom ? 'text-rose-600' : 'text-emerald-600'}`}>
-                               {isFrom ? '➔ Отправка' : '← Получение'}
+                             <span className={`font-semibold ${isFrom ? 'text-rose-600' : 'text-emerald-600'}`}>
+                               {isFrom ? <><ArrowRight className="w-3 h-3" />Отправка</> : <><ArrowLeft className="w-3 h-3" />Получение</>}
                              </span>
-                             <span className="text-[8px] text-slate-400 font-mono">{op.sentAt}</span>
+                             <span className="text-[8px] text-[#9CA3AF] font-mono">{op.sentAt}</span>
                            </div>
-                           <div className="text-slate-600 truncate font-semibold">
+                           <div className="text-[#4B5563] truncate font-semibold">
                              {isFrom ? `В пункт: ${targetName}` : `Из пункта: ${targetName}`}
                            </div>
-                           <div className="text-[8px] text-slate-400 font-bold">
+                           <div className="text-[8px] text-[#9CA3AF] font-semibold">
                              Объём: {op.dozvolIds?.length || 0} бланков
                            </div>
                          </div>
                        );
                      })}
                      {locOps.length === 0 && (
-                       <span className="text-[11px] text-slate-400 italic text-center py-2 bg-slate-50/30 border border-dashed border-slate-200 rounded-lg">
+                       <span className="text-[11px] text-[#9CA3AF] italic text-center py-2 bg-[#F9FAFB] border border-dashed border-[#E5E7EB] rounded-lg">
                          Операций не зарегистрировано
                        </span>
                      )}
@@ -1081,13 +1130,13 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                </div>
 
                {/* Location actions */}
-               <div className="mt-auto pt-3 border-t border-slate-200 flex flex-col gap-2">
+               <div className="mt-auto pt-3 border-t border-[#E5E7EB] flex flex-col gap-2">
                  <button
                    onClick={() => {
                      setDelivFrom(loc.id);
                      setShowDeliveryForm(true);
                    }}
-                   className="w-full min-h-[44px] py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm"
+                   className="w-full min-h-[44px] py-2 bg-[#121316] hover:bg-black text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm"
                  >
                    <Truck className="w-3.5 h-3.5" />
                    Оформить отправку
@@ -1101,7 +1150,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                      setEditNotes(loc.notes || '');
                      setEditCountry(loc.country || 'Беларусь');
                    }}
-                   className="w-full min-h-[44px] py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200/50 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+                   className="w-full min-h-[44px] py-2 bg-[#F9FAFB] hover:bg-[#F3F4F6] text-[#374151] text-xs font-semibold border border-[#E5E7EB] rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
                  >
                    <Edit className="w-3.5 h-3.5" />
                    Редактировать точку
@@ -1115,37 +1164,56 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
       {/* FORM MODAL FOR SENDING PERMITS (GLASSMORPHIC DIALOG) */}
       {showDeliveryForm && (
- <div className="fixed inset-0 z-[1000] bg-slate-900/40 flex items-start justify-center p-2 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200/50 p-4 sm:p-6 w-[620px] max-w-full flex flex-col gap-4 my-auto max-h-[95vh] overflow-y-auto">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-              <h2 className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
-                <Route className="w-4 h-4 text-slate-500" />
+ <div data-scroll-lock="modal" className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6">
+          <div className="relative z-10 w-[620px] max-w-full bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] flex flex-col max-h-[90vh] overflow-hidden">
+            <div className="flex justify-between items-center px-4 sm:px-6 py-4 border-b border-[#E5E7EB] shrink-0">
+              <h2 className="font-semibold text-sm text-[#121316] flex items-center gap-1.5">
+                <Route className="w-4 h-4 text-[#6B7280]" />
                 {editingDelivId ? 'Редактировать отправку дозволов' : 'Оформление транзита бланков'}
               </h2>
               <button 
-                onClick={() => {
-                  setShowDeliveryForm(false);
-                  setEditingDelivId(null);
-                  setDelivFrom('');
-                  setDelivTo('');
-                  setDelivRoute(['']);
-                  setDelivDozvols([]);
-                  setDelivSentAt('');
-                  setDelivSearchQuery('');
-                }} 
-                className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer"
+onClick={closeDeliveryForm} 
+                className="p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
             
-            <div className="flex flex-col gap-3 bg-slate-50/80 p-4 rounded-2xl border border-slate-200/40 overflow-y-auto max-h-56 custom-scrollbar">
+            {/* Маршрут: откуда → куда. Отдельная сводка, чтобы направление читалось сразу */}
+            <div className="flex flex-col gap-3 px-4 sm:px-6 py-4 shrink-0 border-b border-[#F3F4F6]">
+              {(() => {
+                const nameOf = (id: string) => (locations as any)[id]?.name || '';
+                const from = nameOf(delivFrom);
+                const toId = [...delivRoute].reverse().find((r) => r && r.trim());
+                const to = nameOf(toId || '');
+                return (
+                  <div className="flex items-center gap-2 text-xs min-w-0 flex-wrap">
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      <span className="truncate max-w-[160px]">{from || 'Откуда — не выбрано'}</span>
+                    </span>
+                    <ArrowRight className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" />
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[#F3F4F6] text-[#4B5563] border border-[#E5E7EB]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-ui)]" />
+                      <span className="truncate max-w-[160px]">{to || 'Куда — не выбрано'}</span>
+                    </span>
+                    {delivRoute.filter((r) => r && r.trim()).length > 1 && (
+                      <span className="text-[10px] text-[#6B7280]">
+                        через {delivRoute.filter((r) => r && r.trim()).length - 1} пункт(ов)
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="flex flex-col gap-4 px-4 sm:px-6 py-4 shrink-0">
               <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Маршрут следования</span>
+                <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">Маршрут следования</span>
                 <button 
                   type="button"
                   onClick={() => setDelivRoute([...delivRoute, ''])}
-                  className="text-[11px] font-bold bg-blue-50 text-[#3765F6] hover:bg-blue-100 px-2.5 py-1 rounded-lg flex items-center gap-1 transition cursor-pointer"
+                  className="text-[11px] font-medium bg-[#F3F4F6] border border-[#E5E7EB] text-[var(--accent-ink)] hover:bg-[#E5E7EB] px-2.5 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   Пункт транзита
@@ -1155,15 +1223,15 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
               <div className="flex flex-col gap-2.5">
                 {/* Source node */}
                 <div className="flex items-center gap-3">
-                  <div className="w-6 h-6 rounded-full bg-emerald-500 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                  <div className="w-6 h-6 rounded-full bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center shrink-0">
                     S
                   </div>
                   <div className="flex-1">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase">Пункт отправления</label>
+                    <label className="text-[10px] font-semibold text-[#9CA3AF] uppercase">Пункт отправления</label>
                     <select 
                       value={delivFrom} 
                       onChange={(e) => { setDelivFrom(e.target.value); setDelivDozvols([]); setDelivSearchQuery(''); }}
-                      className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2 py-1.5 outline-none focus:border-slate-300 transition"
+                      className="w-full text-xs font-semibold bg-white border border-[#E5E7EB] rounded-xl px-2 py-1.5 outline-none focus:border-[var(--accent-ui)] transition"
                     >
                       <option value="">Выберите начальную точку...</option>
                       {Object.values(locations).map((l: LocationItem) => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -1174,11 +1242,11 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                 {/* Steps */}
                 {delivRoute.map((stepLocId, idx) => (
                   <div key={idx} className="flex items-center gap-3">
-                    <div className="w-6 h-6 rounded-full bg-[#3765F6] text-white font-bold text-xs flex items-center justify-center shrink-0">
+                    <div className="w-6 h-6 rounded-full bg-[var(--accent-solid)] text-[var(--accent-on)] font-semibold text-xs flex items-center justify-center shrink-0">
                       {idx + 1}
                     </div>
                     <div className="flex-1">
-                      <label className="text-[9px] font-bold text-slate-400 uppercase">
+                      <label className="text-[10px] font-semibold text-[#9CA3AF] uppercase">
                         {idx === delivRoute.length - 1 ? 'Конечный получатель' : `Транзитная точка ${idx + 1}`}
                       </label>
                       <select 
@@ -1188,7 +1256,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                           nextRoute[idx] = e.target.value;
                           setDelivRoute(nextRoute);
                         }}
-                        className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-xl px-2 py-1.5 outline-none focus:border-slate-300 transition"
+                        className="w-full text-xs font-semibold bg-white border border-[#E5E7EB] rounded-xl px-2 py-1.5 outline-none focus:border-[var(--accent-ui)] transition"
                       >
                         <option value="">Выберите локацию...</option>
                         {Object.values(locations).filter((l: LocationItem) => l.id !== delivFrom).map((l: LocationItem) => (
@@ -1204,7 +1272,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                           nextRoute.splice(idx, 1);
                           setDelivRoute(nextRoute);
                         }}
-                        className="p-1.5 mt-4 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition shrink-0"
+                        className="p-1.5 mt-4 text-[#9CA3AF] hover:text-rose-500 hover:bg-rose-50 rounded-lg transition shrink-0"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -1216,13 +1284,13 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
             {/* Select permits to transmit */}
             {delivFrom && (
-              <div className="flex flex-col gap-2 min-h-0 flex-1">
+              <div className="flex flex-col gap-2 min-h-0 flex-1 px-4 sm:px-6 pb-4">
                 <div className="flex justify-between items-end">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  <label className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider">
                     Выберите бланки для передачи ({filteredDozvolsAtFrom.length} доступно)
                   </label>
                   {delivDozvols.length > 0 && (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
                       Выбрано: {delivDozvols.length} шт
                     </span>
                   )}
@@ -1234,18 +1302,18 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                     placeholder="Быстрый поиск дозвола в пункте..."
                     value={delivSearchQuery}
                     onChange={(e) => setDelivSearchQuery(e.target.value)}
-                    className="w-full text-xs bg-slate-50 border border-slate-200/60 rounded-xl pl-3 pr-8 py-2 outline-none focus:border-slate-300 transition"
+                    className="w-full text-xs bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl pl-3 pr-8 py-2 outline-none focus:border-[var(--accent-ui)] transition"
                   />
                   {delivSearchQuery && (
-                    <button onClick={() => setDelivSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+                    <button onClick={() => setDelivSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]">
                       <X className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
 
-                <div className="flex flex-col gap-1.5 border border-slate-200/60 rounded-2xl p-2.5 overflow-y-auto bg-slate-50/50 flex-1 min-h-[120px] custom-scrollbar">
+                <div className="flex flex-col gap-1.5 border border-[#E5E7EB] rounded-2xl p-2.5 overflow-y-auto bg-white flex-1 min-h-[120px] custom-scrollbar">
                   {filteredDozvolsAtFrom.map((d: any) => (
-                    <div key={d.id} className="flex items-center gap-2.5 bg-white hover:bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl shadow-sm transition">
+                    <div key={d.id} className="flex items-center gap-2.5 bg-white hover:bg-[#F3F4F6] border border-[#E5E7EB] px-2.5 py-1.5 rounded-xl shadow-sm transition">
                       <input 
                         type="checkbox" 
                         checked={delivDozvols.includes(d.id)} 
@@ -1253,7 +1321,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                           if (e.target.checked) setDelivDozvols([...delivDozvols, d.id]);
                           else setDelivDozvols(delivDozvols.filter(id => id !== d.id));
                         }} 
-                        className="w-4 h-4 rounded text-[#3765F6] border-slate-300 focus:ring-slate-300 cursor-pointer shrink-0"
+                        className="w-4 h-4 rounded text-[var(--accent-ink)] border-[#E5E7EB] focus:ring-[var(--accent-ui)] cursor-pointer shrink-0"
                       />
                       
                       <div 
@@ -1266,17 +1334,17 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                           }
                         }}
                       >
-                        <span className="font-mono font-bold text-xs text-slate-900 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200/50 shrink-0">
+                        <span className="font-mono font-semibold text-xs text-[#121316] bg-[#F9FAFB] px-1.5 py-0.5 rounded border border-[#E5E7EB] shrink-0">
                           {d.number}
                         </span>
-                        <span className="text-[10px] font-semibold text-[#3765F6] bg-blue-50 border border-blue-100/50 px-2 py-0.5 rounded-full uppercase tracking-wider truncate max-w-[150px]">
+                        <span className="text-[10px] font-mono font-medium text-[#4B5563] bg-[#F3F4F6] border border-[#E5E7EB] px-2 py-0.5 rounded-md truncate max-w-[150px]">
                           {d.type}
                         </span>
                       </div>
                     </div>
                   ))}
                   {filteredDozvolsAtFrom.length === 0 && (
-                    <span className="text-xs text-slate-400 text-center py-6 italic bg-white border border-dashed border-slate-200 rounded-xl">
+                    <span className="text-xs text-[#9CA3AF] text-center py-6 italic bg-white border border-dashed border-[#E5E7EB] rounded-xl">
                       Бланков для транзита не найдено
                     </span>
                   )}
@@ -1284,17 +1352,27 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
               </div>
             )}
 
-            <div className="flex flex-col gap-1 shrink-0">
-               <label className="text-[10px] font-bold text-slate-400 uppercase">Дата отправки</label>
+            <div className="flex flex-col gap-1 shrink-0 px-4 sm:px-6">
+               <label className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wider">Дата отправки</label>
                <input 
                  type="date" 
                  value={delivSentAt} 
                  onChange={(e) => setDelivSentAt(e.target.value)} 
-                 className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-slate-300"
+                 className="w-full text-xs font-semibold bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-3 py-2 outline-none focus:border-[var(--accent-ui)]"
                />
             </div>
 
-            <div className="flex justify-end gap-2 mt-2 pt-3 border-t border-slate-100 shrink-0 font-semibold">
+            <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-4 mt-2 border-t border-[#E5E7EB] shrink-0">
+              {/* Валидация рядом с действием: видно, чего не хватает для оформления */}
+              <span className="text-[11px] text-[#6B7280] min-w-0">
+                {[
+                  !delivFrom && 'выберите пункт отправления',
+                  delivRoute.filter(r => r.trim()).length === 0 && 'укажите получателя',
+                  delivDozvols.length === 0 && 'выберите бланки',
+                  !delivSentAt && 'укажите дату отправки',
+                ].filter(Boolean).join(' · ') || `${delivDozvols.length} бланк(ов) к передаче`}
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
               <button 
                 onClick={() => {
                   setShowDeliveryForm(false);
@@ -1306,17 +1384,18 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                   setDelivSentAt('');
                   setDelivSearchQuery('');
                 }}
-                className="px-4 min-h-[44px] py-2 rounded-xl text-xs text-slate-500 hover:bg-slate-100 transition"
+                className="px-4 h-9 rounded-lg text-xs font-medium text-[#4B5563] bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
               >
                 Отмена
               </button>
               <button 
                 onClick={handleSaveDelivery}
                 disabled={!delivFrom || delivRoute.filter(r => r.trim().length > 0).length === 0 || delivDozvols.length === 0 || !delivSentAt}
-                className="px-4 min-h-[44px] py-2 rounded-xl text-xs text-white bg-slate-900 hover:bg-slate-800 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                className="px-5 h-9 rounded-lg text-xs font-medium text-[var(--accent-on)] bg-[var(--accent-solid)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Оформить отправку
+                {editingDelivId ? 'Сохранить отправку' : 'Оформить отправку'}
               </button>
+              </div>
             </div>
           </div>
         </div>

@@ -2,8 +2,10 @@ import {useState, useEffect, useMemo} from 'react'
 import {useDialog} from '../../DialogProvider'
 import {useToast} from '../../ToastProvider'
 import {dbService} from '../../../api'
-import {Anchor, Trash2, Plus, Search, Pencil} from 'lucide-react'
+import {Anchor, Trash2, Plus, Pencil} from 'lucide-react'
 import {UserProfile, FerryTemplate} from '../../../types'
+import {UI} from '../../../ui/kit'
+import {SectionHeader, SearchField, EmptyState, ModalShell} from '../../../ui/components'
 
 interface Props { user: UserProfile }
 
@@ -57,62 +59,105 @@ export default function FerryDirectoryBlock({ user }: Props) {
   };
 
   return (
- <div className="bg-white rounded-2xl border border-slate-200/50 overflow-hidden shadow-sm">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
-        <Anchor className="w-4 h-4 text-slate-600" />
-        <h3 className="text-sm font-bold text-slate-800">Тарифы паромов</h3>
-        <span className="ml-auto text-[11px] text-slate-400 font-mono">{items.length}</span>
-      </div>
-      <div className="p-4 space-y-3">
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск…"
-              className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-white/80 outline-none focus:border-slate-300" />
-          </div>
-          <button onClick={openAdd}
-            className="inline-flex items-center gap-1.5 bg-slate-900 text-white text-xs font-bold px-3 py-2 rounded-xl hover:bg-slate-800 shrink-0">
-            <Plus className="w-3.5 h-3.5" /> Добавить
-          </button>
-        </div>
-        <div className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto">
-          {filtered.length === 0 && <div className="p-6 text-center text-xs text-slate-400">Пусто</div>}
+    <div className="flex flex-col gap-4 min-w-0">
+      <SectionHeader
+        icon={<Anchor className="w-4 h-4" />}
+        tone="graphite"
+        title="Тарифы паромов"
+        subtitle="Стоимость паромных переправ для расчётов по рейсам"
+      >
+        <span className={UI.countBadge}>{items.length}</span>
+        <button type="button" onClick={openAdd} className={UI.buttonPrimary}>
+          <Plus className="w-4 h-4" aria-hidden="true" />
+          Добавить
+        </button>
+      </SectionHeader>
+
+      <SearchField
+        value={search}
+        onChange={setSearch}
+        placeholder="Поиск по названию…"
+        ariaLabel="Поиск тарифов паромов"
+        className="max-w-md"
+      />
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          kind={search.trim() ? 'no-results' : 'empty'}
+          query={search}
+          title={search.trim() ? undefined : 'Тарифов пока нет'}
+          hint={search.trim() ? undefined : 'Добавьте первый тариф — он появится в этом списке.'}
+          actionLabel={search.trim() ? undefined : 'Добавить тариф'}
+          onAction={search.trim() ? undefined : openAdd}
+        />
+      ) : (
+        <div className="w-full">
           {filtered.map((f) => (
-            <div key={f.id} className="flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 group">
-              <div className="text-sm font-semibold text-slate-800 truncate">{f.name}</div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono font-black text-slate-900 bg-white border border-slate-200 px-2 py-0.5 rounded text-[10px]">{f.price} EUR</span>
-                <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition">
-                  <button onClick={() => openEdit(f)} className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100"><Pencil className="w-4 h-4" /></button>
-                  <button onClick={() => handleDelete(f)} className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50"><Trash2 className="w-4 h-4" /></button>
-                </div>
+            <div
+              key={f.id}
+              className="flex items-center justify-between gap-3 py-2.5 border-b border-[#E5E7EB] last:border-0 hover:bg-[#F9FAFB] transition-colors"
+            >
+              <div className="min-w-0 text-xs font-semibold text-[#121316] truncate">{f.name}</div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={UI.chip}>{f.price} EUR</span>
+                <button type="button" onClick={() => openEdit(f)} aria-label="Изменить" title="Изменить" className={UI.buttonIcon}>
+                  <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(f)}
+                  aria-label="Удалить"
+                  title="Удалить"
+                  className="inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
               </div>
             </div>
           ))}
         </div>
-      </div>
-      {editing && (
- <div className="fixed inset-0 z-[100] bg-black/30 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setEditing(null)}>
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-sm p-5 space-y-3 my-4" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-sm font-bold text-slate-800">{editing?.id ? 'Изменить' : 'Добавить'} тариф парома</h2>
-            {[
-              { f: 'name', l: 'Название (напр. Liepaja - Travemunde)' },
-              { f: 'price', l: 'Цена (EUR)', num: true },
-            ].map((fld) => (
-              <div key={fld.f}>
-                <label className="text-[10px] font-bold text-slate-500 uppercase">{fld.l}{fld.f === 'name' ? ' *' : ''}</label>
-                <input type={fld.num ? 'number' : 'text'} value={draft[fld.f] || ''}
-                  onChange={(e) => setDraft((d) => ({ ...d, [fld.f]: e.target.value }))}
-                  className="w-full mt-1 px-3 py-2 text-sm rounded-lg border border-slate-200 outline-none focus:border-slate-300" />
-              </div>
-            ))}
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setEditing(null)} className="px-3 py-2 text-xs font-bold text-slate-500 rounded-lg hover:bg-slate-100">Отмена</button>
-              <button onClick={handleSave} disabled={isSubmitting} className={`inline-flex items-center gap-1.5 ${isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-900 hover:bg-slate-800'} text-white text-xs font-bold px-3 py-2 rounded-lg`}><Plus className="w-3.5 h-3.5" /> {isSubmitting ? 'Сохранение...' : 'Сохранить'}</button>
-            </div>
+      )}
+
+      <ModalShell
+        isOpen={!!editing}
+        onClose={() => setEditing(null)}
+        title={editing?.id ? 'Изменить тариф парома' : 'Добавить тариф парома'}
+        icon={<Anchor className="w-4 h-4" aria-hidden="true" />}
+        ariaLabel={editing?.id ? 'Изменить тариф парома' : 'Добавить тариф парома'}
+        footer={
+          <>
+            <button type="button" onClick={() => setEditing(null)} className={UI.buttonGhost}>
+              Отмена
+            </button>
+            <button type="button" onClick={handleSave} disabled={isSubmitting} className={UI.buttonPrimary}>
+              {isSubmitting ? 'Сохранение…' : 'Сохранить'}
+            </button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <label className={UI.fieldLabel}>Название (напр. Liepaja - Travemunde) *</label>
+            <input
+              type="text"
+              value={draft.name || ''}
+              onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+              placeholder="Liepaja - Travemunde"
+              className={UI.input}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className={UI.fieldLabel}>Цена (EUR)</label>
+            <input
+              type="number"
+              value={draft.price || ''}
+              onChange={(e) => setDraft((d) => ({ ...d, price: e.target.value }))}
+              placeholder="0"
+              className={UI.input}
+            />
           </div>
         </div>
-      )}
+      </ModalShell>
     </div>
   );
 }

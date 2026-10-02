@@ -1,12 +1,17 @@
-import React, {useState, useRef} from 'react'
+import React, {useState} from 'react'
 import {UserProfile, AppSettings, QuickLink, ExternalTab, CurrentPlanningTab, PlanZagruzokTab} from '../../types'
-import {ExternalLink, Link, Plus, X, Check, Globe, GripVertical, Table2, FileSpreadsheet} from 'lucide-react'
+import {ExternalLink, Link, Plus, X, Check, Globe, GripVertical, Table2, FileSpreadsheet, Pencil, Trash2} from 'lucide-react'
+import { UI } from '../../ui/kit';
+import { SectionHeader } from '../../ui/components';
 
 interface Props {
   user: UserProfile;
   settings: AppSettings | null;
   onSave: (s: AppSettings) => void;
 }
+
+const iconBtnDanger = 'inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer';
+const iconBtnSuccess = 'inline-flex items-center justify-center p-1.5 rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer';
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
   const copy = [...arr];
@@ -17,7 +22,7 @@ function moveItem<T>(arr: T[], from: number, to: number): T[] {
 
 function DragHandle() {
   return (
-    <div className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 p-0.5 rounded transition shrink-0">
+    <div className="cursor-grab active:cursor-grabbing text-[#9CA3AF] hover:text-[#4B5563] p-0.5 rounded transition shrink-0">
       <GripVertical className="w-3.5 h-3.5" />
     </div>
   );
@@ -41,7 +46,7 @@ export default function AdminLinksBlock({ user, settings, onSave }: Props) {
   // Current Planning tabs
   const [cpTitle, setCpTitle] = useState('');
   const [cpUrl, setCpUrl] = useState('');
-  const [editingCpId, setEditingCpId] = useState<string | null>(null);
+  const [editingCpId] = useState<string | null>(null);
   const [editingCpTitle, setEditingCpTitle] = useState('');
   const [editingCpUrl, setEditingCpUrl] = useState('');
 
@@ -60,7 +65,7 @@ export default function AdminLinksBlock({ user, settings, onSave }: Props) {
     e.preventDefault();
     if (dragIdx === null || dragIdx === idx) return;
     // Visual feedback would require re-render — we just move on drop
-    (e.currentTarget as HTMLElement).style.borderTop = '2px solid #3765F6';
+    (e.currentTarget as HTMLElement).style.borderTop = '2px solid var(--accent-ui)';
   };
   const onDragLeave = (e: React.DragEvent) => {
     (e.currentTarget as HTMLElement).style.borderTop = '';
@@ -204,57 +209,54 @@ export default function AdminLinksBlock({ user, settings, onSave }: Props) {
   });
 
   return (
-    <div className="space-y-6">
-      {/* Quick Links */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm space-y-4 w-full select-none">
-        <div className="border-b border-slate-100 pb-3">
-          <h2 className="text-sm font-bold uppercase tracking-tight text-slate-900 flex items-center gap-1.5">
-            <Link className="h-4.5 w-4.5 text-slate-500" />
-            Виджет быстрых ссылок на Dashboard
-          </h2>
-          <p className="text-[10px] text-slate-500 font-medium mt-1">
-            Ссылки отображаются на главной панели под блоком новостей
-          </p>
-        </div>
+    <div className="flex flex-col gap-6">
+      {/* Виджет быстрых ссылок */}
+      <div className="flex flex-col gap-3 pb-6 border-b border-[#E5E7EB] last:border-0 last:pb-0">
+        <SectionHeader
+          icon={<Link className="w-4 h-4" />}
+          tone="graphite"
+          title="Виджет быстрых ссылок на Dashboard"
+          subtitle="Ссылки отображаются на главной панели под блоком новостей"
+        >
+          <span className={UI.countBadge}>{settings?.quickLinks?.length || 0}</span>
+        </SectionHeader>
 
         {isWritePermitted && (
-          <form onSubmit={handleAddLink} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50/50 p-3 rounded-xl border border-slate-200">
+          <form onSubmit={handleAddLink} className="flex flex-col sm:flex-row gap-2">
             <input type="text" placeholder="Название" required
               value={linkTitle} onChange={e => setLinkTitle(e.target.value)}
-              className="px-3 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-slate-300 font-bold text-slate-800 transition"
+              className={UI.input}
             />
             <input type="url" placeholder="https://..." required
               value={linkUrl} onChange={e => setLinkUrl(e.target.value)}
-              className="px-3 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-slate-300 font-bold text-slate-800 transition"
+              className={UI.input}
             />
-            <button type="submit"
-              className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95 py-2.5 flex items-center justify-center gap-1.5"
-            >
-              <Plus size={13} strokeWidth={2.5} /> Добавить
+            <button type="submit" className={`${UI.buttonPrimary} shrink-0`}>
+              <Plus size={14} strokeWidth={2.5} /> Добавить
             </button>
           </form>
         )}
 
-        <div className="space-y-1.5 max-h-[250px] overflow-y-auto custom-scrollbar">
+        <div className="flex flex-col gap-1.5 max-h-[250px] overflow-y-auto custom-scrollbar">
           {settings?.quickLinks?.map((link, idx) => {
             const isEditing = editingLinkId === link.id;
             if (isEditing) {
               return (
                 <form key={link.id} onSubmit={handleSaveEditLink}
-                  className="flex flex-col sm:flex-row gap-1.5 bg-slate-100 p-2 rounded-xl border border-slate-300"
+                  className="flex flex-col sm:flex-row gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-2"
                 >
                   <input type="text" value={editingLinkTitle} required
                     onChange={e => setEditingLinkTitle(e.target.value)}
-                    className="p-1.5 bg-white text-xs rounded border border-slate-200 font-bold flex-1"
+                    className={`${UI.inputSm} flex-1`}
                   />
                   <input type="url" value={editingLinkUrl} required
                     onChange={e => setEditingLinkUrl(e.target.value)}
-                    className="p-1.5 bg-white text-xs rounded border border-slate-200 flex-1"
+                    className={`${UI.inputSm} flex-1`}
                   />
-                  <div className="flex gap-1 justify-end">
-                    <button type="submit" className="text-emerald-600 p-1.5 hover:bg-emerald-50 rounded-lg cursor-pointer"><Check size={14} /></button>
+                  <div className="flex gap-0.5 justify-end shrink-0">
+                    <button type="submit" className={iconBtnSuccess} title="Сохранить"><Check size={14} /></button>
                     <button type="button" onClick={() => setEditingLinkId(null)}
-                      className="text-slate-400 p-1.5 hover:bg-slate-200 rounded-lg cursor-pointer"><X size={14} /></button>
+                      className={UI.buttonIcon} title="Отмена"><X size={14} /></button>
                   </div>
                 </form>
               );
@@ -263,24 +265,24 @@ export default function AdminLinksBlock({ user, settings, onSave }: Props) {
               <div key={link.id}
                 {...draggableRow(idx)}
                 onDrop={(e) => { e.preventDefault(); if (dragIdx === null || dragIdx === idx || !settings) return; onSave({ ...settings, quickLinks: moveItem(settings.quickLinks!, dragIdx, idx) }); setDragIdx(null); }}
-                className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-white border transition group ${dragIdx === idx ? 'border-[#3765F6] ring-2 ring-[#3765F6]/10' : 'border-slate-200/60 hover:border-slate-300'}`}
+                className={`flex items-center justify-between gap-2 px-3 py-2.5 bg-white border rounded-xl transition-colors ${dragIdx === idx ? 'border-[var(--accent)] ring-2 ring-[var(--accent-20)]' : 'border-[#E5E7EB] hover:bg-[#F9FAFB]'}`}
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <DragHandle />
-                  <ExternalLink size={12} className="text-slate-400 shrink-0" />
+                  <ExternalLink size={12} className="text-[#9CA3AF] shrink-0" />
                   <a href={link.url} target="_blank" rel="noopener noreferrer"
-                    className="text-xs font-semibold text-slate-700 hover:text-slate-900 truncate max-w-[200px] transition"
+                    className="text-xs font-medium text-[#4B5563] hover:text-[#121316] truncate max-w-[220px] transition-colors"
                   >{link.title}</a>
                 </div>
                 {isWritePermitted && (
-                  <div className="flex gap-1 shrink-0">
+                  <div className="flex gap-0.5 shrink-0">
                     <button onClick={() => handleStartEditLink(link)}
-                      className="text-slate-400 hover:text-slate-700 p-1 hover:bg-slate-100 rounded-lg cursor-pointer transition" title="Редактировать">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                      className={UI.buttonIcon} title="Редактировать">
+                      <Pencil size={13} />
                     </button>
                     <button onClick={() => handleDeleteLink(link.id)}
-                      className="text-slate-400 hover:text-rose-600 p-1 hover:bg-rose-50 rounded-lg cursor-pointer transition" title="Удалить">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                      className={iconBtnDanger} title="Удалить">
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 )}
@@ -288,61 +290,58 @@ export default function AdminLinksBlock({ user, settings, onSave }: Props) {
             );
           })}
           {(!settings?.quickLinks || settings.quickLinks.length === 0) && (
-            <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 text-center py-6">Нет ссылок</div>
+            <div className="py-6 text-center text-xs text-[#6B7280]">Нет ссылок</div>
           )}
         </div>
       </div>
 
-      {/* External Tabs */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm space-y-4 w-full select-none">
-        <div className="border-b border-slate-100 pb-3">
-          <h2 className="text-sm font-bold uppercase tracking-tight text-slate-900 flex items-center gap-1.5">
-            <Globe className="h-4.5 w-4.5 text-slate-500" />
-            Кастомные меню-вкладки на внешние сайты
-          </h2>
-          <p className="text-[10px] text-slate-500 font-medium mt-1">
-            Отображаются в верхнем навигационном меню RATIPA
-          </p>
-        </div>
+      {/* Кастомные вкладки на внешние сайты */}
+      <div className="flex flex-col gap-3 pb-6 border-b border-[#E5E7EB] last:border-0 last:pb-0">
+        <SectionHeader
+          icon={<Globe className="w-4 h-4" />}
+          tone="graphite"
+          title="Кастомные меню-вкладки на внешние сайты"
+          subtitle="Отображаются в верхнем навигационном меню RATIPA"
+        >
+          <span className={UI.countBadge}>{settings?.externalTabs?.length || 0}</span>
+        </SectionHeader>
 
         {isWritePermitted && (
-          <form onSubmit={handleAddExt} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50/50 p-3 rounded-xl border border-slate-200">
+          <form onSubmit={handleAddExt} className="flex flex-col sm:flex-row gap-2">
             <input type="text" placeholder="Название" required
               value={extTitle} onChange={e => setExtTitle(e.target.value)}
-              className="px-3 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-slate-300 font-bold text-slate-800 transition"
+              className={UI.input}
             />
             <input type="url" placeholder="https://..." required
               value={extUrl} onChange={e => setExtUrl(e.target.value)}
-              className="px-3 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-slate-300 font-bold text-slate-800 transition"
+              className={UI.input}
             />
-            <button type="submit"
-              className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95 py-2.5 flex items-center justify-center gap-1.5"
-            >
-              <Plus size={13} strokeWidth={2.5} /> Добавить
+            <button type="submit" className={`${UI.buttonPrimary} shrink-0`}>
+              <Plus size={14} strokeWidth={2.5} /> Добавить
             </button>
           </form>
         )}
 
-        <div className="space-y-1.5 max-h-[250px] overflow-y-auto custom-scrollbar">
+        <div className="flex flex-col gap-1.5 max-h-[250px] overflow-y-auto custom-scrollbar">
           {(settings?.externalTabs || []).map((tab, idx) => {
             const isEditing = editingExtId === tab.id;
             if (isEditing) {
               return (
                 <form key={tab.id} onSubmit={handleSaveEditExt}
-                  className="flex flex-col sm:flex-row gap-1.5 bg-slate-100 p-2 rounded-xl border border-slate-300"
+                  className="flex flex-col sm:flex-row gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-2"
                 >
                   <input type="text" value={editingExtTitle} required
                     onChange={e => setEditingExtTitle(e.target.value)}
-                    className="p-1.5 bg-white text-xs rounded border border-slate-200 font-bold flex-1"
+                    className={`${UI.inputSm} flex-1`}
                   />
                   <input type="url" value={editingExtUrl} required
                     onChange={e => setEditingExtUrl(e.target.value)}
-                    className="p-1.5 bg-white text-xs rounded border border-slate-200 flex-1"
+                    className={`${UI.inputSm} flex-1`}
                   />
-                  <div className="flex gap-1 justify-end">
-                    <button type="submit" className="text-emerald-600 p-1.5 hover:bg-emerald-50 rounded-lg cursor-pointer"><Check size={14} /></button>
+                  <div className="flex gap-0.5 justify-end shrink-0">
+                    <button type="submit" className={iconBtnSuccess} title="Сохранить"><Check size={14} /></button>
                     <button type="button" onClick={() => setEditingExtId(null)}
-                      className="text-slate-400 p-1.5 hover:bg-slate-200 rounded-lg cursor-pointer"><X size={14} /></button>
+                      className={UI.buttonIcon} title="Отмена"><X size={14} /></button>
                   </div>
                 </form>
               );
@@ -351,22 +350,22 @@ export default function AdminLinksBlock({ user, settings, onSave }: Props) {
               <div key={tab.id}
                 {...draggableRow(idx)}
                 onDrop={(e) => { e.preventDefault(); if (dragIdx === null || dragIdx === idx || !settings) return; onSave({ ...settings, externalTabs: moveItem(settings.externalTabs!, dragIdx, idx) }); setDragIdx(null); }}
-                className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-white border transition group ${dragIdx === idx ? 'border-[#3765F6] ring-2 ring-[#3765F6]/10' : 'border-slate-200/60 hover:border-slate-300'}`}
+                className={`flex items-center justify-between gap-2 px-3 py-2.5 bg-white border rounded-xl transition-colors ${dragIdx === idx ? 'border-[var(--accent)] ring-2 ring-[var(--accent-20)]' : 'border-[#E5E7EB] hover:bg-[#F9FAFB]'}`}
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <DragHandle />
-                  <Globe size={12} className="text-slate-400 shrink-0" />
-                  <span className="text-xs font-semibold text-slate-700 truncate max-w-[200px]">{tab.title}</span>
+                  <Globe size={12} className="text-[#9CA3AF] shrink-0" />
+                  <span className="text-xs font-medium text-[#4B5563] truncate max-w-[220px]">{tab.title}</span>
                 </div>
                 {isWritePermitted && (
-                  <div className="flex gap-1 shrink-0">
+                  <div className="flex gap-0.5 shrink-0">
                     <button onClick={() => handleStartEditExt(tab)}
-                      className="text-slate-400 hover:text-slate-700 p-1 hover:bg-slate-100 rounded-lg cursor-pointer transition" title="Редактировать">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                      className={UI.buttonIcon} title="Редактировать">
+                      <Pencil size={13} />
                     </button>
                     <button onClick={() => handleDeleteExt(tab.id)}
-                      className="text-slate-400 hover:text-rose-600 p-1 hover:bg-rose-50 rounded-lg cursor-pointer transition" title="Удалить">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                      className={iconBtnDanger} title="Удалить">
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 )}
@@ -374,119 +373,113 @@ export default function AdminLinksBlock({ user, settings, onSave }: Props) {
             );
           })}
           {(!settings?.externalTabs || settings.externalTabs.length === 0) && (
-            <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 text-center py-6">Нет вкладок</div>
+            <div className="py-6 text-center text-xs text-[#6B7280]">Нет вкладок</div>
           )}
         </div>
       </div>
 
-      {/* Current Planning Tabs */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm space-y-4 w-full select-none">
-        <div className="border-b border-slate-100 pb-3">
-          <h2 className="text-sm font-bold uppercase tracking-tight text-slate-900 flex items-center gap-1.5">
-            <Table2 className="h-4.5 w-4.5 text-slate-500" />
-            Вкладки «Текущее планирование»
-          </h2>
-          <p className="text-[10px] text-slate-500 font-medium mt-1">
-            Вкладки отображаются в модуле Текущего планирования
-          </p>
-        </div>
+      {/* Вкладки «Текущее планирование» */}
+      <div className="flex flex-col gap-3 pb-6 border-b border-[#E5E7EB] last:border-0 last:pb-0">
+        <SectionHeader
+          icon={<Table2 className="w-4 h-4" />}
+          tone="graphite"
+          title="Вкладки «Текущее планирование»"
+          subtitle="Вкладки отображаются в модуле Текущего планирования"
+        >
+          <span className={UI.countBadge}>{settings?.currentPlanningTabs?.length || 0}</span>
+        </SectionHeader>
 
         {isWritePermitted && (
-          <form onSubmit={handleAddCp} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50/50 p-3 rounded-xl border border-slate-200">
+          <form onSubmit={handleAddCp} className="flex flex-col sm:flex-row gap-2">
             <input type="text" placeholder="Название вкладки" required
               value={cpTitle} onChange={e => setCpTitle(e.target.value)}
-              className="px-3 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-slate-300 font-bold text-slate-800 transition"
+              className={UI.input}
             />
             <input type="url" placeholder="https://docs.google.com/..." required
               value={cpUrl} onChange={e => setCpUrl(e.target.value)}
-              className="px-3 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-slate-300 font-bold text-slate-800 transition"
+              className={UI.input}
             />
-            <button type="submit"
-              className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95 py-2.5 flex items-center justify-center gap-1.5"
-            >
-              <Plus size={13} strokeWidth={2.5} /> Добавить
+            <button type="submit" className={`${UI.buttonPrimary} shrink-0`}>
+              <Plus size={14} strokeWidth={2.5} /> Добавить
             </button>
           </form>
         )}
 
-        <div className="space-y-1.5 max-h-[250px] overflow-y-auto custom-scrollbar">
+        <div className="flex flex-col gap-1.5 max-h-[250px] overflow-y-auto custom-scrollbar">
           {(settings?.currentPlanningTabs || []).map((tab, idx) => (
             <div key={tab.id}
               {...draggableRow(idx)}
               onDrop={(e) => { e.preventDefault(); if (dragIdx === null || dragIdx === idx || !settings) return; onSave({ ...settings, currentPlanningTabs: moveItem(settings.currentPlanningTabs!, dragIdx, idx) }); setDragIdx(null); }}
-              className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-white border transition group ${dragIdx === idx ? 'border-[#3765F6] ring-2 ring-[#3765F6]/10' : 'border-slate-200/60 hover:border-slate-300'}`}
+              className={`flex items-center justify-between gap-2 px-3 py-2.5 bg-white border rounded-xl transition-colors ${dragIdx === idx ? 'border-[var(--accent)] ring-2 ring-[var(--accent-20)]' : 'border-[#E5E7EB] hover:bg-[#F9FAFB]'}`}
             >
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 <DragHandle />
-                <Table2 size={12} className="text-slate-400 shrink-0" />
-                <span className="text-xs font-semibold text-slate-700 truncate max-w-[200px]">{tab.name}</span>
+                <Table2 size={12} className="text-[#9CA3AF] shrink-0" />
+                <span className="text-xs font-medium text-[#4B5563] truncate max-w-[220px]">{tab.name}</span>
               </div>
               {isWritePermitted && (
                 <button onClick={() => handleDeleteCp(tab.id)}
-                  className="text-slate-400 hover:text-rose-600 p-1 hover:bg-rose-50 rounded-lg cursor-pointer transition shrink-0" title="Удалить">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                  className={`${iconBtnDanger} shrink-0`} title="Удалить">
+                  <Trash2 size={13} />
                 </button>
               )}
             </div>
           ))}
           {(!settings?.currentPlanningTabs || settings.currentPlanningTabs.length === 0) && (
-            <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 text-center py-6">Нет вкладок</div>
+            <div className="py-6 text-center text-xs text-[#6B7280]">Нет вкладок</div>
           )}
         </div>
       </div>
 
-      {/* Plan Zagruzok Tabs */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200/50 shadow-sm space-y-4 w-full select-none">
-        <div className="border-b border-slate-100 pb-3">
-          <h2 className="text-sm font-bold uppercase tracking-tight text-slate-900 flex items-center gap-1.5">
-            <FileSpreadsheet className="h-4.5 w-4.5 text-slate-500" />
-            Вкладки «План загрузок»
-          </h2>
-          <p className="text-[10px] text-slate-500 font-medium mt-1">
-            Дополнительные вкладки в модуле Плана загрузок
-          </p>
-        </div>
+      {/* Вкладки «План загрузок» */}
+      <div className="flex flex-col gap-3 pb-6 border-b border-[#E5E7EB] last:border-0 last:pb-0">
+        <SectionHeader
+          icon={<FileSpreadsheet className="w-4 h-4" />}
+          tone="graphite"
+          title="Вкладки «План загрузок»"
+          subtitle="Дополнительные вкладки в модуле Плана загрузок"
+        >
+          <span className={UI.countBadge}>{settings?.planZagruzokTabs?.length || 0}</span>
+        </SectionHeader>
 
         {isWritePermitted && (
-          <form onSubmit={handleAddPz} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50/50 p-3 rounded-xl border border-slate-200">
+          <form onSubmit={handleAddPz} className="flex flex-col sm:flex-row gap-2">
             <input type="text" placeholder="Название вкладки" required
               value={pzTitle} onChange={e => setPzTitle(e.target.value)}
-              className="px-3 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-slate-300 font-bold text-slate-800 transition"
+              className={UI.input}
             />
             <input type="url" placeholder="https://docs.google.com/..." required
               value={pzUrl} onChange={e => setPzUrl(e.target.value)}
-              className="px-3 py-2.5 bg-white text-xs rounded-xl border border-slate-200 outline-none focus:border-slate-300 font-bold text-slate-800 transition"
+              className={UI.input}
             />
-            <button type="submit"
-              className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95 py-2.5 flex items-center justify-center gap-1.5"
-            >
-              <Plus size={13} strokeWidth={2.5} /> Добавить
+            <button type="submit" className={`${UI.buttonPrimary} shrink-0`}>
+              <Plus size={14} strokeWidth={2.5} /> Добавить
             </button>
           </form>
         )}
 
-        <div className="space-y-1.5 max-h-[250px] overflow-y-auto custom-scrollbar">
+        <div className="flex flex-col gap-1.5 max-h-[250px] overflow-y-auto custom-scrollbar">
           {(settings?.planZagruzokTabs || []).map((tab, idx) => (
             <div key={tab.id}
               {...draggableRow(idx)}
               onDrop={(e) => { e.preventDefault(); if (dragIdx === null || dragIdx === idx || !settings) return; onSave({ ...settings, planZagruzokTabs: moveItem(settings.planZagruzokTabs!, dragIdx, idx) }); setDragIdx(null); }}
-              className={`flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-white border transition group ${dragIdx === idx ? 'border-[#3765F6] ring-2 ring-[#3765F6]/10' : 'border-slate-200/60 hover:border-slate-300'}`}
+              className={`flex items-center justify-between gap-2 px-3 py-2.5 bg-white border rounded-xl transition-colors ${dragIdx === idx ? 'border-[var(--accent)] ring-2 ring-[var(--accent-20)]' : 'border-[#E5E7EB] hover:bg-[#F9FAFB]'}`}
             >
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 <DragHandle />
-                <FileSpreadsheet size={12} className="text-slate-400 shrink-0" />
-                <span className="text-xs font-semibold text-slate-700 truncate max-w-[200px]">{tab.name}</span>
+                <FileSpreadsheet size={12} className="text-[#9CA3AF] shrink-0" />
+                <span className="text-xs font-medium text-[#4B5563] truncate max-w-[220px]">{tab.name}</span>
               </div>
               {isWritePermitted && (
                 <button onClick={() => handleDeletePz(tab.id)}
-                  className="text-slate-400 hover:text-rose-600 p-1 hover:bg-rose-50 rounded-lg cursor-pointer transition shrink-0" title="Удалить">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                  className={`${iconBtnDanger} shrink-0`} title="Удалить">
+                  <Trash2 size={13} />
                 </button>
               )}
             </div>
           ))}
           {(!settings?.planZagruzokTabs || settings.planZagruzokTabs.length === 0) && (
-            <div className="text-[10px] uppercase font-bold tracking-widest text-slate-400 text-center py-6">Нет вкладок</div>
+            <div className="py-6 text-center text-xs text-[#6B7280]">Нет вкладок</div>
           )}
         </div>
       </div>

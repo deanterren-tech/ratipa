@@ -14,6 +14,7 @@ import {
   CurrencyPreset,
 } from "../../types";
 import {calculateTripFinances} from '../../utils/financeCalculators'
+import { buildDispatcherDirectory, dispatcherFieldsFor, resolvePersonName, DispatcherRef } from '../../utils/dispatcher'
 import {dbService, directoryService} from '../../api';
 import {pdService} from '../../api';
 import CouplingPicker from "../common/CouplingPicker";
@@ -111,6 +112,8 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     distanceLookupMode: "cities",
   });
   const [dispatchers, setDispatchers] = useState<string[]>([]);
+  /** Диспетчеры с идентификаторами учётных записей — для связи записей с пользователями */
+  const [dispatcherRefs, setDispatcherRefs] = useState<DispatcherRef[]>([]);
   const [dispatchersOrder, setDispatchersOrder] = useState<string[]>([]);
   const [dispatchersColors, setDispatchersColors] = useState<
     Record<string, string>
@@ -152,6 +155,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       const withMe = names.includes(user.name) ? names : [...names, user.name];
       setDispatchers(withMe);
       setDispatchersOrder(withMe);
+      setDispatcherRefs(
+        objs
+          .map((d: any) => ({ id: String(d.id || ''), name: String(d.name || '') }))
+          .filter((d: any) => d.id && d.name),
+      );
     });
     pdService.setPresence(user.name);
 
@@ -378,6 +386,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       window.removeEventListener("mouseup", handleMouseUp);
     };
   }, [nbResizing, nbResizeStartSize]);
+
+  /** Справочник диспетчеров: идентификатор учётной записи ↔ имя */
+  const dispatcherDirectory = useMemo(() => buildDispatcherDirectory(dispatcherRefs), [dispatcherRefs]);
 
   // Derived state for dispatchers
   const filterDispatchers = useMemo(() => dispatchersOrder.filter(
@@ -1537,6 +1548,11 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
       }
 
       const totals = calculateTotals();
+      // Диспетчер рейса: храним идентификатор учётной записи и имя с фамилией
+      const tripDispatcherFields = dispatcherFieldsFor(
+        dispatcher || carDispatcherMapping[trimmedCar] || user.name,
+        dispatcherDirectory,
+      );
       const tripObj: TripPlan = {
         driverName: undefined,
         id: editingTripId || "",
@@ -1561,7 +1577,9 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
         stripColor: stripColor || "bg-blue-500",
         legs,
         potentialLoads,
-        dispatcher: dispatcher || carDispatcherMapping[trimmedCar] || user.name,
+        dispatcher: tripDispatcherFields.dispatcher,
+        dispatcherName: tripDispatcherFields.dispatcherName,
+        dispatcherId: tripDispatcherFields.dispatcherId,
         currentMonth,
         isArchived: editingTripId
           ? trips.find((t) => t.id === editingTripId)?.isArchived || false
@@ -1663,7 +1681,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     const profitPerDayPlan = Math.round(rawProfitPerDayPlan);
 
     return (
- <div className="fixed inset-0 z-[100] flex items-start md:items-center justify-center bg-slate-900/60 animate-fade-in overflow-y-auto overscroll-contain">
+ <div data-scroll-lock="modal" className="fixed inset-0 z-[100] flex items-start md:items-center justify-center bg-slate-900/60 animate-fade-in overflow-y-auto overscroll-contain">
  <div className="bg-white w-full md:max-w-[1400px] mx-0 md:mx-4 shadow-2xl rounded-2xl flex flex-col relative min-h-[100dvh] md:min-h-0 md:max-h-[calc(100vh-2rem)] overflow-hidden">
           
           {/* Header */}
@@ -1693,7 +1711,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
               {(currentEditingTrip as any)?.updatedBy && (
                 <div className="flex items-center gap-1.5 mt-2">
                   <span className="inline-flex items-center gap-1 bg-slate-100/80 border border-slate-200/60 px-2.5 py-1 rounded-lg font-semibold text-slate-700 shadow-sm text-[11px]">
-                    ✎ {(currentEditingTrip as any).updatedBy}
+                    ✎ {resolvePersonName((currentEditingTrip as any).updatedBy, dispatcherDirectory)}
                     {(currentEditingTrip as any).updatedAt && (
                       <span className="font-medium text-slate-400 font-mono">
                         · {(currentEditingTrip as any).updatedAt}
@@ -1746,7 +1764,8 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         <CouplingPicker
                           value={carNumber}
                           onSelect={(rec) => {
-                            if (rec) handleCarNumberChange(formatCoupling((rec.carNumber || rec.vehicleNumbers || '').toUpperCase()));
+                            if (!rec) { handleCarNumberChange(''); return; }
+                            handleCarNumberChange(formatCoupling((rec.carNumber || rec.vehicleNumbers || '').toUpperCase()));
                           }}
                         />
                       </div>
@@ -1990,7 +2009,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                               onChange={(e) => updateLeg(idx, { from: e.target.value })}
                               onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx, field: 'from', isPl: false, rect}); }}
                               onBlur={() => { checkLegDistance(idx); }}
-                              className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
+                              className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[var(--accent-ui)] transition shadow-sm"
                             />
                           </div>
                           <div className="flex flex-col gap-1.5">
@@ -2001,7 +2020,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                               onChange={(e) => updateLeg(idx, { to: e.target.value })}
                               onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx, field: 'to', isPl: false, rect}); }}
                               onBlur={() => { checkLegDistance(idx); }}
-                              className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
+                              className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[var(--accent-ui)] transition shadow-sm"
                             />
                           </div>
                         </div>
@@ -2022,7 +2041,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                   setShowAddDistModal(true);
                                 }
                               }}
-                              className="w-full pl-3 pr-8 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
+                              className="w-full pl-3 pr-8 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums text-slate-800 outline-none focus:bg-white focus:border-[var(--accent-ui)] transition shadow-sm"
                             />
                             <button
                               type="button"
@@ -2038,7 +2057,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                               type="number"
                               value={leg.emptyRun || ""}
                               onChange={(e) => updateLeg(idx, { emptyRun: Number(e.target.value) })}
-                              className="w-full pl-3 pr-8 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums text-slate-800 outline-none focus:bg-white focus:border-[#3765F6] transition shadow-sm"
+                              className="w-full pl-3 pr-8 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums text-slate-800 outline-none focus:bg-white focus:border-[var(--accent-ui)] transition shadow-sm"
                             />
                             <button
                               type="button"
@@ -3074,7 +3093,8 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             };
 
             // Set up clean dispatcher badges
-            const dispatcherName = trip.dispatcher || trip.logist || "—";
+            // Диспетчер: имя из записи, иначе — по автору, с полным именем из учётной записи
+            const dispatcherName = trip.dispatcher || resolvePersonName(trip.logist, dispatcherDirectory) || "—";
             const colorKey = dispatchersColors[dispatcherName];
             const preset = DISPATCHER_COLORS_PRESETS.find((p) => p.key === colorKey);
             const dispBadgeStyle = preset
@@ -3134,7 +3154,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                       <div className="flex items-center gap-1.5 mt-2">
                         {(trip as any).updatedBy && (
                           <span className="inline-flex items-center gap-1 bg-slate-100/80 border border-slate-200/60 px-2 py-0.5 rounded-lg font-semibold text-slate-700 shadow-sm text-[10px]">
-                            ✎ {(trip as any).updatedBy}
+                            ✎ {resolvePersonName((trip as any).updatedBy, dispatcherDirectory)}
                             {(trip as any).updatedAt && (
                               <span className="font-medium text-slate-400 font-mono">
                                 · {(trip as any).updatedAt}
@@ -3380,7 +3400,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
   };
 
   const announceModal = showAnnounce ? (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={dismissAnnounce}>
+    <div data-scroll-lock="modal" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={dismissAnnounce}>
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200/60 max-w-lg w-full mx-4 p-6 md:p-8 relative" onClick={e => e.stopPropagation()}>
         <button onClick={dismissAnnounce} className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 transition-colors">
           <X size={20} />
@@ -3682,7 +3702,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
         setSaveToDirectoryChecked={setSaveToDirectoryChecked}
         onApply={handleApplyMapRoute}
       />
-    ;
+
       {/* Global City Dropdown Portal */}
       {cityDropdown?.rect && (
         <div
@@ -3729,7 +3749,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
       {/* Add Distance to DB Modal */}
       {showAddDistModal && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowAddDistModal(false)}>
+        <div data-scroll-lock="modal" className="fixed inset-0 z-[100] bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowAddDistModal(false)}>
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-md p-6 space-y-4 my-4" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-base font-bold text-slate-900">Добавить маршрут в базу</h2>
             <p className="text-xs text-slate-500">Маршрут «{addDistFrom} → {addDistTo}» не найден в базе расстояний. Добавить?</p>
@@ -3814,7 +3834,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={() => setShowAddDistModal(false)} className="px-4 py-2 text-xs font-medium text-slate-500 rounded-xl hover:bg-slate-100 transition cursor-pointer">Отмена</button>
-              <button onClick={() => { const [a, b] = [addDistFrom.trim(), addDistTo.trim()].sort((x, y) => x.localeCompare(y)); const id = 'dist_' + Date.now().toString(); const checkpoints = addDistCheckpoints.split(',').filter(Boolean).map(s => s.trim()); dbService.saveDistance({ id, from: a, to: b, distance: addDistKm || 0, countryFrom: addDistCountryFrom, countryTo: addDistCountryTo, checkpoints: checkpoints.length > 0 ? checkpoints : undefined, }, user.name, user.role); setShowAddDistModal(false); toast('Маршрут добавлен в базу расстояний', 'success'); }} className="inline-flex items-center gap-1.5 bg-slate-900 text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-slate-800 shadow-sm transition cursor-pointer">
+              <button onClick={() => { const [a, b] = [addDistFrom.trim(), addDistTo.trim()].sort((x, y) => x.localeCompare(y)); const id = 'dist_' + Date.now().toString(); const checkpoints = addDistCheckpoints.split(',').filter(Boolean).map(s => s.trim()); dbService.saveDistance({ id, from: a, to: b, distance: addDistKm || 0, countryFrom: addDistCountryFrom, countryTo: addDistCountryTo, checkpoints: checkpoints.length > 0 ? checkpoints : undefined, }, user.name, user.role); setShowAddDistModal(false); addToast('Маршрут добавлен в базу расстояний', 'success'); }} className="inline-flex items-center gap-1.5 bg-slate-900 text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-slate-800 shadow-sm transition cursor-pointer">
                 <Plus className="w-3.5 h-3.5" /> Добавить
               </button>
             </div>

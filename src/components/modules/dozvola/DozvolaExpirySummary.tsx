@@ -12,6 +12,7 @@ interface Props {
 export default function DozvolaExpirySummary({ user, onNavigateToRegistry }: Props) {
   const [dozvolsData, setDozvolsData] = useState<Record<string, any>>({});
   const [typesDeadlineDays, setTypesDeadlineDays] = useState<Record<string, number>>({});
+  const [activeFilter, setActiveFilter] = useState<'all' | 'expired' | 'urgent' | 'soon'>('all');
 
   useEffect(() => {
     if (!useFirebase) return;
@@ -74,34 +75,10 @@ export default function DozvolaExpirySummary({ user, onNavigateToRegistry }: Pro
     } catch { return '—'; }
   };
 
-  const barColor = (days: number) => {
-    if (days < 0) return 'bg-rose-500';
-    if (days <= 3) return 'bg-rose-400';
-    if (days <= 7) return 'bg-amber-400';
-    if (days <= 14) return 'bg-yellow-400';
-    return 'bg-slate-300';
-  };
-
-  const barBg = (days: number) => {
-    if (days < 0) return 'bg-rose-50 border-rose-200';
-    if (days <= 3) return 'bg-rose-50/70 border-rose-200/50';
-    if (days <= 7) return 'bg-amber-50/70 border-amber-200/50';
-    if (days <= 14) return 'bg-yellow-50/70 border-yellow-200/50';
-    return 'bg-slate-50 border-slate-200/50';
-  };
-
   const labelColor = (days: number) => {
     if (days < 0) return 'text-rose-700';
-    if (days <= 3) return 'text-rose-600';
-    if (days <= 7) return 'text-amber-600';
-    if (days <= 14) return 'text-yellow-600';
-    return 'text-slate-500';
-  };
-
-  const icon = (days: number) => {
-    if (days < 0) return <XCircle size={14} className="text-rose-500 shrink-0" />;
-    if (days <= 7) return <AlertTriangle size={14} className="text-amber-500 shrink-0" />;
-    return <Clock size={14} className="text-yellow-500 shrink-0" />;
+    if (days <= 7) return 'text-amber-700';
+    return 'text-[#6B7280]';
   };
 
   const daysLabel = (days: number) => {
@@ -111,116 +88,125 @@ export default function DozvolaExpirySummary({ user, onNavigateToRegistry }: Pro
     return `Осталось ${days} дн.`;
   };
 
-  const barWidth = (days: number) => {
-    if (days < 0) return 100;
-    const pct = Math.max(5, ((30 - Math.max(0, days)) / 30) * 100);
-    return Math.min(100, pct);
-  };
-
   const expiredCount = items.filter(i => i.daysLeft < 0).length;
   const urgentCount = items.filter(i => i.daysLeft >= 0 && i.daysLeft <= 7).length;
   const soonCount = items.filter(i => i.daysLeft > 7 && i.daysLeft <= 30).length;
 
+  const visibleItems = activeFilter === 'all'
+    ? items
+    : activeFilter === 'expired'
+      ? items.filter(i => i.daysLeft < 0)
+      : activeFilter === 'urgent'
+        ? items.filter(i => i.daysLeft >= 0 && i.daysLeft <= 7)
+        : items.filter(i => i.daysLeft > 7 && i.daysLeft <= 30);
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/50 shadow-sm overflow-hidden">
-      <div className="px-5 py-4 flex items-center justify-between border-b border-slate-100">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Clock className="w-5 h-5 text-slate-700" strokeWidth={1.5} />
-            <span className="absolute -top-1.5 -right-1.5 w-2 h-2 bg-rose-400 rounded-full" />
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Сроки дозволов
-            </span>
-            <span className="text-xs font-bold text-slate-900">
-              {items.length} на контроле
-            </span>
-          </div>
+    <div className="flex flex-col gap-2.5">
+      {/* Заголовок связан с таблицей: без разделителя и лишнего разрыва */}
+      <div className="flex items-center gap-2.5">
+        <div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg shrink-0">
+          <Clock className="w-3.5 h-3.5" />
         </div>
-        <button
-          onClick={onNavigateToRegistry}
-          className="text-[10px] font-semibold text-slate-500 hover:text-slate-900 transition cursor-pointer shrink-0"
-        >
-          Все дозвола →
-        </button>
+        <h3 className="text-sm font-semibold text-[#121316]">
+          Сроки дозволов
+        </h3>
+        <span className="text-xs text-[#6B7280]">{items.length} на контроле</span>
       </div>
 
-      <div className="flex gap-1.5 px-5 pt-3 pb-2 flex-wrap">
+      {/* Segmented filter pills (new design) */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
         {expiredCount > 0 && (
-          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-50 border border-rose-200">
-            <XCircle size={12} className="text-rose-500" />
-            <span className="text-[11px] font-bold text-rose-600">{expiredCount} просроч.</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => setActiveFilter(activeFilter === 'expired' ? 'all' : 'expired')}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+              activeFilter === 'expired'
+                ? 'bg-rose-600 text-white'
+                : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+            }`}
+          >
+            Просрочено ({expiredCount})
+          </button>
         )}
         {urgentCount > 0 && (
-          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 border border-amber-200">
-            <AlertTriangle size={12} className="text-amber-500" />
-            <span className="text-[11px] font-bold text-amber-600">{urgentCount} срочных</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => setActiveFilter(activeFilter === 'urgent' ? 'all' : 'urgent')}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+              activeFilter === 'urgent'
+                ? 'bg-amber-500 text-white'
+                : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+            }`}
+          >
+            Срочно ({urgentCount})
+          </button>
         )}
         {soonCount > 0 && (
-          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-yellow-50 border border-yellow-200">
-            <Clock size={12} className="text-yellow-500" />
-            <span className="text-[11px] font-bold text-yellow-600">{soonCount} скоро</span>
-          </div>
+          <button
+            type="button"
+            onClick={() => setActiveFilter(activeFilter === 'soon' ? 'all' : 'soon')}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors cursor-pointer ${
+              activeFilter === 'soon'
+                ? 'bg-[#121316] text-white'
+                : 'bg-[#F3F4F6] text-[#4B5563] hover:text-[#121316]'
+            }`}
+          >
+            Скоро ({soonCount})
+          </button>
         )}
       </div>
 
-      <div className="px-5 pb-5 space-y-1.5 max-h-[280px] overflow-y-auto custom-scrollbar">
-        {items.length > 0 ? items.map((item) => {
-          const pct = barWidth(item.daysLeft);
-          const color = barColor(item.daysLeft);
-          const bgCls = barBg(item.daysLeft);
-          const lblCls = labelColor(item.daysLeft);
-
-          return (
-            <div
-              key={item.id}
-              className={`rounded-xl px-3.5 py-2.5 border transition hover:shadow-sm cursor-default ${bgCls}`}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                {icon(item.daysLeft)}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-[13px] font-mono text-slate-900 truncate">
-                      {item.permitNumber}
+      {/* Rows — compact deadline table: fixed height, pinned header, sum row */}
+      <div className="max-h-[240px] overflow-y-auto overflow-x-auto custom-scrollbar border border-[#E5E7EB] rounded-xl">
+        <table className="w-full text-left border-separate border-spacing-0">
+          <thead>
+            <tr className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">
+              <th className="sticky top-0 z-10 bg-white px-3 py-2.5 font-semibold border-b border-[#E5E7EB]">Бланк</th>
+              <th className="sticky top-0 z-10 bg-white px-3 py-2.5 font-semibold border-b border-[#E5E7EB]">Срок сдачи</th>
+              <th className="sticky top-0 z-10 bg-white px-3 py-2.5 font-semibold border-b border-[#E5E7EB]">Осталось</th>
+              <th className="sticky top-0 z-10 bg-white px-3 py-2.5 font-semibold border-b border-[#E5E7EB]">Авто</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleItems.length > 0 ? visibleItems.map((item) => (
+              <tr key={item.id} className="hover:bg-[#F9FAFB] transition-colors">
+                <td className="px-3 py-2.5 align-middle border-b border-[#F3F4F6]">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {item.daysLeft < 0
+                      ? <XCircle size={14} className="text-rose-500 shrink-0" />
+                      : item.daysLeft <= 7
+                        ? <AlertTriangle size={14} className="text-amber-500 shrink-0" />
+                        : <Clock size={14} className="text-[#9CA3AF] shrink-0" />}
+                    <span className="font-mono font-semibold text-xs text-[#121316] whitespace-nowrap select-all">
+                      {[item.type, item.permitNumber].filter(Boolean).join(' ')}
                     </span>
-                    <span className="text-[9px] font-bold text-slate-400 bg-white/60 px-1.5 py-0.5 rounded shrink-0">
-                      {item.type}
-                    </span>
-                    {item.car && (
-                      <span className="text-[8px] font-mono text-slate-400 truncate max-w-[100px]">
-                        {item.car}
-                      </span>
-                    )}
                   </div>
-                </div>
-                <span className={`text-[11px] font-bold font-mono shrink-0 ${lblCls}`}>
-                  {formatDate(new Date(item.deadlineDate))}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2.5">
-                <div className="flex-1 h-1.5 bg-slate-200/60 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${color}`}
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-                <span className={`text-[10px] font-semibold font-mono shrink-0 ${lblCls}`}>
-                  {daysLabel(item.daysLeft)}
-                </span>
-              </div>
-            </div>
-          );
-        }) : (
-          <div className="flex flex-col items-center justify-center py-6 text-slate-400">
-            <div className="text-2xl mb-2">✅</div>
-            <p className="text-xs font-semibold text-slate-500">Нет дозволов с истекающим сроком</p>
-            <p className="text-[10px] mt-0.5">У всех активных дозволов срок сдачи ещё не подходит</p>
-          </div>
-        )}
+                </td>
+                <td className="px-3 py-2.5 align-middle border-b border-[#F3F4F6]">
+                  <span className="text-xs font-medium font-mono text-[#4B5563] whitespace-nowrap">
+                    {formatDate(new Date(item.deadlineDate))}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 align-middle border-b border-[#F3F4F6]">
+                  <span className={`text-[11px] font-semibold whitespace-nowrap ${labelColor(item.daysLeft)}`}>
+                    {daysLabel(item.daysLeft)}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 align-middle border-b border-[#F3F4F6]">
+                  <span className="text-[10px] font-mono text-[#6B7280] whitespace-nowrap">
+                    {item.car || '—'}
+                  </span>
+                </td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={4} className="px-3 py-12 text-center text-xs text-[#6B7280]">
+                  Нет дозволов по этому фильтру
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

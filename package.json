@@ -1,7 +1,7 @@
 {
-  "name": "react-example",
+  "name": "ratipa-portal",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
+    "@pdf-lib/fontkit": "^1.1.1",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^17.2.3",
@@ -24,6 +25,7 @@
     "lucide-react": "^0.546.0",
     "motion": "^12.42.2",
     "multer": "^2.2.0",
+    "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.1.200",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",

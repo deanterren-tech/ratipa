@@ -33,6 +33,7 @@ import {
   CurrencyPreset,
 } from "./types";
 import { firebaseConfig } from "./firebaseConfig";
+import { registerRead, markRead, releaseRead } from "./db/moduleReadiness";
 import { sharedGetDrivers, sharedGetTractors, sharedGetTrailers, sharedGetCouplings, sharedGetCarRateGroups, sharedGetCurrencies, sharedGetSettings, sharedGetFerryTemplates, sharedGetCheckpoints, sharedGetDistances, sharedGetDirections, sharedGetVehicleStatuses, sharedDirVehicleBrands, sharedDirTrailerBrands, sharedDirDispatchers, sharedDirRateGroups, sharedDirStatusTypes, sharedDirDirections } from "./db/subscriptions";
 import { DEFAULT_USERS, INITIAL_VEHICLES, INITIAL_TRIPS, INITIAL_PERMITS, INITIAL_FERRY_TEMPLATES, INITIAL_DISTANCES, INITIAL_CARS_POOL, INITIAL_DIRECTIONS, INITIAL_SETTINGS } from "./db/seed";
 
@@ -134,8 +135,13 @@ export const onValue = (
   const onlyOnce =
     errorOrOpts && typeof errorOrOpts === "object" && (errorOrOpts as any).onlyOnce;
 
+  // Готовность данных раздела: подписка отмечается при первом ответе базы
+  const readyToken = registerRead();
+
   if (!useFirebase) {
     if (errorCallback) errorCallback(new Error("Firebase not initialized"));
+    // Локальный режим: ответа базы не будет — раздел не должен ждать таймаут
+    markRead(readyToken);
     return () => {};
   }
 
@@ -148,6 +154,7 @@ export const onValue = (
     activeUnsubscribe = firebaseOnValue(
       dbRef,
       (snap: any) => {
+        markRead(readyToken);
         if (onlyOnce) {
           if (activeUnsubscribe) {
             activeUnsubscribe();
@@ -157,6 +164,8 @@ export const onValue = (
         callback(snap);
       },
       (err: any) => {
+        // Первая ошибка — ещё не приговор: ниже подписка повторяется один раз
+        const wasRetried = resubscribeAttempted;
         // If auth was not ready yet, wait for it then resubscribe.
         // Исправлено: не выходим при null user — повторяем попытку через таймаут
         const msg = (err && (err.message || "")) + "";
@@ -184,6 +193,8 @@ export const onValue = (
             subscribe();
           }, 2000);
         }
+        // Повтор не помог — раздел должен показать ошибку, а не ждать вечно
+        if (wasRetried) markRead(readyToken, err);
         if (errorCallback) errorCallback(err);
       },
     );
@@ -198,6 +209,7 @@ export const onValue = (
   return () => {
     isCancelled = true;
     if (activeUnsubscribe) activeUnsubscribe();
+    releaseRead(readyToken);
   };
 };
 
@@ -208,22 +220,28 @@ export const onceValue = (
   errorCallback?: (error: any) => void,
 ) => {
   let isCancelled = false;
+  // Разовый запрос тоже участвует в готовности раздела
+  const readyToken = registerRead();
 
   ensureAuth().then((user) => {
     if (isCancelled) return;
     if (user && useFirebase) {
       firebaseGet(dbRef)
         .then((snapshot) => {
+          markRead(readyToken);
           if (!isCancelled) {
             callback(snapshot);
           }
         })
         .catch((err) => {
+          markRead(readyToken, err);
           if (!isCancelled && errorCallback) {
             errorCallback(err);
           }
         });
     } else {
+      // Локальный режим: ждать ответа базы нечего
+      markRead(readyToken);
       if (errorCallback) {
         errorCallback(new Error("Firebase auth not ready or local mode active"));
       }
@@ -232,6 +250,7 @@ export const onceValue = (
 
   return () => {
     isCancelled = true;
+    releaseRead(readyToken);
   };
 };
 
@@ -499,7 +518,13 @@ export const dbService = {
   getAuditLogs: (callback: (logs: AuditLog[]) => void, limitCount = 100) => {
     if (useFirebase) {
       
-      const dbRef = query(ref(database, "auditLogs"), orderByChild("timestamp"), limitToLast(limitCount));
+      // Внимание: в правилах базы нет .indexOn для auditLogs, поэтому сортировка
+      // orderByChild заставляет базу выгружать весь узел (сейчас это ~100 МБ)
+      // и фильтровать его на клиенте — раздел ждал данные десятки секунд.
+      // Ключи журнала создаются push-ом (хронологический порядок), поэтому
+      // limitToLast без сортировки отдаёт те же последние записи, но сервер
+      // возвращает сразу только их.
+      const dbRef = query(ref(database, "auditLogs"), limitToLast(limitCount));
       return onValue(
         dbRef,
         (snapshot) => {
@@ -1346,6 +1371,8 @@ export const dbService = {
     const brand = rec.brandModel || rec.brands || "";
     const trailer = rec.trailerMake || "";
     const disp = rec.dispatcher || rec.dispatcherName || "";
+    // Идентификатор учётной записи диспетчера: стабильная связь записи с пользователем
+    const dispId = rec.dispatcherId || "";
     const phoneNum = rec.phone || rec.driverPhone || "";
     const normalized = {
       ...rec,
@@ -1357,6 +1384,7 @@ export const dbService = {
       trailerMake: trailer || null,
       dispatcherName: disp || null,
       dispatcher: disp || null,
+      dispatcherId: dispId || null,
       driverPhone: phoneNum || null,
       phone: phoneNum || null,
       lastPassportVerificationYear: rec.lastPassportVerificationYear ?? null,
@@ -1378,6 +1406,7 @@ export const dbService = {
       driver2: rec.driver2 || null,
       dispatcher: disp || null,
       dispatcherName: disp || null,
+      dispatcherId: dispId || null,
       brand: rec.brand || rec.brandModel || null,
       trailerBrand: rec.trailerBrand || rec.trailerMake || null,
       brandRu: rec.brandRu || null,
@@ -1454,6 +1483,8 @@ export const dbService = {
             shortNameRu: rec.driverNameRu || rec.driverName || null,
             nameLat: rec.driverNameLat || null,
             dispatcher: disp || null,
+            dispatcherName: disp || null,
+            dispatcherId: dispId || null,
             phone: rec.phone || rec.driverPhone || null,
             phones: Array.isArray(rec.phones) ? rec.phones : (rec.phone || rec.driverPhone ? [{ id: 'phone_1', number: rec.phone || rec.driverPhone, isPrimary: true }] : []),
             passport: rec.passportNumber || null,
@@ -2818,6 +2849,35 @@ export const dbService = {
    * перезаписывать весь профиль (безопасно при параллельных правках).
    * moduleKey: 'disposition' | 'planZagruzok' | 'currentPlanning'
    */
+  /**
+   * Сохраняет выбранный пользователем режим отображения списка в модуле
+   * (merge-апдейт users_list/{uid}, как saveUserSheetZoom).
+   * moduleKey: 'vehicles' и другие списки.
+   */
+  /**
+   * Отмечает, что пользователь прошёл (или закрыл) превью обновлений
+   * конкретной версии. Merge-апдейт users_list/{uid}/onboarding/{версия}.
+   */
+  saveUserOnboarding: (uid: string, version: string, status: 'done' | 'skipped') => {
+    if (useFirebase) {
+      const patch: Record<string, any> = {};
+      patch[`onboarding/${version}`] = status;
+      update(ref(database, `users_list/${uid}`), patch).catch((err) =>
+        console.warn("Failed to save user onboarding:", err)
+      );
+    }
+  },
+
+  saveUserViewMode: (uid: string, moduleKey: string, mode: string) => {
+    if (useFirebase) {
+      const patch: Record<string, any> = {};
+      patch[`viewModes/${moduleKey}`] = mode;
+      update(ref(database, `users_list/${uid}`), patch).catch((err) =>
+        console.warn("Failed to save user view mode:", err)
+      );
+    }
+  },
+
   saveUserSheetZoom: (uid: string, moduleKey: string, zoom: number) => {
     if (useFirebase) {
       const patch: Record<string, any> = {};

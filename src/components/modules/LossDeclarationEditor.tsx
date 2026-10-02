@@ -2,7 +2,9 @@ import {useToast} from '../ToastProvider'
 import React, {useState, useEffect, useRef} from 'react'
 import { database, onValue } from '../../api'
 import { ref, push, set } from 'firebase/database'
-import {Save, Plus, Printer, FileText, CheckSquare, MapPin, Calendar, FileSignature, FileSpreadsheet} from 'lucide-react'
+import {Save, Plus, Printer, FileText, CheckSquare, MapPin, Calendar, FileSignature, FileSpreadsheet, X} from 'lucide-react';
+import {UI} from '../../ui/kit';
+import {SectionHeader, FilterPills} from '../../ui/components';
 
 const lostDeclImg = '/lost_decl.png';
 
@@ -48,7 +50,7 @@ const DraggableItem = ({ id, x, y, onMove, children, isSelected, onClick, onRemo
         e.stopPropagation();
         if (onClick) onClick(id);
       }}
-      className={`absolute cursor-move select-none pointer-events-auto ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/50' : 'hover:ring-1 hover:ring-slate-300'}`}
+      className={`absolute cursor-move select-none pointer-events-auto ${isSelected ? 'ring-2 ring-[var(--accent)] bg-[var(--accent-10)]' : 'hover:ring-1 hover:ring-[#D1D5DB]'}`}
       style={{ left: `${x}%`, top: `${y}%`, padding: '4px', zIndex: isDragging ? 50 : 10 }}
     >
       {children}
@@ -63,10 +65,10 @@ const DraggableItem = ({ id, x, y, onMove, children, isSelected, onClick, onRemo
             e.stopPropagation();
             onRemove(id);
           }}
-          className="absolute -top-3 -right-3 bg-red-600 hover:bg-red-700 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-md cursor-pointer z-[100] text-[10px] font-bold select-none leading-none transition-colors"
+          className="absolute -top-3 -right-3 bg-rose-600 hover:bg-rose-700 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-md cursor-pointer z-[100] select-none transition-colors"
           title="Удалить"
         >
-          ✕
+          <X size={12} aria-hidden="true" />
         </button>
       )}
     </div>
@@ -498,81 +500,68 @@ export default function LossDeclarationEditor({ signeeName }: LossDeclarationEdi
   };
 
   return (
-    <div className="bg-white rounded-2xl p-6 border border-slate-100 flex flex-col gap-5">
+    <div className="flex flex-col gap-5">
       
-      {/* STEP NAVIGATION HEADER — PlanDohod pill-style tabs */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-          <FileSpreadsheet className="w-4 h-4 text-slate-400" />
-          {activeTab === 'step1' ? 'Декларация об утере' : 'Сопроводительное письмо'}
-        </h2>
-        <div className="flex bg-slate-100 rounded-full p-1 gap-1 border border-slate-200/50">
-          <button 
-            onClick={() => setActiveTab('step1')}
-            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === 'step1' 
-                ? 'bg-white shadow-sm text-slate-900' 
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Этап 1: Декларация
-          </button>
-          <button 
-            onClick={() => setActiveTab('step2')}
-            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-              activeTab === 'step2' 
-                ? 'bg-white shadow-sm text-slate-900' 
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Этап 2: Письмо
-          </button>
-        </div>
-      </div>
+      {/* STEP NAVIGATION HEADER */}
+      <SectionHeader
+        icon={<FileSpreadsheet className="w-4 h-4" aria-hidden="true" />}
+        tone="graphite"
+        title={activeTab === 'step1' ? 'Декларация об утере' : 'Сопроводительное письмо'}
+      >
+        <FilterPills
+          items={[
+            { key: 'step1', label: 'Этап 1: Декларация' },
+            { key: 'step2', label: 'Этап 2: Письмо' },
+          ]}
+          active={activeTab}
+          onChange={(key) => setActiveTab(key as 'step1' | 'step2')}
+          ariaLabel="Этапы подготовки документа"
+        />
+      </SectionHeader>
 
-      <div className="flex flex-1 overflow-hidden gap-5">
+      <div className="flex flex-col lg:flex-row gap-5 items-start">
         
-        {/* LEFT PANEL - FORMS — PlanDohod white card */}
-        <div className="w-1/3 min-w-[320px] max-w-[420px] bg-white rounded-2xl p-5 border border-slate-200/60 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col gap-4">
+        {/* LEFT PANEL - FORMS */}
+        <div className="w-full lg:w-1/3 lg:min-w-[320px] lg:max-w-[420px] flex flex-col gap-4">
           
           {/* Header row */}
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+          <div className="flex items-center justify-between gap-2 pb-3 border-b border-[#E5E7EB] flex-wrap">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-[#121316]">
               {activeTab === 'step1' ? (
-                <><FileText className="w-4 h-4 text-slate-400" /> Поля декларации</>
+                <><FileText className="w-4 h-4 text-[#6B7280]" aria-hidden="true" /> Поля декларации</>
               ) : (
-                <><FileSignature className="w-4 h-4 text-slate-400" /> Параметры письма</>
+                <><FileSignature className="w-4 h-4 text-[#6B7280]" aria-hidden="true" /> Параметры письма</>
               )}
             </h3>
             <div className="flex gap-2">
               <button 
                 onClick={saveTemplate} 
                 title="Сохранить шаблон" 
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700 flex items-center gap-1.5 text-[11px] font-semibold transition cursor-pointer"
+                className={UI.buttonGhost}
               >
-                <Save size={14} /> Сохр.
+                <Save size={14} aria-hidden="true" /> Сохр.
               </button>
               <button 
                 onClick={handlePrint} 
                 title="Печать" 
-                className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 rounded-lg text-white flex items-center gap-1.5 text-[11px] font-semibold transition cursor-pointer"
+                className={UI.buttonPrimary}
               >
-                <Printer size={14} /> Печать
+                <Printer size={14} aria-hidden="true" /> Печать
               </button>
             </div>
           </div>
 
           {activeTab === 'step1' ? (
-            <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-1">
-              {/* Add checkmark button — PlanDohod style */}
-              <div className="pb-3 border-b border-slate-100">
+            <div className="flex flex-col gap-4 max-h-[720px] overflow-y-auto custom-scrollbar pr-1">
+              {/* Add checkmark button */}
+              <div className="pb-3 border-b border-[#E5E7EB]">
                 <button 
                   onClick={addCheckmark}
-                  className="w-full flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 py-2 rounded-xl font-semibold text-xs transition cursor-pointer"
+                  className={`${UI.buttonGhost} w-full`}
                 >
-                  <Plus size={15} /> Добавить галочку
+                  <Plus size={15} aria-hidden="true" /> Добавить галочку
                 </button>
-                <p className="text-[10px] text-slate-400 text-center mt-1.5 font-medium">
+                <p className="text-[11px] text-[#6B7280] text-center mt-2 font-medium">
                   Галочка появится на документе. Перетащите её в нужный чекбокс.
                 </p>
               </div>
@@ -582,7 +571,7 @@ export default function LossDeclarationEditor({ signeeName }: LossDeclarationEdi
 
                 return (
                   <div key={key} className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
+                    <label className={UI.fieldLabel}>
                       {fieldLabels[key]}
                     </label>
                     
@@ -595,17 +584,17 @@ export default function LossDeclarationEditor({ signeeName }: LossDeclarationEdi
                             handleInputChange(key as string, e.target.value);
                             setPlaceSearchQuery(e.target.value);
                           }}
-                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                          className={UI.input}
                         />
                         {/* Suggestions dropdown */}
                         {placeSearchQuery && (
-                          <div className="max-h-32 overflow-y-auto bg-white border border-slate-200/60 rounded-xl p-1.5 text-xs shadow-xs">
+                          <div className="max-h-32 overflow-y-auto bg-white border border-[#E5E7EB] rounded-xl p-1.5 text-xs shadow-xs custom-scrollbar">
                             {savedPlaces
                               .filter(p => p.toLowerCase().includes(placeSearchQuery.toLowerCase()))
                               .map((p, i) => (
                                 <div 
                                   key={i} 
-                                  className="cursor-pointer p-2 hover:bg-slate-50 rounded-lg font-semibold"
+                                  className="cursor-pointer p-2 hover:bg-[#F3F4F6] rounded-lg font-medium text-[#4B5563]"
                                   onClick={() => {
                                     handleInputChange(key, p);
                                     setPlaceSearchQuery('');
@@ -618,7 +607,7 @@ export default function LossDeclarationEditor({ signeeName }: LossDeclarationEdi
                         )}
                         <button 
                           onClick={() => handleSaveNewPlace(formValues[key])}
-                          className="text-[10px] bg-slate-100 hover:bg-slate-200 py-1.5 rounded-lg text-slate-700 font-semibold cursor-pointer"
+                          className={`${UI.buttonGhost} w-full`}
                         >
                           Сохранить это место
                         </button>
@@ -628,7 +617,7 @@ export default function LossDeclarationEditor({ signeeName }: LossDeclarationEdi
                         type="text"
                         value={formValues[key]}
                         onChange={(e) => handleInputChange(key as string, e.target.value)}
-                        className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                        className={UI.input}
                       />
                     )}
                   </div>
@@ -636,46 +625,46 @@ export default function LossDeclarationEditor({ signeeName }: LossDeclarationEdi
               })}
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-1">
+            <div className="flex flex-col gap-4 max-h-[720px] overflow-y-auto custom-scrollbar pr-1">
               {/* Info notice */}
-              <div className="bg-blue-50/80 border border-blue-150/40 p-3 rounded-xl text-[11px] text-blue-800 leading-relaxed font-medium">
-                <strong>Режим сопроводительного письма</strong><br />
+              <div className="bg-[#F3F4F6] border border-[#E5E7EB] p-3 rounded-xl text-[11px] text-[#4B5563] leading-relaxed font-medium">
+                <strong className="text-[#121316]">Режим сопроводительного письма</strong><br />
                 В соответствии с требованиями, изменять можно только <strong>номер книжки МДП</strong>, <strong>дату</strong> и <strong>номер исходящего</strong>. Остальные данные остаются неизменными и соответствуют официальному бланку 1 в 1.
               </div>
 
               {/* Исходящий номер и дата */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">Исходящий №</label>
+                  <label className={UI.fieldLabel}>Исходящий №</label>
                   <input
                     type="text"
                     value={letterValues.docNum}
                     onChange={(e) => setLetterValues(prev => ({ ...prev, docNum: e.target.value }))}
-                    className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                    className={UI.input}
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">Дата исх.</label>
+                  <label className={UI.fieldLabel}>Дата исх.</label>
                   <input
                     type="text"
                     value={letterValues.docDate}
                     onChange={(e) => setLetterValues(prev => ({ ...prev, docDate: e.target.value }))}
-                    className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                    className={UI.input}
                   />
                 </div>
               </div>
 
               {/* Номер книжки МДП */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">Номер книжки (книжек) МДП</label>
+                <label className={UI.fieldLabel}>Номер книжки (книжек) МДП</label>
                 <input
                   type="text"
                   value={formValues.carnet}
                   onChange={(e) => handleInputChange('carnet', e.target.value)}
-                  className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                  className={UI.input}
                   placeholder="Например, SX87832639"
                 />
-                <p className="text-[10px] text-slate-400 leading-normal mt-1 font-medium">
+                <p className="text-[11px] text-[#6B7280] leading-normal mt-1">
                   Синхронизировано с Этапом 1. Если ввести несколько номеров через запятую или пробел, письмо автоматически переключится в режим множественного числа (&laquo;книжки МДП... были изъяты...&raquo;).
                 </p>
               </div>
@@ -683,16 +672,16 @@ export default function LossDeclarationEditor({ signeeName }: LossDeclarationEdi
           )}
         </div>
 
-        {/* RIGHT PANEL - CANVAS — PlanDohod white card */}
+        {/* RIGHT PANEL - CANVAS */}
         <div 
-          className="flex-1 bg-white rounded-2xl p-5 border border-slate-200/60 shadow-[0_4px_20px_rgba(0,0,0,0.01)] overflow-auto flex items-start justify-center max-h-[850px]"
+          className="flex-1 w-full min-w-0 overflow-auto custom-scrollbar flex items-start justify-center max-h-[850px]"
           onClick={() => setSelectedItemId(null)}
         >
           {activeTab === 'step1' ? (
             /* A4 Proportion Container - Declaration */
             <div 
               id="loss-canvas-container"
-              className="relative bg-white shadow-xl flex-shrink-0"
+              className="relative bg-white border border-[#E5E7EB] shadow-[0_10px_30px_rgba(0,0,0,0.08)] flex-shrink-0"
               style={{ width: '794px', height: '1123px', margin: '0 auto' }} // A4 standard at 96 DPI
             >
               {/* Background template with 100% opacity in preview */}
@@ -705,7 +694,7 @@ export default function LossDeclarationEditor({ signeeName }: LossDeclarationEdi
               />
 
               {/* Draggable Fields Overlay */}
-              <div className="absolute inset-0 z-10 text-sm font-bold text-slate-900 pointer-events-none" style={{ fontFamily: 'Arial, sans-serif' }}>
+              <div className="absolute inset-0 z-10 text-sm font-bold text-[#121316] pointer-events-none" style={{ fontFamily: 'Arial, sans-serif' }}>
                 <div className="pointer-events-none absolute inset-0 w-full h-full">
                   {Object.keys(fieldsLayout).map(key => {
                     const val = formValues[key as keyof typeof formValues];
@@ -721,7 +710,7 @@ export default function LossDeclarationEditor({ signeeName }: LossDeclarationEdi
                         isSelected={selectedItemId === key}
                         onClick={setSelectedItemId}
                       >
-                        <div className="whitespace-pre-wrap max-w-[400px] leading-tight text-sm font-bold text-slate-900" style={{ fontFamily: 'Arial, sans-serif' }}>
+                        <div className="whitespace-pre-wrap max-w-[400px] leading-tight text-sm font-bold text-[#121316]" style={{ fontFamily: 'Arial, sans-serif' }}>
                           {val}
                         </div>
                       </DraggableItem>
@@ -751,7 +740,7 @@ export default function LossDeclarationEditor({ signeeName }: LossDeclarationEdi
             /* A4 Proportion Container - Letter */
             <div 
               id="letter-canvas-container"
-              className="relative bg-white shadow-xl flex-shrink-0 p-[20mm] flex flex-col text-black text-justify"
+              className="relative bg-white border border-[#E5E7EB] shadow-[0_10px_30px_rgba(0,0,0,0.08)] flex-shrink-0 p-[20mm] flex flex-col text-black text-justify"
               style={{ width: '794px', height: '1123px', margin: '0 auto', boxSizing: 'border-box', fontFamily: "'Times New Roman', Times, serif" }}
             >
               {/* Header Section */}

@@ -1,13 +1,22 @@
 // Чистые форматтеры, вынесенные из гигантских модулей (PlanDohodModule / DohodModule)
 // для уменьшения их размера и переиспользования. Без зависимостей от state/hooks.
 
-/** Приводит строку к "Title Case" с исключениями для служебных фраз. */
+/**
+ * Приводит строку к "Title Case" с исключениями для служебных фраз.
+ *
+ * Каждое слово начинается с заглавной буквы, остальные буквы НЕ переводятся
+ * в нижний регистр: иначе фамилия теряла заглавную букву и «Виталий Козловский»
+ * отображался как «Виталий козловский». Регистр внутри слова сохраняем —
+ * в именах и названиях он бывает значимым.
+ */
 export function formatToTitleCase(str: string): string {
   if (!str) return "";
   const trimmed = str.trim();
   if (trimmed.toUpperCase() === "ВСЕ ДИСПЕТЧЕРЫ") return "Все диспетчеры";
   if (trimmed.toUpperCase() === "ВСЕ НАПРАВЛЕНИЯ") return "Все направления";
-  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+  return trimmed
+    .toLowerCase()
+    .replace(/(^|[\s\-–—/(«"'])([а-яёa-z])/gi, (_m, sep: string, ch: string) => sep + ch.toUpperCase());
 }
 
 /** Нормализует латинскую раскладку в кириллическую (для ввода городов/дорог).

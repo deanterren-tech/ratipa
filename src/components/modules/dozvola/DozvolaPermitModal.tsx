@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react'
+import { useModalKeyboard } from '../../../hooks/useModalKeyboard';
 import { createPortal } from 'react-dom'
+import { X, FilePlus2, History } from 'lucide-react'
 import { useToast } from '../../ToastProvider'
 import CouplingPicker from '../../common/CouplingPicker'
 
@@ -118,38 +120,52 @@ export default function DozvolaPermitModal({
     onClose();
   };
 
+  const modalFormRef = React.useRef<HTMLFormElement>(null);
+  useModalKeyboard({
+    isOpen,
+    onClose,
+    onConfirm: () => modalFormRef.current?.requestSubmit(),
+    canConfirm: true,
+  });
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[5000] bg-slate-950/10 backdrop-blur-sm flex justify-center items-start overflow-y-auto">
-      <div className="bg-white rounded-2xl max-w-2xl w-full shadow-sm border border-slate-200/50 my-4 max-h-[90vh] overflow-y-auto">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between select-none">
-          <div>
-            <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest block">
-              {editingItem ? "Edit Permit" : "Permit Form"}
-            </span>
-            <h2 className="text-sm font-bold text-slate-850">
-              {editingItem
-                ? "Редактирование бланка"
-                : "Ручной ввод бланка"}
-            </h2>
+    <div data-scroll-lock="modal" className="fixed inset-0 z-[5000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6">
+      <div className="relative z-10 w-full max-w-2xl bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] flex flex-col max-h-[90vh] overflow-hidden" role="dialog" aria-modal="true">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-[#F3F4F6] text-[var(--accent-ink)] rounded-lg shrink-0">
+              <FilePlus2 className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-[#121316]">
+                {editingItem ? "Редактирование бланка" : "Регистрация бланка"}
+              </h3>
+              <p className="text-xs text-[#6B7280] mt-0.5">
+                {editingItem
+                  ? <>Бланк <span className="font-mono text-[#121316]">{editingItem.number || editingItem.permitNumber || '—'}</span></>
+                  : 'Ручной ввод бланка в реестр'}
+              </p>
+            </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer"
+            className="p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form ref={modalFormRef} onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-6 py-5 space-y-4">
           <div>
-            <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+            <label className="text-[11px] font-medium text-[#6B7280] block">
               Вид дозвола
             </label>
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
-              className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition"
+              className="block w-full mt-1.5 px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-xs text-[#121316] focus:outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition"
             >
               {customTypesOrder.map((id) => {
                 const t = customTypes[id];
@@ -164,7 +180,7 @@ export default function DozvolaPermitModal({
           </div>
 
           <div>
-            <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+            <label className="text-[11px] font-medium text-[#6B7280] block">
               Номер бланка
             </label>
             <input
@@ -173,24 +189,24 @@ export default function DozvolaPermitModal({
               placeholder="TR A 55432"
               value={permitNumber}
               onChange={(e) => setPermitNumber(e.target.value)}
-              className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-450 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition"
+              className="block w-full mt-1.5 px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-xs font-semibold text-[#121316] placeholder:text-[#9CA3AF] focus:outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition"
             />
           </div>
 
           <div>
-            <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+            <label className="text-[11px] font-medium text-[#6B7280] block">
               Сопутствующий комментарий
             </label>
             <textarea
               placeholder="Добавьте примечание к бланку..."
               value={comments}
               onChange={(e) => setComments(e.target.value)}
-              className="block w-full mt-1.5 px-3.5 py-2.5 bg-slate-50/50 border border-slate-200/60 rounded-xl text-xs font-semibold h-16 resize-none focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition"
+              className="block w-full mt-1.5 px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-xs font-semibold h-16 resize-none focus:outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition"
             />
           </div>
 
           <div>
-            <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+            <label className="text-[11px] font-medium text-[#6B7280] block">
               Автомобиль / Локация
             </label>
             <CouplingPicker
@@ -227,10 +243,10 @@ export default function DozvolaPermitModal({
 
           {editingItem && editDriverName && (
             <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+              <label className="text-[11px] font-medium text-[#6B7280] block">
                 Водитель (авто-заполнение)
               </label>
-              <div className="mt-1.5 px-3.5 py-2.5 bg-slate-100/50 border border-slate-200/40 rounded-xl text-xs font-semibold text-emerald-700 font-mono">
+              <div className="mt-1.5 px-3.5 py-2.5 bg-[#F3F4F6]/50 border border-[#E5E7EB] rounded-xl text-xs font-semibold text-emerald-700 font-mono">
                 {editDriverName}
               </div>
             </div>
@@ -239,7 +255,7 @@ export default function DozvolaPermitModal({
           {editingItem && (
             <>
               <div>
-                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+                <label className="text-[11px] font-medium text-[#6B7280] block">
                   Статус бланка
                 </label>
                 <select
@@ -251,7 +267,7 @@ export default function DozvolaPermitModal({
                       setEditCar('Минск офис');
                     }
                   }}
-                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition"
+                  className="block w-full mt-1.5 px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-xs text-[#121316] focus:outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition"
                 >
                   <option value="office">В офисе</option>
                   <option value="hand">В рейсе</option>
@@ -263,33 +279,33 @@ export default function DozvolaPermitModal({
               </div>
 
               <div>
-                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+                <label className="text-[11px] font-medium text-[#6B7280] block">
                   Дата выдачи
                 </label>
                 <input
                   type="date"
                   value={editIssueDate}
                   onChange={(e) => setEditIssueDate(e.target.value)}
-                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition"
+                  className="block w-full mt-1.5 px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-xs text-[#121316] focus:outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+                <label className="text-[11px] font-medium text-[#6B7280] block">
                   Срок действия
                 </label>
                 <input
                   type="date"
                   value={editExpiryDate}
                   onChange={(e) => setEditExpiryDate(e.target.value)}
-                  className="block w-full mt-1.5 px-3.5 py-2.5 bg-white/45 border border-slate-200/60 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 transition"
+                  className="block w-full mt-1.5 px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-xs text-[#121316] focus:outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition"
                 />
               </div>
 
               {(type === "CHN 2" || type === "CHN 3") && (
-                <div className="bg-purple-50/20 border border-purple-100/40 p-4 rounded-2xl space-y-3">
+                <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-semibold text-purple-950 uppercase tracking-wider">
+                    <span className="text-[11px] font-medium text-[#6B7280]">
                       Сдана копия (CHN 2/3)?
                     </span>
                     <input
@@ -303,13 +319,13 @@ export default function DozvolaPermitModal({
                           );
                         }
                       }}
-                      className="w-4 h-4 rounded text-purple-600 border-slate-300 focus:ring-purple-500 cursor-pointer"
+                      className="w-4 h-4 rounded text-[#4B5563] border-[#E5E7EB] focus:ring-[var(--accent-ui)] cursor-pointer"
                     />
                   </div>
 
                   {editIsCopy && (
                     <div>
-                      <label className="text-[10px] font-semibold text-purple-700 uppercase tracking-wider block">
+                      <label className="text-[11px] font-medium text-[#6B7280] block">
                         Дата сдачи копии
                       </label>
                       <input
@@ -318,7 +334,7 @@ export default function DozvolaPermitModal({
                         onChange={(e) =>
                           setEditCopySubmittedAt(e.target.value)
                         }
-                        className="block w-full mt-1.5 px-3 py-2 bg-white border border-purple-100 rounded-xl text-xs font-semibold text-purple-950 focus:outline-none focus:border-purple-400 transition"
+                        className="block w-full mt-1.5 px-3 py-2 bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold text-[#4B5563] focus:outline-none focus:border-[#E5E7EB] transition"
                       />
                     </div>
                   )}
@@ -327,9 +343,9 @@ export default function DozvolaPermitModal({
 
               
               {/* HISTORY TIMELINE */}
-              <div className="border-t border-slate-100 pt-3 mt-3">
-                <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-2">
-                  📜 История дозвола
+              <div className="border-t border-[#E5E7EB] pt-3 mt-3">
+                <h3 className="flex items-center gap-1.5 text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none mb-2">
+                  <History className="w-3.5 h-3.5" />История дозвола
                 </h3>
                 <div className="max-h-48 overflow-y-auto space-y-1.5">
                   {(() => {
@@ -345,25 +361,25 @@ export default function DozvolaPermitModal({
                       })
                       .slice(0, 20);
                     if (entries.length === 0) {
-                      return <p className="text-[11px] text-slate-400 italic">Нет записей истории для этого бланка</p>;
+                      return <p className="text-[11px] text-[#9CA3AF] italic">Нет записей истории для этого бланка</p>;
                     }
                     return entries.map(([key, entry]: [string, any]) => (
                       <div key={key} className="flex items-start gap-2 text-[11px]">
-                        <div className="w-1.5 h-1.5 rounded-full bg-slate-300 mt-1.5 shrink-0" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-[#D1D5DB] mt-1.5 shrink-0" />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-slate-500 font-mono font-semibold whitespace-nowrap">
+                            <span className="text-[#6B7280] font-mono font-semibold whitespace-nowrap">
                               {entry.time || entry.date || '—'}
                             </span>
-                            <span className="text-slate-400 font-medium">
+                            <span className="text-[#9CA3AF] font-medium">
                               {entry.logist || entry.user || '—'}
                             </span>
                           </div>
-                          <div className="text-slate-700 font-semibold">
+                          <div className="text-[#374151] font-semibold">
                             {entry.action || '—'}
                           </div>
                           {entry.meta && (
-                            <div className="text-slate-400 italic truncate">
+                            <div className="text-[#9CA3AF] italic truncate">
                               {entry.meta}
                             </div>
                           )}
@@ -376,21 +392,22 @@ export default function DozvolaPermitModal({
             </>
           )}
 
-          <div className="pt-3 border-t border-slate-100 flex justify-end gap-2.5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 min-h-[44px] py-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-semibold text-slate-600 bg-white transition cursor-pointer"
-            >
-              Отмена
-            </button>
-            <button
-              type="submit"
-              className="px-5 min-h-[44px] py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl text-xs transition shadow-sm cursor-pointer"
-            >
-              Сохранить
-            </button>
-          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-[#E5E7EB] flex justify-end gap-2.5 shrink-0 bg-white">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 border border-[#E5E7EB] hover:bg-[#F3F4F6] rounded-lg text-xs font-medium text-[#4B5563] bg-white transition-colors cursor-pointer"
+          >
+            Отмена
+          </button>
+          <button
+            type="submit"
+            className="px-5 py-2 bg-[var(--accent-solid)] hover:bg-[var(--accent-hover)] text-[var(--accent-on)] font-medium rounded-lg text-xs transition-colors cursor-pointer"
+          >
+            {editingItem ? 'Сохранить изменения' : 'Зарегистрировать'}
+          </button>
+        </div>
         </form>
       </div>
     </div>,

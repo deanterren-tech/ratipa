@@ -21,8 +21,6 @@ export default function TabelModule({ user, settings }: TabelModuleProps) {
       title="Табель"
       subtitle="Учёт рабочего времени"
       icon={ClipboardList}
-      iconWrapClass="bg-emerald-500/10 border-emerald-500/20"
-      iconColorClass="text-emerald-600"
       tabs={tabs}
       gpsUrls={{
         beltranssputnik: settings?.gpsBeltranssputnikUrl || "",

@@ -2,11 +2,13 @@ import {useState, useEffect, useMemo} from 'react'
 import {createPortal} from 'react-dom'
 import {useDialog} from '../../DialogProvider'
 import {useToast} from '../../ToastProvider'
-import {dbService, directoryService} from '../../../api'
+import {dbService} from '../../../api'
 import {getDriversFlat, getDispatchersFlat, getCouplingsFlat} from '../../../services/fleetService'
-import {Users, Plus, Trash2, Pencil, Search, Check, Layers, Tag, User, X, Phone, FileText} from 'lucide-react'
+import {Users, Plus, Trash2, Pencil, Check, Layers, User} from 'lucide-react'
 import {UserProfile, Driver} from '../../../types'
 import DriverCard from '../DriverCard'
+import {UI} from '../../../ui/kit'
+import {SectionHeader, SearchField, EmptyState, ModalShell} from '../../../ui/components'
 
 interface Props {
   user: UserProfile;
@@ -26,11 +28,6 @@ interface DriverRow {
   rateGroupId?: string;
   coupling?: string;
 }
-
-const DISP_COLORS: Record<string, string> = {
-  виталий: '#3765F6', матвей: '#8b5cf6', сергей: '#f59e0b', юрий: '#10b981',
-};
-const dispColor = (key?: string) => DISP_COLORS[(key || '').toLowerCase()] || '#64748b';
 
 export default function DriverDirectoryBlock({ user, isWritePermitted = true }: Props) {
   const { showConfirm } = useDialog();
@@ -149,7 +146,17 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
   const applyBulk = async () => {
     if (!bulkField || !bulkValue) return;
     const ids = Array.from(selected);
-    await dbService.bulkUpdateDrivers(ids, { [bulkField]: bulkValue });
+    const patch: Record<string, any> = { [bulkField]: bulkValue };
+    if (bulkField === 'dispatcher') {
+      // В записи храним имя для показа и идентификатор учётной записи для связи
+      // (в значении селекта приходит идентификатор, а не имя).
+      const entry = dispatchers.find((d) => (d.id || d.key) === bulkValue);
+      const name = entry?.name || bulkValue;
+      patch.dispatcher = name;
+      patch.dispatcherName = name;
+      patch.dispatcherId = entry ? (entry.id || entry.key) : null;
+    }
+    await dbService.bulkUpdateDrivers(ids, patch);
     toast(`Обновлено ${ids.length} водителей`, 'success');
     setBulkOpen(false); setBulkField(null); setBulkValue(''); setSelected(new Set());
   };
@@ -161,199 +168,213 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
   };
 
   return (
-    <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between pb-5 border-b border-slate-200/60">
-        <div>
-          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">
-            База водителей
-          </span>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <Users className="w-7 h-7 text-slate-800" /> База водителей (ФИО, телефон, паспорт)
-          </h1>
-          <p className="text-[11px] text-slate-400 font-medium mt-1">
-            Единый реестр водителей: ФИО, контакты, паспортные данные и привязка к диспетчеру.
-          </p>
-          <div className="flex flex-wrap gap-2 mt-3">
-            <div className="flex items-center gap-2 bg-slate-900 text-white rounded-xl px-3 py-1.5">
-              <Users className="w-3.5 h-3.5 text-slate-300" />
-              <span className="text-[10px] font-semibold text-slate-300">Всего</span>
-              <span className="text-sm font-bold font-mono">{drivers.length}</span>
-            </div>
-            <div className="flex items-center gap-2 bg-[#3765F6] text-white rounded-xl px-3 py-1.5">
-              <span className="text-[10px] font-semibold">С диспетчером</span>
-              <span className="text-sm font-bold font-mono">{drivers.filter(d => d.dispatcher).length}</span>
-            </div>
-            <div className="flex items-center gap-2 bg-amber-500 text-white rounded-xl px-3 py-1.5">
-              <span className="text-[10px] font-semibold">Без диспетчера</span>
-              <span className="text-sm font-bold font-mono">{drivers.filter(d => !d.dispatcher).length}</span>
-            </div>
-          </div>
-        </div>
+    <div className="flex flex-col gap-4 min-w-0">
+      <SectionHeader
+        icon={<Users className="w-4 h-4" />}
+        tone="graphite"
+        title="База водителей (ФИО, телефон, паспорт)"
+        subtitle="Единый реестр водителей: ФИО, контакты, паспортные данные и привязка к диспетчеру."
+      >
         {isWritePermitted && (
-          <button onClick={openAdd}
-            className="mt-3 md:mt-0 inline-flex items-center gap-2 bg-[#3765F6] text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-[#2a4fd0] shadow-sm active:scale-95">
-            <Plus className="w-4 h-4" /> Добавить водителя
+          <button type="button" onClick={openAdd} className={UI.buttonPrimary}>
+            <Plus className="w-4 h-4" aria-hidden="true" /> Добавить водителя
           </button>
         )}
+      </SectionHeader>
+
+      {/* Counters */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <StatRow color="graphite" label="Всего" value={drivers.length} />
+        <StatRow color="emerald" label="С диспетчером" value={drivers.filter(d => d.dispatcher).length} />
+        <StatRow color="amber" label="Без диспетчера" value={drivers.filter(d => !d.dispatcher).length} />
       </div>
 
       {/* SEARCH + multi-select */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Поиск по ФИО / телефону / паспорту..."
-            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-slate-300 font-mono" />
-        </div>
+        <SearchField
+          value={search}
+          onChange={setSearch}
+          placeholder="Поиск по ФИО / телефону / паспорту…"
+          ariaLabel="Поиск по водителям"
+          className="max-w-md"
+        />
         {isWritePermitted && (
-          <button onClick={toggleAll}
-            className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition ${allVisibleSelected ? 'bg-[#3765F6] text-white border-[#3765F6]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>
-            <Check className="w-4 h-4" /> Выбрать все (видимые)
+          <button
+            type="button"
+            onClick={toggleAll}
+            className={`${allVisibleSelected ? UI.buttonDark : UI.buttonGhost}`}
+          >
+            <Check className="w-4 h-4" aria-hidden="true" /> Выбрать все (видимые)
           </button>
         )}
         {selected.size > 0 && (
-          <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-[#3765F6]/10 text-[#3765F6] text-xs font-bold">
-            <Layers className="w-4 h-4" /> Выбрано: {selected.size}
-          </div>
+          <span className="inline-flex items-center gap-2 text-xs font-medium text-[#4B5563] px-2.5 py-1 rounded-lg bg-[#F3F4F6] border border-[#E5E7EB]">
+            <Layers className="w-3.5 h-3.5 text-[#9CA3AF]" aria-hidden="true" /> Выбрано: {selected.size}
+          </span>
         )}
       </div>
 
       {/* BULK ACTION PANEL */}
       {isWritePermitted && selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl bg-[#3765F6]/5 border border-[#3765F6]/20">
-          <span className="text-xs font-bold text-slate-700">Массово для {selected.size}:</span>
-          <button onClick={() => { setBulkField('dispatcher'); setBulkValue(''); setBulkOpen(true); }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50">
-            <User className="w-3.5 h-3.5" /> Назначить диспетчера
+        <div className="flex flex-wrap items-center gap-2 p-3 bg-white border border-[#E5E7EB] rounded-xl">
+          <span className="text-xs font-semibold text-[#121316]">Массово для {selected.size}:</span>
+          <button
+            type="button"
+            onClick={() => { setBulkField('dispatcher'); setBulkValue(''); setBulkOpen(true); }}
+            className={UI.buttonGhost}
+          >
+            <User className="w-3.5 h-3.5" aria-hidden="true" /> Назначить диспетчера
           </button>
-          <button onClick={async () => {
-            if (await showConfirm(`Удалить ${selected.size} водителей?`)) {
-              for (const id of Array.from(selected)) dbService.deleteDriver(id, user.name, user.role);
-              toast(`Удалено ${selected.size} водителей`, 'success');
-              setSelected(new Set());
-            }
-          }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-600 hover:bg-rose-100">
-            <Trash2 className="w-3.5 h-3.5" /> Удалить
+          <button
+            type="button"
+            onClick={async () => {
+              if (await showConfirm(`Удалить ${selected.size} водителей?`)) {
+                for (const id of Array.from(selected)) dbService.deleteDriver(id, user.name, user.role);
+                toast(`Удалено ${selected.size} водителей`, 'success');
+                setSelected(new Set());
+              }
+            }}
+            className={UI.buttonDanger}
+          >
+            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Удалить
           </button>
-          <button onClick={() => setSelected(new Set())}
-            className="ml-auto px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-400 hover:bg-slate-100">Сбросить</button>
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            className="ml-auto px-3 py-1.5 min-h-[44px] rounded-xl text-xs font-medium text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+          >
+            Сбросить
+          </button>
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200/60 bg-white/40">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-slate-50/95">
-            <tr className="text-[9px] font-black uppercase text-slate-500 font-mono border-b border-slate-200/80">
-              {isWritePermitted && <th className="px-2 py-3 w-[36px]"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} className="accent-slate-900" /></th>}
-              <th className="px-4 py-3 whitespace-nowrap">Водитель</th>
-              <th className="px-4 py-3 whitespace-nowrap">Телефон</th>
-              <th className="px-4 py-3 whitespace-nowrap">Паспорт</th>
-              <th className="px-4 py-3 whitespace-nowrap">Личный №</th>
-              <th className="px-4 py-3 whitespace-nowrap">Машина</th>
-              {isWritePermitted && <th className="px-4 py-3 text-right w-[80px]"></th>}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100/80 text-xs text-slate-700 font-mono">
-            {filtered.map((d, i) => {
-              const isSel = selected.has(d.id);
-              return (
-                <tr key={d.id} onClick={() => setViewCard({ type: 'driver', driverId: d.id, driverName: d.name })}
-                  className={`hover:bg-slate-50/60 cursor-pointer transition ${isSel ? 'bg-[#3765F6]/10' : ''} ${focusIdx === i ? 'ring-2 ring-[#3765F6]/40 ring-inset' : ''}`} onMouseEnter={() => setFocusIdx(i)}>
-                  {isWritePermitted && (
-                    <td className="px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" checked={isSel} onChange={() => toggle(d.id)} className="accent-slate-900" />
+      {filtered.length === 0 ? (
+        <EmptyState
+          kind={search.trim() ? 'no-results' : 'empty'}
+          query={search}
+          title={search.trim() ? undefined : 'Водителей пока нет'}
+          hint={search.trim() ? undefined : 'Добавьте первого водителя — он появится в этом реестре.'}
+          actionLabel={search.trim() || !isWritePermitted ? undefined : 'Добавить водителя'}
+          onAction={search.trim() || !isWritePermitted ? undefined : openAdd}
+        />
+      ) : (
+        <div className={UI.tableWrap}>
+          <table className={UI.table}>
+            <thead>
+              <tr className={UI.theadRow}>
+                {isWritePermitted && (
+                  <th className={UI.th + ' w-[36px]'}>
+                    <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} aria-label="Выбрать всех видимых" className={UI.checkbox} />
+                  </th>
+                )}
+                <th className={UI.th}>Водитель</th>
+                <th className={UI.th}>Телефон</th>
+                <th className={UI.th}>Паспорт</th>
+                <th className={UI.th}>Личный №</th>
+                <th className={UI.th}>Машина</th>
+                {isWritePermitted && <th className={UI.th + ' text-right w-[80px]'}></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((d, i) => {
+                const isSel = selected.has(d.id);
+                return (
+                  <tr
+                    key={d.id}
+                    onClick={() => setViewCard({ type: 'driver', driverId: d.id, driverName: d.name })}
+                    className={`${UI.tr} cursor-pointer ${isSel ? 'bg-[var(--accent-10)]' : ''} ${focusIdx === i ? 'ring-2 ring-[var(--accent-50)] ring-inset' : ''}`}
+                    onMouseEnter={() => setFocusIdx(i)}
+                  >
+                    {isWritePermitted && (
+                      <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={isSel} onChange={() => toggle(d.id)} aria-label={`Выбрать ${d.name}`} className={UI.checkbox} />
+                      </td>
+                    )}
+                    <td className={UI.tdStrong}>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setViewCard({ type: 'driver', driverId: d.id, driverName: d.name }); }}
+                        className="inline-flex items-center gap-2 text-left hover:underline cursor-pointer max-w-[240px]"
+                      >
+                        <span className="w-5 h-5 rounded-full bg-[var(--accent-10)] text-[#A55329] flex items-center justify-center text-[10px] font-semibold shrink-0">
+                          {initials(d.name)}
+                        </span>
+                        <span className="truncate">{d.name || '—'}</span>
+                      </button>
                     </td>
-                  )}
-                  <td className="px-4 py-2.5">
-                    <button onClick={(e) => { e.stopPropagation(); setViewCard({ type: 'driver', driverId: d.id, driverName: d.name }); }}
-                      className="inline-flex items-center gap-1.5 text-left hover:underline font-medium text-slate-700">
-                      <span className="w-5 h-5 rounded-full bg-[#3765F6]/15 text-[#3765F6] flex items-center justify-center text-[9px] font-semibold">
-                        {initials(d.name)}
-                      </span>
-                      {d.name || '—'}
-                    </button>
-                  </td>
-                  <td className="px-4 py-2.5 text-slate-500">{d.phone || '—'}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{d.passport || '—'}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{d.personalId || '—'}</td>
-                  <td className="px-4 py-2.5 text-slate-500">{couplingOf(d.id)}</td>
-                  {isWritePermitted && (
-                    <td className="px-4 py-2.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button onClick={(e) => { e.stopPropagation(); openEdit(d); }} className="p-1.5 rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-600">
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDelete(d); }} className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-500">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-            {filtered.length === 0 && (
-              <tr><td colSpan={isWritePermitted ? 8 : 7} className="px-4 py-8 text-center text-xs text-slate-400">Пусто</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                    <td className={`${UI.td} font-mono whitespace-nowrap`}>{d.phone || '—'}</td>
+                    <td className={`${UI.td} font-mono whitespace-nowrap`}>{d.passport || '—'}</td>
+                    <td className={`${UI.td} font-mono whitespace-nowrap`}>{d.personalId || '—'}</td>
+                    <td className={`${UI.td} font-mono whitespace-nowrap`}>{couplingOf(d.id)}</td>
+                    {isWritePermitted && (
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button type="button" onClick={(e) => { e.stopPropagation(); openEdit(d); }} aria-label="Изменить" title="Изменить" className={UI.buttonIcon}>
+                            <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(d); }} aria-label="Удалить" title="Удалить"
+                            className="inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer">
+                            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* MODAL add/edit */}
-      {modalOpen && createPortal(
- <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 p-4 overflow-y-auto" onClick={() => setModalOpen(false)}>
-          <div className="w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 my-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <User className="w-4 h-4 text-[#3765F6]" />
-                {editing ? 'Редактировать водителя' : 'Новый водитель'}
-              </h3>
-              <button onClick={() => setModalOpen(false)} className="min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-100 text-slate-400 flex items-center justify-center">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="ФИО *" value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="Иванов Иван Иванович" />
-                <Field label="Телефон" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+375 29 ..." />
-                <Field label="Паспорт" value={form.passport} onChange={(v) => setForm({ ...form, passport: v })} placeholder="AB 1234567" />
-                <Field label="Личный №" value={form.personalId} onChange={(v) => setForm({ ...form, personalId: v })} placeholder="ИНН / личный №" />
-                <Field label="Вод. удостоверение" value={form.license} onChange={(v) => setForm({ ...form, license: v })} placeholder="Номер ВУ" />
-                <Field label="Дата рождения" value={form.birthDate} onChange={(v) => setForm({ ...form, birthDate: v })} placeholder="01.01.1980" />
-                <SelectField label="Диспетчер" value={form.dispatcher} onChange={(v) => setForm({ ...form, dispatcher: v })}
-                  options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 mt-5">
-              <button onClick={() => setModalOpen(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl">Отмена</button>
-              <button onClick={handleSave} className="px-4 py-2 text-xs font-bold text-white bg-[#3765F6] hover:bg-[#2a4fd0] rounded-xl shadow-sm">Сохранить</button>
-            </div>
+      {createPortal(
+        <ModalShell
+          isOpen={modalOpen}
+          onClose={() => setModalOpen(false)}
+          title={editing ? 'Редактировать водителя' : 'Новый водитель'}
+          icon={<User className="w-4 h-4" aria-hidden="true" />}
+          ariaLabel={editing ? 'Редактировать водителя' : 'Новый водитель'}
+          footer={
+            <>
+              <button type="button" onClick={() => setModalOpen(false)} className={UI.buttonGhost}>Отмена</button>
+              <button type="button" onClick={handleSave} className={UI.buttonPrimary}>Сохранить</button>
+            </>
+          }
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="ФИО *" value={form.name} onChange={(v) => setForm({ ...form, name: v })} placeholder="Иванов Иван Иванович" />
+            <Field label="Телефон" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} placeholder="+375 29 …" />
+            <Field label="Паспорт" value={form.passport} onChange={(v) => setForm({ ...form, passport: v })} placeholder="AB 1234567" />
+            <Field label="Личный №" value={form.personalId} onChange={(v) => setForm({ ...form, personalId: v })} placeholder="ИНН / личный №" />
+            <Field label="Вод. удостоверение" value={form.license} onChange={(v) => setForm({ ...form, license: v })} placeholder="Номер ВУ" />
+            <Field label="Дата рождения" value={form.birthDate} onChange={(v) => setForm({ ...form, birthDate: v })} placeholder="01.01.1980" />
+            <SelectField label="Диспетчер" value={form.dispatcher} onChange={(v) => setForm({ ...form, dispatcher: v })}
+              options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
           </div>
-        </div>,
+        </ModalShell>,
         document.body
       )}
 
       {/* BULK modal */}
-      {bulkOpen && createPortal(
- <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-900/40 p-4 overflow-y-auto" onClick={() => setBulkOpen(false)}>
-          <div className="w-full max-w-sm bg-white rounded-3xl border border-slate-200 shadow-2xl p-6 my-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Layers className="w-4 h-4 text-[#3765F6]" />
-                Назначить диспетчера ({selected.size})
-              </h3>
-              <button onClick={() => setBulkOpen(false)} className="min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-100 text-slate-400 flex items-center justify-center"><X className="w-4 h-4" /></button>
-            </div>
-            <SelectField label="Диспетчер" value={bulkValue} onChange={setBulkValue}
-              options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
-            <div className="flex items-center justify-end gap-2 mt-5">
-              <button onClick={() => setBulkOpen(false)} className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 rounded-xl">Отмена</button>
-              <button onClick={applyBulk} disabled={!bulkValue}
-                className="px-4 py-2 text-xs font-bold text-white bg-[#3765F6] hover:bg-[#2a4fd0] rounded-xl shadow-sm disabled:opacity-40">Применить</button>
-            </div>
-          </div>
-        </div>,
+      {createPortal(
+        <ModalShell
+          isOpen={bulkOpen}
+          onClose={() => setBulkOpen(false)}
+          title={`Назначить диспетчера (${selected.size})`}
+          icon={<Layers className="w-4 h-4" aria-hidden="true" />}
+          ariaLabel="Назначить диспетчера"
+          maxWidth="max-w-sm"
+          footer={
+            <>
+              <button type="button" onClick={() => setBulkOpen(false)} className={UI.buttonGhost}>Отмена</button>
+              <button type="button" onClick={applyBulk} disabled={!bulkValue} className={UI.buttonPrimary}>Применить</button>
+            </>
+          }
+        >
+          <SelectField label="Диспетчер" value={bulkValue} onChange={setBulkValue}
+            options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
+        </ModalShell>,
         document.body
       )}
 
@@ -363,7 +384,7 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
           driverId={viewCard.driverId || ''}
           driverName={viewCard.driverName || ''}
           onClose={() => setViewCard(null)}
-          onOpenCoupling={(carNumber) => setViewCard(null)}
+          onOpenCoupling={() => setViewCard(null)}
         />,
         document.body
       )}
@@ -371,12 +392,23 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
   );
 }
 
+function StatRow({ color, label, value }: { color: 'graphite' | 'emerald' | 'amber'; label: string; value: number }) {
+  const dot = color === 'emerald' ? 'bg-emerald-500' : color === 'amber' ? 'bg-amber-500' : 'bg-[#121316]';
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} aria-hidden="true" />
+      <span className={UI.hint}>{label}</span>
+      <span className="text-xs font-semibold font-mono tabular-nums text-[#121316]">{value}</span>
+    </div>
+  );
+}
+
 function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
-    <div>
-      <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">{label}</label>
+    <div className="flex flex-col gap-2">
+      <label className={UI.fieldLabel}>{label}</label>
       <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono outline-none focus:border-slate-300" />
+        className={UI.input} />
     </div>
   );
 }
@@ -386,10 +418,9 @@ function SelectField({ label, value, onChange, options }: {
   options: { v: string; l: string }[];
 }) {
   return (
-    <div>
-      <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-slate-300">
+    <div className="flex flex-col gap-2">
+      <label className={UI.fieldLabel}>{label}</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={`${UI.select} w-full`}>
         <option value="">—</option>
         {options.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
       </select>

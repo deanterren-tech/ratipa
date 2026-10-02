@@ -2,8 +2,10 @@ import {useState, useEffect, useMemo, useRef} from 'react'
 import {useDialog} from '../../DialogProvider'
 import {useToast} from '../../ToastProvider'
 import {dbService} from '../../../api'
-import {Navigation, Trash2, Plus, Search, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Globe, AlertTriangle, Download, Upload, Check, X, MapPin} from 'lucide-react'
+import {Navigation, Trash2, Plus, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Globe, Download, Upload, Check, X, MapPin, MoveHorizontal} from 'lucide-react'
 import {UserProfile, DistancePreset} from '../../../types'
+import {UI} from '../../../ui/kit'
+import {SectionHeader, SearchField, FilterPills, EmptyState, ModalShell} from '../../../ui/components'
 
 interface Props { user: UserProfile }
 
@@ -61,13 +63,11 @@ const COUNTRY_NAMES: Record<string, string> = {
   IR: 'Иран', GE: 'Грузия', AM: 'Армения', AZ: 'Азербайджан',
 }
 
-const COUNTRY_FLAGS: Record<string, string> = {
-  BY: '🇧🇾', RUS: '🇷🇺', KZ: '🇰🇿',
-  UZ: '🇺🇿', TJ: '🇹🇯', KG: '🇰🇬',
-  MN: '🇲🇳', CN: '🇨🇳', TR: '🇹🇷',
-  IR: '🇮🇷', GE: '🇬🇪', AM: '🇦🇲',
-  AZ: '🇦🇿',
-}
+const COUNTRY_CODES = ['BY','RUS','KZ','UZ','TJ','KG','MN','CN','TR','IR','GE','AM','AZ'];
+
+/** Компактный селект страны в форме маршрута. */
+const COUNTRY_SELECT_CLS =
+  'w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1.5 text-[11px] text-[#4B5563] outline-none transition-colors cursor-pointer focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)]';
 
 const getCountry = (city: string): string => {
   var key = city.trim().toLowerCase().replace(/[^a-zа-яё-]/g, '');
@@ -171,10 +171,10 @@ export default function DistanceDirectoryBlock({ user }: Props) {
   };
 
   const SortIcon = ({ colKey }: { colKey: string }) => {
-    if (sortKey !== colKey) return <ArrowUpDown className="w-3.5 h-3.5 text-slate-300 ml-1 inline" />;
+    if (sortKey !== colKey) return <ArrowUpDown className="w-3.5 h-3.5 text-[#D1D5DB] ml-1 inline" aria-hidden="true" />;
     return sortDir === 'asc'
-      ? <ArrowUp className="w-3.5 h-3.5 text-slate-600 ml-1 inline" />
-      : <ArrowDown className="w-3.5 h-3.5 text-slate-600 ml-1 inline" />;
+      ? <ArrowUp className="w-3.5 h-3.5 text-[#4B5563] ml-1 inline" aria-hidden="true" />
+      : <ArrowDown className="w-3.5 h-3.5 text-[#4B5563] ml-1 inline" aria-hidden="true" />;
   };
 
   const openAdd = () => {
@@ -338,160 +338,166 @@ export default function DistanceDirectoryBlock({ user }: Props) {
     return 'text-rose-600';
   };
 
+  const countryBadge = (code: string) => (code && code !== '—' ? code : '');
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/50 overflow-hidden shadow-sm">
+    <div className="flex flex-col gap-4 min-w-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center">
-            <Navigation className="w-4 h-4 text-slate-600" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-slate-900">Стандартные расстояния</h3>
-            <p className="text-[10px] text-slate-400 font-medium mt-0.5">{items.length} маршрутов</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={handleExport} className="inline-flex items-center gap-1.5 bg-white text-slate-600 text-xs font-semibold px-3 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition shrink-0 cursor-pointer" title="Экспорт CSV">
-            <Download className="w-3.5 h-3.5" /> CSV
-          </button>
-          <button onClick={handleImport} className="inline-flex items-center gap-1.5 bg-white text-slate-600 text-xs font-semibold px-3 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition shrink-0 cursor-pointer" title="Импорт CSV">
-            <Upload className="w-3.5 h-3.5" /> CSV
-          </button>
-          <button onClick={() => setShowBulk(!showBulk)} className="inline-flex items-center gap-1.5 bg-white text-slate-600 text-xs font-semibold px-3 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition shrink-0 cursor-pointer">
-            <Plus className="w-3.5 h-3.5" /> Массовый
-          </button>
-          <button onClick={openAdd}
-            className="inline-flex items-center gap-1.5 bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 rounded-xl hover:bg-slate-800 shadow-sm transition shrink-0 cursor-pointer">
-            <Plus className="w-4 h-4" /> Добавить
-          </button>
-        </div>
-      </div>
+      <SectionHeader
+        icon={<Navigation className="w-4 h-4" />}
+        tone="graphite"
+        title="Стандартные расстояния"
+        subtitle={`${items.length} маршрутов в справочнике`}
+      >
+        <button type="button" onClick={handleExport} title="Экспорт CSV" className={UI.buttonGhost}>
+          <Download className="w-3.5 h-3.5" aria-hidden="true" /> CSV
+        </button>
+        <button type="button" onClick={handleImport} title="Импорт CSV" className={UI.buttonGhost}>
+          <Upload className="w-3.5 h-3.5" aria-hidden="true" /> CSV
+        </button>
+        <button type="button" onClick={() => setShowBulk(!showBulk)} className={UI.buttonGhost}>
+          <Plus className="w-3.5 h-3.5" aria-hidden="true" /> Массовый
+        </button>
+        <button type="button" onClick={openAdd} className={UI.buttonPrimary}>
+          <Plus className="w-4 h-4" aria-hidden="true" /> Добавить
+        </button>
+      </SectionHeader>
 
       {/* Bulk entry panel */}
       {showBulk && (
-        <div className="border-b border-slate-100 bg-slate-50/50 px-5 py-4 space-y-2">
-          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Массовый ввод маршрутов</div>
-          <p className="text-[10px] text-slate-400">Формат: Город1 - Город2 1200</p>
-          <textarea value={bulkText} onChange={(e) => setBulkText(e.target.value)}
+        <div className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-4 flex flex-col gap-2.5">
+          <div className={UI.caption}>Массовый ввод маршрутов</div>
+          <p className={UI.hint}>Формат: Город1 - Город2 1200</p>
+          <textarea
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
             placeholder={'Минск - Берлин 1100\nВаршава - Берлин 580'}
-            className="w-full p-3 text-xs rounded-xl border border-slate-200 outline-none focus:border-slate-400 bg-white font-mono min-h-[100px]" />
+            className={`${UI.textarea} font-mono min-h-[100px]`}
+          />
           <div className="flex gap-2">
-            <button onClick={handleBulkAdd} className="inline-flex items-center gap-1.5 bg-slate-900 text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-slate-800 transition cursor-pointer">
-              <Check className="w-3.5 h-3.5" /> Добавить
+            <button type="button" onClick={handleBulkAdd} className={UI.buttonPrimary}>
+              <Check className="w-3.5 h-3.5" aria-hidden="true" /> Добавить
             </button>
-            <button onClick={() => setShowBulk(false)} className="inline-flex items-center gap-1.5 bg-white text-slate-500 text-xs font-semibold px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 transition cursor-pointer">
-              <X className="w-3.5 h-3.5" /> Отмена
+            <button type="button" onClick={() => setShowBulk(false)} className={UI.buttonGhost}>
+              <X className="w-3.5 h-3.5" aria-hidden="true" /> Отмена
             </button>
           </div>
         </div>
       )}
 
-      {/* Stats dashboard */}
-      <div className="grid grid-cols-3 gap-px bg-slate-100 border-b border-slate-200/60">
-        <div className="bg-white px-5 py-3">
-          <div className="text-xl font-bold font-sans text-slate-900">{items.length}</div>
-          <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">Маршрутов</div>
-        </div>
-        <div className="bg-white px-5 py-3">
-          <div className="text-xl font-bold font-sans text-slate-900">{allCities.length}</div>
-          <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">Городов</div>
-        </div>
-        <div className="bg-white px-5 py-3">
-          <div className="text-xl font-bold font-sans text-slate-900">{countryOptions.length}</div>
-          <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">Стран</div>
-        </div>
+      {/* Compact stats */}
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-2 pb-4 border-b border-[#E5E7EB]">
+        <Stat label="Маршрутов" value={items.length} />
+        <Stat label="Городов" value={allCities.length} />
+        <Stat label="Стран" value={countryOptions.length} />
       </div>
 
       {/* Country filter + search */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-3 border-b border-slate-100">
-        <div className="flex items-center gap-1.5 overflow-x-auto flex-nowrap flex-1 min-w-0">
-          <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-          <button onClick={() => setCountryFilter('all')}
-            className={'px-2.5 py-1.5 text-[10px] font-semibold rounded-lg whitespace-nowrap transition cursor-pointer ' + (countryFilter === 'all' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200')}>
-            Все страны
-          </button>
-          {countryOptions.map(c => (
-            <button key={c} onClick={() => setCountryFilter(c)}
-              className={'px-2.5 py-1.5 text-[10px] font-semibold rounded-lg whitespace-nowrap transition cursor-pointer ' + (countryFilter === c ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200')}>
-              {c}
-            </button>
-          ))}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-center gap-1.5 overflow-x-auto flex-nowrap flex-1 min-w-0 scrollbar-none">
+          <Globe className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" aria-hidden="true" />
+          <FilterPills
+            items={[
+              { key: 'all', label: 'Все страны' },
+              ...countryOptions.map(c => ({ key: c, label: c })),
+            ]}
+            active={countryFilter}
+            onChange={setCountryFilter}
+            ariaLabel="Фильтр по странам"
+          />
           {countryFilter !== 'all' && (
-            <button onClick={() => setCountryFilter('all')} className="text-[10px] text-slate-400 hover:text-slate-600 px-1.5 py-1 font-medium cursor-pointer">✕</button>
+            <button
+              type="button"
+              onClick={() => setCountryFilter('all')}
+              aria-label="Сбросить фильтр страны"
+              title="Сбросить фильтр страны"
+              className="inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0"
+            >
+              <X className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
           )}
         </div>
-        <div className="relative sm:w-56 shrink-0">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск по городу, КПП..."
-            className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-slate-50 outline-none focus:border-slate-300 focus:bg-white transition" />
-        </div>
+        <SearchField
+          value={search}
+          onChange={setSearch}
+          placeholder="Поиск по городу, КПП…"
+          ariaLabel="Поиск по маршрутам"
+          className="sm:max-w-[16rem]"
+        />
       </div>
 
       {/* Empty state */}
       {grouped.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-          <Navigation className="w-10 h-10 mb-3 text-slate-300" />
-          <div className="text-sm font-medium">Нет маршрутов</div>
-          <div className="text-xs mt-1">{search ? 'Попробуйте другой поиск' : 'Нажмите «Добавить»'}</div>
-        </div>
+        <EmptyState
+          kind={search.trim() || countryFilter !== 'all' ? 'no-results' : 'empty'}
+          query={search}
+          title={search.trim() || countryFilter !== 'all' ? undefined : 'Нет маршрутов'}
+          hint={search.trim() || countryFilter !== 'all' ? undefined : 'Нажмите «Добавить» или «Массовый», чтобы заполнить справочник.'}
+          actionLabel={search.trim() || countryFilter !== 'all' ? undefined : 'Добавить маршрут'}
+          onAction={search.trim() || countryFilter !== 'all' ? undefined : openAdd}
+        />
       )}
 
       {/* Groups + Table */}
       {grouped.map(group => (
         <div key={group.country}>
           {/* Group header */}
-          <div className="px-5 py-2.5 border-b border-t border-slate-200/40 text-xs font-bold uppercase tracking-wider flex items-center gap-2 sticky top-0 bg-slate-50/90 z-10 text-slate-600">
-            <Globe className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-2 py-2 border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">
+            <Globe className="w-3.5 h-3.5 text-[#9CA3AF]" aria-hidden="true" />
             <span>{group.country}</span>
-            <span className="text-[10px] font-normal opacity-60">{group.items.length} маршрутов</span>
+            <span className="font-mono text-[10px] text-[#9CA3AF]">{group.items.length} маршрутов</span>
           </div>
 
           {/* Table header */}
-          <div className="grid grid-cols-[1fr_1fr_100px_1fr_80px] gap-0 text-[10px] font-semibold uppercase tracking-wider bg-slate-50 border-b border-slate-200/60 select-none">
-            <div className="px-5 py-3 cursor-pointer hover:bg-slate-100/50 flex items-center gap-1 text-slate-500" onClick={() => handleSort('from')}>
+          <div className="grid grid-cols-[1fr_1fr_100px_1fr_80px] gap-0 border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">
+            <div className="px-3 py-2.5 min-h-[44px] cursor-pointer hover:text-[#121316] select-none whitespace-nowrap flex items-center gap-1" onClick={() => handleSort('from')}>
               От <SortIcon colKey="from" />
             </div>
-            <div className="px-5 py-3 cursor-pointer hover:bg-slate-100/50 flex items-center gap-1 text-slate-500" onClick={() => handleSort('to')}>
+            <div className="px-3 py-2.5 min-h-[44px] cursor-pointer hover:text-[#121316] select-none whitespace-nowrap flex items-center gap-1" onClick={() => handleSort('to')}>
               До <SortIcon colKey="to" />
             </div>
-            <div className="px-5 py-3 cursor-pointer hover:bg-slate-100/50 flex items-center gap-1 text-slate-500 justify-end" onClick={() => handleSort('distance')}>
+            <div className="px-3 py-2.5 min-h-[44px] cursor-pointer hover:text-[#121316] select-none whitespace-nowrap flex items-center gap-1 justify-end" onClick={() => handleSort('distance')}>
               Км <SortIcon colKey="distance" />
             </div>
-            <div className="px-5 py-3 text-slate-400 text-[10px]">КПП</div>
-            <div className="px-5 py-3"></div>
+            <div className="px-3 py-2.5 min-h-[44px] whitespace-nowrap flex items-center">КПП</div>
+            <div className="px-3 py-2.5 min-h-[44px]"></div>
           </div>
 
           {/* Items */}
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-[#E5E7EB]">
             {group.items.map((d) => {
               const isEditing = inlineEdit?.id === d.id;
+              const codeFrom = countryBadge(d.countryFrom || getCountry(d.from));
+              const codeTo = countryBadge(d.countryTo || getCountry(d.to));
               return (
-                <div key={d.id} className={'grid grid-cols-[1fr_1fr_100px_1fr_80px] gap-0 items-center px-5 py-2.5 hover:bg-slate-50 group transition text-sm ' + (kmColor(d.distance || 0).replace('text-', 'bg-').replace('-600', '-50/50'))}>
+                <div
+                  key={d.id}
+                  className="grid grid-cols-[1fr_1fr_100px_1fr_80px] gap-0 items-center px-3 py-2.5 hover:bg-[#F9FAFB] transition-colors text-xs"
+                >
                   {/* From */}
-                  <div className="font-semibold text-slate-800 truncate min-h-[28px] flex items-center">
+                  <div className="font-semibold text-[#121316] truncate min-h-[28px] flex items-center gap-1">
                     {isEditing && inlineEdit?.field === 'from' ? (
                       <input ref={inlineRef} value={inlineVal} onChange={(e) => setInlineVal(e.target.value)}
                         onBlur={saveInlineEdit} onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit(); if (e.key === 'Escape') setInlineEdit(null); }}
-                        className="w-full px-1.5 py-0.5 text-sm rounded border border-slate-400 outline-none bg-white" />
+                        className="w-full bg-white border border-[#E5E7EB] rounded-lg px-1.5 py-1 text-xs text-[#121316] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)]" />
                     ) : (
-                      <span onClick={() => startInlineEdit(d, 'from')} className="cursor-pointer hover:bg-slate-200/50 px-1 -mx-1 rounded transition truncate flex items-center gap-1">
-                        {(d.countryFrom || getCountry(d.from)) !== '—' && <span className="text-[10px]">{COUNTRY_FLAGS[d.countryFrom || getCountry(d.from)] || ''}</span>}
+                      <span onClick={() => startInlineEdit(d, 'from')} className="cursor-pointer hover:bg-[#F3F4F6] px-1 -mx-1 rounded-lg transition-colors truncate flex items-center gap-1.5">
+                        {codeFrom && <span className="text-[10px] font-mono text-[#9CA3AF]">{codeFrom}</span>}
                         {d.from}
                       </span>
                     )}
                   </div>
                   {/* To */}
-                  <div className="text-slate-700 truncate min-h-[28px] flex items-center">
+                  <div className="text-[#4B5563] truncate min-h-[28px] flex items-center gap-1.5">
                     {isEditing && inlineEdit?.field === 'to' ? (
                       <input ref={inlineRef} value={inlineVal} onChange={(e) => setInlineVal(e.target.value)}
                         onBlur={saveInlineEdit} onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit(); if (e.key === 'Escape') setInlineEdit(null); }}
-                        className="w-full px-1.5 py-0.5 text-sm rounded border border-slate-400 outline-none bg-white" />
+                        className="w-full bg-white border border-[#E5E7EB] rounded-lg px-1.5 py-1 text-xs text-[#121316] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)]" />
                     ) : (
-                      <span className="truncate block w-full">
-                        <span className="text-slate-300 mr-1">↔</span>
-                        <span onClick={() => startInlineEdit(d, 'to')} className="cursor-pointer hover:bg-slate-200/50 px-1 -mx-1 rounded transition inline-flex items-center gap-1">
-                          {(d.countryTo || getCountry(d.to)) !== '—' && <span className="text-[10px]">{COUNTRY_FLAGS[d.countryTo || getCountry(d.to)] || ''}</span>}
+                      <span className="truncate flex items-center gap-1.5">
+                        <MoveHorizontal className="w-3 h-3 text-[#9CA3AF] shrink-0" aria-hidden="true" />
+                        <span onClick={() => startInlineEdit(d, 'to')} className="cursor-pointer hover:bg-[#F3F4F6] px-1 -mx-1 rounded-lg transition-colors inline-flex items-center gap-1.5">
+                          {codeTo && <span className="text-[10px] font-mono text-[#9CA3AF]">{codeTo}</span>}
                           {d.to}
                         </span>
                       </span>
@@ -502,37 +508,47 @@ export default function DistanceDirectoryBlock({ user }: Props) {
                     {isEditing && inlineEdit?.field === 'distance' ? (
                       <input ref={inlineRef} value={inlineVal} onChange={(e) => setInlineVal(e.target.value)}
                         onBlur={saveInlineEdit} onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit(); if (e.key === 'Escape') setInlineEdit(null); }}
-                        type="number" className="w-20 px-1.5 py-0.5 text-sm rounded border border-slate-400 outline-none bg-white text-right" />
+                        type="number" className="w-20 bg-white border border-[#E5E7EB] rounded-lg px-1.5 py-1 text-xs text-[#121316] text-right outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)]" />
                     ) : (
-                      <span onClick={() => startInlineEdit(d, 'distance')} className={'font-mono font-bold ' + kmColor(d.distance || 0) + ' cursor-pointer hover:bg-slate-200/50 px-1.5 -mx-1.5 rounded transition'}>
-                        {d.distance || 0} <span className="text-[10px] text-slate-400 font-medium">км</span>
+                      <span onClick={() => startInlineEdit(d, 'distance')} className={'font-mono font-semibold ' + kmColor(d.distance || 0) + ' cursor-pointer hover:bg-[#F3F4F6] px-1.5 -mx-1.5 rounded-lg transition-colors'}>
+                        {d.distance || 0} <span className="text-[10px] text-[#9CA3AF] font-medium">км</span>
                       </span>
                     )}
                   </div>
                   {/* Checkpoints */}
-                  <div className="text-[10px] text-slate-500 truncate min-h-[28px] flex items-center">
+                  <div className="text-[10px] text-[#6B7280] truncate min-h-[28px] flex items-center">
                     {d.checkpoints && d.checkpoints.length > 0 ? (
                       <span className="flex gap-1 flex-wrap">
                         {d.checkpoints.map((cp, i) => {
                           const cpInfo = allCheckpoints.find((c: any) => c.name?.toLowerCase() === cp.toLowerCase());
                           return (
-                            <span key={i} className="px-1.5 py-0.5 bg-slate-100 rounded text-[9px] font-medium text-slate-600 cursor-default" title={cpInfo ? (cpInfo.countryFrom || '') + '→' + (cpInfo.countryTo || '') : ''}>
+                            <span key={i} className={UI.chip} title={cpInfo ? (cpInfo.countryFrom || '') + '→' + (cpInfo.countryTo || '') : ''}>
                               {cp}
                               {cpInfo && cpInfo.countryFrom && cpInfo.countryTo && (
-                                <span className="ml-0.5 text-[8px] text-slate-400">{cpInfo.countryFrom}→{cpInfo.countryTo}</span>
+                                <span className="ml-1 text-[10px] text-[#9CA3AF]">{cpInfo.countryFrom}→{cpInfo.countryTo}</span>
                               )}
                             </span>
                           );
                         })}
                       </span>
                     ) : (
-                      <span className="text-slate-300 italic">—</span>
+                      <span className="text-[#D1D5DB]">—</span>
                     )}
                   </div>
                   {/* Actions */}
-                  <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                    <button onClick={() => openEdit(d)} className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 cursor-pointer" title="Изменить"><Pencil className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => handleDelete(d)} className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 cursor-pointer" title="Удалить"><Trash2 className="w-3.5 h-3.5" /></button>
+                  <div className="flex items-center justify-center gap-1">
+                    <button type="button" onClick={() => openEdit(d)} aria-label="Изменить" title="Изменить" className={UI.buttonIcon}>
+                      <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(d)}
+                      aria-label="Удалить"
+                      title="Удалить"
+                      className="inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
                   </div>
                 </div>
               );
@@ -542,173 +558,188 @@ export default function DistanceDirectoryBlock({ user }: Props) {
       ))}
 
       {/* Modal */}
-      {editing && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setEditing(null)}>
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-md p-6 space-y-4 my-4" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-base font-bold text-slate-900">{editing?.id ? 'Изменить маршрут' : 'Добавить маршрут'}</h2>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Город A</label>
-                <input type="text" value={draft.from || ''} onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))}
-                  placeholder="Откуда" className="w-full mt-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:border-slate-400 bg-white transition" />
-                <div className="mt-1 flex items-center gap-1.5">
-                  <select value={draft.countryFrom || (getCountry(draft.from || '') !== '—' ? getCountry(draft.from || '') : '')}
-                    onChange={(e) => setDraft((d) => ({ ...d, countryFrom: e.target.value }))}
-                    className={'flex-1 px-2 py-1.5 text-[10px] font-semibold rounded-lg border border-slate-200 outline-none focus:border-slate-400 bg-white transition cursor-pointer ' + (draft.countryFrom || getCountry(draft.from || '') !== '—' ? 'text-slate-700' : 'text-slate-400')}>
-                    <option value="">Страна</option>
-                    {['BY','RUS','KZ','UZ','TJ','KG','MN','CN','TR','IR','GE','AM','AZ'].map(c => (
-                      <option key={c} value={c}>{COUNTRY_FLAGS[c] || ''} {c}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Город B</label>
-                <input type="text" value={draft.to || ''} onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
-                  placeholder="Куда" className="w-full mt-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:border-slate-400 bg-white transition" />
-                <div className="mt-1 flex items-center gap-1.5">
-                  <select value={draft.countryTo || (getCountry(draft.to || '') !== '—' ? getCountry(draft.to || '') : '')}
-                    onChange={(e) => setDraft((d) => ({ ...d, countryTo: e.target.value }))}
-                    className={'flex-1 px-2 py-1.5 text-[10px] font-semibold rounded-lg border border-slate-200 outline-none focus:border-slate-400 bg-white transition cursor-pointer ' + (draft.countryTo || getCountry(draft.to || '') !== '—' ? 'text-slate-700' : 'text-slate-400')}>
-                    <option value="">Страна</option>
-                    {['BY','RUS','KZ','UZ','TJ','KG','MN','CN','TR','IR','GE','AM','AZ'].map(c => (
-                      <option key={c} value={c}>{COUNTRY_FLAGS[c] || ''} {c}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Расстояние (км)</label>
-              <input type="number" min="1" value={draft.distance || ''} onChange={(e) => setDraft((d) => ({ ...d, distance: e.target.value }))}
-                placeholder="0" className="w-full mt-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:border-slate-400 bg-white transition" />
-            </div>
-
-            {/* Checkpoints */}
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                <MapPin className="w-3 h-3" /> Погранпереходы
-              </label>
-              <div className="flex flex-wrap gap-1 mt-1 mb-1.5">
-                {(draft.checkpoints || '').split(',').filter(Boolean).map((cp, i) => (
-                  <span key={i} className="px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-700 rounded-lg flex items-center gap-1">
-                    {cp.trim()}
-                    <button type="button" onClick={() => {
-                      const list = (draft.checkpoints || '').split(',').filter(Boolean);
-                      list.splice(i, 1);
-                      setDraft((d) => ({ ...d, checkpoints: list.join(', ') }));
-                    }} className="text-slate-400 hover:text-rose-500 cursor-pointer">×</button>
-                  </span>
+      <ModalShell
+        isOpen={!!editing}
+        onClose={() => setEditing(null)}
+        title={editing?.id ? 'Изменить маршрут' : 'Добавить маршрут'}
+        icon={<Navigation className="w-4 h-4" aria-hidden="true" />}
+        ariaLabel={editing?.id ? 'Изменить маршрут' : 'Добавить маршрут'}
+        maxWidth="max-w-md"
+        footer={
+          <>
+            <button type="button" onClick={() => setEditing(null)} className={UI.buttonGhost}>Отмена</button>
+            <button type="button" onClick={handleSave} disabled={isSubmitting} className={UI.buttonPrimary}>
+              {isSubmitting ? 'Сохранение…' : 'Сохранить'}
+            </button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-2">
+              <label className={UI.fieldLabel}>Город A</label>
+              <input type="text" value={draft.from || ''} onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))}
+                placeholder="Откуда" className={UI.input} />
+              <select value={draft.countryFrom || (getCountry(draft.from || '') !== '—' ? getCountry(draft.from || '') : '')}
+                onChange={(e) => setDraft((d) => ({ ...d, countryFrom: e.target.value }))}
+                className={COUNTRY_SELECT_CLS}>
+                <option value="">Страна</option>
+                {COUNTRY_CODES.map(c => (
+                  <option key={c} value={c}>{c}</option>
                 ))}
-              </div>
-              <div className="flex gap-1">
-                <input type="text" value={draft.cpInput || ''} ref={cpInputRef}
-                  onChange={(e) => setDraft((d) => ({ ...d, cpInput: e.target.value }))}
-                  onFocus={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    setCpDropdownRect({ top: rect.bottom + 4, left: rect.left, width: rect.width });
-                    setShowCpDropdown(true);
-                  }}
-                  onBlur={() => setTimeout(() => setShowCpDropdown(false), 200)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      const val = (draft.cpInput || '').trim();
-                      if (val) {
-                        const existing = (draft.checkpoints || '').split(',').filter(Boolean).map(s => s.trim());
-                        if (!existing.includes(val)) {
-                          setDraft((d) => ({ ...d, checkpoints: [...existing, val].join(', '), cpInput: '' }));
-                        }
-                      }
-                    }
-                  }}
-                  placeholder="Начните ввод или выберите из списка..."
-                  className="flex-1 px-3 py-2 text-sm rounded-xl border border-slate-200 outline-none focus:border-slate-400 bg-white transition" />
-                <button type="button" onClick={() => {
-                  const val = (draft.cpInput || '').trim();
-                  if (val) {
-                    const existing = (draft.checkpoints || '').split(',').filter(Boolean).map(s => s.trim());
-                    if (!existing.includes(val)) {
-                      setDraft((d) => ({ ...d, checkpoints: [...existing, val].join(', '), cpInput: '' }));
-                    }
-                  }
-                }} className="px-3 py-2 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition cursor-pointer">+</button>
-                {showCpDropdown && cpDropdownRect && (
-                  <div style={{ position: 'fixed', top: cpDropdownRect.top, left: cpDropdownRect.left, width: cpDropdownRect.width, zIndex: 110 }}
-                    className="bg-white border border-slate-200 rounded-xl shadow-xl max-h-[200px] overflow-y-auto" onMouseDown={(e) => e.preventDefault()}>
-                    {(draft.cpInput || '').trim().length > 0 ? (
-                      allCheckpoints.filter((c: any) => {
-                        const existing = (draft.checkpoints || '').split(',').filter(Boolean).map(s => s.trim().toLowerCase());
-                        return !existing.includes(c.name.toLowerCase()) && c.name.toLowerCase().includes((draft.cpInput || '').toLowerCase().trim());
-                      }).slice(0, 15).map((c: any) => (
-                        <button key={c.id} type="button" onClick={() => {
-                          const existing = (draft.checkpoints || '').split(',').filter(Boolean).map(s => s.trim());
-                          if (!existing.includes(c.name)) {
-                            setDraft((d) => ({ ...d, checkpoints: [...existing, c.name].join(', '), cpInput: '' }));
-                          }
-                        }}
-                          className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition flex items-center gap-2 border-b border-slate-100 last:border-0 cursor-pointer"
-                        >
-                          <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span>{c.name}</span>
-                          {c.countryFrom && c.countryTo && (
-                            <span className="ml-auto text-[9px] text-slate-400 shrink-0">{c.countryFrom}→{c.countryTo}</span>
-                          )}
-                        </button>
-                      ))
-                    ) : (
-                      allCheckpoints.filter((c: any) => {
-                        const existing = (draft.checkpoints || '').split(',').filter(Boolean).map(s => s.trim().toLowerCase());
-                        return !existing.includes(c.name.toLowerCase());
-                      }).slice(0, 20).map((c: any) => (
-                        <button key={c.id} type="button" onClick={() => {
-                          const existing = (draft.checkpoints || '').split(',').filter(Boolean).map(s => s.trim());
-                          if (!existing.includes(c.name)) {
-                            setDraft((d) => ({ ...d, checkpoints: [...existing, c.name].join(', '), cpInput: '' }));
-                          }
-                        }}
-                          className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition flex items-center gap-2 border-b border-slate-100 last:border-0 cursor-pointer"
-                        >
-                          <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span>{c.name}</span>
-                          {c.countryFrom && c.countryTo && (
-                            <span className="ml-auto text-[9px] text-slate-400 shrink-0">{c.countryFrom}→{c.countryTo}</span>
-                          )}
-                        </button>
-                      ))
-                    )}
-                    {allCheckpoints.length === 0 && (
-                      <div className="px-3 py-2 text-xs text-slate-400">Нет КПП в справочнике</div>
-                    )}
-                  </div>
-                )}
-              </div>
-              <p className="text-[9px] text-slate-400 mt-1">КПП указываются по порядку следования маршрута. При обратном направлении — порядок КПП будет обратным. КПП двусторонние.</p>
+              </select>
             </div>
-
-            {draft.from && draft.to && (
-              <div className="text-[10px] text-slate-500 bg-slate-50 rounded-xl px-3 py-2 border border-slate-200">
-                <span className="font-semibold">Страны: </span>
-                {draft.countryFrom || getCountry(draft.from)} ↔ {draft.countryTo || getCountry(draft.to)}
-              </div>
-            )}
-
-            <div className="bg-blue-50/50 border border-blue-200/50 rounded-xl px-3 py-2.5 text-[10px] text-blue-700 flex items-center gap-2">
-              <Navigation className="w-3.5 h-3.5 shrink-0 text-blue-500" />
-              <span>Маршрут двусторонний: <strong>{draft.from || 'A'} ↔ {draft.to || 'B'}</strong></span>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-1">
-              <button onClick={() => setEditing(null)} className="px-4 py-2 text-xs font-medium text-slate-500 rounded-xl hover:bg-slate-100 transition cursor-pointer">Отмена</button>
-              <button onClick={handleSave} disabled={isSubmitting} className={`inline-flex items-center gap-1.5 ${isSubmitting ? 'bg-slate-400 cursor-not-allowed' : 'bg-slate-900 hover:bg-slate-800'} text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-sm transition cursor-pointer`}>
-                <Plus className="w-3.5 h-3.5" /> {isSubmitting ? 'Сохранение...' : 'Сохранить'}
-              </button>
+            <div className="flex flex-col gap-2">
+              <label className={UI.fieldLabel}>Город B</label>
+              <input type="text" value={draft.to || ''} onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
+                placeholder="Куда" className={UI.input} />
+              <select value={draft.countryTo || (getCountry(draft.to || '') !== '—' ? getCountry(draft.to || '') : '')}
+                onChange={(e) => setDraft((d) => ({ ...d, countryTo: e.target.value }))}
+                className={COUNTRY_SELECT_CLS}>
+                <option value="">Страна</option>
+                {COUNTRY_CODES.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
             </div>
           </div>
+
+          <div className="flex flex-col gap-2">
+            <label className={UI.fieldLabel}>Расстояние (км)</label>
+            <input type="number" min="1" value={draft.distance || ''} onChange={(e) => setDraft((d) => ({ ...d, distance: e.target.value }))}
+              placeholder="0" className={UI.input} />
+          </div>
+
+          {/* Checkpoints */}
+          <div className="flex flex-col gap-2">
+            <label className={`${UI.fieldLabel} flex items-center gap-1`}>
+              <MapPin className="w-3 h-3" aria-hidden="true" /> Погранпереходы
+            </label>
+            <div className="flex flex-wrap gap-1">
+              {(draft.checkpoints || '').split(',').filter(Boolean).map((cp, i) => (
+                <span key={i} className={`${UI.chip} inline-flex items-center gap-1`}>
+                  {cp.trim()}
+                  <button type="button" onClick={() => {
+                    const list = (draft.checkpoints || '').split(',').filter(Boolean);
+                    list.splice(i, 1);
+                    setDraft((d) => ({ ...d, checkpoints: list.join(', ') }));
+                  }} aria-label="Убрать погранпереход" className="text-[#9CA3AF] hover:text-rose-600 cursor-pointer">
+                    <X className="w-3 h-3" aria-hidden="true" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-1">
+              <input type="text" value={draft.cpInput || ''} ref={cpInputRef}
+                onChange={(e) => setDraft((d) => ({ ...d, cpInput: e.target.value }))}
+                onFocus={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setCpDropdownRect({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+                  setShowCpDropdown(true);
+                }}
+                onBlur={() => setTimeout(() => setShowCpDropdown(false), 200)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const val = (draft.cpInput || '').trim();
+                    if (val) {
+                      const existing = (draft.checkpoints || '').split(',').filter(Boolean).map(s => s.trim());
+                      if (!existing.includes(val)) {
+                        setDraft((d) => ({ ...d, checkpoints: [...existing, val].join(', '), cpInput: '' }));
+                      }
+                    }
+                  }
+                }}
+                placeholder="Начните ввод или выберите из списка…"
+                className={`${UI.input} flex-1`} />
+              <button type="button" onClick={() => {
+                const val = (draft.cpInput || '').trim();
+                if (val) {
+                  const existing = (draft.checkpoints || '').split(',').filter(Boolean).map(s => s.trim());
+                  if (!existing.includes(val)) {
+                    setDraft((d) => ({ ...d, checkpoints: [...existing, val].join(', '), cpInput: '' }));
+                  }
+                }
+              }} aria-label="Добавить погранпереход" className={UI.buttonGhost}>
+                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+              {showCpDropdown && cpDropdownRect && (
+                <div style={{ position: 'fixed', top: cpDropdownRect.top, left: cpDropdownRect.left, width: cpDropdownRect.width, zIndex: 110 }}
+                  className="bg-white border border-[#E5E7EB] rounded-xl shadow-[0_16px_40px_rgba(15,23,42,0.16)] max-h-[200px] overflow-y-auto custom-scrollbar" onMouseDown={(e) => e.preventDefault()}>
+                  {(draft.cpInput || '').trim().length > 0 ? (
+                    allCheckpoints.filter((c: any) => {
+                      const existing = (draft.checkpoints || '').split(',').filter(Boolean).map(s => s.trim().toLowerCase());
+                      return !existing.includes(c.name.toLowerCase()) && c.name.toLowerCase().includes((draft.cpInput || '').toLowerCase().trim());
+                    }).slice(0, 15).map((c: any) => (
+                      <button key={c.id} type="button" onClick={() => {
+                        const existing = (draft.checkpoints || '').split(',').filter(Boolean).map(s => s.trim());
+                        if (!existing.includes(c.name)) {
+                          setDraft((d) => ({ ...d, checkpoints: [...existing, c.name].join(', '), cpInput: '' }));
+                        }
+                      }}
+                        className="w-full text-left px-3 py-2 text-xs font-medium text-[#4B5563] hover:bg-[#F9FAFB] transition-colors flex items-center gap-2 border-b border-[#E5E7EB] last:border-0 cursor-pointer"
+                      >
+                        <MapPin className="w-3 h-3 text-[#9CA3AF] shrink-0" aria-hidden="true" />
+                        <span>{c.name}</span>
+                        {c.countryFrom && c.countryTo && (
+                          <span className="ml-auto text-[10px] text-[#9CA3AF] shrink-0">{c.countryFrom}→{c.countryTo}</span>
+                        )}
+                      </button>
+                    ))
+                  ) : (
+                    allCheckpoints.filter((c: any) => {
+                      const existing = (draft.checkpoints || '').split(',').filter(Boolean).map(s => s.trim().toLowerCase());
+                      return !existing.includes(c.name.toLowerCase());
+                    }).slice(0, 20).map((c: any) => (
+                      <button key={c.id} type="button" onClick={() => {
+                        const existing = (draft.checkpoints || '').split(',').filter(Boolean).map(s => s.trim());
+                        if (!existing.includes(c.name)) {
+                          setDraft((d) => ({ ...d, checkpoints: [...existing, c.name].join(', '), cpInput: '' }));
+                        }
+                      }}
+                        className="w-full text-left px-3 py-2 text-xs font-medium text-[#4B5563] hover:bg-[#F9FAFB] transition-colors flex items-center gap-2 border-b border-[#E5E7EB] last:border-0 cursor-pointer"
+                      >
+                        <MapPin className="w-3 h-3 text-[#9CA3AF] shrink-0" aria-hidden="true" />
+                        <span>{c.name}</span>
+                        {c.countryFrom && c.countryTo && (
+                          <span className="ml-auto text-[10px] text-[#9CA3AF] shrink-0">{c.countryFrom}→{c.countryTo}</span>
+                        )}
+                      </button>
+                    ))
+                  )}
+                  {allCheckpoints.length === 0 && (
+                    <div className="px-3 py-2 text-xs text-[#6B7280]">Нет КПП в справочнике</div>
+                  )}
+                </div>
+              )}
+            </div>
+            <p className={UI.hint}>КПП указываются по порядку следования маршрута. При обратном направлении — порядок КПП будет обратным. КПП двусторонние.</p>
+          </div>
+
+          {draft.from && draft.to && (
+            <div className="flex items-center gap-2 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2.5 text-xs text-[#4B5563]">
+              <span className="font-semibold text-[#121316]">Страны: </span>
+              <span>{draft.countryFrom || getCountry(draft.from)}</span>
+              <MoveHorizontal className="w-3 h-3 text-[#9CA3AF]" aria-hidden="true" />
+              <span>{draft.countryTo || getCountry(draft.to)}</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2.5 text-[11px] text-[#4B5563]">
+            <Navigation className="w-3.5 h-3.5 shrink-0 text-[#9CA3AF]" aria-hidden="true" />
+            <span>Маршрут двусторонний: <strong className="text-[#121316]">{draft.from || 'A'} ↔ {draft.to || 'B'}</strong></span>
+          </div>
         </div>
-      )}
+      </ModalShell>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className={UI.hint}>{label}</span>
+      <span className="text-xs font-semibold font-mono tabular-nums text-[#121316]">{value}</span>
     </div>
   );
 }

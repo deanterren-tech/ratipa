@@ -4,17 +4,31 @@ import {dbService, onValue} from '../../api'
 import {pdService} from '../../api'
 import {getDatabase, ref, set, push, remove, update, query, limitToLast} from 'firebase/database'
 import {getApp} from 'firebase/app'
-import { 
-  Trash2, 
+import {
+  Archive,
+  ArrowDown,
+  ArrowRight,
+  ArrowUp,
+  Calendar,
+  ChevronDown,
+  Edit,
   History,
-  CheckCircle2, 
-  Wrench, 
-  Truck,
-  X,
   Plus,
-  Calendar
+  Trash2,
+  Truck,
+  AlertCircle,
 } from 'lucide-react';
-import {motion, AnimatePresence} from 'motion/react'
+import {UI} from '../../ui/kit'
+import {
+  ModuleShell,
+  SectionHeader,
+  SearchField,
+  FilterPills,
+  StatusText,
+  EmptyState,
+  FoundCount,
+  ModalShell,
+} from '../../ui/components'
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
 import {formatDriverShortName} from '../../utils/driverSync'
@@ -49,6 +63,68 @@ const getNormalizedFieldLabel = (field: string) => {
 };
 
 
+
+/**
+ * Поле даты в форме: пользователь видит текст «ДД/ММ/ГГГГ», а рядом есть значок
+ * календаря. Логика прежняя: текстовое поле только для показа, значение хранит
+ * скрытый нативный input[type=date] (он же открывает системный календарь через
+ * showPicker), поэтому формат и сохранённое значение не меняются.
+ */
+function BazaDateField({
+  id,
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  disabled?: boolean;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  const openPicker = () => {
+    const el = document.getElementById(`picker-${id}`) as HTMLInputElement | null;
+    el?.showPicker?.();
+  };
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className={UI.fieldLabel} htmlFor={`form-date-${id}`}>{label}</label>
+      <div className="relative">
+        <input
+          id={`form-date-${id}`}
+          type="text"
+          readOnly
+          disabled={disabled}
+          value={value ? value.split('-').reverse().join('/') : ''}
+          placeholder="ДД/ММ/ГГГГ"
+          onClick={openPicker}
+          className={`${UI.input} cursor-pointer pr-11`}
+        />
+        <input
+          type="date"
+          id={`picker-${id}`}
+          disabled={disabled}
+          value={value || ''}
+          onChange={onChange}
+          className="absolute inset-0 opacity-0 pointer-events-none"
+          aria-hidden="true"
+          tabIndex={-1}
+        />
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={openPicker}
+          title={`Открыть календарь: ${label}`}
+          aria-label={`Открыть календарь: ${label}`}
+          className="absolute right-1 top-1/2 flex min-h-[36px] min-w-[36px] -translate-y-1/2 items-center justify-center rounded-lg text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] disabled:opacity-30 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)]"
+        >
+          <Calendar className="w-4 h-4" aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function BazaModule({ user: ratipaUser, settings }: BazaModuleProps) {
   const { showConfirm } = useDialog();
@@ -313,14 +389,16 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
   }, [currentTab]);
 
   // Auth mapping: figure out our internal role & perms based on users_list mapped to ratipaUser.name
-  const matchedUser = systemUsers.find(u => String(u.name || '').toLowerCase() === String(ratipaUser?.name || '').toLowerCase() || u.id === ratipaUser?.uid) || {
+  const matchedUser = systemUsers.find(u => String(u.name || '').toLowerCase() === String(ratipaUser?.name || '').toLowerCase() || u.uid === ratipaUser?.uid || u.id === ratipaUser?.uid) || {
     name: ratipaUser.name,
     role: ratipaUser.role === 'root_admin' ? 'Диспетчер' : 'Механик',
     permissions: {},
     isRootAdmin: ratipaUser.role === 'root_admin'
   };
 
-  const isRootAdmin = matchedUser.isRootAdmin || matchedUser.name === 'Сергей';
+  // Root — только по роли. Имя в проверке было обходом (появлялось у любого «Сергея»);
+  // запись справочника может не нести флаг isRootAdmin, поэтому роль читаем из профиля.
+  const isRootAdmin = ratipaUser.role === 'root_admin' || matchedUser.isRootAdmin === true;
   // Используем resolvePermission для проверки доступа к модулю baza
   const bazaPerm = resolvePermission(ratipaUser, 'baza', settings?.rolePermissions);
   const canWriteBaza = isRootAdmin || bazaPerm === 'write';
@@ -364,21 +442,21 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
   const calculateCarStatus = (car: any) => {
       const todayStr = new Date().toISOString().split('T')[0];
       if (car.dateDeparture && car.dateDeparture <= todayStr) {
-          return { code: 'transit', text: 'В рейсе', class: 'bg-slate-900 text-slate-100', icon: <Truck className="h-3 w-3"/> };
+          return { code: 'transit', text: 'В рейсе' };
       }
       if (car.dateRepairStart) {
           if (!car.dateRepairEnd || todayStr < car.dateRepairEnd) {
               if (todayStr >= car.dateRepairStart) {
-                  return { code: 'repair', text: 'В ремонте', class: 'bg-amber-50 text-amber-700 border-amber-100', icon: <Wrench className="h-3 w-3"/> };
+                  return { code: 'repair', text: 'В ремонте' };
               }
           }
       }
       if (car.dateRepairEnd && todayStr >= car.dateRepairEnd) {
           if (!car.dateDeparture || car.dateDeparture > todayStr) {
-              return { code: 'ready', text: 'Готов к рейсу', class: 'bg-emerald-50 text-emerald-700 border-emerald-100', icon: <CheckCircle2 className="h-3 w-3"/> };
+              return { code: 'ready', text: 'Готов к рейсу' };
           }
       }
-      return { code: 'base', text: 'На базе', class: 'bg-[#c3fb12]/20 text-[#2f4201] border-[#c3fb12]/40', icon: <CheckCircle2 className="h-3 w-3 opacity-60"/> };
+      return { code: 'base', text: 'На базе' };
   };
 
   const getDaysBetween = (date1: string, date2: string) => {
@@ -412,6 +490,9 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
   };
 
   // --- Actions ---
+  // Ошибки полей формы добавления: показываются рядом с полем, ввод не очищается
+  const [formErrors, setFormErrors] = useState<{ carNumber?: string }>({});
+
   const handleFormChange = (e: any, field: string) => {
     const val = e.target.value;
     const updates: any = { [field]: val };
@@ -432,7 +513,13 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
     }
     const db = getDatabase(getApp());
     const cNum = formData.carNumber.trim().toUpperCase();
-    if (!cNum) return;
+    if (!cNum) {
+      // Раньше отправка прерывалась молча — теперь причина видна у самого поля,
+      // введённые данные сохраняются.
+      setFormErrors({ carNumber: 'Укажите автомобиль: выберите его из справочника' });
+      return;
+    }
+    setFormErrors({});
 
     if (!knownFleet.includes(cNum)) {
       push(ref(db, 'known_fleet'), cNum);
@@ -531,7 +618,9 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
   };
 
   const updateCarField = async (id: string, field: string, newValue: string) => {
-      if (!isRootAdmin && !currentUserPermissions[field]) {
+      // Та же проверка, что и у формы (canEditField): модуль, переопределения полей
+      // и старая per-field модель — единый порядок, без второго списка разрешений.
+      if (!canEditField(field)) {
           toast("Действие отклонено: У вас нет прав на редактирование этого поля!", 'error');
           return;
       }
@@ -777,6 +866,12 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
           return;
       }
       if (isMechanic) return;
+      // Удаление — операция записи: без права записи в раздел она недоступна,
+      // даже если кнопка как-то активирована в обход интерфейса.
+      if (!canWriteBaza) {
+          toast("Действие отклонено: у вас нет прав на удаление записей", 'error');
+          return;
+      }
 
       if (await showConfirm(`Вы уверены, что хотите окончательно удалить запись автомобиля ${carNumber}?`)) {
           const db = getDatabase(getApp());
@@ -927,11 +1022,9 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
 
   const renderSortIndicator = (sortKey: string) => {
     if (sortConfig?.key !== sortKey) return null;
-    return (
-      <span className="text-slate-500 ml-1">
-        {sortConfig.dir === "asc" ? "↑" : "↓"}
-      </span>
-    );
+    return sortConfig.dir === 'asc'
+      ? <ArrowUp className="w-3 h-3 inline-block ml-0.5 -mt-px text-[#6B7280]" aria-hidden="true" />
+      : <ArrowDown className="w-3 h-3 inline-block ml-0.5 -mt-px text-[#6B7280]" aria-hidden="true" />;
   };
 
   const wTotal = useMemo(() => {
@@ -946,579 +1039,587 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
      return cars.filter(c => calculateCarStatus(c).code === 'ready').length;
   }, [cars]);
 
-  const getStatusBadge = (code: string, text: string) => {
-    switch (code) {
-      case 'transit':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#3765F6]/10 text-[#3765F6] border border-[#3765F6]/10 font-sans">
-            <Truck size={12} className="stroke-[2.5]" />
-            <span>В рейсе</span>
-          </span>
-        );
-      case 'repair':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/10 text-rose-600 border border-rose-500/10 font-sans">
-            <Wrench size={12} className="stroke-[2.5]" />
-            <span>В ремонте</span>
-          </span>
-        );
-      case 'ready':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-700 border border-emerald-500/10 font-sans">
-            <CheckCircle2 size={12} className="stroke-[2.5]" />
-            <span>Готов к рейсу</span>
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-500/10 text-slate-600 border border-slate-500/10 font-sans">
-            <CheckCircle2 size={12} className="opacity-60 stroke-[2.5]" />
-            <span>На базе</span>
-          </span>
-        );
-    }
+  // Статус — точка + текст; цвета состояний собраны в одной таблице.
+  const STATUS_DOT_COLOR: Record<string, 'accent' | 'amber' | 'emerald' | 'grey'> = {
+    transit: 'accent',
+    repair: 'amber',
+    ready: 'emerald',
+    base: 'grey',
   };
 
+  const getStatusBadge = (code: string, text: string) => (
+    <StatusText color={STATUS_DOT_COLOR[code] || 'grey'}>{text}</StatusText>
+  );
+
+  const tabsList: { key: 'base' | 'archive' | 'history'; label: string; count?: number }[] = [
+    { key: 'base', label: 'На базе', count: cars.length > 0 ? cars.length : undefined },
+    { key: 'archive', label: 'Архив', count: archiveCars.length > 0 ? archiveCars.length : undefined },
+    { key: 'history', label: 'История', count: globalHistory.length > 0 ? globalHistory.length : undefined },
+  ];
+
   return (
-    <div className="bg-white rounded-2xl p-5 lg:p-6 border border-slate-200/50 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
-      
-      {/* Top Internal Tab Navigation for Baza module */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 select-none pb-5 border-b border-slate-200/60">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-            <Truck className="w-7 h-7 text-slate-800" /> Учёт выезда
-          </h1>
-        </div>
-        
-        <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto justify-start sm:justify-end">
-          <div className="flex gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50 overflow-x-auto custom-scrollbar">
-            <button 
-              onClick={() => setCurrentTab('base')} 
-              className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer min-h-[44px] ${
-                currentTab === 'base' 
-                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
-                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
-              }`}
-            >
-              На базе
-            </button>
-            <button 
-              onClick={() => setCurrentTab('archive')} 
-              className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer min-h-[44px] ${
-                currentTab === 'archive' 
-                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
-                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
-              }`}
-            >
-              Архив
-            </button>
-            <button 
-              onClick={() => setCurrentTab('history')} 
-              className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer min-h-[44px] ${
-                currentTab === 'history' 
-                  ? 'bg-white text-slate-900 shadow-xs border border-slate-200/40'
-                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/30'
-              }`}
-            >
-              История
-            </button>
-          </div>
-
-        </div>
-      </div>
-
-      {/* Dynamic Counter widgets on top (Full width) — PlanDohod KPI style */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 bg-slate-50/40 border border-slate-200/50 rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.01)] mt-6">
-         {/* Всего на базе */}
-         <div className="flex flex-col">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Всего на базе ТС</span>
-            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900 font-sans tabular-nums">{wTotal}</span>
-         </div>
-         {/* В ремонте */}
-         <div className="flex flex-col lg:border-l lg:border-slate-200/60 lg:pl-6">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1.5">В ремонте ТС</span>
-            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-rose-600 font-sans tabular-nums">{wRepair}</span>
-         </div>
-         {/* Готовы к рейсу */}
-         <div className="flex flex-col lg:border-l lg:border-slate-200/60 lg:pl-6">
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1.5">Готовы к рейсу ТС</span>
-            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-emerald-600 font-sans tabular-nums">{wReady}</span>
-         </div>
-      </div>
-
-      <div className="space-y-6">
-          
-          <div className={currentTab === 'base' ? '' : 'hidden'}>
-             <div className="pt-6">
-                 <h2 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                    <Plus className="h-4 w-4 text-[#3765F6]" />
-                    Добавить новый автомобиль
-                 </h2>
-                 <form onSubmit={handleAddNewCar}>
-                                     <div className="space-y-1">
-                                             <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Автомобиль *</label>
-                            <CouplingPicker
-                              mode="combined"
-                              value={formData.carNumber}
-                              onSelect={(rec) => {
-                                if (rec) {
-                                  const cNum = [(rec.carNumber || rec.vehicleNumbers || '').toUpperCase(), (rec.trailerNumber || '').toUpperCase()].filter(Boolean).join(' / ');
-                                  const updates: any = { carNumber: cNum };
-                                  if (rec.driverName) updates.driverName = rec.driverName;
-                                  if (rec.driverPhone) updates.driverPhone = rec.driverPhone;
-                                  setFormData((f) => ({ ...f, ...updates }));
-                                }
-                              }}
-                            />
-                          </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4 mt-6">
-                         <div className="space-y-1">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">ФИО Водителя</label>
-                            <input type="text"
-                              value={formData.driverName || ''}
-                              onChange={(e) => setFormData((f) => ({ ...f, driverName: e.target.value }))}
-                              className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full focus:border-slate-300"
-                              placeholder="—"
-                            />
-                         </div>
-                         <div className="space-y-1">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Прибыл на базу</label>
-                            <div className="relative"><input type="text" readOnly disabled={!canEditField('dateArrival')} value={formData.dateArrival ? formData.dateArrival.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('picker-dateArrival')?.showPicker()} /><input type="date" id="picker-dateArrival" disabled={!canEditField('dateArrival')} value={formData.dateArrival || ''} onChange={e => handleFormChange(e, 'dateArrival')} className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateArrival')} onClick={() => document.getElementById('picker-dateArrival')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
-                         </div>
-                         <div className="space-y-1">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="Срок готовности">Срок готовности</label>
-                            <div className="relative"><input type="text" readOnly disabled={!canEditField('dateLoading')} value={formData.dateLoading ? formData.dateLoading.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('picker-dateLoading')?.showPicker()} /><input type="date" id="picker-dateLoading" disabled={!canEditField('dateLoading')} value={formData.dateLoading || ''} onChange={e => handleFormChange(e, 'dateLoading')} className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateLoading')} onClick={() => document.getElementById('picker-dateLoading')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
-                         </div>
-                         <div className="space-y-1">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate">Заявка на ремонт</label>
-                            <div className="relative"><input type="text" readOnly disabled={!canEditField('dateRepairStart')} value={formData.dateRepairStart ? formData.dateRepairStart.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('picker-dateRepairStart')?.showPicker()} /><input type="date" id="picker-dateRepairStart" disabled={!canEditField('dateRepairStart')} value={formData.dateRepairStart || ''} onChange={e => handleFormChange(e, 'dateRepairStart')} className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateRepairStart')} onClick={() => document.getElementById('picker-dateRepairStart')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
-                         </div>
-                         <div className="space-y-1">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate">Завершение ремонта</label>
-                            <div className="relative"><input type="text" readOnly disabled={!canEditField('dateRepairEnd')} value={formData.dateRepairEnd ? formData.dateRepairEnd.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('picker-dateRepairEnd')?.showPicker()} /><input type="date" id="picker-dateRepairEnd" disabled={!canEditField('dateRepairEnd')} value={formData.dateRepairEnd || ''} onChange={e => handleFormChange(e, 'dateRepairEnd')} className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateRepairEnd')} onClick={() => document.getElementById('picker-dateRepairEnd')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
-                         </div>
-                         <div className="space-y-1">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Фактический выезд</label>
-                            <div className="relative"><input type="text" readOnly disabled={!canEditField('dateDeparture')} value={formData.dateDeparture ? formData.dateDeparture.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('picker-dateDeparture')?.showPicker()} /><input type="date" id="picker-dateDeparture" disabled={!canEditField('dateDeparture')} value={formData.dateDeparture || ''} onChange={e => handleFormChange(e, 'dateDeparture')} className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateDeparture')} onClick={() => document.getElementById('picker-dateDeparture')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
-                         </div>
-                         <div className="space-y-1">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Примечание</label>
-                            <input 
-                              disabled={!canEditField('comment')} 
-                              value={formData.comment} 
-                              onChange={e => handleFormChange(e, 'comment')} 
-                              className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300" 
-                              placeholder="..." 
-                            />
-                         </div>
-                     </div>
-                     <button 
-                       type="submit" 
-                       disabled={!allFields.some(f => canEditField(f))} 
-                       className="bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold px-4 py-2.5 transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-40 mt-2 min-h-[44px]"
-                     >
-                        Добавить в контроль
-                     </button>
-                     <datalist id="known-fleet-dl">
-                        {knownFleet.map(k => <option key={k} value={k} />)}
-                     </datalist>
-                 </form>
-             </div>
-          </div>
-
-          <div className={currentTab !== 'history' ? '' : 'hidden'}>
-             <div className="pt-6 flex flex-col">
-                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-5">
-                    <h2 className="text-base font-semibold text-slate-800 tracking-tight">
-                       {currentTab === 'base' ? 'Автомобили на базе' : 'Архив выехавших автомобилей'}
-                    </h2>
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full sm:w-auto">
-                       <input 
-                         value={searchQuery} 
-                         onChange={e => setSearchQuery(e.target.value)} 
-                         type="text" 
-                         className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full sm:w-64 focus:border-slate-300" 
-                         placeholder="Быстрый поиск..." 
-                       />
-                    </div>
-                 </div>
-
-                 {/* Month tabs for archive */}
-                 {currentTab === 'archive' && (
-                   <div className="flex gap-1.5 overflow-x-auto pb-2 custom-scrollbar mt-2">
-                     {(() => {
-                       const monthNames = ['','Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
-                       const groups: Record<string, number> = {};
-                       archiveCars.forEach(v => {
-                         const m = v.dateDeparture ? v.dateDeparture.substring(0, 7) : 'Без даты';
-                         groups[m] = (groups[m] || 0) + 1;
-                       });
-                       const months = Object.keys(groups).sort((a, b) => b.localeCompare(a));
-                       return [
-                         <button key="all" onClick={() => setArchiveMonth(null)} className={`px-3 py-1.5 rounded-full text-[10px] font-semibold transition-all whitespace-nowrap cursor-pointer select-none ${archiveMonth === null ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200'}`}>Все ({archiveCars.length})</button>,
-                         ...months.map(m => {
-                           const [y, mo] = m.split('-');
-                           const label = m === 'Без даты' ? 'Без даты' : `${monthNames[parseInt(mo)]} ${y}`;
-                           return (
-                             <button key={m} onClick={() => setArchiveMonth(m)} className={`px-3 py-1.5 rounded-full text-[10px] font-semibold transition-all whitespace-nowrap cursor-pointer select-none ${archiveMonth === m ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100/70 text-slate-500 hover:bg-slate-200'}`}>{label} ({groups[m]})</button>
-                           );
-                         })
-                       ];
-                     })()}
-                   </div>
-                 )}
-
-                 {/* Desktop Table */}
-                 <div className="hidden lg:block overflow-x-auto custom-scrollbar">
-                     
-<table className="w-full text-left border-separate border-spacing-y-2">
-  <thead>
-    <tr>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('carNumber')}>Госномер{renderSortIndicator('carNumber')}</th>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('driverName')}>Водитель{renderSortIndicator('driverName')}</th>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('dateArrival')}>Прибыл на базу{renderSortIndicator('dateArrival')}</th>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('dateLoading')}>Срок готовности{renderSortIndicator('dateLoading')}</th>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('dateRepairStart')}>Заявка на ремонт{renderSortIndicator('dateRepairStart')}</th>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('dateRepairEnd')}>Завершение ремонта{renderSortIndicator('dateRepairEnd')}</th>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans cursor-pointer hover:text-slate-700 select-none" onClick={() => handleSort('dateDeparture')}>Фактический выезд{renderSortIndicator('dateDeparture')}</th>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Примечание</th>
-      <th className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-2 px-4 font-sans">Действия</th>
-    </tr>
-  </thead>
-  <tbody>
-    {visibleList.map((v) => (
-      <tr key={`${v.id}-${normalizePlate(v.carNumber)}`} data-nav-item className="group cursor-pointer">
-        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 group-hover:bg-slate-50 transition duration-150">
-          <span className="font-semibold text-sm text-slate-800 font-mono tracking-wider inline-block select-all">{v.carNumber}</span>
-        </td>
-        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 text-sm font-medium text-slate-700 group-hover:bg-slate-50 transition">{v.displayDriver || '—'}</td>
-        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 text-sm font-medium text-slate-500 group-hover:bg-slate-50 transition">
-          {v.dateArrival ? v.dateArrival.split('-').reverse().join('/') : '—'}
-        </td>
-        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 text-sm font-medium text-slate-500 group-hover:bg-slate-50 transition">
-          {v.dateLoading ? v.dateLoading.split('-').reverse().join('/') : '—'}
-        </td>
-        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 text-sm font-medium text-slate-500 group-hover:bg-slate-50 transition">
-          {v.dateRepairStart ? v.dateRepairStart.split('-').reverse().join('/') : '—'}
-        </td>
-        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 text-sm font-medium text-slate-500 group-hover:bg-slate-50 transition">
-          {v.dateRepairEnd ? v.dateRepairEnd.split('-').reverse().join('/') : '—'}
-        </td>
-        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 text-sm font-medium group-hover:bg-slate-50 transition">
-          <span className={`whitespace-nowrap font-sans ${
-            v.dateDeparture
-                ? 'text-emerald-700 font-semibold' 
-                : 'text-slate-500'
-          }`}>
-            {v.dateDeparture ? v.dateDeparture.split('-').reverse().join('/') : '—'}
+    <>
+      <ModuleShell
+        title="Учёт выезда"
+        tabs={tabsList}
+        activeTab={currentTab}
+        onTabChange={(key) => setCurrentTab(key as 'base' | 'archive' | 'history')}
+        tabsAriaLabel="Вкладки модуля учёта выезда"
+      >
+        {/* Сводные показатели — строкой: точка, подпись, моно-значение */}
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-3 pb-4 border-b border-[#E5E7EB]">
+          <span className="inline-flex items-center gap-2">
+            <StatusText color="grey">Всего на базе ТС</StatusText>
+            <span className="text-sm font-semibold font-mono tabular-nums text-[#121316]">{wTotal}</span>
           </span>
-        </td>
-        <td onClick={() => openCarModal(v)} className="border-t border-slate-100 px-4 py-3.5 text-sm text-slate-400 group-hover:bg-slate-50 transition max-w-[180px] truncate">{v.comment || v.notes || '—'}</td>
-        <td className="border-t border-slate-100 px-4 py-3.5 group-hover:bg-slate-50 transition">
-          <div className="flex gap-1.5 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-            <button 
-              onClick={(e) => { e.stopPropagation(); openCarModal(v); }} 
-              className="p-1.5 text-slate-400 hover:text-[#3765F6] bg-white hover:bg-[#3765F6]/5 border border-slate-200/60 hover:border-[#3765F6]/20 rounded-lg shadow-3xs transition-all active:scale-90 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center" 
-              title="Редактировать"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
-            </button>
-            <button 
-              disabled={isMechanic}
-              onClick={(e) => { e.stopPropagation(); deleteCarRecord(v.id, v.carNumber, e); }} 
-              className="p-1.5 text-slate-400 hover:text-rose-600 bg-white hover:bg-rose-50 border border-slate-200/60 hover:border-rose-200 rounded-lg shadow-3xs transition-all active:scale-90 disabled:opacity-30 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center" 
-              title="Удалить"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-            </button>
-          </div>
-        </td>
-      </tr>
-    ))}
-  </tbody>
-</table>
-                 </div>
+          <span className="inline-flex items-center gap-2">
+            <StatusText color="amber">В ремонте ТС</StatusText>
+            <span className="text-sm font-semibold font-mono tabular-nums text-[#121316]">{wRepair}</span>
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <StatusText color="emerald">Готовы к рейсу ТС</StatusText>
+            <span className="text-sm font-semibold font-mono tabular-nums text-[#121316]">{wReady}</span>
+          </span>
+        </div>
 
-                 {/* Mobile Cards View */}
-                 <div className="block lg:hidden space-y-3 mt-4">
-                   {visibleList.map(v => (
-                     <div 
-                       key={`${v.id}-${normalizePlate(v.carNumber)}`} 
-                       onClick={() => openCarModal(v)}
-                       className="bg-slate-50 rounded-2xl p-4 border border-slate-200/50 transition-all cursor-pointer flex flex-col gap-3"
-                     >
-                       <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-xs bg-white text-slate-800 border border-slate-200/60 shadow-3xs px-2.5 py-1.5 rounded-xl font-mono tracking-wider">{v.carNumber}</span>
-                            <span className="text-xs font-semibold text-slate-800">{v.displayDriver || "—"}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            {getStatusBadge(v._status.code, v._status.text)}
-                            <button 
-                              disabled={(currentTab === "archive" && !isRootAdmin) || isMechanic}
-                              onClick={(e) => { e.stopPropagation(); deleteCarRecord(v.id, v.carNumber, e); }} 
-                              className="min-h-[44px] min-w-[44px] bg-rose-50 hover:bg-rose-100 text-rose-500 rounded-xl flex items-center justify-center shrink-0 disabled:opacity-30 transition-all active:scale-90 border border-rose-100 cursor-pointer"
-                            >
-                              <Trash2 className="h-4 w-4"/>
-                            </button>
-                          </div>
-                       </div>
-                       
-                       <div className="grid grid-cols-2 gap-2 text-[11px]">
-                         <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-200/50">
-                           <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Прибыл на базу</span>
-                           <span className="font-medium text-slate-700">{v.dateArrival ? v.dateArrival.split("-").reverse().join("/") : "—"}</span>
-                         </div>
-                         <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-200/50">
-                           <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Срок готовности</span>
-                           <span className="font-medium text-slate-700">{v.dateLoading ? v.dateLoading.split("-").reverse().join("/") : "—"}</span>
-                         </div>
-                         <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-200/50">
-                           <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Заявка на ремонт</span>
-                           <span className="font-medium text-slate-700">{v.dateRepairStart ? v.dateRepairStart.split("-").reverse().join("/") : "—"}</span>
-                         </div>
-                         <div className="bg-slate-100 p-2.5 rounded-xl border border-slate-200/50">
-                           <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Завершение ремонта</span>
-                           <span className="font-medium text-slate-700">{v.dateRepairEnd ? v.dateRepairEnd.split("-").reverse().join("/") : "—"}</span>
-                         </div>
-                       </div>
-                       
-                       <div className="flex justify-between items-center gap-2 pt-3 border-t border-slate-100/50 mt-1">
-                         <div className="flex-1">
-                           <span className="block text-[9px] text-slate-400 uppercase font-semibold mb-1.5 tracking-wider">Фактический выезд</span>
-                           <span className={`px-2 py-1 inline-block rounded-lg border text-[11px] font-semibold ${v.dateDeparture ? "bg-emerald-500/10 border-emerald-500/15 text-emerald-800" : "bg-white/60 border-slate-200/40 text-slate-500"}`}>
-                             {v.dateDeparture ? v.dateDeparture.split("-").reverse().join("/") : "—"}
-                           </span>
-                         </div>
-                         <div className="flex-1 text-right">
-                            <span className="block text-[9px] text-slate-400 uppercase font-semibold mb-1.5 tracking-wider">Примечание</span>
-                            <span className="text-[11px] text-slate-600 truncate max-w-[120px] inline-block font-medium">{v.comment || v.notes || "—"}</span>
-                         </div>
-                       </div>
-                     </div>
-                     ))}</div>
-                   
-                   {filteredList.length === 0 && (
-                   <div className="text-center p-8 text-slate-400 font-medium bg-slate-50 rounded-2xl border border-slate-200/50">
-                     Нет записей
-                   </div>)}
-                   {hasMoreBaza && (
-                     <div className="flex justify-center mt-4">
-                       <button
-                         onClick={() => setVisibleBazaCount((c) => c + BAZA_PAGE_SIZE)}
-                         className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold shadow-sm transition-colors min-h-[44px]"
-                       >
-                         Показать ещё {Math.min(BAZA_PAGE_SIZE, filteredList.length - visibleBazaCount)} (осталось {filteredList.length - visibleBazaCount})
-                       </button>
-                     </div>
-                   )}
-             </div>
-          </div>
-
-          <div className={currentTab === 'history' ? '' : 'hidden'}>
-             <div className="pt-6 flex flex-col">
-                 <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-4 mb-4 flex items-center gap-2">
-                    <History className="h-4 w-4 text-[#3765F6]" />
-                    История всех действий в системе
-                 </h2>
-                 <div className="space-y-3 max-h-[700px] overflow-y-auto pr-2">
-                    {[...globalHistory].reverse().slice(0, historyLimit).map(h => (
-                       <div key={h.id} className="bg-slate-50 rounded-2xl p-4 border border-slate-200/50 flex flex-col gap-3 hover:border-[#3765F6]/20 transition-all">
-                          <div className="flex items-center flex-wrap gap-3">
-                             <span className="text-xs font-semibold text-slate-400 font-mono">{h.date}</span>
-                             <span className="text-xs font-semibold bg-white px-2.5 py-1 rounded-xl border border-slate-200/60 shadow-3xs font-mono text-slate-800">{h.carNumber}</span>
-                             <span className="text-xs font-semibold text-slate-700 bg-[#3765F6]/5 text-[#3765F6] border border-[#3765F6]/10 px-2.5 py-1 rounded-xl">{h.user}</span>
-                          </div>
-                          <div className="text-xs text-slate-700 bg-white p-3 rounded-xl border border-slate-200/30 flex flex-wrap items-center gap-2">
-                             <span className="font-bold text-slate-800 border-r border-slate-200/60 pr-2">{getNormalizedFieldLabel(h.field)}:</span>
-                             <span className={`text-rose-500 font-semibold ${h.actionType==='delete'?'line-through-none':''}`}>{h.old}</span>
-                             {h.actionType !== 'delete' && (
-                                <>
-                                 <span className="text-slate-300">➔</span>
-                                 <span className="text-emerald-600 font-semibold">{h.new}</span>
-                                </>
-                             )}
-                          </div>
-                       </div>
-                    ))}
-                    
-                    {globalHistory.length > historyLimit && (
-                       <button 
-                          onClick={() => setHistoryLimit(prev => prev + 100)}
-                          className="w-full py-3 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl transition-all cursor-pointer text-center tracking-tight border border-slate-200/50 active:scale-95 shadow-sm min-h-[44px]"
-                       >
-                          Загрузить еще (Показано {historyLimit} из {globalHistory.length})
-                       </button>
+        {/* Вкладка «На базе»: добавление автомобиля */}
+        <div className={currentTab === 'base' ? '' : 'hidden'}>
+          <div className="pt-5">
+            <SectionHeader
+              icon={<Plus className="w-4 h-4" aria-hidden="true" />}
+              title="Добавить новый автомобиль"
+            />
+            <form onSubmit={handleAddNewCar} noValidate className="flex flex-col gap-6 pt-4">
+              {/* Автомобиль и водитель */}
+              <section className="flex flex-col gap-3">
+                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">Автомобиль и водитель</h4>
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <label className={UI.fieldLabel} htmlFor="form-car-picker">
+                      Автомобиль <span className="text-[#A55329]">*</span>
+                    </label>
+                    <div id="form-car-picker">
+                      <CouplingPicker
+                        mode="combined"
+                        value={formData.carNumber}
+                        onSelect={(rec) => {
+                          if (!rec) {
+                            // Очистка выбора: машина и заполненные из сцепки поля
+                            setFormData((f) => ({ ...f, carNumber: '', driverName: '', driverPhone: '' }));
+                            return;
+                          }
+                          const cNum = [(rec.carNumber || rec.vehicleNumbers || '').toUpperCase(), (rec.trailerNumber || '').toUpperCase()]
+                            .filter(Boolean).join(' / ');
+                          const updates: any = { carNumber: cNum };
+                          if (rec.driverName) updates.driverName = rec.driverName;
+                          if (rec.driverPhone) updates.driverPhone = rec.driverPhone;
+                          setFormData((f) => ({ ...f, ...updates }));
+                          if (formErrors.carNumber) setFormErrors({});
+                        }}
+                      />
+                    </div>
+                    {formErrors.carNumber && (
+                      <span className="flex items-center gap-1.5 text-[11px] text-rose-600">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        {formErrors.carNumber}
+                      </span>
                     )}
-                    
-                    {globalHistory.length === 0 && <div className="text-slate-400 italic font-medium py-4 text-center">История пуста.</div>}
-                 </div>
-             </div>
+                    <span className={UI.hint}>Выбор из справочника сцепок: тягач и прицеп подставятся вместе с водителем.</span>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className={UI.fieldLabel} htmlFor="form-add-driver">ФИО водителя</label>
+                    <input
+                      id="form-add-driver"
+                      type="text"
+                      value={formData.driverName || ''}
+                      onChange={(e) => setFormData((f) => ({ ...f, driverName: e.target.value }))}
+                      className={UI.input}
+                      placeholder="Фамилия Имя Отчество"
+                    />
+                    <span className={UI.hint}>Заполняется из сцепки. Если поправить — запись появится в базе водителей.</span>
+                  </div>
+                </div>
+              </section>
+
+              {/* Даты: порядок — от прибытия к выезду, как идёт работа машины */}
+              <section className="flex flex-col gap-3">
+                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">Даты</h4>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  <BazaDateField
+                    id="dateArrival"
+                    label="Прибыл на базу"
+                    value={formData.dateArrival}
+                    disabled={!canEditField('dateArrival')}
+                    onChange={(e) => handleFormChange(e, 'dateArrival')}
+                  />
+                  <BazaDateField
+                    id="dateLoading"
+                    label="Срок готовности"
+                    value={formData.dateLoading}
+                    disabled={!canEditField('dateLoading')}
+                    onChange={(e) => handleFormChange(e, 'dateLoading')}
+                  />
+                  <BazaDateField
+                    id="dateRepairStart"
+                    label="Заявка на ремонт"
+                    value={formData.dateRepairStart}
+                    disabled={!canEditField('dateRepairStart')}
+                    onChange={(e) => handleFormChange(e, 'dateRepairStart')}
+                  />
+                  <BazaDateField
+                    id="dateRepairEnd"
+                    label="Завершение ремонта"
+                    value={formData.dateRepairEnd}
+                    disabled={!canEditField('dateRepairEnd')}
+                    onChange={(e) => handleFormChange(e, 'dateRepairEnd')}
+                  />
+                  <BazaDateField
+                    id="dateDeparture"
+                    label="Фактический выезд"
+                    value={formData.dateDeparture}
+                    disabled={!canEditField('dateDeparture')}
+                    onChange={(e) => handleFormChange(e, 'dateDeparture')}
+                  />
+                </div>
+                <span className={UI.hint}>
+                  Даты в формате ДД/ММ/ГГГГ. Календарь открывается нажатием на поле или по значку справа.
+                </span>
+              </section>
+
+              {/* Примечание */}
+              <section className="flex flex-col gap-3">
+                <h4 className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">Примечание</h4>
+                <input
+                  id="form-add-comment"
+                  disabled={!canEditField('comment')}
+                  value={formData.comment}
+                  onChange={e => handleFormChange(e, 'comment')}
+                  className={UI.input}
+                  placeholder="Что важно знать по машине — необязательно"
+                  aria-label="Примечание"
+                />
+              </section>
+
+              {/* Действие */}
+              <div className="flex flex-col gap-2 border-t border-[#E5E7EB] pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <span className={UI.hint}>Поля со звёздочкой обязательны. Машина добавляется в контроль сразу после отправки.</span>
+                <button
+                  type="submit"
+                  disabled={!allFields.some(f => canEditField(f))}
+                  className={`${UI.buttonPrimary} w-full shrink-0 sm:w-auto`}
+                >
+                  Добавить в контроль
+                </button>
+              </div>
+              <datalist id="known-fleet-dl">
+                {Array.from(new Set(knownFleet)).map((k, oi) => <option key={`${k}-${oi}`} value={k} />)}
+              </datalist>
+            </form>
+          </div>
+        </div>
+
+        {/* Вкладки «На базе» и «Архив»: список автомобилей */}
+        <div className={currentTab !== 'history' ? '' : 'hidden'}>
+          <div className="pt-5 flex flex-col gap-4">
+            <SectionHeader
+              icon={currentTab === 'base'
+                ? <Truck className="w-4 h-4" aria-hidden="true" />
+                : <Archive className="w-4 h-4" aria-hidden="true" />}
+              title={currentTab === 'base' ? 'Автомобили на базе' : 'Архив выехавших автомобилей'}
+            />
+            <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+              <SearchField
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Быстрый поиск..."
+                ariaLabel="Быстрый поиск по автомобилям"
+              />
+              <FoundCount
+                count={filteredList.length}
+                onReset={(searchQuery || archiveMonth !== null) ? () => { setSearchQuery(''); setArchiveMonth(null); } : undefined}
+              />
+            </div>
+
+            {currentTab === 'archive' && (
+              (() => {
+                const monthNames = ['','Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+                const groups: Record<string, number> = {};
+                archiveCars.forEach(v => {
+                  const m = v.dateDeparture ? v.dateDeparture.substring(0, 7) : 'Без даты';
+                  groups[m] = (groups[m] || 0) + 1;
+                });
+                const months = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+                return (
+                  <FilterPills
+                    items={[
+                      { key: 'all', label: `Все (${archiveCars.length})` },
+                      ...months.map(m => {
+                        const [y, mo] = m.split('-');
+                        const label = m === 'Без даты' ? `Без даты (${groups[m]})` : `${monthNames[parseInt(mo)]} ${y} (${groups[m]})`;
+                        return { key: m, label };
+                      }),
+                    ]}
+                    active={archiveMonth ?? 'all'}
+                    onChange={(k) => setArchiveMonth(k === 'all' ? null : k)}
+                    ariaLabel="Месяц архива"
+                  />
+                );
+              })()
+            )}
+
+            {filteredList.length === 0 ? (
+              <EmptyState
+                kind={(searchQuery || archiveMonth !== null) ? 'no-results' : 'empty'}
+                title={(searchQuery || archiveMonth !== null) ? undefined : 'Записей пока нет'}
+                hint={(searchQuery || archiveMonth !== null) ? undefined : (currentTab === 'archive' ? 'Автомобиль появится здесь после выезда в рейс.' : 'Добавьте автомобиль через форму — запись появится здесь.')}
+                query={searchQuery || undefined}
+              />
+            ) : (
+              <>
+                {/* Таблица — прямо на холсте */}
+                <div className={`hidden lg:block ${UI.tableWrap}`}>
+                  <table className={UI.table}>
+                    <thead>
+                      <tr className={UI.theadRow}>
+                        <th className={UI.thSortable} onClick={() => handleSort('carNumber')}>Госномер{renderSortIndicator('carNumber')}</th>
+                        <th className={UI.thSortable} onClick={() => handleSort('driverName')}>Водитель{renderSortIndicator('driverName')}</th>
+                        <th className={UI.thSortable} onClick={() => handleSort('dateArrival')}>Прибыл на базу{renderSortIndicator('dateArrival')}</th>
+                        <th className={UI.thSortable} onClick={() => handleSort('dateLoading')}>Срок готовности{renderSortIndicator('dateLoading')}</th>
+                        <th className={UI.thSortable} onClick={() => handleSort('dateRepairStart')}>Заявка на ремонт{renderSortIndicator('dateRepairStart')}</th>
+                        <th className={UI.thSortable} onClick={() => handleSort('dateRepairEnd')}>Завершение ремонта{renderSortIndicator('dateRepairEnd')}</th>
+                        <th className={UI.thSortable} onClick={() => handleSort('dateDeparture')}>Фактический выезд{renderSortIndicator('dateDeparture')}</th>
+                        <th className={UI.th}>Примечание</th>
+                        <th className={`${UI.th} text-right`}>Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleList.map((v, rowIndex) => (
+                        <tr key={`${v.id}-${normalizePlate(v.carNumber)}-${rowIndex}`} data-nav-item className={`${UI.tr} cursor-pointer`}>
+                          <td onClick={() => openCarModal(v)} className={UI.tdMono}><span className="select-all">{v.carNumber}</span></td>
+                          <td onClick={() => openCarModal(v)} className={UI.tdStrong}>{v.displayDriver || '—'}</td>
+                          <td onClick={() => openCarModal(v)} className={UI.td}><span className="whitespace-nowrap">{v.dateArrival ? v.dateArrival.split('-').reverse().join('/') : '—'}</span></td>
+                          <td onClick={() => openCarModal(v)} className={UI.td}><span className="whitespace-nowrap">{v.dateLoading ? v.dateLoading.split('-').reverse().join('/') : '—'}</span></td>
+                          <td onClick={() => openCarModal(v)} className={UI.td}><span className="whitespace-nowrap">{v.dateRepairStart ? v.dateRepairStart.split('-').reverse().join('/') : '—'}</span></td>
+                          <td onClick={() => openCarModal(v)} className={UI.td}><span className="whitespace-nowrap">{v.dateRepairEnd ? v.dateRepairEnd.split('-').reverse().join('/') : '—'}</span></td>
+                          <td onClick={() => openCarModal(v)} className={UI.td}>
+                            <span className={`whitespace-nowrap ${v.dateDeparture ? 'font-semibold text-emerald-600' : ''}`}>{v.dateDeparture ? v.dateDeparture.split('-').reverse().join('/') : '—'}</span>
+                          </td>
+                          <td onClick={() => openCarModal(v)} className={UI.td}>
+                            {(v.comment || v.notes) ? (
+                              <span className="block max-w-[180px] truncate text-[#6B7280]" title={v.comment || v.notes}>{v.comment || v.notes}</span>
+                            ) : (
+                              <span className="text-[#9CA3AF]">—</span>
+                            )}
+                          </td>
+                          <td className={UI.td}>
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openCarModal(v); }}
+                                className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-[#6B7280] hover:text-[var(--accent-ink)] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                                title="Редактировать"
+                              >
+                                <Edit className="w-3.5 h-3.5" aria-hidden="true" />
+                              </button>
+                              <button
+                                disabled={isMechanic || !canWriteBaza}
+                                onClick={(e) => { e.stopPropagation(); deleteCarRecord(v.id, v.carNumber, e); }}
+                                className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 transition-colors disabled:opacity-30 cursor-pointer"
+                                title="Удалить"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Карточки на мобильных */}
+                <div className="lg:hidden flex flex-col gap-3">
+                  {visibleList.map((v, rowIndex) => (
+                    <div
+                      key={`${v.id}-${normalizePlate(v.carNumber)}-${rowIndex}`}
+                      onClick={() => openCarModal(v)}
+                      className="bg-white border border-[#E5E7EB] rounded-2xl p-4 flex flex-col gap-3 cursor-pointer hover:bg-[#F9FAFB] transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                          <span className="font-mono font-semibold text-xs text-[#121316] select-all">{v.carNumber}</span>
+                          <span className="text-xs font-medium text-[#4B5563] truncate">{v.displayDriver || '—'}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {getStatusBadge(v._status.code, v._status.text)}
+                          <button
+                            disabled={(currentTab === 'archive' && !isRootAdmin) || isMechanic || !canWriteBaza}
+                            onClick={(e) => { e.stopPropagation(); deleteCarRecord(v.id, v.carNumber, e); }}
+                            className="w-11 h-11 flex items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 disabled:opacity-30 transition-colors cursor-pointer shrink-0"
+                            title="Удалить"
+                          >
+                            <Trash2 className="w-4 h-4" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+                        {[
+                          { label: 'Прибыл на базу', value: v.dateArrival },
+                          { label: 'Срок готовности', value: v.dateLoading },
+                          { label: 'Заявка на ремонт', value: v.dateRepairStart },
+                          { label: 'Завершение ремонта', value: v.dateRepairEnd },
+                        ].map((f) => (
+                          <div key={f.label} className="flex flex-col gap-1">
+                            <span className="text-[10px] font-medium uppercase tracking-wider text-[#9CA3AF]">{f.label}</span>
+                            <span className="text-xs font-mono tabular-nums text-[#4B5563]">{f.value ? f.value.split('-').reverse().join('/') : '—'}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex items-start justify-between gap-3 pt-3 border-t border-[#E5E7EB]">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] font-medium uppercase tracking-wider text-[#9CA3AF]">Фактический выезд</span>
+                          <span className={`text-xs font-mono tabular-nums ${v.dateDeparture ? 'font-semibold text-emerald-600' : 'text-[#4B5563]'}`}>{v.dateDeparture ? v.dateDeparture.split('-').reverse().join('/') : '—'}</span>
+                        </div>
+                        <div className="flex flex-col gap-1 min-w-0 items-end text-right">
+                          <span className="text-[10px] font-medium uppercase tracking-wider text-[#9CA3AF]">Примечание</span>
+                          <span className="text-xs text-[#6B7280] truncate max-w-[160px]" title={v.comment || v.notes || undefined}>{v.comment || v.notes || '—'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {hasMoreBaza && (
+              <div className="flex justify-center pt-1">
+                <button
+                  onClick={() => setVisibleBazaCount((c) => c + BAZA_PAGE_SIZE)}
+                  className={UI.buttonGhost}
+                >
+                  <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+                  Показать ещё {Math.min(BAZA_PAGE_SIZE, filteredList.length - visibleBazaCount)} (осталось {filteredList.length - visibleBazaCount})
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Вкладка «История» */}
+        <div className={currentTab === 'history' ? '' : 'hidden'}>
+          <div className="pt-5 flex flex-col gap-4">
+            <SectionHeader
+              icon={<History className="w-4 h-4" aria-hidden="true" />}
+              title="История всех действий в системе"
+            />
+
+            {globalHistory.length === 0 ? (
+              <EmptyState
+                kind="empty"
+                title="История пуста"
+                hint="Действия по записям автомобилей появятся здесь."
+              />
+            ) : (
+              <>
+                <div className="flex flex-col max-h-[700px] overflow-y-auto custom-scrollbar pr-1">
+                  {[...globalHistory].reverse().slice(0, historyLimit).map(h => (
+                    <div key={h.id} className="flex flex-col gap-1.5 py-3.5 border-b border-[#E5E7EB] last:border-0">
+                      <div className="flex items-center flex-wrap gap-x-3 gap-y-1.5">
+                        <span className="text-[11px] font-mono tabular-nums text-[#6B7280]">{h.date}</span>
+                        <span className={`${UI.chip} font-mono text-[#121316]`}>{h.carNumber}</span>
+                        <span className="text-[11px] font-medium text-[#A55329]">{h.user}</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-[#4B5563]">
+                        <span className="font-semibold text-[#121316]">{getNormalizedFieldLabel(h.field)}:</span>
+                        <span className="text-rose-600">{h.old}</span>
+                        {h.actionType !== 'delete' && (
+                          <>
+                            <ArrowRight className="w-3.5 h-3.5 text-[#D1D5DB]" aria-hidden="true" />
+                            <span className="font-medium text-emerald-600">{h.new}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {globalHistory.length > historyLimit && (
+                  <button
+                    onClick={() => setHistoryLimit(prev => prev + 100)}
+                    className={`${UI.buttonGhost} w-full`}
+                  >
+                    Загрузить еще (Показано {historyLimit} из {globalHistory.length})
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </ModuleShell>
+
+      {/* Модальное окно редактирования автомобиля */}
+      <ModalShell
+        isOpen={isCarModalOpen}
+        onClose={() => setIsCarModalOpen(false)}
+        title="Карточка автомобиля"
+        subtitle={modalData.carNumber || undefined}
+        icon={<Truck className="w-4 h-4" aria-hidden="true" />}
+        iconTone="graphite"
+        maxWidth="max-w-4xl"
+        footer={
+          <div className="flex flex-wrap items-center justify-end gap-2 w-full">
+            {currentTab === 'base' && !isMechanic && (
+              <button onClick={moveCarToArchive} className={`${UI.buttonGhost} mr-auto`}>
+                Выехал в рейс
+              </button>
+            )}
+            <button onClick={() => setIsCarModalOpen(false)} className={UI.buttonGhost}>Отмена</button>
+            <button onClick={saveCarModal} className={UI.buttonPrimary}>Сохранить</button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-wrap items-center gap-3 pb-4 border-b border-[#E5E7EB]">
+            {getStatusBadge(calculateCarStatus(modalData).code, calculateCarStatus(modalData).text)}
           </div>
 
-      </div>
+          {/* Аналитика простоя */}
+          <div className="flex flex-col gap-3">
+            <span className={UI.caption}>Аналитика простоя по записи</span>
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+              <span className="inline-flex items-center gap-2">
+                <StatusText color="grey">Дни отдыха водит.</StatusText>
+                <span className="text-sm font-semibold font-mono tabular-nums text-[#121316]">{getDaysBetween(modalData.dateArrival, modalData.dateLoading)}</span>
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <StatusText color="rose">Ожидание ремонта</StatusText>
+                <span className="text-sm font-semibold font-mono tabular-nums text-rose-600">{getDaysBetween(modalData.dateArrival, modalData.dateRepairStart)}</span>
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <StatusText color="amber">Дни ремонта</StatusText>
+                <span className="text-sm font-semibold font-mono tabular-nums text-[var(--accent-ink)]">{getDaysBetween(modalData.dateRepairStart, modalData.dateRepairEnd)}</span>
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <StatusText color="accent">Общий простой</StatusText>
+                <span className="text-sm font-semibold font-mono tabular-nums text-[var(--accent-ink)]">{getDaysBetween(modalData.dateArrival, modalData.dateDeparture)}</span>
+              </span>
+            </div>
+          </div>
 
-      {/* Car Editor Modal */}
-      <AnimatePresence>
-        {isCarModalOpen && (
-           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-50 bg-slate-900/40 flex items-start md:items-center justify-center overflow-y-auto">
-              <motion.div initial={{y:30, scale:0.96}} animate={{y:0, scale:1}} exit={{y:20, opacity:0, scale:0.96}} className="bg-white w-full md:max-w-4xl md:mx-4 rounded-2xl flex flex-col md:border md:border-slate-200/50 md:shadow-[0_8px_30px_rgba(0,0,0,0.01)] min-h-screen md:min-h-0 md:max-h-[calc(100vh-2rem)] overflow-hidden">
-                 <div className="p-4 md:p-5 border-b border-slate-200/50 flex justify-between items-center bg-white shrink-0 sticky top-0 z-10">
-                    <div className="flex items-center gap-3 min-w-0">
-                       <h2 className="text-sm font-semibold text-slate-800 tracking-tight truncate">Карточка автомобиля</h2>
-                       {modalData.carNumber && (
-                          <span className="font-semibold text-[11px] bg-white text-slate-800 border border-slate-200 shadow-3xs px-2.5 py-1 rounded-lg font-mono tracking-wider shrink-0">
-                             {modalData.carNumber}
-                          </span>
-                       )}
-                       {modalData.id && (
-                          getStatusBadge(calculateCarStatus(modalData).code, calculateCarStatus(modalData).text)
-                       )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel}>Госномер автомобиля</label>
+              <CouplingPicker
+                mode="combined"
+                value={modalData.carNumber}
+                onSelect={(rec) => {
+                  if (!rec) return;
+                  const coupling = [
+                    (rec.carNumber || rec.vehicleNumbers || '').toUpperCase(),
+                    rec.trailerNumber ? rec.trailerNumber.toUpperCase() : ''
+                  ].filter(Boolean).join(' / ');
+                  const fullName = rec.driverNameRu || rec.driverName || rec.driverShortNameRu || '';
+                  const driverName = fullName;
+                  // Changing the car edits carNumber + driverName; mark them touched so they save,
+                  // but NEVER touch the date/comment fields (they must survive the change).
+                  setTouchedFields(prev => ({ ...prev, carNumber: true, driverName: true, driverNameRu: true }));
+                  setModalData((m) => ({ ...m, carNumber: coupling, driverName, driverNameRu: fullName || '' }));
+                }}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel}>ФИО Водителя</label>
+              <div className="flex items-center min-h-[44px] py-2 text-xs font-medium text-[#4B5563]">
+                {modalData.driverName || <span className="text-[#9CA3AF]">—</span>}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel} title="Прибыл на базу">Прибыл на базу</label>
+              <div className="relative">
+                <input type="text" readOnly disabled={!canEditField('dateArrival')} value={modalData.dateArrival ? modalData.dateArrival.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className={`${UI.input} cursor-pointer pr-10`} onClick={() => (document.getElementById('modal-picker-dateArrival') as HTMLInputElement | null)?.showPicker()} />
+                <input type="date" id="modal-picker-dateArrival" disabled={!canEditField('dateArrival')} value={modalData.dateArrival || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateArrival: true})); setModalData((mm) => ({...mm, dateArrival: e.target.value})); } } className="absolute inset-0 opacity-0 pointer-events-none" />
+                <button type="button" disabled={!canEditField('dateArrival')} onClick={() => (document.getElementById('modal-picker-dateArrival') as HTMLInputElement | null)?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-[#9CA3AF] hover:text-[#121316] disabled:opacity-30 cursor-pointer">
+                  <Calendar className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel} title="К какому числу должна быть готова машина">Срок готовности</label>
+              <div className="relative">
+                <input type="text" readOnly disabled={!canEditField('dateLoading')} value={modalData.dateLoading ? modalData.dateLoading.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className={`${UI.input} cursor-pointer pr-10`} onClick={() => (document.getElementById('modal-picker-dateLoading') as HTMLInputElement | null)?.showPicker()} />
+                <input type="date" id="modal-picker-dateLoading" disabled={!canEditField('dateLoading')} value={modalData.dateLoading || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateLoading: true})); setModalData((mm) => ({...mm, dateLoading: e.target.value})); } } className="absolute inset-0 opacity-0 pointer-events-none" />
+                <button type="button" disabled={!canEditField('dateLoading')} onClick={() => (document.getElementById('modal-picker-dateLoading') as HTMLInputElement | null)?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-[#9CA3AF] hover:text-[#121316] disabled:opacity-30 cursor-pointer">
+                  <Calendar className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel} title="Дата подачи заявки на ремонт">Заявка на ремонт</label>
+              <input type="date" disabled={!canEditField('dateRepairStart')} value={modalData.dateRepairStart || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateRepairStart: true})); setModalData((mm) => ({...mm, dateRepairStart: e.target.value})); }} className={UI.input} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel} title="Дата окончания ремонта">Завершение ремонта</label>
+              <input type="date" disabled={!canEditField('dateRepairEnd')} value={modalData.dateRepairEnd || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateRepairEnd: true})); setModalData((mm) => ({...mm, dateRepairEnd: e.target.value})); }} className={UI.input} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel} title="Фактический выезд">Фактический выезд</label>
+              <div className="relative">
+                <input type="text" readOnly disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture ? modalData.dateDeparture.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className={`${UI.input} cursor-pointer pr-10`} onClick={() => (document.getElementById('modal-picker-dateDeparture') as HTMLInputElement | null)?.showPicker()} />
+                <input type="date" id="modal-picker-dateDeparture" disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateDeparture: true})); setModalData((mm) => ({...mm, dateDeparture: e.target.value})); } } className="absolute inset-0 opacity-0 pointer-events-none" />
+                <button type="button" disabled={!canEditField('dateDeparture')} onClick={() => (document.getElementById('modal-picker-dateDeparture') as HTMLInputElement | null)?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-[#9CA3AF] hover:text-[#121316] disabled:opacity-30 cursor-pointer">
+                  <Calendar className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className={UI.fieldLabel}>Примечание</label>
+            <input
+              disabled={!canEditField('comment')}
+              value={modalData.comment||''}
+              onChange={(e)=>{ setTouchedFields(prev => ({...prev, comment: true})); setModalData((mm) => ({...mm, comment: e.target.value})); }}
+              onKeyDown={handleInputKeyDown}
+              className={UI.input}
+            />
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <span className={UI.caption}>Журнал изменений записи</span>
+            <div className="flex flex-col max-h-40 overflow-y-auto custom-scrollbar pr-1">
+              {modalData.history && Object.keys(modalData.history).reverse().map(hk => {
+                const h = modalData.history[hk];
+                return (
+                  <div key={hk} className="flex flex-col gap-1 py-2.5 border-b border-[#E5E7EB] last:border-0">
+                    <div className="flex items-center gap-2 text-[10px] font-medium text-[#9CA3AF]">
+                      <span>{h.date}</span>
+                      <span>·</span>
+                      <span className="text-[#A55329]">{h.user}</span>
                     </div>
-                    <button 
-                      onClick={() => setIsCarModalOpen(false)} 
-                      className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer shrink-0"
-                      title="Закрыть"
-                    >
-                      <X size={18} strokeWidth={2.5} />
-                    </button>
-                 </div>
-
-                 <div className="flex-1 w-full md:overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-6">
-                    {/* Summary Widgets */}
-                    <div className="bg-slate-50 rounded-2xl p-4 lg:p-5 border border-slate-200/50">
-                       <h3 className="text-[11px] font-bold uppercase text-slate-400 tracking-wider mb-3 block">Аналитика простоя по записи</h3>
-                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                          <div className="bg-white rounded-xl p-3 text-center border border-slate-200/50 hover:border-[#3765F6]/20 transition-all">
-                             <div className="text-[10px] font-semibold text-slate-400 mb-1">Дни отдыха водит.</div>
-                             <div className="text-lg font-bold text-slate-800">{getDaysBetween(modalData.dateArrival, modalData.dateLoading)}</div>
-                          </div>
-                          <div className="bg-white rounded-xl p-3 text-center border border-slate-200/50 hover:border-[#3765F6]/20 transition-all">
-                             <div className="text-[10px] font-semibold text-slate-400 mb-1">Ожидание ремонта</div>
-                             <div className="text-lg font-bold text-rose-500">{getDaysBetween(modalData.dateArrival, modalData.dateRepairStart)}</div>
-                          </div>
-                          <div className="bg-white rounded-xl p-3 text-center border border-slate-200/50 hover:border-[#3765F6]/20 transition-all">
-                             <div className="text-[10px] font-semibold text-slate-400 mb-1">Дни ремонта</div>
-                             <div className="text-lg font-bold text-[#3765F6]">{getDaysBetween(modalData.dateRepairStart, modalData.dateRepairEnd)}</div>
-                          </div>
-                          <div className="bg-[#3765F6]/5 border border-[#3765F6]/10 rounded-xl p-3 text-center">
-                             <div className="text-[10px] font-bold text-[#3765F6] mb-1">Общий простой</div>
-                             <div className="text-lg font-bold text-[#3765F6]">{getDaysBetween(modalData.dateArrival, modalData.dateDeparture)}</div>
-                          </div>
-                       </div>
+                    <div className="text-xs text-[#4B5563] leading-relaxed">
+                      «{getNormalizedFieldLabel(h.field)}»: <span className="line-through text-[#9CA3AF] mx-1">{h.old}</span>
+                      <ArrowRight className="w-3.5 h-3.5 inline-block align-middle text-[#D1D5DB]" aria-hidden="true" />
+                      <span className="text-[#121316] font-medium mx-1">{h.new}</span>
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                       <div className="space-y-1">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Госномер автомобиля</label>
-                          <CouplingPicker
-                            mode="combined"
-                            value={modalData.carNumber}
-                            onSelect={(rec) => {
-                              if (!rec) return;
-                              const coupling = [
-                                (rec.carNumber || rec.vehicleNumbers || '').toUpperCase(),
-                                rec.trailerNumber ? rec.trailerNumber.toUpperCase() : ''
-                              ].filter(Boolean).join(' / ');
-                              const fullName = rec.driverNameRu || rec.driverName || rec.driverShortNameRu || '';
-                              const driverName = fullName;
-                              // Changing the car edits carNumber + driverName; mark them touched so they save,
-                              // but NEVER touch the date/comment fields (they must survive the change).
-                              setTouchedFields(prev => ({ ...prev, carNumber: true, driverName: true, driverNameRu: true }));
-                              setModalData((m) => ({ ...m, carNumber: coupling, driverName, driverNameRu: fullName || '' }));
-                            }}
-                          />
-                       </div>
-                        <div className="space-y-1">
-                           <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">ФИО Водителя</label>
-                           <div className="text-xs font-semibold py-2 px-1 text-slate-800">
-                             {modalData.driverName || <span className="text-slate-400 font-normal">—</span>}
-                           </div>
-                       </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-                       <div className="space-y-1">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="Прибыл на базу">Прибыл на базу</label>
-                          <div className="relative"><input type="text" readOnly disabled={!canEditField('dateArrival')} value={modalData.dateArrival ? modalData.dateArrival.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('modal-picker-dateArrival')?.showPicker()} /><input type="date" id="modal-picker-dateArrival" disabled={!canEditField('dateArrival')} value={modalData.dateArrival || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateArrival: true})); setModalData((mm) => ({...mm, dateArrival: e.target.value})); } } className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateArrival')} onClick={() => document.getElementById('modal-picker-dateArrival')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
-                       </div>
-                       <div className="space-y-1">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="К какому числу должна быть готова машина">Срок готовности</label>
-                          <div className="relative"><input type="text" readOnly disabled={!canEditField('dateLoading')} value={modalData.dateLoading ? modalData.dateLoading.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('modal-picker-dateLoading')?.showPicker()} /><input type="date" id="modal-picker-dateLoading" disabled={!canEditField('dateLoading')} value={modalData.dateLoading || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateLoading: true})); setModalData((mm) => ({...mm, dateLoading: e.target.value})); } } className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateLoading')} onClick={() => document.getElementById('modal-picker-dateLoading')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
-                       </div>
-                       <div className="space-y-1">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="Дата подачи заявки на ремонт">Заявка на ремонт</label>
-                          <input type="date" disabled={!canEditField('dateRepairStart')} value={modalData.dateRepairStart || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateRepairStart: true})); setModalData((mm) => ({...mm, dateRepairStart: e.target.value})); }} className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300" />
-                       </div>
-                       <div className="space-y-1">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="Дата окончания ремонта">Завершение ремонта</label>
-                          <input type="date" disabled={!canEditField('dateRepairEnd')} value={modalData.dateRepairEnd || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateRepairEnd: true})); setModalData((mm) => ({...mm, dateRepairEnd: e.target.value})); }} className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300" />
-                       </div>
-                       <div className="space-y-1">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block truncate" title="Фактический выезд">Фактический выезд</label>
-                          <div className="relative"><input type="text" readOnly disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture ? modalData.dateDeparture.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300 cursor-pointer pr-10" onClick={() => document.getElementById('modal-picker-dateDeparture')?.showPicker()} /><input type="date" id="modal-picker-dateDeparture" disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateDeparture: true})); setModalData((mm) => ({...mm, dateDeparture: e.target.value})); } } className="absolute inset-0 opacity-0 pointer-events-none" /><button type="button" disabled={!canEditField('dateDeparture')} onClick={() => document.getElementById('modal-picker-dateDeparture')?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-slate-400 hover:text-slate-600 disabled:opacity-30 cursor-pointer"><Calendar className="w-4 h-4" /></button></div>
-                       </div>
-                    </div>
-
-                    <div className="space-y-1">
-                       <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Примечание</label>
-                       <input 
-                         disabled={!canEditField('comment')} 
-                         value={modalData.comment||''} 
-                         onChange={(e)=>{ setTouchedFields(prev => ({...prev, comment: true})); setModalData((mm) => ({...mm, comment: e.target.value})); }}
-                         onKeyDown={handleInputKeyDown} 
-                         className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none px-3 py-2 w-full disabled:opacity-50 focus:border-slate-300" 
-                       />
-                    </div>
-
-                    <div className="bg-slate-50 rounded-2xl p-4 lg:p-5 border border-slate-200/50">
-                       <h3 className="text-[11px] font-bold uppercase text-slate-400 tracking-wider mb-3 block">ЖУРНАЛ ИЗМЕНЕНИЙ ЗАПИСИ</h3>
-                       <div className="space-y-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                           {modalData.history && Object.keys(modalData.history).reverse().map(hk => {
-                              const h = modalData.history[hk];
-                              return (
-                                 <div className="bg-white rounded-xl p-3 flex flex-col gap-1 border border-slate-200/50">
-                                    <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold font-sans">
-                                       <span>{h.date}</span> • <span className="text-[#3765F6]">{h.user}</span>
-                                    </div>
-                                    <div className="text-xs text-slate-700 font-medium leading-relaxed">
-                                       «{getNormalizedFieldLabel(h.field)}»: <span className="line-through text-slate-400 mx-1">{h.old}</span> ➔ <span className="text-slate-900 font-semibold mx-1">{h.new}</span>
-                                    </div>
-                                 </div>
-                              );
-                           })}
-                           {(!modalData.history || Object.keys(modalData.history).length === 0) && <div className="text-xs text-slate-400 italic font-medium">Изменений еще нет</div>}
-                       </div>
-                    </div>
-                 </div>
-
-                 <div className="p-4 border-t border-slate-200/50 flex justify-end items-center gap-2 bg-white shrink-0 sticky bottom-0 md:static">
-                    {currentTab === 'base' && !isMechanic && (
-                      <button 
-                        onClick={moveCarToArchive} 
-                        className="bg-[#3765F6] hover:bg-[#2555E5] text-white rounded-xl text-xs font-semibold px-4 py-2.5 transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5 min-h-[44px]"
-                      >
-                         Выехал в рейс
-                      </button>
-                    )}
-                    <button 
-                      onClick={saveCarModal} 
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold px-4 py-2.5 transition-all cursor-pointer shadow-sm active:scale-95 flex items-center gap-1.5 min-h-[44px]"
-                    >
-                       Сохранить
-                    </button>
-                 </div>
-              </motion.div>
-           </motion.div>
-        )}
-      </AnimatePresence>
+                  </div>
+                );
+              })}
+              {(!modalData.history || Object.keys(modalData.history).length === 0) && <p className={UI.hint}>Изменений еще нет</p>}
+            </div>
+          </div>
+        </div>
+      </ModalShell>
 
       <datalist id="baza-drivers-dl">
-         {drivers.map((drv: any) => (
-            <option key={drv.id} value={drv.shortNameRu || formatDriverShortName(drv)} />
-         ))}
+        {drivers.map((drv: any) => (
+          <option key={drv.id} value={drv.shortNameRu || formatDriverShortName(drv)} />
+        ))}
       </datalist>
-
-    </div>
+    </>
   );
 }

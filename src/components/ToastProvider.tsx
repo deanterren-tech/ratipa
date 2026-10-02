@@ -1,4 +1,4 @@
-import {createContext, useContext, useState, ReactNode, useCallback} from 'react'
+import {createContext, useContext, useState, ReactNode, useCallback, useRef, useEffect} from 'react'
 import {motion, AnimatePresence, useReducedMotion} from 'motion/react'
 import {CheckCircle2, AlertCircle, AlertTriangle, Info, X} from 'lucide-react'
 
@@ -22,73 +22,115 @@ export const useToast = () => {
   return context;
 };
 
+/** Время показа: ошибку держим дольше — её нужно успеть прочитать. */
+const DURATION: Record<ToastType, number> = {
+  success: 4000,
+  info: 4500,
+  warning: 6000,
+  error: 8000,
+};
+
+const STYLE: Record<ToastType, { icon: any; iconColor: string; bar: string }> = {
+  success: { icon: CheckCircle2, iconColor: 'text-emerald-600', bar: 'bg-emerald-500' },
+  error:   { icon: AlertCircle,  iconColor: 'text-rose-600',    bar: 'bg-rose-500' },
+  warning: { icon: AlertTriangle, iconColor: 'text-amber-600',  bar: 'bg-amber-500' },
+  info:    { icon: Info,          iconColor: 'text-[var(--accent-ink)]',  bar: 'bg-[var(--accent-ui)]' },
+};
+
 export const ToastProvider = ({ children }: { children: ReactNode }) => {
   const [toasts, setToasts] = useState<ToastOptions[]>([]);
   const shouldReduceMotion = useReducedMotion();
+  const timers = useRef<Record<string, number>>({});
+  const remaining = useRef<Record<string, number>>({});
+  const startedAt = useRef<Record<string, number>>({});
 
-  const toast = useCallback((message: string, type: ToastType = 'info') => {
-    const id = Math.random().toString(36).substring(2, 9);
-    setToasts((prev) => [...prev, { id, message, type }]);
-    
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4500);
+  const clearTimer = (id: string) => {
+    if (timers.current[id]) {
+      window.clearTimeout(timers.current[id]);
+      delete timers.current[id];
+    }
+  };
+
+  const removeToast = useCallback((id: string) => {
+    clearTimer(id);
+    delete remaining.current[id];
+    delete startedAt.current[id];
+    setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const removeToast = (id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
+  const schedule = useCallback((id: string, ms: number) => {
+    clearTimer(id);
+    remaining.current[id] = ms;
+    startedAt.current[id] = Date.now();
+    timers.current[id] = window.setTimeout(() => removeToast(id), ms);
+  }, [removeToast]);
+
+  /** Пауза при наведении: уведомление не исчезнет, пока его читают. */
+  const pauseToast = (id: string) => {
+    if (!startedAt.current[id]) return;
+    clearTimer(id);
+    const left = (remaining.current[id] ?? 0) - (Date.now() - startedAt.current[id]);
+    remaining.current[id] = Math.max(1200, left);
   };
+
+  const resumeToast = (id: string) => {
+    if (remaining.current[id] === undefined) return;
+    schedule(id, remaining.current[id]);
+  };
+
+  const toast = useCallback((message: string, type: ToastType = 'info') => {
+    const text = String(message || '').trim();
+    if (!text) return; // пустое уведомление не показываем
+
+    setToasts((prev) => {
+      // Одно и то же событие не дублируется, пока предыдущее на экране
+      if (prev.some(t => t.message === text && t.type === type)) return prev;
+
+      const id = Math.random().toString(36).substring(2, 9);
+      schedule(id, DURATION[type]);
+      return [...prev, { id, message: text, type }].slice(-4);
+    });
+  }, [schedule]);
+
+  useEffect(() => () => {
+    Object.keys(timers.current).forEach(clearTimer);
+  }, []);
 
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div className="fixed top-5 right-5 z-[9999] flex flex-col gap-2.5 pointer-events-none max-w-sm w-full sm:w-auto">
+      {/* Область уведомлений: контейнер не перехватывает клики, интерактивны сами уведомления.
+          На узких экранах уведомление занимает ширину минус отступы и не выходит за экран. */}
+      <div
+        className="fixed z-[9999] top-4 right-4 left-4 sm:left-auto flex flex-col gap-2.5 pointer-events-none items-stretch sm:items-end"
+        aria-live="polite"
+        aria-atomic="false"
+      >
         <AnimatePresence>
           {toasts.map((t) => {
-            let IconComponent = Info;
-            let iconColor = "";
-
-            if (t.type === 'success') {
-              IconComponent = CheckCircle2;
-              iconColor = "text-emerald-500";
-            } else if (t.type === 'error') {
-              IconComponent = AlertCircle;
-              iconColor = "text-rose-500";
-            } else if (t.type === 'warning') {
-              IconComponent = AlertTriangle;
-              iconColor = "text-amber-500";
-            } else {
-              IconComponent = Info;
-              iconColor = "text-[#3765F6]";
-            }
-
+            const { icon: IconComponent, iconColor, bar } = STYLE[t.type];
+            const isError = t.type === 'error';
             return (
               <motion.div
                 key={t.id}
-                initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.95, x: 20 }}
+                role={isError ? 'alert' : 'status'}
+                onMouseEnter={() => pauseToast(t.id)}
+                onMouseLeave={() => resumeToast(t.id)}
+                initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.97, x: 16 }}
                 animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1, x: 0 }}
-                exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.93, x: 25, transition: { duration: 0.15 } }}
-                transition={shouldReduceMotion ? { duration: 0.1 } : { type: 'spring', stiffness: 280, damping: 26 }}
- className="pointer-events-auto border border-slate-200/50 rounded-2xl p-4 min-w-[320px] max-w-sm flex items-start gap-3.5 relative overflow-hidden select-none transition-all duration-300 bg-white shadow-xl shadow-slate-900/5 hover:shadow-2xl hover:shadow-slate-900/10 text-slate-800"
+                exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97, x: 16, transition: { duration: 0.15 } }}
+                transition={shouldReduceMotion ? { duration: 0.1 } : { type: 'spring', stiffness: 300, damping: 28 }}
+                className="pointer-events-auto relative overflow-hidden flex items-start gap-3 w-full sm:w-[360px] max-w-full px-3.5 py-3 bg-white border border-[#E5E7EB] rounded-xl shadow-[0_8px_24px_rgba(15,23,42,0.12)]"
               >
-                {/* Visual side-marker color bar */}
-                <div className={`absolute left-0 top-0 bottom-0 w-1 ${
-                  t.type === 'success' ? 'bg-emerald-500' :
-                  t.type === 'error' ? 'bg-rose-500' :
-                  t.type === 'warning' ? 'bg-amber-500' : 'bg-[#3765F6]'
-                }`} />
-
-                <div className="pl-1 shrink-0">
-                  <IconComponent className={`${iconColor} w-5 h-5 shrink-0`} />
-                </div>
-                
-                <div className="flex-1 pr-4">
-                  <p className="text-[13px] font-bold leading-relaxed tracking-tight text-slate-800 font-sans">{t.message}</p>
-                </div>
-
-                <button 
-                  onClick={() => removeToast(t.id)} 
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/30 transition-all duration-150 cursor-pointer active:scale-95 shrink-0"
+                {/* Тип передаётся иконкой и цветом, не только цветом */}
+                <div className={`absolute left-0 top-0 bottom-0 w-1 ${bar}`} />
+                <IconComponent className={`${iconColor} w-4 h-4 shrink-0 mt-0.5 ml-1`} aria-hidden="true" />
+                <p className="flex-1 text-xs leading-relaxed text-[#121316] break-words">{t.message}</p>
+                <button
+                  type="button"
+                  onClick={() => removeToast(t.id)}
+                  aria-label="Закрыть уведомление"
+                  className="p-1 -m-0.5 shrink-0 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>

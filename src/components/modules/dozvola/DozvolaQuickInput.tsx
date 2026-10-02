@@ -101,7 +101,7 @@ export default function DozvolaQuickInput({
   return (
     <div className="bg-white rounded-2xl border border-slate-200/50 shadow-sm overflow-hidden">
       <div className="flex items-center gap-3 px-5 py-3">
-        <Sparkles className="h-4 w-4 text-[#3765F6] shrink-0" />
+        <Sparkles className="h-4 w-4 text-[var(--accent-ink)] shrink-0" />
         <input
           type="text"
           value={quickText}
