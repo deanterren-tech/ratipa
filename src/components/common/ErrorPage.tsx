@@ -102,7 +102,7 @@ export default function ErrorPage({
     retry: onRetry, home: onHome, back: onBack, login: onLogin,
   };
 
-  const primaryBtn = 'inline-flex items-center justify-center gap-2 h-11 min-w-[150px] px-5 rounded-xl text-sm font-medium text-[var(--accent-on)] bg-[var(--accent-solid)] hover:bg-[var(--accent-hover)] active:bg-[#2a4ec4] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] focus-visible:ring-offset-2';
+  const primaryBtn = 'inline-flex items-center justify-center gap-2 h-11 min-w-[150px] px-5 rounded-xl text-sm font-medium text-[var(--accent-on)] bg-[var(--accent-solid)] hover:bg-[var(--accent-hover)] active:bg-[var(--accent-ui)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] focus-visible:ring-offset-2';
   const secondaryBtn = 'inline-flex items-center justify-center gap-2 h-11 min-w-[126px] px-5 rounded-xl text-sm font-medium text-[#4B5563] bg-transparent hover:bg-[#F3F4F6] active:bg-[#E5E7EB] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-45)] focus-visible:ring-offset-2';
 
   if (compact) {

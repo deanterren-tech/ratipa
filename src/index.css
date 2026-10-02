@@ -230,3 +230,14 @@ input:focus, select:focus, textarea:focus, button:focus {
   .error-enter { animation: none; }
   .error-mark  { animation: none; opacity: 0.9; transform: none; }
 }
+
+/* ─── Текст на акцентной заливке ──────────────────────────────────────────────
+   Единое правило для всего портала: на акцентных плашках цвет текста берётся из
+   токена --accent-on. Он рассчитывается в src/theme/accent.ts (textOn): белый или
+   тёмный — тот вариант, что даёт лучший контраст, с нормой 4.5:1 на заливке и на
+   наведении. Страховка на случай, если в новой кнопке цвет текста не задан. */
+[class*="bg-[var(--accent-solid)]"],
+[class*="bg-[var(--accent-ui)]"],
+[class*="bg-[var(--accent)]"] {
+  color: var(--accent-on);
+}

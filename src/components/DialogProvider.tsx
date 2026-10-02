@@ -186,8 +186,10 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
                   type="button"
                   onClick={() => handleClose(confirmValue)}
                   autoFocus={dialog.type !== 'prompt'}
-                  className={`px-4 py-2 text-xs font-medium text-white rounded-lg transition-colors cursor-pointer ${
-                    isDanger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-[var(--accent-ui)] hover:bg-[var(--accent-ui-hover)]'
+                  className={`px-4 py-2 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
+                    isDanger
+                      ? 'text-white bg-rose-600 hover:bg-rose-700'
+                      : 'text-[var(--accent-on)] bg-[var(--accent-ui)] hover:bg-[var(--accent-ui-hover)]'
                   }`}
                 >
                   {dialog.confirmLabel || (dialog.type === 'alert' ? 'Понятно' : 'Подтвердить')}
