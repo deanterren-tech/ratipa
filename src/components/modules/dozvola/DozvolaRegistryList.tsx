@@ -755,6 +755,13 @@ const setCurrentSelectedTab = (type: string) => {
   // --- Диалог выбора сдачи ---
   const [batchDialog, setBatchDialog] = useState<{ id: string; updates: any } | null>(null);
 
+  // Escape закрывает диалог очереди сдачи (Enter не назначен — это выбор, а не подтверждение).
+  useModalKeyboard({
+    isOpen: !!batchDialog,
+    onClose: () => setBatchDialog(null),
+    skipInitialFocus: true,
+  });
+
   // --- Панель массовых действий ---
   const [isBulkApplying, setIsBulkApplying] = useState(false);
   const [bulkResult, setBulkResult] = useState<string | null>(null);
@@ -1080,10 +1087,12 @@ const setCurrentSelectedTab = (type: string) => {
       if (newStatus === "office") {
         updates.car = "Минск офис";
       }
-      // «Использован» раньше ставил состояние batchDialog и выходил, но диалог
-      // выбора сдачи нигде не рендерился — статус не менялся вообще, и кнопка
-      // молча не работала. Пишем статус так же, как это делает массовая операция.
-      setBatchDialog(null);
+      // «Использован» — сначала спрашиваем очередь сдачи (Сдача 1 / Сдача 2):
+      // выбор определяет, попадёт ли бланк в реестр возврата, и пишется в submissionBatch.
+      if (newStatus === "office_return") {
+        setBatchDialog({ id, updates });
+        return;
+      }
       update(ref(database, `dozvolsRegistryV4/${id}`), updates);
       logAction(
         old.type,
@@ -1092,6 +1101,28 @@ const setCurrentSelectedTab = (type: string) => {
         `Статус: [${getStatusLabel(old.status)}] → [${getStatusLabel(newStatus)}]${newStatus === "office" ? " (Локация: Минск офис)" : ""}`,
       );
     }
+  };
+
+  /**
+   * Применяет выбранную очередь сдачи: статус «Использован» + submissionBatch.
+   * Автопереход «Сдача 2 → Сдача 1» происходит позже — при списании в архив ТИ.
+   */
+  const applySubmissionBatch = (batch: 1 | 2) => {
+    if (!batchDialog) return;
+    const { id, updates } = batchDialog;
+    const old = dozvolsData[id];
+    if (canWriteRTDB()) {
+      update(ref(database, `dozvolsRegistryV4/${id}`), { ...updates, submissionBatch: batch });
+      if (old) {
+        logAction(
+          old.type,
+          old.number,
+          "Изменен статус",
+          `Статус: [${getStatusLabel(old.status)}] → [${getStatusLabel('office_return')} (Сдача ${batch})]`,
+        );
+      }
+    }
+    setBatchDialog(null);
   };
 
   /**
@@ -2020,6 +2051,52 @@ const setCurrentSelectedTab = (type: string) => {
         dozvolsHistory={dozvolsHistory}
         onSave={handlePermitSave}
       />
+
+      {/* Диалог выбора очереди сдачи: открывается при переводе бланка в «Использован» */}
+      {batchDialog && (
+        <div
+          data-scroll-lock="modal"
+          className="fixed inset-0 z-[5000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6"
+          onClick={() => setBatchDialog(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Какая это сдача?"
+            onClick={(e) => e.stopPropagation()}
+            className="relative z-10 w-full max-w-sm bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] p-5"
+          >
+            <span className="block text-[9px] font-semibold uppercase tracking-widest text-[#9CA3AF]">Очередь сдачи</span>
+            <h3 className="mt-1 text-sm font-semibold text-[#121316]">Какая это сдача?</h3>
+            <p className="mt-1.5 text-xs leading-relaxed text-[#6B7280]">
+              Бланк перейдёт в статус «Использован». Очередь влияет на реестр возврата разрешений.
+            </p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => applySubmissionBatch(1)}
+                className="flex-1 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[var(--accent-solid)] px-5 text-xs font-semibold text-[var(--accent-on)] transition-colors hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]"
+              >
+                Сдача 1
+              </button>
+              <button
+                type="button"
+                onClick={() => applySubmissionBatch(2)}
+                className="flex-1 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[var(--accent-solid)] px-5 text-xs font-semibold text-[var(--accent-on)] transition-colors hover:bg-[var(--accent-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]"
+              >
+                Сдача 2
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setBatchDialog(null)}
+              className="mt-2 inline-flex min-h-[44px] w-full items-center justify-center rounded-xl px-5 text-xs font-medium text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316]"
+            >
+              Отмена
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
