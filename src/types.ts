@@ -376,6 +376,32 @@ export interface MenuStructureGroup {
   customLabels?: Record<string, string>; // to rename subtabs/modules individually
 }
 
+/** Ссылка из инструкции на раздел приложения. */
+export interface InstructionLink {
+  label: string;
+  module: string;
+}
+
+/** Инструкция по типовой рабочей задаче (модуль «Инструкции»). */
+export interface Instruction {
+  id: string;
+  /** Тема или рабочий процесс — по ним инструкции группируются в списке. */
+  theme: string;
+  title: string;
+  /** Краткое описание: когда и зачем выполнять задачу. */
+  summary: string;
+  /** Предварительные условия или нужные данные. */
+  prerequisites?: string[];
+  /** Нумерованный порядок действий. */
+  steps: string[];
+  /** Подсказки и типичные ошибки. */
+  tips?: string[];
+  /** Ссылки на разделы приложения. */
+  links?: InstructionLink[];
+  /** Содержание требует уточнения: порядок шагов ещё не подтверждён. */
+  needsWork?: boolean;
+}
+
 export interface AppSettings {
   googleSheetsId: string;
   googleSheetsUrl: string;
@@ -397,6 +423,8 @@ export interface AppSettings {
   highlights?: HighlightData[];
   quickLinks: QuickLink[];
   externalTabs?: ExternalTab[];
+  /** Инструкции для модуля «Инструкции» (редактируются в базе, без правки интерфейса). */
+  instructions?: Instruction[];
   bamapUrl?: string;
   asmapUrl?: string;
   idleRate: number;

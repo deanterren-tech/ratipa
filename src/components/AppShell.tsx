@@ -18,7 +18,7 @@ import {useConverter} from '../hooks/useConverter'
 import UpdateTour from './UpdateTour'
 import {usePresence} from '../hooks/usePresence'
 import {useChat} from '../hooks/useChat'
-import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Truck, FileText, Files, Clock, Map, Settings, Settings2, ShieldAlert, LogOut, Menu, X, Radio, MessageSquare, Send, Trash2, Sparkles, ChevronDown, ArrowUp, Pencil, Calendar, Bell, BellRing, Check, CheckCheck, AlertTriangle, Info, LineChart, ExternalLink, Wifi, WifiOff, RefreshCw, Home, Sliders, BookOpen, ClipboardList, DollarSign } from 'lucide-react';
+import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Truck, FileText, Files, Clock, Map, Settings, Settings2, ShieldAlert, LogOut, Menu, X, Radio, MessageSquare, Send, Trash2, Sparkles, ChevronDown, ArrowUp, Pencil, Calendar, Bell, BellRing, Check, CheckCheck, AlertTriangle, Info, LineChart, ExternalLink, Wifi, WifiOff, RefreshCw, Home, Sliders, BookOpen, ClipboardList, DollarSign, BookMarked } from 'lucide-react';
 
 // Import newly created business modules
 const DashboardModule = lazy(() => import('./modules/DashboardModule'));
@@ -34,6 +34,7 @@ const SettingsModule = lazy(() => import('./modules/SettingsModule'));
 const DirectoriesModule = lazy(() => import('./modules/DirectoriesModule'));
 const AdminModule = lazy(() => import('./modules/AdminModule'));
 const DocumentsModule = lazy(() => import('./modules/DocumentsModule'));
+const InstructionsModule = lazy(() => import('./modules/InstructionsModule'));
 const VehicleDriverDataModule = lazy(() => import('./modules/VehicleDriverDataModule'));
 const BookIssueModule = lazy(() => import('./modules/BookIssueModule'));
 const TabelModule = lazy(() => import('./modules/TabelModule'));
@@ -439,6 +440,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'vehicleDriverData', label: 'Авто и Водители', icon: FileText, permissionKey: 'vehicleDriverData' },
     { key: 'dozvola', label: 'Учет Дозволов', icon: FileText, permissionKey: 'dozvola' },
     { key: 'documents', label: 'Документы', icon: Files, permissionKey: 'documents' },
+  { key: 'instructions', label: 'Инструкции', icon: BookMarked, permissionKey: 'instructions' },
     { key: 'disposition', label: 'Диспозиция', icon: Map, permissionKey: 'disposition' },
     { key: 'appSettings', label: 'Справочники', icon: Settings2, permissionKey: 'settings' },
     { key: 'settings', label: 'База данных', icon: BookOpen, permissionKey: 'settings' },
@@ -503,7 +505,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     }
     return [
       { id: 'g_home', label: 'Главная', isDropdown: false, singleModuleKey: 'dashboard' },
-      { id: 'g_ops', label: 'Текущее', isDropdown: true, subtabKeys: ['disposition', 'baza', 'documents', 'vehicleDriverData', 'dozvola'] },
+      { id: 'g_ops', label: 'Текущее', isDropdown: true, subtabKeys: ['disposition', 'baza', 'documents', 'vehicleDriverData', 'dozvola', 'instructions'] },
       { id: 'g_planning', label: 'Планирование', isDropdown: true, subtabKeys: ['planZagruzok', 'planDohod', 'currentPlanning', 'dohod'] },
       { id: 'g_report', label: 'Отчетность', isDropdown: true, subtabKeys: ['salary', 'bookIssue', 'tabel', 'mdpJournal'] },
       { id: 'g_settings', label: 'Настройки', isDropdown: true, subtabKeys: ['settings', 'appSettings', 'admin'] }
@@ -565,6 +567,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         return <DozvolaModule user={user} />;
       case 'documents':
         return <DocumentsModule user={user} />;
+      case 'instructions':
+        return <InstructionsModule user={user} settings={settings} />;
       case 'disposition':
         return <DispositionModule user={user} />;
       case 'settings':
