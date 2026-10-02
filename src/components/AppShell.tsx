@@ -192,6 +192,17 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
    */
   const tourVersionKey = APP_VERSION.replace(/[.#$/\[\]]/g, '_');
   /**
+   * Кому вообще показывать превью: только тем, у кого есть рабочая «Главная» —
+   * то же условие, что в allowedModules ниже (у механиков навигация ограничена
+   * «Учётом выезда», и подсказки про главную, ссылки и разделы им недоступны).
+   */
+  const tourAvailable = !!user && (
+    user.role === 'mechanic'
+      ? false
+      : user.role === 'root_admin'
+        || resolvePermission(user, 'dashboard', settings?.rolePermissions) !== 'none'
+  );
+  /**
    * Отметка «показано» ставится СРАЗУ при показе, а не только при закрытии:
    * иначе перезагрузка или повторный вход (например, пользователь ушёл, не закрыв окно)
    * показывали превью второй раз.
@@ -215,7 +226,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     dbService.saveUserOnboarding(user.uid, tourVersionKey, status);
   };
   useEffect(() => {
-    if (tourShownThisSession || tourSeen || !user?.uid) return;
+    if (tourShownThisSession || tourSeen || !user?.uid || !tourAvailable) return;
     let cancelled = false;
     let attempts = 0;
     // Показываем после загрузки данных: ждём, пока рабочая область перестанет грузиться
@@ -235,7 +246,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     const timer = window.setTimeout(tryShow, 1600);
     return () => { cancelled = true; window.clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.uid, tourSeen, tourShownThisSession, tourVersionKey]);
+  }, [user?.uid, tourSeen, tourShownThisSession, tourVersionKey, tourAvailable]);
 
   const closeTour = (reason: 'done' | 'skipped') => {
     setTourOpen(false);
@@ -937,7 +948,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         isOpen={tourOpen}
         accentAvailable={!!user?.uid}
         linksCount={Array.isArray(settings?.quickLinks) ? settings!.quickLinks.filter((l) => l && l.url).length : 0}
-        canSeeVehicles={user.role === 'root_admin' || resolvePermission(user, 'vehicleDriverData', settings?.rolePermissions) !== 'none'}
+        canSeeVehicles={user.role !== 'mechanic' && (user.role === 'root_admin' || resolvePermission(user, 'vehicleDriverData', settings?.rolePermissions) !== 'none')}
         onClose={closeTour}
       />
 
