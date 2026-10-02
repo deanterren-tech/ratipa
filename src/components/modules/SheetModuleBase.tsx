@@ -202,35 +202,23 @@ export default function SheetModuleBase({
     "inline-flex items-center justify-center h-8 w-9 sm:w-8 rounded-lg bg-[var(--accent-15)] text-[var(--accent-ink)] hover:bg-[var(--accent-20)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)]";
 
   return (
-    <div className="fixed top-16 inset-x-0 bottom-[84px] z-40 flex flex-col overflow-hidden bg-[#F8F9FA] md:bottom-0">
-      {/* === ШАПКА МОДУЛЯ (элемент портала; таблица ниже и не перекрывается) === */}
+    <div className="fixed top-16 inset-x-0 bottom-[84px] z-40 overflow-hidden bg-[#F8F9FA] md:bottom-0">
+      {/* === ШАПКА МОДУЛЯ: лежит поверх верхней части фрейма таблицы === */}
       {collapsed ? (
-        /* Свёрнутая панель: одна строка в потоке, таблица занимает всё остальное.
-           Ничего не плавает над таблицей и не перекрывает её. */
-        <div className="shrink-0 border-b border-[#E5E7EB] bg-white px-3 sm:px-4">
-          <div className="flex items-center justify-between gap-3 py-0.5">
-            <div className="flex min-w-0 items-center gap-2">
-              <Icon className="h-3.5 w-3.5 shrink-0 text-[#6B7280]" />
-              <span className="truncate text-xs font-semibold tracking-tight text-[#121316]">{title}</span>
-              {activeTab && (
-                <span className="hidden truncate text-[11px] text-[#9CA3AF] sm:inline">· {activeTab.name}</span>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setCollapsed(false)}
-              title="Показать панель"
-              aria-label="Показать панель"
-              aria-expanded={false}
-              className="inline-flex h-11 min-w-[44px] shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 text-[11px] font-medium text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)] sm:h-7 sm:min-w-0 sm:px-2.5 sm:text-xs"
-            >
-              <ChevronDown className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Показать панель</span>
-            </button>
-          </div>
-        </div>
+        /* Свёрнутая панель: от неё остаётся только кнопка поверх таблицы — как было раньше. */
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          title={`Показать панель «${title}»`}
+          aria-label={`Показать панель «${title}»`}
+          aria-expanded={false}
+          className="absolute right-3 top-3 z-[101] inline-flex min-h-[44px] max-w-[calc(100vw-24px)] items-center gap-1.5 rounded-xl bg-[var(--accent-solid)] px-3 text-xs font-semibold text-[var(--accent-on)] shadow-sm transition-all hover:bg-[var(--accent-hover)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] sm:min-h-0 sm:py-2"
+        >
+          <ChevronDown className="h-4 w-4 shrink-0" />
+          <span className="truncate">{title}</span>
+        </button>
       ) : (
-        <div className="shrink-0 bg-white border-b border-[#E5E7EB] px-3 sm:px-4">
+        <div className="absolute left-0 right-0 top-0 z-[100] border-b border-[#E5E7EB] bg-white px-3 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:px-4">
           <div className="flex items-center justify-between gap-3 flex-wrap py-2">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6] text-[#4B5563]">
@@ -318,9 +306,10 @@ export default function SheetModuleBase({
         </div>
       )}
 
-      {/* === ОБЛАСТЬ ТАБЛИЦЫ (рамка принадлежит порталу, содержимое — Google) === */}
-      <div className="flex min-h-0 flex-1 flex-col p-1.5 sm:p-3">
-        <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
+      {/* === ОБЛАСТЬ ТАБЛИЦЫ (рамка принадлежит порталу, содержимое — Google).
+             Занимает всю высоту: плашка при наложении закрывает её верхнюю часть. === */}
+      <div className="absolute inset-0 p-1.5 sm:p-3">
+        <div className="relative h-full w-full overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
         {embedUrl ? (
           <>
             <div
