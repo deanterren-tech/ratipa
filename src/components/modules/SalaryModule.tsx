@@ -745,10 +745,6 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
               <StatusText color="grey">Премия</StatusText>
               <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(bonus).toLocaleString('ru-RU')} €</span>
             </div>
-            <div className="flex items-center justify-between gap-3">
-              <StatusText color="grey">З/П за сутки</StatusText>
-              <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(salaryPerDay).toLocaleString('ru-RU')} €</span>
-            </div>
           </div>
         </section>
 
@@ -759,17 +755,31 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
             title="Итоговая сумма"
             subtitle="Итого к выплате за текущий расчёт"
           />
-          <div className="flex flex-col gap-1">
-            <span className={UI.caption}>Итого водителю</span>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl sm:text-4xl font-mono font-semibold tabular-nums text-[#121316]">
-                {Math.round(totalSalary).toLocaleString('ru-RU')}
-              </span>
-              <span className="text-sm text-[#6B7280]">€</span>
+          <div className="flex flex-wrap items-start gap-x-10 gap-y-4">
+            <div className="flex flex-col gap-1">
+              <span className={UI.caption}>Итого водителю</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl sm:text-4xl font-mono font-semibold tabular-nums text-[#121316]">
+                  {Math.round(totalSalary).toLocaleString('ru-RU')}
+                </span>
+                <span className="text-sm text-[#6B7280]">€</span>
+              </div>
+              <p className="text-[11px] text-[#6B7280]">
+                Складывается из показателей выше: километраж, простой с суточными и премия.
+              </p>
             </div>
-            <p className="text-[11px] text-[#6B7280]">
-              Складывается из показателей выше: километраж, простой с суточными и премия.
-            </p>
+            <div className="flex flex-col gap-1">
+              <span className={UI.caption}>З/П за сутки</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl sm:text-4xl font-mono font-semibold tabular-nums text-[#121316]">
+                  {Math.round(salaryPerDay).toLocaleString('ru-RU')}
+                </span>
+                <span className="text-sm text-[#6B7280]">€</span>
+              </div>
+              <p className="text-[11px] text-[#6B7280]">
+                Выходит за одну сутки при текущем расчёте.
+              </p>
+            </div>
           </div>
         </section>
 

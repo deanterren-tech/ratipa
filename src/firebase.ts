@@ -722,7 +722,18 @@ export const dbService = {
     }
   },
   saveUser: (user: UserProfile) => {
+    // SEC: проверка на уровне данных, а не только в интерфейсе — портал не должен
+    // остаться без единственной учётной записи разработчика (root_admin).
+    const knownUsers = Array.isArray(catalogCache.users) ? (catalogCache.users as UserProfile[]) : null;
     catalogCache.users = null;
+    if (knownUsers && user && user.uid && typeof (user as any).role === 'string') {
+      const target = knownUsers.find((u) => u.uid === user.uid);
+      const roots = knownUsers.filter((u) => u.role === 'root_admin');
+      if (target && target.role === 'root_admin' && (user as any).role !== 'root_admin' && roots.length <= 1) {
+        console.warn('[saveUser] отказано: это единственная учётная запись разработчика');
+        return Promise.resolve();
+      }
+    }
     if (useFirebase) {
       // MERGE (update), а не полная перезапись (set):
       // иначе при быстрой смене прав одного блока затираются права других блоков

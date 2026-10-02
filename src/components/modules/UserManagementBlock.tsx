@@ -28,6 +28,8 @@ interface Props {
   user: UserProfile;
 }
 
+const PERM_LABELS: Record<string, string> = { none: 'Нет доступа', read: 'Только чтение', write: 'Полный доступ' };
+
 const ROLE_LABELS: Record<string, string> = {
   root_admin: "Разработчик (Root)",
   admin: "Администратор",
@@ -71,8 +73,6 @@ export default function UserManagementBlock({ user }: Props) {
   const [editLastName, setEditLastName] = useState("");
   const [newUPassword, setNewUPassword] = useState("");
   const [newURole, setNewURole] = useState("dispatcher");
-  
-  const [showPassword, setShowPassword] = useState(false);
   // Ошибки обязательных полей формы сотрудника (подписи под полями)
   const [addErrors, setAddErrors] = useState<{ name?: string; password?: string }>({});
   const [nameErrors, setNameErrors] = useState<{ name?: string }>({});
@@ -142,46 +142,74 @@ export default function UserManagementBlock({ user }: Props) {
     toast(`Пользователь ${newUser.name} успешно добавлен`, "success");
   };
 
-  const handleRolePermChange = (roleKey: string, permKey: string, val: string) => {
-    const newRolePermissions = { 
-      ...(settings?.rolePermissions || DEFAULT_ROLE_PERMS), 
-      [roleKey]: { 
-        ...(settings?.rolePermissions?.[roleKey] || DEFAULT_ROLE_PERMS[roleKey] || {}), 
-        [permKey]: val 
-      } 
+  /** Сотрудники выбранной роли — для подтверждения и понятного текста. */
+  const countByRole = (roleKey: string) => users.filter((u) => u.role === roleKey).length;
+
+  /** Копия права роли, размноженная по людям прежней версией вкладки.
+   *  Индивидуальное переопределение всегда пишет customPermissions, поэтому
+   *  значение в permissions без ключа в customPermissions — устаревшая копия. */
+  const isInheritedCopy = (u: UserProfile, permKey: string, roleValue: string) => {
+    const custom = (u.customPermissions || {}) as Record<string, string>;
+    if (Object.prototype.hasOwnProperty.call(custom, permKey)) return false;
+    const own = ((u.permissions || {}) as Record<string, string>)[permKey];
+    return own !== undefined && own === roleValue;
+  };
+
+  const handleRolePermChange = async (roleKey: string, permKey: string, val: string) => {
+    const rolePerms = { ...(settings?.rolePermissions?.[roleKey] || DEFAULT_ROLE_PERMS[roleKey] || {}) };
+    const previous = rolePerms[permKey];
+    const affected = countByRole(roleKey);
+    const moduleLabel = MODULES_LIST.find((m) => m.key === permKey)?.label || permKey;
+
+    const ok = await showConfirm(
+      `Право «${moduleLabel}» для роли ${ROLE_LABELS[roleKey] || roleKey} станет «${PERM_LABELS[val] || val}»`
+      + (previous && previous !== val ? ` (было «${PERM_LABELS[previous] || previous}»)` : '')
+      + `. Действует на ${affected} ${affected === 1 ? 'сотрудника' : 'сотрудников'}, у кого это право не переопределено лично.`,
+      'Изменить право роли?',
+    );
+    if (!ok) return;
+
+    const newRolePermissions = {
+      ...(settings?.rolePermissions || DEFAULT_ROLE_PERMS),
+      [roleKey]: { ...rolePerms, [permKey]: val },
     };
-    
-    // Optimistic Settings update
-    if (settings) {
-      setSettings({ ...settings, rolePermissions: newRolePermissions });
-    }
-    
+
+    if (settings) setSettings({ ...settings, rolePermissions: newRolePermissions });
     dbService.saveSettings({ ...settings, rolePermissions: newRolePermissions } as any, user.name, user.role);
-    
-    dbService.logAction(user.name, user.role, "Изменение прав роли", "Admin", roleKey, `Роль ${roleKey}: ${permKey} → ${val}`);
-    
-    // Мгновенно записываем новое значение в permissions для всех пользователей этой роли.
-    // Это быстрее, чем ждать обновления settings.rolePermissions через Firebase.
+    dbService.logAction(user.name, user.role, 'Изменение прав роли', 'Admin', roleKey, `Роль ${roleKey}: ${permKey} → ${val}`);
+
+    // Права роли читаются resolvePermission напрямую из rolePermissions, поэтому
+    // ничего не пишем каждому сотруднику. Наоборот: убираем устаревшие копии,
+    // которые прежняя версия вкладки раскладывала по людям — они перекрывали права
+    // роли и делали её настройку бессмысленной.
     const updates: Record<string, any> = {};
+    const cleanedNames: string[] = [];
     setUsers(prev => prev.map(u => {
-      if (u.role === roleKey) {
-        updates[`users_list/${u.uid}/permissions/${permKey}`] = val;
-        updates[`users_list/${u.uid}/customPermissions`] = u.customPermissions || {};
-        return { ...u, permissions: { ...(u.permissions || {} as any), [permKey]: val } as any };
-      }
-      return u;
+      if (u.role !== roleKey || !isInheritedCopy(u, permKey, previous || '')) return u;
+      updates[`users_list/${u.uid}/permissions/${permKey}`] = null;
+      const nextPermissions = { ...(u.permissions || {}) };
+      delete nextPermissions[permKey];
+      cleanedNames.push(u.name);
+      return { ...u, permissions: nextPermissions as any };
     }));
     if (Object.keys(updates).length > 0) {
       dbService.saveUsersBatch(updates);
+      dbService.logAction(user.name, user.role, 'Очистка устаревших копий права', 'Admin', roleKey,
+        `Снято ${Object.keys(updates).length} копий ${permKey} у роли ${roleKey} (${cleanedNames.slice(0, 6).join(', ')})`);
     }
-    
-    toast(`Права роли обновлены`, "success");
+
+    toast('Права роли обновлены', 'success');
   };
 
   const handleUserPermChange = (u: UserProfile, permKey: string, val: string) => {
     // Берём АКТУАЛЬНОЕ состояние из users (а не u — старая копия),
     // иначе при быстрой смене прав разных модулей предыдущие слетают.
     const current = users.find((x) => x.uid === u.uid) || u;
+    // SEC-4: у учётной записи разработчика права не правит никто, кроме разработчика.
+    if (user.role !== 'root_admin' && current.role === 'root_admin') {
+      toast('Права учётной записи разработчика может менять только разработчик', 'error');
+      return;
+    }
     const newCustom = { ...(current.customPermissions || {}), [permKey]: val };
     
     // Optimistic UI update: пишем и в permissions (для resolvePermission) и в customPermissions
@@ -196,18 +224,41 @@ export default function UserManagementBlock({ user }: Props) {
     dbService.logAction(user.name, user.role, "Изменение прав пользователя", "Admin", current.uid, `Пользователь ${current.name}: ${permKey} → ${val}`);
   };
 
-  const handleUserRoleChange = (u: UserProfile, newRole: string) => {
+  const rootUsers = users.filter((x) => x.role === 'root_admin');
+
+  const handleUserRoleChange = async (u: UserProfile, newRole: string) => {
     const current = users.find((x) => x.uid === u.uid) || u;
-    // SEC-3: Запретить самопонижение — администратор не может снять себе права администратора
-    if (current.uid === user.uid && newRole !== 'root_admin' && newRole !== 'admin') {
-      toast("Вы не можете понизить собственные права администратора", "error");
+    if (current.role === newRole) return;
+
+    // SEC-1: трогать учётную запись разработчика (root) и назначать её может только root.
+    if (user.role !== 'root_admin' && (current.role === 'root_admin' || newRole === 'root_admin')) {
+      toast('Менять учётную запись разработчика и назначать эту роль может только разработчик', 'error');
       return;
     }
+    // SEC-2: запрет самопонижения — администратор не снимает себе права администратора.
+    if (current.uid === user.uid && newRole !== 'root_admin' && newRole !== 'admin') {
+      toast('Вы не можете понизить собственные права администратора', 'error');
+      return;
+    }
+    // SEC-3: нельзя оставить портал без единственной учётной записи разработчика.
+    if (current.role === 'root_admin' && newRole !== 'root_admin' && rootUsers.length <= 1) {
+      toast('Это единственная учётная запись разработчика — снять с неё роль нельзя', 'error');
+      return;
+    }
+
+    const ok = await showConfirm(
+      `Роль сотрудника ${current.name} изменится с «${ROLE_LABELS[current.role] || current.role}» на «${ROLE_LABELS[newRole] || newRole}».`
+      + ' Индивидуальные права доступа при этом обнуляются — сотрудник получит права новой роли.'
+      + (newRole === 'root_admin' ? ' Внимание: роль разработчика даёт полный доступ ко всему порталу.' : ''),
+      'Изменить роль сотрудника?',
+    );
+    if (!ok) return;
+
     dbService.saveUser({ ...current, role: newRole as any, permissions: {} as any, customPermissions: current.customPermissions || {} } as any);
-    setUsers(prev => prev.map(user => 
-      user.uid === u.uid ? { ...user, role: newRole as any, permissions: {} as any } : user
-    ));
-    toast("Роль сотрудника обновлена", "success");
+    setUsers(prev => prev.map(us => (us.uid === u.uid ? { ...us, role: newRole as any, permissions: {} as any } : us)));
+    dbService.logAction(user.name, user.role, 'Изменение роли сотрудника', 'Admin', current.uid,
+      `${current.name}: ${current.role} → ${newRole}`);
+    toast('Роль сотрудника обновлена', 'success');
   };
 
   const filteredUsers = users.filter(
@@ -379,7 +430,8 @@ export default function UserManagementBlock({ user }: Props) {
                               return;
                             }
                           }
-                          if (await showConfirm(`Удалить учетную запись ${u.name}?`)) {
+                          if (await showConfirm(`Удалить учетную запись ${u.name}? Действие необратимо: доступ сотрудника к порталу будет закрыт.`, 'Удалить сотрудника?')) {
+                            dbService.logAction(user.name, user.role, "Удаление учётной записи", "Admin", u.uid, `${u.name} (${ROLE_LABELS[u.role] || u.role})`);
                             dbService.deleteUser(u.uid, u.name);
                             if (selectedUid === u.uid) setSelectedUid(null);
                           }
@@ -708,24 +760,29 @@ export default function UserManagementBlock({ user }: Props) {
                   <h4 className="text-sm font-semibold text-[#121316]">Учётные данные</h4>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
-                  <input type={showPassword ? "text" : "password"} readOnly value={selectedUser.password || "—"} className={`${UI.input} font-mono select-all`} aria-label="Пароль сотрудника" />
-                  <button onClick={() => setShowPassword(v => !v)}
-                    className={`${UI.buttonGhost} shrink-0`}
-                    title={showPassword ? "Скрыть пароль" : "Показать пароль"}
-                  >{showPassword ? "Скрыть" : "Показать"}</button>
-                  {canEditUsers && (
+                  <div className={`${UI.input} flex items-center gap-2 text-[#6B7280]`} aria-label="Состояние пароля сотрудника">
+                    <Key size={13} className="text-[#9CA3AF]" aria-hidden="true" />
+                    {selectedUser.password ? 'Пароль задан' : 'Пароль не задан'}
+                  </div>
+                  {canEditUsers && (user.role === 'root_admin' || selectedUser.role !== 'root_admin') && (
                     <button onClick={async () => {
-                        const p = await showPrompt("Новый пароль сотрудника:", selectedUser.password);
-                        if (p && p.trim() !== "") {
+                        const ok = await showConfirm(
+                          `Сменить пароль сотруднику ${selectedUser.name}? Прежний пароль перестанет действовать — сотрудник войдёт только с новым.`,
+                          'Сменить пароль?',
+                        );
+                        if (!ok) return;
+                        const p = await showPrompt('Новый пароль сотрудника:', '', 'Новый пароль');
+                        if (p && p.trim() !== '') {
                           dbService.saveUser({ ...selectedUser, password: p.trim() });
-                          toast("Пароль обновлен", "success");
+                          dbService.logAction(user.name, user.role, 'Смена пароля сотрудника', 'Admin', selectedUser.uid, `Пароль изменён: ${selectedUser.name}`);
+                          toast('Пароль обновлён', 'success');
                         }
                       }}
                       className={`${UI.buttonPrimary} shrink-0`}
-                    >Изменить</button>
+                    >Сменить пароль</button>
                   )}
                 </div>
-                <span className={UI.hint}>Пароль используется для входа вместе с именем и фамилией сотрудника.</span>
+                <span className={UI.hint}>Пароль нужен для входа вместе с именем и фамилией. В самом интерфейсе пароль не показывается — так безопаснее.</span>
               </section>
 
               {/* Роль и доступ */}
