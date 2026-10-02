@@ -50,3 +50,25 @@ export function getEmbeddableDriveUrl(url: string): string {
 
   return processed;
 }
+
+/** Достаёт id папки Google Диска из ссылки (или null, если это не папка). */
+export function getDriveFolderId(url: string): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  const folder = trimmed.match(/\/folders\/([a-zA-Z0-9-_]+)/);
+  if (folder && folder[1]) return folder[1];
+  const byId = trimmed.match(/[?&]id=([a-zA-Z0-9-_]+)/);
+  return byId && byId[1] ? byId[1] : null;
+}
+
+/**
+ * Ссылка для поиска: у папки — сама папка с запросом (Drive фильтрует её содержимое),
+ * иначе — общий поиск по Диску. Встраивать поиск внутрь iframe нельзя: внутри страница
+ * Google, которая требует входа и запрещает вложение, поэтому открываем в новой вкладке.
+ */
+export function getDriveSearchUrl(url: string, query: string): string {
+  const q = encodeURIComponent((query || '').trim());
+  const id = getDriveFolderId(url);
+  if (id) return `https://drive.google.com/drive/folders/${id}?q=${q}`;
+  return `https://drive.google.com/drive/search?q=${q}`;
+}

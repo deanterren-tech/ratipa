@@ -26,7 +26,7 @@ import { useDialog } from '../DialogProvider';
 import { useToast } from '../ToastProvider';
 import { dbService } from '../../api';
 import { resolvePermission } from '../../utils/permissions';
-import { getEmbeddableDriveUrl } from '../../utils/embed';
+import { getEmbeddableDriveUrl, getDriveSearchUrl } from '../../utils/embed';
 import {
   EMPTY_INSTRUCTION,
   MODULE_LINKS,
@@ -136,6 +136,7 @@ export default function InstructionsModule({ user, settings }: Props) {
   const [isDriveFocus, setIsDriveFocus] = useState(false);
   const [isDriveLoading, setIsDriveLoading] = useState(true);
   const [driveKey, setDriveKey] = useState(0);
+  const [driveQuery, setDriveQuery] = useState('');
   const rawDriveUrl = settings?.instructionsDriveUrl || '';
   const driveEmbedUrl = rawDriveUrl ? getEmbeddableDriveUrl(rawDriveUrl) : '';
 
@@ -332,8 +333,29 @@ export default function InstructionsModule({ user, settings }: Props) {
               <HardDrive className="h-3 w-3" aria-hidden="true" />
               Drive
             </span>
-            <h3 className="hidden truncate text-xs font-semibold tracking-tight text-[#121316] sm:block">Google Диск</h3>
+            <h3 className="hidden shrink-0 truncate text-xs font-semibold tracking-tight text-[#121316] sm:block">Google Диск</h3>
           </div>
+
+          {/* Поиск по папке: открывает поиск Google Диска в новой вкладке */}
+          <form
+            className="relative min-w-0 flex-1"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const q = driveQuery.trim();
+              if (!q || !rawDriveUrl) return;
+              window.open(getDriveSearchUrl(rawDriveUrl, q), '_blank', 'noopener');
+            }}
+          >
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" aria-hidden="true" />
+            <input
+              value={driveQuery}
+              onChange={(e) => setDriveQuery(e.target.value)}
+              placeholder="Поиск в папке…"
+              aria-label="Поиск в папке Google Диска"
+              title="Найдите файл по названию — откроется поиск по этой папке в Google Диске"
+              className="w-full rounded-lg border border-[#E5E7EB] bg-white py-1.5 pl-8 pr-2 text-[11px] text-[#121316] transition focus:border-[var(--accent-ui)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-30)]"
+            />
+          </form>
           <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
