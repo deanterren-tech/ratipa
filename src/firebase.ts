@@ -760,10 +760,10 @@ export const dbService = {
     // остаться без единственной учётной записи разработчика (root_admin).
     const knownUsers = Array.isArray(catalogCache.users) ? (catalogCache.users as UserProfile[]) : null;
     catalogCache.users = null;
-    if (knownUsers && user && user.uid && typeof (user as any).role === 'string') {
+    if (knownUsers && user && user.uid && typeof user.role === 'string') {
       const target = knownUsers.find((u) => u.uid === user.uid);
       const roots = knownUsers.filter((u) => u.role === 'root_admin');
-      if (target && target.role === 'root_admin' && (user as any).role !== 'root_admin' && roots.length <= 1) {
+      if (target && target.role === 'root_admin' && user.role !== 'root_admin' && roots.length <= 1) {
         console.warn('[saveUser] отказано: это единственная учётная запись разработчика');
         return Promise.resolve();
       }
@@ -772,7 +772,7 @@ export const dbService = {
       // MERGE (update), а не полная перезапись (set):
       // иначе при быстрой смене прав одного блока затираются права других блоков
       // (selectedUser — старая копия, set перезаписывает весь профиль).
-      update(ref(database, `users_list/${user.uid}`), user as any).catch((err) => {
+      update(ref(database, `users_list/${user.uid}`), user).catch((err) => {
         handleFailure("firebase", err, {
           path: `users_list/${user.uid}`,
           userMessage: "Не удалось сохранить сотрудника — изменения могут не примениться",

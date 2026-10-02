@@ -11,6 +11,8 @@ import {
 } from "../firebase";
 import type {
   Driver,
+  Vehicle,
+  CouplingRecord,
   CarRateGroup,
   DirectionPreset,
   FerryTemplate,
@@ -212,7 +214,7 @@ export const sharedGetDrivers = createSharedSubscription<Driver[]>(
 );
 
 // === ЕДИНАЯ БАЗА (portal-схема): tractors / trailers / couplings ===
-export const sharedGetTractors = createSharedSubscription<any[]>(
+export const sharedGetTractors = createSharedSubscription<Vehicle[]>(
   (onData, onError) => {
     const dbRef = ref(database, "tractors");
     return onValue(
@@ -232,7 +234,7 @@ export const sharedGetTractors = createSharedSubscription<any[]>(
   (onData) => onData([])
 );
 
-export const sharedGetTrailers = createSharedSubscription<any[]>(
+export const sharedGetTrailers = createSharedSubscription<Vehicle[]>(
   (onData, onError) => {
     const dbRef = ref(database, "trailers");
     return onValue(
@@ -252,7 +254,7 @@ export const sharedGetTrailers = createSharedSubscription<any[]>(
   (onData) => onData([])
 );
 
-export const sharedGetCouplings = createSharedSubscription<any[]>(
+export const sharedGetCouplings = createSharedSubscription<CouplingRecord[]>(
   (onData, onError) => {
     const dbRef = ref(database, "couplings");
     return onValue(

@@ -593,9 +593,9 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
     // уже введённое значение не уедет в базу (проверка на записи, не только в форме).
     const allowedForm: Record<string, string> = {};
     for (const f of ['dateArrival', 'dateLoading', 'dateRepairStart', 'dateRepairEnd', 'dateDeparture', 'comment']) {
-      if (canEditField(f)) allowedForm[f] = (formData as any)[f] || '';
+      if (canEditField(f)) allowedForm[f] = formData[f] || '';
     }
-    if (canEditField('driverName')) allowedForm.driverName = (formData as any).driverName || '';
+    if (canEditField('driverName')) allowedForm.driverName = formData.driverName || '';
 
     const carData = {
       carId: newRef.key,
@@ -752,7 +752,7 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
       if (!touchedFields[field]) continue;
       if (!canEditField(field)) continue;
       let oldValue = targetCar[field] || '';
-      let val = (modalData as any)[field] || '';
+      let val = modalData[field] || '';
       if (field === 'carNumber') val = val.toUpperCase();
       if (oldValue === val) continue;
 
@@ -803,8 +803,8 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
     }
 
     // Full driver name from CouplingPicker (kept separate so it isn't truncated to initials)
-    if ((modalData as any).driverNameRu && (modalData as any).driverNameRu !== (targetCar.driverNameRu || '')) {
-      updates.driverNameRu = (modalData as any).driverNameRu;
+    if (modalData.driverNameRu && modalData.driverNameRu !== (targetCar.driverNameRu || '')) {
+      updates.driverNameRu = modalData.driverNameRu;
     }
 
     if (Object.keys(updates).length === 0) {
