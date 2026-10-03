@@ -3065,7 +3065,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
         {archived && renderKpiSummary(false)}
 
         {/* Table Headers */}
-        <div className="hidden xl:flex px-4 pb-3 border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider self-start w-full cursor-pointer select-none">
+        <div className="hidden xl:flex pl-4 pr-[112px] pb-3 border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider self-start w-full cursor-pointer select-none">
           <div
             className="min-w-[200px] hover:text-[#121316] transition-colors flex items-center gap-1"
             onClick={() => handleSort("carNumber")}
@@ -3079,43 +3079,47 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             Даты {renderSortIndicator("dateStart")}
           </div>
           <div className="flex-1 min-w-[220px]">Маршрут</div>
-          <div className="min-w-[480px] flex gap-4 pl-6 justify-end">
-            <span
-              className="w-20 hover:text-[#121316] transition-colors flex items-center gap-1 justify-end"
-              onClick={() => handleSort("km")}
-            >
-              Км {renderSortIndicator("km")}
-            </span>
-            <span
-              className="w-20 hover:text-[#121316] transition-colors flex items-center gap-1 justify-end"
-              onClick={() => handleSort("freight")}
-            >
-              Фрахт {renderSortIndicator("freight")}
-            </span>
-            <span
-              className="w-20 hover:text-[#121316] transition-colors flex items-center gap-1 justify-end"
-              onClick={() => handleSort("expenses")}
-            >
-              Расходы {renderSortIndicator("expenses")}
-            </span>
-            <span
-              className="w-24 hover:text-[#121316] transition-colors flex items-center gap-1 justify-end"
-              onClick={() => handleSort("profit")}
-            >
-              Прибыль {renderSortIndicator("profit")}
-            </span>
-            <span className="w-12 text-right">Дни</span>
-            <span
-              className="w-20 text-right hover:text-[#121316] transition-colors flex items-center gap-1 justify-end"
-              onClick={() => handleSort("profitDay")}
-            >
-              В день {renderSortIndicator("profitDay")}
-            </span>
+          <div className="w-[540px] shrink-0 flex flex-col gap-1">
+            <div className="grid grid-cols-3 gap-x-4 text-right">
+              <span
+                className="hover:text-[#121316] transition-colors flex items-center gap-1 justify-end whitespace-nowrap"
+                onClick={() => handleSort("profit")}
+              >
+                Прибыль {renderSortIndicator("profit")}
+              </span>
+              <span className="whitespace-nowrap">Дни</span>
+              <span
+                className="hover:text-[#121316] transition-colors flex items-center gap-1 justify-end whitespace-nowrap"
+                onClick={() => handleSort("profitDay")}
+              >
+                В день {renderSortIndicator("profitDay")}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-x-4 text-right">
+              <span
+                className="hover:text-[#121316] transition-colors flex items-center gap-1 justify-end whitespace-nowrap"
+                onClick={() => handleSort("km")}
+              >
+                Км {renderSortIndicator("km")}
+              </span>
+              <span
+                className="hover:text-[#121316] transition-colors flex items-center gap-1 justify-end whitespace-nowrap"
+                onClick={() => handleSort("freight")}
+              >
+                Фрахт {renderSortIndicator("freight")}
+              </span>
+              <span
+                className="hover:text-[#121316] transition-colors flex items-center gap-1 justify-end whitespace-nowrap"
+                onClick={() => handleSort("expenses")}
+              >
+                Расходы {renderSortIndicator("expenses")}
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Pure Map List instead of Virtuoso (solves ResizeObserver infinite loops under CSS zoom) */}
-        <div className="flex flex-col gap-3 w-full lg:gap-0 lg:divide-y lg:divide-[#F3F4F6]">
+        <div className="flex flex-col gap-3 w-full lg:gap-0 lg:[&>*:first-child]:border-t-0">
           {list.map((trip) => {
             const firstLeg = trip.legs?.[0];
             const lastLeg = trip.legs?.[trip.legs.length - 1];
@@ -3123,13 +3127,21 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
               firstLeg?.from && lastLeg?.to
                 ? `${firstLeg.from} → ${lastLeg.to}`
                 : "Плечи маршрута";
-            // Короткие даты «дд/мм» — та же форма, что была в карточке до редизайна
+            // Даты — в принятом в портале формате ДД/ММ/ГГГГ (как в «Базе» и калькуляторах)
             const fmtShortDate = (value?: string) =>
               value
-                ? new Date(value).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" }).replace(/\./g, "/")
+                ? new Date(value).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\./g, "/")
                 : "—";
             const dateStartFmt = fmtShortDate(trip.dateStart);
             const dateEndFmt = fmtShortDate(trip.dateEnd);
+
+            // Показатели прибыли: считаем на ЧИСЛОВЫХ значениях (в базе могут быть строки).
+            // Пороги прежней логики: прибыль < 3000 и прибыль в день < 100 — красные;
+            // на пороге и выше — акцентный текст темы (accent-ink гарантирует 4.5:1 на светлом).
+            const profitValue = Number(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) || 0;
+            const daysValue = Number(trip.days) || 0;
+            const perDayValue = Math.round(profitValue / (daysValue || 1));
+            const ACCENT_VALUE_CLS = "text-[var(--accent-ink)]";
 
             const isHighlighted =
               trip.carNumber &&
@@ -3155,7 +3167,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 key={trip.id}
                 data-trip-id={trip.id}
                 onClick={() => loadTripToForm(trip)}
-                className={`car-strip-item bg-white rounded-2xl p-4 border transition-colors duration-150 group relative hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:shadow-sm lg:bg-transparent lg:rounded-none lg:border-0 lg:px-4 lg:py-4 lg:hover:shadow-none flex flex-col gap-3.5 cursor-pointer w-full ${isHighlighted ? "border-amber-400 ring-2 ring-amber-400/20" : "border-[#E5E7EB]"}`}
+                className={`car-strip-item bg-white rounded-2xl p-4 border transition-colors duration-150 group relative hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:shadow-sm lg:bg-transparent lg:rounded-none lg:border-x-0 lg:border-b-0 lg:border-t-[#E5E7EB] lg:px-4 lg:py-4 lg:hover:shadow-none flex flex-col gap-3.5 xl:flex-row xl:items-start xl:gap-x-5 xl:gap-y-0 xl:py-4 xl:pr-[112px] cursor-pointer w-full ${isHighlighted ? "border-amber-400 ring-2 ring-amber-400/20" : "border-[#E5E7EB]"}`}
                 draggable={true}
                 onDragStart={(e) => {
                   e.dataTransfer.setData("tripId", trip.id);
@@ -3170,9 +3182,9 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 }}
               >
                 {/* Блок 1: автомобиль и направление — сверху и крупно */}
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start justify-between gap-3 xl:block xl:min-w-[190px] xl:max-w-[240px] xl:shrink-0">
                   <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 min-w-0">
-                    <span className="text-lg font-bold tracking-tight text-[#121316] break-words">{trip.carNumber}</span>
+                    <span className="text-xl font-bold tracking-tight text-[#121316] break-words">{trip.carNumber}</span>
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E7EB] bg-[#F8F9FA] px-2.5 py-1 text-[11px] font-medium text-[#4B5563]">
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getDirectionDotClass(trip.direction || "")}`} aria-hidden="true" />
                       {trip.direction || "—"}
@@ -3184,7 +3196,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     )}
                   </div>
                   {/* Действия: клик по ним не открывает форму */}
-                  <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-1 shrink-0 xl:absolute xl:right-3 xl:top-1/2 xl:-translate-y-1/2 xl:z-10" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       onClick={() => loadTripToForm(trip)}
@@ -3218,23 +3230,25 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                   </div>
                 </div>
 
-                {/* Блок 2: диспетчер и даты старт/финиш */}
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                  <span className="inline-flex items-center gap-1.5 min-w-0">
-                    <span className="text-[11px] text-[#9CA3AF]">Диспетчер</span>
-                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: dispDotColor }} aria-hidden="true" />
-                    <span className="text-xs font-medium text-[#121316] break-words">{formatToTitleCase(dispatcherName)}</span>
+                {/* Блок 2: диспетчер и даты — единая сетка «подпись — значение» */}
+                <div className="grid grid-cols-2 gap-x-5 gap-y-2.5 xl:grid-cols-1 xl:gap-y-2 xl:min-w-[150px] xl:max-w-[190px] xl:shrink-0 xl:pt-1">
+                  <span className="col-span-2 xl:col-span-1 flex flex-col gap-0.5 min-w-0">
+                    <span className={UI.caption}>Диспетчер</span>
+                    <span className="inline-flex items-center gap-1.5 min-w-0">
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: dispDotColor }} aria-hidden="true" />
+                      <span className="text-xs font-medium text-[#121316] break-words">{formatToTitleCase(dispatcherName)}</span>
+                    </span>
                   </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="text-[11px] text-[#9CA3AF]">Старт</span>
-                    <span className="text-xs font-semibold text-[#121316] font-mono tabular-nums">{dateStartFmt}</span>
+                  <span className="flex flex-col gap-0.5">
+                    <span className={UI.caption}>Старт</span>
+                    <span className="text-xs font-semibold text-[#121316] font-mono tabular-nums whitespace-nowrap">{dateStartFmt}</span>
                   </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="text-[11px] text-[#9CA3AF]">Финиш</span>
-                    <span className="text-xs font-semibold text-[#121316] font-mono tabular-nums">{dateEndFmt}</span>
+                  <span className="flex flex-col gap-0.5">
+                    <span className={UI.caption}>Финиш</span>
+                    <span className="text-xs font-semibold text-[#121316] font-mono tabular-nums whitespace-nowrap">{dateEndFmt}</span>
                   </span>
                   {(trip as any).updatedBy && (
-                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-[#F8F9FA] px-2 py-1 text-[11px] text-[#6B7280] max-w-full">
+                    <span className="col-span-2 xl:col-span-1 inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-[#F8F9FA] px-2 py-1 text-[11px] text-[#6B7280] max-w-full w-fit">
                       <PenLine className="w-3 h-3 text-[#9CA3AF] shrink-0" aria-hidden="true" />
                       <span className="truncate min-w-0 max-w-[160px] font-medium text-[#4B5563]" title={resolvePersonName((trip as any).updatedBy, dispatcherDirectory)}>
                         {resolvePersonName((trip as any).updatedBy, dispatcherDirectory)}
@@ -3246,24 +3260,32 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                   )}
                 </div>
 
-                {/* Блок 3: маршрут — пункты переносятся, важные названия не обрезаются */}
-                <div className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] p-3 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0">
+                {/* Блок 3: маршрут — нумерованные точки со стрелками, полные названия переносятся */}
+                <div className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] p-3 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 xl:flex-1 xl:min-w-0 xl:pt-1">
                   <div className="flex items-center gap-1.5 mb-2 min-w-0">
                     <MapPin className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" aria-hidden="true" />
                     <span className="text-xs font-semibold tracking-tight text-[#121316] break-words">{routeTitle}</span>
                   </div>
                   {trip.legs && trip.legs.length > 0 ? (
-                    <div className="flex flex-col gap-1.5 pl-1 ml-1.5 border-l-2 border-[#E5E7EB]">
+                    <div className="flex flex-col gap-1 pl-1.5 ml-2 border-l border-[#E5E7EB]">
                       {trip.legs.map((leg, i) => {
                         const isActive = trip.activeLegIndex === i;
                         return (
                           <div
                             key={i}
-                            className={`flex items-start gap-2 text-xs p-1 -ml-2 rounded-md ${isActive ? "bg-[#F3F4F6] text-[#121316] font-medium" : "text-[#6B7280]"}`}
+                            className={`flex items-start gap-2 text-xs py-1 pr-1.5 -ml-[17px] rounded-lg ${isActive ? "bg-[#F3F4F6]" : ""}`}
                           >
-                            <div className={`w-2 h-2 mt-0.5 rounded-full border flex-shrink-0 -ml-[10px] ${isActive ? "bg-[#121316] border-white shadow-xs scale-110" : "bg-[#D1D5DB] border-white"}`} />
-                            <span className="min-w-0 break-words leading-snug">
-                              {leg.from || "?"} <span className="text-[#D1D5DB]">→</span> {leg.to || "?"}
+                            {/* Номер шага — порядок следования читается сразу */}
+                            <span
+                              aria-hidden="true"
+                              className={`w-5 h-5 rounded-full border text-[10px] font-mono font-semibold flex items-center justify-center shrink-0 tabular-nums ${isActive ? "bg-[#121316] border-[#121316] text-white" : "bg-white border-[#D1D5DB] text-[#6B7280]"}`}
+                            >
+                              {i + 1}
+                            </span>
+                            <span className="min-w-0 break-words leading-snug pt-0.5">
+                              <span className={`font-semibold ${isActive ? "text-[#121316]" : "text-[#4B5563]"}`}>{leg.from || "?"}</span>
+                              <span className="text-[var(--accent-ink)] font-semibold mx-1.5" aria-hidden="true">→</span>
+                              <span className={`font-semibold ${isActive ? "text-[#121316]" : "text-[#4B5563]"}`}>{leg.to || "?"}</span>
                             </span>
                           </div>
                         );
@@ -3274,35 +3296,42 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                   )}
                 </div>
 
-                {/* Блок 4: показатели — главное в карточке */}
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-3 border-t border-[#E5E7EB] pt-3 w-full">
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[11px] text-[#6B7280] leading-tight">Км</span>
-                    <span className="text-sm font-semibold text-[#4B5563] font-mono tabular-nums whitespace-nowrap">{Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU")}</span>
+                {/* Блок 4: показатели — главное в карточке.
+                    Прибыль, дни и прибыль в день — крупными моно-числами (образец «Зарплаты водителей»),
+                    ниже — спокойная строка второстепенных показателей. Красные пороги сохранены:
+                    прибыль < 3000 и прибыль в день < 100. */}
+                <div className="w-full flex flex-col gap-3 border-t border-[#E5E7EB] pt-3 xl:ml-auto xl:w-[540px] xl:shrink-0 xl:border-t-0 xl:pt-1">
+                  <div className="grid grid-cols-3 gap-x-4 gap-y-2 xl:justify-items-end">
+                    <div className="flex flex-col min-w-0">
+                      <span className={`${UI.caption} leading-tight`}>Прибыль</span>
+                      <span className={`text-2xl font-semibold font-mono tabular-nums whitespace-nowrap leading-tight ${profitValue < 3000 ? "text-rose-600" : ACCENT_VALUE_CLS}`}>
+                        {Math.round(profitValue).toLocaleString("ru-RU")} <span className="text-[11px] font-medium text-[#6B7280]">€</span>
+                      </span>
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className={`${UI.caption} leading-tight`}>Дни</span>
+                      <span className="text-xl font-semibold text-[#121316] font-mono tabular-nums whitespace-nowrap leading-tight">{trip.days || "—"}</span>
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className={`${UI.caption} leading-tight`}>В день</span>
+                      <span className={`text-xl font-semibold font-mono tabular-nums whitespace-nowrap leading-tight ${perDayValue < 100 ? "text-rose-600" : ACCENT_VALUE_CLS}`}>
+                        {perDayValue.toLocaleString("ru-RU")} <span className="text-[11px] font-medium text-[#6B7280]">€</span>
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[11px] text-[#6B7280] leading-tight">Фрахт</span>
-                    <span className="text-sm font-semibold text-[#4B5563] font-mono tabular-nums whitespace-nowrap">{Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}</span>
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[11px] text-[#6B7280] leading-tight">Расходы</span>
-                    <span className="text-sm font-semibold text-rose-600/90 font-mono tabular-nums whitespace-nowrap">{Math.round(trip.totalExpenses !== undefined ? trip.totalExpenses : (trip.totalFreight - (trip.profit || 0))).toLocaleString("ru-RU")}</span>
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[11px] text-[#6B7280] leading-tight">Прибыль</span>
-                    <span className={`text-base font-bold font-mono tabular-nums whitespace-nowrap ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 0 ? "text-rose-600" : "text-[var(--accent-ink)]"}`}>
-                      {Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}
-                    </span>
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[11px] text-[#6B7280] leading-tight">Дни</span>
-                    <span className="text-sm font-semibold text-[#6B7280] font-mono tabular-nums whitespace-nowrap">{trip.days || "—"}</span>
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[11px] text-[#6B7280] leading-tight">В день</span>
-                    <span className={`text-sm font-semibold font-mono tabular-nums whitespace-nowrap ${Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)) < 0 ? "text-rose-600" : "text-[var(--accent-ink)]"}`}>
-                      {Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)).toLocaleString("ru-RU")}
-                    </span>
+                  <div className="grid grid-cols-3 gap-x-4 gap-y-2 xl:justify-items-end">
+                    <div className="flex flex-col min-w-0">
+                      <span className={`${UI.caption} leading-tight`}>Км</span>
+                      <span className="text-sm font-semibold text-[#4B5563] font-mono tabular-nums whitespace-nowrap">{Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU")}</span>
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className={`${UI.caption} leading-tight`}>Фрахт</span>
+                      <span className="text-sm font-semibold text-[#4B5563] font-mono tabular-nums whitespace-nowrap">{Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}</span>
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className={`${UI.caption} leading-tight`}>Расходы</span>
+                      <span className="text-sm font-semibold text-rose-600/90 font-mono tabular-nums whitespace-nowrap">{Math.round(trip.totalExpenses !== undefined ? trip.totalExpenses : (trip.totalFreight - (trip.profit || 0))).toLocaleString("ru-RU")}</span>
+                    </div>
                   </div>
                 </div>
               </div>
