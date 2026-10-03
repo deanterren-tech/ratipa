@@ -1247,15 +1247,29 @@ export const dbService = {
     );
   },
 
-  deleteSalary: (logOrId: any, user: string, role: string) => {
+  // storageKey — фактический ключ ветки (salaryHistory/months|byDispatcher), под которым
+  // лежит запись, если он отличается от поля id (например, записи бота). Без него
+  // удалялись бы пути, которых в базе нет, и копия записи оставалась.
+  deleteSalary: (logOrId: any, user: string, role: string, storageKey?: string) => {
     const isObject = typeof logOrId === 'object' && logOrId !== null;
     const id = isObject ? logOrId.id : logOrId;
+    // Ключ ветки: явный аргумент, иначе служебное поле storageKey самой записи
+    // (его добавляет подписка на months/byDispatcher, когда ключ != поля id).
+    const branchKey: string | undefined = storageKey || (isObject ? logOrId.storageKey : undefined);
 
     const getYearMonth = (item: SalaryLog): string => {
+      // Дата хранится в двух форматах: «ДД.ММ.ГГГГ» (старые записи и редактор даты)
+      // и «ДД/ММ/ГГГГ» (запись из формы расчёта — saveToHistory заменяет точки на «/»).
+      // Раньше разбирался только формат с точками: для «ДД/ММ/ГГГГ» + нечислового id
+      // (push-key) месяц падал в текущий, и запись в архиве месяцев не удалялась.
       if (item.datetime) {
-        const parts = item.datetime.split('.');
+        const parts = item.datetime.split(/[./]/);
         if (parts.length === 3) {
-          return `${parts[2]}-${parts[1]}`;
+          const y = String(parts[2]).slice(0, 4);
+          const m = String(parts[1]).padStart(2, '0');
+          if (/^\d{4}$/.test(y) && /^\d{1,2}$/.test(String(parts[1]).trim())) {
+            return `${y}-${m}`;
+          }
         }
       }
       const timestamp = parseInt(item.id || "");
@@ -1277,12 +1291,18 @@ export const dbService = {
       if (isObject) {
         const ym = getYearMonth(logOrId);
         const dispatcher = sanitizeKey(logOrId.logist || 'System');
-        const updates: Record<string, any> = {
-          [`salaryHistory/flat/${id}`]: null,
-          [`salaryHistory/months/${ym}/${id}`]: null,
-          [`salaryHistory/byDispatcher/${dispatcher}/${id}`]: null,
-          [`salaryHistory/${id}`]: null
-        };
+        // Одним multi-path update снимаем ВСЕ копии записи: flat / months / byDispatcher
+        // и legacy-ключ в корне salaryHistory. Если фактический ключ ветки (storageKey)
+        // отличается от поля id — чистим оба варианта, иначе останется копия под ключом.
+        const ids = new Set<string>([String(id)]);
+        if (branchKey && String(branchKey) !== String(id)) ids.add(String(branchKey));
+        const updates: Record<string, any> = {};
+        for (const recId of ids) {
+          updates[`salaryHistory/flat/${recId}`] = null;
+          updates[`salaryHistory/months/${ym}/${recId}`] = null;
+          updates[`salaryHistory/byDispatcher/${dispatcher}/${recId}`] = null;
+          updates[`salaryHistory/${recId}`] = null;
+        }
         update(ref(database), updates).catch((err) =>
         handleFailure("firebase", err, { path: "salaryHistory", userMessage: "Не удалось удалить запись — данные остались на месте" }));
       } else {

@@ -5,6 +5,7 @@ import {pdService} from '../../api'
 import { ref } from 'firebase/database'
 import {Wallet, Calculator, Trash2, Edit, Copy, Calendar, TrendingUp, History, ChevronDown, CheckCircle2} from 'lucide-react'
 import {UI} from '../../ui/kit'
+import {openDatePicker} from '../../utils/openDatePicker'
 import {ModuleShell, SectionHeader, SearchField, FilterPills, StatusText, EmptyState, FoundCount, ModalShell} from '../../ui/components'
 import CalendarDaysCalculator from './CalendarDaysCalculator';
 import {useDialog} from '../DialogProvider'
@@ -32,11 +33,9 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Tab control states for Recent Logs
-  const [activeTab, setActiveTab] = useState<'current' | 'archive' | 'dispatcher'>('current');
+  const [activeTab, setActiveTab] = useState<'current' | 'archive'>('current');
   const [selectedMonth, setSelectedMonth] = useState<string>('');
-  const [selectedDispatcher, setSelectedDispatcher] = useState<string>('');
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
-  const [availableDispatchers, setAvailableDispatchers] = useState<string[]>([]);
   const [isMigrating, setIsMigrating] = useState(false);
 
 
@@ -94,7 +93,10 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const saveEditModal = () => {
     if (editingSalaryData && editingSalaryData.id) {
       const mark = [editDirection, editCircles].filter(Boolean).join(", ");
-      dbService.updateSalary(editingSalaryData.id, { ...editingSalaryData, mark }, user.name, user.role);
+      // storageKey — служебный ключ ветки, в саму запись его не пишем
+      const editable: Partial<SalaryLog> = { ...editingSalaryData };
+      delete editable.storageKey;
+      dbService.updateSalary(editingSalaryData.id, { ...editable, mark }, user.name, user.role);
     }
     closeEditModal();
   };
@@ -174,7 +176,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     migrateLegacySalaries();
   }, []);
 
-  // 2. Fetch months and dispatchers to populate available values
+  // 2. Fetch months to populate available values
   useEffect(() => {
     const unsubMonths = onValue(ref(database, 'salaryHistory/months'), (snap) => {
       const data = snap.val();
@@ -187,18 +189,8 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
       }
     });
 
-    const unsubDispatchers = onValue(ref(database, 'salaryHistory/byDispatcher'), (snap) => {
-      const data = snap.val();
-      if (data) {
-        setAvailableDispatchers(Object.keys(data).sort());
-      } else {
-        setAvailableDispatchers([]);
-      }
-    });
-
     return () => {
       unsubMonths();
-      unsubDispatchers();
     };
   }, []);
 
@@ -208,12 +200,6 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
       setSelectedMonth(availableMonths[0]);
     }
   }, [availableMonths, selectedMonth]);
-
-  useEffect(() => {
-    if (availableDispatchers.length > 0 && !selectedDispatcher) {
-      setSelectedDispatcher(availableDispatchers[0]);
-    }
-  }, [availableDispatchers, selectedDispatcher]);
 
   // 4. Scoped reactive subscription for active tab
   useEffect(() => {
@@ -228,10 +214,6 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
       if (selectedMonth) {
         dbPath = `salaryHistory/months/${selectedMonth}`;
       }
-    } else if (activeTab === 'dispatcher') {
-      if (selectedDispatcher) {
-        dbPath = `salaryHistory/byDispatcher/${selectedDispatcher}`;
-      }
     }
     
     if (!dbPath) {
@@ -245,6 +227,9 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
         const list: SalaryLog[] = Object.keys(data).map((key) => ({
           id: key,
           ...data[key],
+          // Ключ ветки может отличаться от поля id (записи бота) — храним его,
+          // чтобы удаление снимало копии именно под фактическим ключом.
+          storageKey: key,
         }));
         list.sort((a, b) => {
           const aTime = parseInt(a.id.replace(/\D/g, "")) || 0;
@@ -263,7 +248,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     return () => {
       unsub();
     };
-  }, [activeTab, selectedMonth, selectedDispatcher]);
+  }, [activeTab, selectedMonth]);
 
   // 5. General metadata subscriptions
   useEffect(() => {
@@ -814,7 +799,6 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                 items={[
                   { key: 'current', label: 'Текущий месяц' },
                   { key: 'archive', label: 'Архив месяцев' },
-                  { key: 'dispatcher', label: 'По диспетчерам' },
                 ]}
                 active={activeTab}
                 onChange={(key) => setActiveTab(key)}
@@ -826,26 +810,6 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                 placeholder="Поиск по водителю, логисту, транспортному средству..."
                 className="lg:flex-1 lg:max-w-none"
               />
-              {activeTab === 'dispatcher' && (
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={UI.fieldLabel}>Логист:</span>
-                  <select
-                    value={selectedDispatcher}
-                    onChange={(e) => setSelectedDispatcher(e.target.value)}
-                    className={`${UI.select} lg:min-w-[200px]`}
-                  >
-                    {availableDispatchers.length === 0 ? (
-                      <option value="">Нет данных</option>
-                    ) : (
-                      availableDispatchers.map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
-              )}
             </div>
 
             {activeTab === 'archive' && availableMonths.length > 0 && (
@@ -866,19 +830,11 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
               />
             )}
 
-            {activeTab === 'dispatcher' && availableDispatchers.length > 0 && (
-              <FilterPills
-                items={availableDispatchers.map((d) => ({ key: d, label: d }))}
-                active={selectedDispatcher}
-                onChange={setSelectedDispatcher}
-                ariaLabel="Логист"
-              />
-            )}
           </div>
 
           <div className="flex flex-col gap-3 pt-1">
             <span className={UI.caption}>
-              Статистика выплат ({activeTab === 'current' ? 'Текущий месяц' : activeTab === 'archive' ? 'За выбранный месяц' : 'По выбранному логисту'})
+              Статистика выплат ({activeTab === 'current' ? 'Текущий месяц' : 'За выбранный месяц'})
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-x-6 gap-y-3">
               <div className="flex items-center justify-between gap-3">
@@ -1027,7 +983,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                             <Edit className="w-3.5 h-3.5" aria-hidden="true" />
                           </button>
                           <button
-                            onClick={async () => { if(await showConfirm('Удалить эту выплату?')) dbService.deleteSalary(rec, user.name, user.role); }}
+                            onClick={async () => { if(await showConfirm('Удалить эту выплату?')) dbService.deleteSalary(rec, user.name, user.role, rec.storageKey); }}
                             title="Удалить"
                             className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer"
                           >
@@ -1186,7 +1142,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                     readOnly
                     value={(editingSalaryData.datetime || '').replace(/\./g, '/')}
                     placeholder="ДД/ММ/ГГГГ"
-                    onClick={() => (document.getElementById('salary-edit-date-picker') as HTMLInputElement | null)?.showPicker?.()}
+                    onClick={() => openDatePicker('salary-edit-date-picker')}
                     className={`${UI.input} cursor-pointer pr-10`}
                   />
                   <input
@@ -1202,15 +1158,15 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                         const ru = parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : v;
                         setEditingSalaryData({...editingSalaryData, datetime: ru});
                     }}
-                    className="absolute inset-0 h-0 w-0 opacity-0 pointer-events-none"
+                    className="absolute inset-0 opacity-0 md:pointer-events-none"
                     tabIndex={-1}
                     aria-hidden="true"
                   />
                   <button
                     type="button"
                     aria-label="Открыть календарь"
-                    onClick={() => (document.getElementById('salary-edit-date-picker') as HTMLInputElement | null)?.showPicker?.()}
-                    className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                    onClick={() => openDatePicker('salary-edit-date-picker')}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer pointer-events-none md:pointer-events-auto"
                   >
                     <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
                   </button>
