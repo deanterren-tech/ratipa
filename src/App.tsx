@@ -75,8 +75,17 @@ export default function App() {
   useEffect(() => {
     const checkModals = () => {
       const modals = document.querySelectorAll('.fixed.inset-0');
-      const hasModal = modals.length > 0;
-      if (hasModal) {
+      // Учитываем только реально видимые окна: скрытые (display:none / нулевой
+      // размер) оверлеи — например, оставшиеся в DOM модули и закрытые окна —
+      // не должны держать прокрутку страницы заблокированной.
+      let hasVisibleModal = false;
+      modals.forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+        const cs = window.getComputedStyle(el);
+        if (cs.display !== 'none' && cs.visibility !== 'hidden') hasVisibleModal = true;
+      });
+      if (hasVisibleModal) {
         document.body.style.overflow = 'hidden';
       } else {
         document.body.style.overflow = '';

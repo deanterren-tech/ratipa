@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, X, ChevronDown, BookMarked, ExternalLink, ListChecks, Lightbulb, Info } from 'lucide-react';
 import { AppSettings, Instruction } from '../types';
 import { PORTAL_INSTRUCTIONS, normalizeInstruction, searchBlob } from './modules/instructionsData';
@@ -59,9 +60,9 @@ export default function PortalInstructionsModal({ isOpen, settings, onClose }: P
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-[2px] sm:items-center sm:p-6"
+      className="fixed inset-0 z-[9999] flex items-stretch justify-center overflow-hidden bg-transparent p-0 md:items-center md:overflow-y-auto md:bg-black/40 md:p-6 md:backdrop-blur-[2px]"
       data-scroll-lock="modal"
       onClick={onClose}
     >
@@ -70,7 +71,7 @@ export default function PortalInstructionsModal({ isOpen, settings, onClose }: P
         aria-modal="true"
         aria-label="Инструкции по порталу"
         onClick={(e) => e.stopPropagation()}
-        className="relative z-10 my-4 flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_25px_60px_rgba(0,0,0,0.12)]"
+        className="relative z-10 flex h-full w-full flex-col overflow-hidden bg-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] md:my-4 md:h-auto md:max-h-[88vh] md:max-w-2xl md:rounded-2xl md:border md:border-[#E5E7EB] md:pt-0 md:pb-0 md:shadow-[0_25px_60px_rgba(0,0,0,0.12)]"
       >
         <div className="flex items-start justify-between gap-3 border-b border-[#E5E7EB] px-5 py-4">
           <div className="flex items-center gap-2.5">
@@ -233,6 +234,7 @@ export default function PortalInstructionsModal({ isOpen, settings, onClose }: P
           </p>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

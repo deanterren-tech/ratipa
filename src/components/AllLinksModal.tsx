@@ -78,7 +78,7 @@ export default function AllLinksModal({ isOpen, links, onClose }: AllLinksModalP
   return createPortal(
     <div
       data-scroll-lock="modal"
-      className="fixed inset-0 z-[5000] bg-black/40 backdrop-blur-[2px] flex items-start sm:items-center justify-center p-3 sm:p-6 overflow-y-auto"
+      className="fixed inset-0 z-[5000] flex items-stretch md:items-center justify-center p-0 md:p-6 bg-transparent md:bg-black/40 md:backdrop-blur-[2px] overflow-hidden md:overflow-y-auto"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -88,7 +88,7 @@ export default function AllLinksModal({ isOpen, links, onClose }: AllLinksModalP
         role="dialog"
         aria-modal="true"
         aria-label="Все полезные ссылки"
-        className="relative z-10 w-full max-w-2xl my-3 sm:my-0 bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden"
+        className="relative z-10 flex h-full w-full flex-col overflow-hidden bg-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] md:h-auto md:max-h-[88vh] md:max-w-2xl md:my-0 md:rounded-2xl md:border md:border-[#E5E7EB] md:pt-0 md:pb-0 md:shadow-[0_25px_60px_rgba(0,0,0,0.12)]"
       >
         {/* Шапка: название, количество и закрытие */}
         <div className="flex items-center gap-3 px-4 sm:px-5 py-3.5 border-b border-[#E5E7EB] shrink-0">

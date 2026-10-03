@@ -213,6 +213,18 @@ export default function InstructionsModule({ user, settings }: Props) {
     try { window.localStorage.setItem('ratipa_instructions_drive_visible', 'false'); } catch { /* приватный режим */ }
   };
 
+  /** Escape закрывает панель Диска: из открытого файла — назад к поиску, иначе — закрыть панель. */
+  useEffect(() => {
+    if (!isDriveOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (drivePreview) { setDrivePreview(null); return; }
+      closeDrive();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isDriveOpen, drivePreview]);
+
   /** Переход в подпапку: и список файлов, и просмотр переключаются на неё. */
   const openDriveFolder = (folder: DriveEntry) => {
     setDriveFolderUrl(`https://drive.google.com/drive/folders/${folder.id}`);
@@ -419,7 +431,7 @@ export default function InstructionsModule({ user, settings }: Props) {
     'w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5 text-xs text-[#121316] transition focus:border-[var(--accent-ui)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-30)]';
   const labelCls = 'block text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]';
 
-  /** Панель Диска: на широких экранах — сбоку, на узких — на весь экран. */
+  /** Панель Диска: на широких экранах — сбоку; на телефоне — на весь экран; на планшете — карточкой. */
   const drivePanelContent = (
     <>
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#E5E7EB] bg-white p-3">
@@ -485,7 +497,7 @@ export default function InstructionsModule({ user, settings }: Props) {
               onClick={() => setIsDriveFocus((v) => !v)}
               aria-label={isDriveFocus ? 'Свернуть' : 'Развернуть на весь экран'}
               title={isDriveFocus ? 'Свернуть' : 'Развернуть на весь экран'}
-              className="rounded-lg p-1.5 text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316]"
+              className="hidden xl:inline-flex rounded-lg p-1.5 text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316]"
             >
               {isDriveFocus ? <Minimize2 className="h-3.5 w-3.5" aria-hidden="true" /> : <Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />}
             </button>
@@ -634,7 +646,7 @@ export default function InstructionsModule({ user, settings }: Props) {
         className={
           isDriveFocus
             ? 'fixed inset-0 z-[4100] flex flex-col bg-white'
-            : 'fixed inset-x-3 bottom-3 top-20 z-[4100] flex flex-col overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-[0_25px_60px_rgba(0,0,0,0.25)] xl:hidden'
+            : 'fixed inset-0 z-[4100] flex flex-col overflow-hidden bg-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] md:inset-x-3 md:top-20 md:bottom-3 md:rounded-2xl md:border md:border-[#E5E7EB] md:pt-0 md:pb-0 md:shadow-[0_25px_60px_rgba(0,0,0,0.25)] xl:hidden'
         }
       >
         {drivePanelContent}

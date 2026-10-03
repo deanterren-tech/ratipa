@@ -1445,9 +1445,9 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                 </div>
               </div>
 
-              {/* Mobile: полноэкранный режим */}
-              <div data-scroll-lock="modal" className="fixed inset-0 z-[500] bg-black/40 backdrop-blur-[2px] flex md:hidden" onClick={() => { setIsDriveOpen(false); localStorage.setItem('ratipa_driver_drive_visible', 'false'); }}>
-                <div className="bg-white flex flex-col w-full h-full" onClick={(e) => e.stopPropagation()}>
+              {/* Mobile: полноэкранный режим (поверх шапки и навигации — как все ссылки/материалы) */}
+              <div data-scroll-lock="modal" className="fixed inset-0 z-[4100] bg-black/40 backdrop-blur-[2px] flex md:hidden" onClick={() => { setIsDriveOpen(false); localStorage.setItem('ratipa_driver_drive_visible', 'false'); }}>
+                <div className="bg-white flex flex-col w-full h-full pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]" onClick={(e) => e.stopPropagation()}>
                   <div className="p-4 border-b border-[#E5E7EB] flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-2">
                       <HardDrive className="w-4 h-4 text-[#9CA3AF]" aria-hidden="true" />
@@ -1484,7 +1484,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
 
       {/* Ежегодная проверка паспортных данных */}
       {currentVerification && (
-        <div data-scroll-lock="modal" className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4 sm:p-6 overflow-y-auto">
+        <div data-scroll-lock="modal" data-mobile-fullscreen className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4 sm:p-6 overflow-y-auto">
           <div className="relative z-10 w-full max-w-md bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] p-6 flex flex-col gap-5 text-center my-4">
             <div className="mx-auto p-2.5 bg-amber-50 text-amber-600 rounded-xl w-max">
               <AlertTriangle className="w-6 h-6" aria-hidden="true" />

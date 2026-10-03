@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronUp,
   Navigation,
+  ArrowLeft,
   X,
   Loader2,
   AlertCircle,
@@ -202,25 +203,47 @@ export default function SheetModuleBase({
     "inline-flex items-center justify-center h-8 w-9 sm:w-8 rounded-lg bg-[var(--accent-15)] text-[var(--accent-ink)] hover:bg-[var(--accent-20)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)]";
 
   return (
-    <div className="fixed top-16 inset-x-0 bottom-[84px] z-40 overflow-hidden bg-[#F8F9FA] md:bottom-0">
+    <div className="fixed inset-0 z-[4500] overflow-hidden bg-[#F8F9FA] md:top-16 md:bottom-0 md:z-40">
       {/* === ШАПКА МОДУЛЯ: лежит поверх верхней части фрейма таблицы === */}
       {collapsed ? (
-        /* Свёрнутая панель: от неё остаётся только кнопка поверх таблицы — как было раньше. */
-        <button
-          type="button"
-          onClick={() => setCollapsed(false)}
-          title={`Показать панель «${title}»`}
-          aria-label={`Показать панель «${title}»`}
-          aria-expanded={false}
-          className="absolute right-3 top-3 z-[101] inline-flex min-h-[44px] max-w-[calc(100vw-24px)] items-center gap-1.5 rounded-xl bg-[var(--accent-solid)] px-3 text-xs font-semibold text-[var(--accent-on)] shadow-sm transition-all hover:bg-[var(--accent-hover)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] sm:min-h-0 sm:py-2"
-        >
-          <ChevronDown className="h-4 w-4 shrink-0" />
-          <span className="truncate">{title}</span>
-        </button>
+        /* Свёрнутая панель: от неё остаётся только кнопка поверх таблицы — как было раньше.
+           На телефоне модуль открыт на весь экран, поэтому рядом — кнопка «Назад» (выход в раздел). */
+        <>
+          <button
+            type="button"
+            onClick={() => { window.location.hash = 'dashboard'; }}
+            title="Назад"
+            aria-label="Назад"
+            className="absolute left-3 top-[calc(env(safe-area-inset-top,0px)+12px)] z-[101] flex md:hidden min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-[#E5E7EB] bg-white text-[#4B5563] shadow-sm transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)]"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setCollapsed(false)}
+            title={`Показать панель «${title}»`}
+            aria-label={`Показать панель «${title}»`}
+            aria-expanded={false}
+            className="absolute right-3 top-[calc(env(safe-area-inset-top,0px)+12px)] z-[101] inline-flex min-h-[44px] max-w-[calc(100vw-24px)] items-center gap-1.5 rounded-xl bg-[var(--accent-solid)] px-3 text-xs font-semibold text-[var(--accent-on)] shadow-sm transition-all hover:bg-[var(--accent-hover)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] sm:min-h-0 sm:py-2"
+          >
+            <ChevronDown className="h-4 w-4 shrink-0" />
+            <span className="truncate">{title}</span>
+          </button>
+        </>
       ) : (
-        <div className="absolute left-0 right-0 top-0 z-[100] border-b border-[#E5E7EB] bg-white px-3 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:px-4">
+        <div className="absolute left-0 right-0 top-0 z-[100] border-b border-[#E5E7EB] bg-white px-3 pt-[env(safe-area-inset-top)] shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:px-4">
           <div className="flex items-center justify-between gap-3 flex-wrap py-2">
             <div className="flex items-center gap-2.5 min-w-0">
+              {/* Назад: на телефоне модуль открыт на весь экран — это выход в прежний раздел */}
+              <button
+                type="button"
+                onClick={() => { window.location.hash = 'dashboard'; }}
+                title="Назад"
+                aria-label="Назад"
+                className="flex md:hidden min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-white text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)]"
+              >
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              </button>
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6] text-[#4B5563]">
                 <Icon className="h-4 w-4" />
               </div>
@@ -308,7 +331,7 @@ export default function SheetModuleBase({
 
       {/* === ОБЛАСТЬ ТАБЛИЦЫ (рамка принадлежит порталу, содержимое — Google).
              Занимает всю высоту: плашка при наложении закрывает её верхнюю часть. === */}
-      <div className="absolute inset-0 p-1.5 sm:p-3">
+      <div className="absolute inset-0 px-1.5 pt-1.5 pb-[calc(env(safe-area-inset-bottom,0px)+6px)] sm:p-3">
         <div className="relative h-full w-full overflow-hidden rounded-xl border border-[#E5E7EB] bg-white">
         {embedUrl ? (
           <>
