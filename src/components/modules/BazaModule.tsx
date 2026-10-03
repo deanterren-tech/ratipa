@@ -1514,7 +1514,7 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
         subtitle={modalData.carNumber || undefined}
         icon={<Truck className="w-4 h-4" aria-hidden="true" />}
         iconTone="graphite"
-        maxWidth="max-w-4xl"
+        maxWidth="max-w-6xl"
         footer={
           <div className="flex flex-wrap items-center justify-end gap-2 w-full">
             {currentTab === 'base' && !isMechanic && canWriteBaza && (
@@ -1539,7 +1539,7 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
           {/* Аналитика простоя */}
           <div className="flex flex-col gap-3">
             <span className={UI.caption}>Аналитика простоя по записи</span>
-            <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+            <div className="flex flex-wrap items-center gap-x-10 gap-y-4">
               <span className="inline-flex items-center gap-2">
                 <StatusText color="grey">Дни отдыха водит.</StatusText>
                 <span className="text-sm font-semibold font-mono tabular-nums text-[#121316]">{getDaysBetween(modalData.dateArrival, modalData.dateLoading)}</span>
@@ -1559,8 +1559,8 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+            <div className="flex flex-col gap-2">
               <label className={UI.fieldLabel}>Госномер автомобиля</label>
               <CouplingPicker
                 mode="combined"
@@ -1582,14 +1582,14 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
             </div>
             <div className="flex flex-col gap-1.5">
               <label className={UI.fieldLabel}>ФИО Водителя</label>
-              <div className="flex items-center min-h-[44px] py-2 text-xs font-medium text-[#4B5563]">
+              <div className="flex items-center min-h-[44px] py-2 text-sm font-medium text-[#121316]">
                 {modalData.driverName || <span className="text-[#9CA3AF]">—</span>}
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-            <div className="flex flex-col gap-1.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-5">
+            <div className="flex flex-col gap-2">
               <label className={UI.fieldLabel} title="Прибыл на базу">Прибыл на базу</label>
               <div className="relative">
                 <input type="text" readOnly disabled={!canEditField('dateArrival')} value={modalData.dateArrival ? modalData.dateArrival.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className={`${UI.input} cursor-pointer pr-10`} onClick={() => (document.getElementById('modal-picker-dateArrival') as HTMLInputElement | null)?.showPicker()} />
@@ -1599,7 +1599,7 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
                 </button>
               </div>
             </div>
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
               <label className={UI.fieldLabel} title="К какому числу должна быть готова машина">Срок готовности</label>
               <div className="relative">
                 <input type="text" readOnly disabled={!canEditField('dateLoading')} value={modalData.dateLoading ? modalData.dateLoading.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className={`${UI.input} cursor-pointer pr-10`} onClick={() => (document.getElementById('modal-picker-dateLoading') as HTMLInputElement | null)?.showPicker()} />
@@ -1609,15 +1609,15 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
                 </button>
               </div>
             </div>
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
               <label className={UI.fieldLabel} title="Дата подачи заявки на ремонт">Заявка на ремонт</label>
               <input type="date" disabled={!canEditField('dateRepairStart')} value={modalData.dateRepairStart || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateRepairStart: true})); setModalData((mm) => ({...mm, dateRepairStart: e.target.value})); }} className={UI.input} />
             </div>
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
               <label className={UI.fieldLabel} title="Дата окончания ремонта">Завершение ремонта</label>
               <input type="date" disabled={!canEditField('dateRepairEnd')} value={modalData.dateRepairEnd || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateRepairEnd: true})); setModalData((mm) => ({...mm, dateRepairEnd: e.target.value})); }} className={UI.input} />
             </div>
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
               <label className={UI.fieldLabel} title="Фактический выезд">Фактический выезд</label>
               <div className="relative">
                 <input type="text" readOnly disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture ? modalData.dateDeparture.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className={`${UI.input} cursor-pointer pr-10`} onClick={() => (document.getElementById('modal-picker-dateDeparture') as HTMLInputElement | null)?.showPicker()} />
@@ -1642,17 +1642,17 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
 
           <div className="flex flex-col gap-3">
             <span className={UI.caption}>Журнал изменений записи</span>
-            <div className="flex flex-col max-h-40 overflow-y-auto custom-scrollbar pr-1">
+            <div className="flex flex-col max-h-72 overflow-y-auto custom-scrollbar pr-1">
               {modalData.history && Object.keys(modalData.history).reverse().map(hk => {
                 const h = modalData.history[hk];
                 return (
-                  <div key={hk} className="flex flex-col gap-1 py-2.5 border-b border-[#E5E7EB] last:border-0">
-                    <div className="flex items-center gap-2 text-[10px] font-medium text-[#9CA3AF]">
-                      <span>{h.date}</span>
-                      <span>·</span>
-                      <span className="text-[#A55329]">{h.user}</span>
+                  <div key={hk} className="flex flex-col gap-1.5 py-3 border-b border-[#E5E7EB] last:border-0">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-[#6B7280]">
+                      <span className="font-mono tabular-nums">{h.date}</span>
+                      <span aria-hidden="true">·</span>
+                      <span className="text-[var(--accent-ink)]">{h.user}</span>
                     </div>
-                    <div className="text-xs text-[#4B5563] leading-relaxed">
+                    <div className="text-[13px] text-[#4B5563] leading-relaxed">
                       «{getNormalizedFieldLabel(h.field)}»: <span className="line-through text-[#9CA3AF] mx-1">{h.old}</span>
                       <ArrowRight className="w-3.5 h-3.5 inline-block align-middle text-[#D1D5DB]" aria-hidden="true" />
                       <span className="text-[#121316] font-medium mx-1">{h.new}</span>
