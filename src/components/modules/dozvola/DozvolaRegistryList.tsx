@@ -163,7 +163,7 @@ const TiApplicationModal: React.FC<{
   const statusLabel = permit.status === 'lost' ? 'Утерян' : 'Аннулирован';
 
   return (
-    <div data-scroll-lock="modal" className="fixed inset-0 z-[5000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6">
+    <div data-scroll-lock="modal" data-mobile-fullscreen className="fixed inset-0 z-[5000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6">
       <div
         role="dialog"
         aria-modal="true"
@@ -453,7 +453,7 @@ const DozvolaRow = React.memo(({
                 ТИ
               </button>
             )}
-            {canWrite && (<button onClick={onEdit} className="w-7 h-7 shrink-0 flex items-center justify-center text-[var(--accent-ink)] hover:bg-blue-50 rounded-lg transition cursor-pointer" title="Редактировать"><Edit className="h-3.5 w-3.5" /></button>)}
+            {canWrite && (<button onClick={onEdit} className="w-7 h-7 shrink-0 flex items-center justify-center text-[var(--accent-ink)] hover:bg-[var(--accent-10)] rounded-lg transition cursor-pointer" title="Редактировать"><Edit className="h-3.5 w-3.5" /></button>)}
             {(isRootAdmin || canWrite) && (<button onClick={onDelete} className="w-7 h-7 shrink-0 flex items-center justify-center text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer" title="Удалить"><Trash2 className="h-3.5 w-3.5" /></button>)}
           </div>
         </td>
@@ -490,7 +490,7 @@ const DozvolaRow = React.memo(({
               {item.number || item.permitNumber}
             </span>
             {showTypeColumn && (
-              <span className="inline-block mt-1 font-semibold text-[var(--accent-ink)] bg-blue-50/60 border border-blue-100/30 px-2.5 py-1 rounded-xl text-[11px]">
+              <span className="inline-block mt-1 font-semibold text-[var(--accent-ink)] bg-[var(--accent-10)] border border-[var(--accent-15)] px-2.5 py-1 rounded-xl text-[11px]">
                 {item.type}
               </span>
             )}
@@ -627,7 +627,7 @@ const DozvolaRow = React.memo(({
         </select>
         <div className="flex items-center gap-1.5">
           {canWrite && (
-            <button onClick={onEdit} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[var(--accent-ink)] hover:bg-blue-50 rounded-xl transition cursor-pointer" title="Редактировать параметры бланка">
+            <button onClick={onEdit} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[var(--accent-ink)] hover:bg-[var(--accent-10)] rounded-xl transition cursor-pointer" title="Редактировать параметры бланка">
               <Edit className="h-4 w-4" />
             </button>
           )}
@@ -996,7 +996,7 @@ const setCurrentSelectedTab = (type: string) => {
     const rows = items.map((item: any, idx: number) => `<tr>
       <td style="padding:6px 10px;border:1px solid #ddd;text-align:center;font-size:12px">${idx + 1}</td>
       <td style="padding:6px 10px;border:1px solid #ddd;font-size:13px;font-weight:bold;font-family:monospace">${item.number || item.permitNumber || '—'}</td>
-      ${showTypeColumn ? `<td style="padding:6px 10px;border:1px solid #ddd;font-size:12px"><span style="background:#eef2ff;padding:2px 8px;border-radius:4px;font-weight:bold">${item.type || '—'}</span></td>` : ''}
+      ${showTypeColumn ? `<td style="padding:6px 10px;border:1px solid #ddd;font-size:12px"><span style="background:#f3f4f6;padding:2px 8px;border-radius:4px;font-weight:bold">${item.type || '—'}</span></td>` : ''}
       <td style="padding:6px 10px;border:1px solid #ddd;font-size:12px;font-weight:bold">${shortStatusLabel[item.status] || item.status || '—'}</td>
       <td style="padding:6px 10px;border:1px solid #ddd;font-size:11px;color:#666">${item.comment || item.comments || ''}</td>
       <td style="padding:6px 10px;border:1px solid #ddd;font-size:12px;font-family:monospace">${item.issueDate ? new Date(item.issueDate).toLocaleDateString('ru-RU') : '—'}</td>
@@ -2055,7 +2055,7 @@ const setCurrentSelectedTab = (type: string) => {
       {/* Диалог выбора очереди сдачи: открывается при переводе бланка в «Использован» */}
       {batchDialog && (
         <div
-          data-scroll-lock="modal"
+          data-scroll-lock="modal" data-mobile-fullscreen
           className="fixed inset-0 z-[5000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6"
           onClick={() => setBatchDialog(null)}
         >

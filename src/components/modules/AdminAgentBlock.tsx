@@ -557,7 +557,7 @@ export default function AdminAgentBlock({ user }: AdminAgentBlockProps) {
                 <div className="flex sm:flex-col gap-2 shrink-0 sm:min-w-[150px]">
                   <button 
                     onClick={() => resolveApproval(app.id, 'approved')}
-                    className="w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors cursor-pointer min-h-[44px]"
+                    className="w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-on)] text-xs font-semibold transition-colors cursor-pointer min-h-[44px]"
                   >
                     <CheckCircle className="w-3.5 h-3.5" /> Подтвердить
                   </button>

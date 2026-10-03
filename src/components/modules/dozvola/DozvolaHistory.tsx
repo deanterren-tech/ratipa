@@ -552,7 +552,7 @@ function HistoryDetailModal({
   ];
 
   return (
-    <div data-scroll-lock="modal" className="fixed inset-0 z-[5000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6">
+    <div data-scroll-lock="modal" data-mobile-fullscreen className="fixed inset-0 z-[5000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6">
       <div
         role="dialog"
         aria-modal="true"

@@ -278,9 +278,9 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
               onClick={() => handlePick({ carNumber: query.trim().toUpperCase(), vehicleNumbers: query.trim().toUpperCase(), isNew: true })}
               className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[var(--accent-5)] text-left border-t border-[#E5E7EB] bg-[#F9FAFB]"
             >
-              <Truck className="w-4 h-4 text-emerald-500 shrink-0" />
+              <Truck className="w-4 h-4 text-[var(--accent-ink)] shrink-0" />
               <div className="min-w-0 flex-1">
-                <div className={compact ? "text-xs font-medium text-emerald-700 truncate" : "text-xs font-bold text-emerald-600 font-mono truncate"}>+ Добавить: {query.trim().toUpperCase()}</div>
+                <div className={compact ? "text-xs font-medium text-[var(--accent-ink)] truncate" : "text-xs font-bold text-[var(--accent-ink)] font-mono truncate"}>+ Добавить: {query.trim().toUpperCase()}</div>
                 <div className={compact ? "text-[10px] text-[#6B7280] truncate" : "text-[10px] text-[#6B7280] truncate"}>новый автомобиль (не из базы сцепок)</div>
               </div>
             </button>
@@ -294,7 +294,7 @@ export default function CouplingPicker({ value, onSelect, placeholder, excludeId
               onClick={() => handlePickLoc(loc)}
               className={`w-full flex items-center gap-2 px-3 py-2 text-left border-b last:border-0 ${compact ? "hover:bg-[#F9FAFB] border-[#F3F4F6]" : "hover:bg-[#F9FAFB] border-[#F3F4F6]"}`}
             >
-              <MapPin className="w-4 h-4 text-emerald-500 shrink-0" />
+              <MapPin className="w-4 h-4 text-[var(--accent-ink)] shrink-0" />
               <div className="min-w-0 flex-1">
                 <div className={compact ? "text-xs font-medium text-[#121316] truncate" : "text-xs font-semibold text-[#121316] truncate"}>{loc}</div>
               </div>

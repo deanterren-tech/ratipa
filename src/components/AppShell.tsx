@@ -1712,7 +1712,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          className="fixed right-4 bottom-20 md:bottom-6 z-[1000] flex items-center justify-center w-11 h-11 bg-[#121316] text-[#70FC8E] hover:bg-[#121316] transition-colors select-none cursor-pointer rounded-full shadow-lg active:scale-95"
+          className="fixed right-4 bottom-20 md:bottom-6 z-[1000] flex items-center justify-center w-11 h-11 bg-[#121316] text-[var(--accent)] hover:bg-[#121316] transition-colors select-none cursor-pointer rounded-full shadow-lg active:scale-95"
           title="Наверх"
         >
           <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
@@ -1741,15 +1741,15 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                 className="bg-[#121316] text-white rounded-xl border border-slate-700/60 shadow-[0_20px_80px_rgba(0,0,0,0.6)] p-6 sm:p-8 w-full max-w-lg relative overflow-hidden flex flex-col gap-4"
               >
                 {/* Highlight bar */}
-                <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#70FC8E]" />
+                <div className="absolute top-0 left-0 right-0 h-1.5 bg-[var(--accent)]" />
 
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-3">
-                    <div className="p-2 bg-[#121316] border border-slate-700 rounded-xl text-[#70FC8E]">
+                    <div className="p-2 bg-[#121316] border border-slate-700 rounded-xl text-[var(--accent)]">
                       <BellRing className="h-5 w-5" />
                     </div>
                     <div>
-                      <span className="text-[10px] font-semibold uppercase tracking-widest text-[#70FC8E] block">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--accent)] block">
                         Важное Распоряжение
                       </span>
                       <span className="text-[10px] text-[#9CA3AF] font-mono">
@@ -1773,7 +1773,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
                 <button
                   onClick={() => dbService.markBroadcastNotificationAsRead(notif.id, user.uid, user.name)}
-                  className="w-full mt-1 py-3 px-4 bg-[#70FC8E] hover:bg-[#5be277] active:scale-[0.99] text-[#121316] font-semibold text-xs uppercase tracking-widest rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center gap-2 shadow-lg"
+                  className="w-full mt-1 py-3 px-4 bg-[var(--accent)] hover:bg-[var(--accent-hover)] active:scale-[0.99] text-[var(--accent-on)] font-semibold text-xs uppercase tracking-widest rounded-xl transition-all duration-150 cursor-pointer flex items-center justify-center gap-2 shadow-lg"
                 >
                   <Check className="h-4 w-4" strokeWidth={3} />
                   Подтвердить прочтение

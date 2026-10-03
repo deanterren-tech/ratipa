@@ -537,7 +537,7 @@ export default function UserManagementBlock({ user }: Props) {
           {isAdding && activeMainTab === "users" && (
             <div className="p-5 lg:p-7 flex flex-col">
               <div className="flex items-center gap-2.5 pb-3 border-b border-[#E5E7EB] mb-5">
-                <div className="p-2 bg-[#F3F4F6] text-[#A55329] rounded-xl">
+                <div className="p-2 bg-[var(--accent-10)] text-[var(--accent-ink)] rounded-xl">
                   <UserPlus className="w-4 h-4" />
                 </div>
                 <h3 className="text-sm font-semibold text-[#121316]">
@@ -550,7 +550,7 @@ export default function UserManagementBlock({ user }: Props) {
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">Данные сотрудника</span>
                   <div className="space-y-1.5">
                     <label className={UI.fieldLabel}>
-                      Имя <span className="text-[#A55329]">*</span>
+                      Имя <span className="text-[var(--accent-ink)]">*</span>
                     </label>
                     <input
                       type="text"
@@ -577,7 +577,7 @@ export default function UserManagementBlock({ user }: Props) {
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">Вход в систему</span>
                   <div className="space-y-1.5">
                     <label className={UI.fieldLabel}>
-                      Пароль <span className="text-[#A55329]">*</span>
+                      Пароль <span className="text-[var(--accent-ink)]">*</span>
                     </label>
                     <input
                       type="text"

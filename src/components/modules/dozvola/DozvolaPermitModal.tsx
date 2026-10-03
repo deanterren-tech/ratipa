@@ -130,7 +130,7 @@ export default function DozvolaPermitModal({
   if (!isOpen) return null;
 
   return createPortal(
-    <div data-scroll-lock="modal" className="fixed inset-0 z-[5000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6">
+    <div data-scroll-lock="modal" data-mobile-fullscreen className="fixed inset-0 z-[5000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6">
       <div className="relative z-10 w-full max-w-2xl bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] flex flex-col max-h-[90vh] overflow-hidden" role="dialog" aria-modal="true">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] shrink-0">
           <div className="flex items-center gap-2.5">

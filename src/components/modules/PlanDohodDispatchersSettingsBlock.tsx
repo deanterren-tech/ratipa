@@ -75,7 +75,7 @@ export default function PlanDohodDispatchersSettingsBlock({ user }: Props) {
 
       {/* Block Header */}
       <div className="border-b border-white/40 pb-4">
-        <span className="bg-indigo-600 text-white font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-wider">
+        <span className="bg-[var(--accent)] text-[var(--accent-on)] font-black text-[9px] px-2.5 py-0.5 rounded-full uppercase font-mono tracking-wider">
           Dispatchers Configuration
         </span>
         <h2 className="text-sm font-bold uppercase tracking-tight text-slate-900 mt-2 flex items-center gap-1.5">
@@ -92,7 +92,7 @@ export default function PlanDohodDispatchersSettingsBlock({ user }: Props) {
           placeholder="Поиск диспетчера..."
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
-          className="flex-1 bg-white/40 border border-white/45 shadow-sm px-4 py-2.5 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 transition"
+          className="flex-1 bg-white/40 border border-white/45 shadow-sm px-4 py-2.5 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-4 focus:ring-[var(--accent-20)] focus:border-[var(--accent)] transition"
         />
         <input
           type="text"
@@ -100,11 +100,11 @@ export default function PlanDohodDispatchersSettingsBlock({ user }: Props) {
           value={newDispatcherName}
           onChange={e => setNewDispatcherName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleAddDispatcher()}
-          className="flex-1 bg-white/40 border border-white/45 shadow-sm px-4 py-2.5 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 transition"
+          className="flex-1 bg-white/40 border border-white/45 shadow-sm px-4 py-2.5 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-4 focus:ring-[var(--accent-20)] focus:border-[var(--accent)] transition"
         />
         <button
           onClick={handleAddDispatcher}
-          className="flex items-center gap-1 text-[10px] uppercase font-bold tracking-widest text-white bg-indigo-600 px-4 py-2.5 rounded-xl hover:bg-indigo-755 active:scale-95 shadow-md transition cursor-pointer"
+          className="flex items-center gap-1 text-[10px] uppercase font-bold tracking-widest text-[var(--accent-on)] bg-[var(--accent)] px-4 py-2.5 rounded-xl hover:bg-[var(--accent-hover)] active:scale-95 shadow-md transition cursor-pointer"
         >
           <Plus size={12}/> Добавить
         </button>

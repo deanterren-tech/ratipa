@@ -111,7 +111,7 @@ export function SectionHeader({
 }) {
   const tones: Record<string, string> = {
     graphite: 'bg-[#F3F4F6] text-[#121316]',
-    accent: 'bg-[var(--accent-10)] text-[#A55329]',
+    accent: 'bg-[var(--accent-10)] text-[var(--accent-ink)]',
     amber: 'bg-amber-50 text-amber-600',
     emerald: 'bg-emerald-50 text-emerald-600',
     rose: 'bg-rose-50 text-rose-600',
@@ -336,7 +336,7 @@ export function ModalShell({
 }) {
   if (!isOpen) return null;
   const tones: Record<string, string> = {
-    accent: 'bg-[#F3F4F6] text-[#A55329]',
+    accent: 'bg-[var(--accent-10)] text-[var(--accent-ink)]',
     graphite: 'bg-[#F3F4F6] text-[#121316]',
     rose: 'bg-rose-50 text-rose-600',
     amber: 'bg-amber-50 text-amber-600',

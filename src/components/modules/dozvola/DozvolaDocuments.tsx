@@ -1464,7 +1464,7 @@ const formatApplicationDate = (value: string) => {
             </div>
               <div className="flex gap-2">
                 {user.role === 'root_admin' && (
-                  <button onClick={markCheckedOfficeReturnsAsUsed} className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl text-[10px] font-semibold transition cursor-pointer shadow-xs">
+                  <button onClick={markCheckedOfficeReturnsAsUsed} className="flex items-center gap-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-on)] px-3 py-2 rounded-xl text-[10px] font-semibold transition cursor-pointer shadow-xs">
                     <CheckCircle className="h-3.5 w-3.5" /> Списать (Сданы в инспекцию ТИ)
                   </button>
                 )}
@@ -1535,7 +1535,7 @@ const formatApplicationDate = (value: string) => {
                 <input type="checkbox" checked={showArchiveChina} onChange={(e) => setShowArchiveChina(e.target.checked)} className="accent-[var(--accent-ui)]" />
                 Включить уже сданные в ТИ (Архив)
               </label>
-              <button onClick={() => markSelectedChinaCopiesAsSubmitted(true)} className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Пометить как отправленные в ТИ</button>
+              <button onClick={() => markSelectedChinaCopiesAsSubmitted(true)} className="px-3.5 py-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-on)] text-[10px] font-semibold rounded-xl cursor-pointer transition">Пометить как отправленные в ТИ</button>
               <button onClick={() => markSelectedChinaCopiesAsSubmitted(false)} className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-semibold rounded-xl cursor-pointer transition">Сбросить отметку сдачи</button>
               <div className="flex-1 min-w-[200px]">
                 <input

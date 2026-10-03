@@ -200,6 +200,9 @@ export interface SalaryLog {
   comment?: string;
   carId?: string;
   driverId?: string;
+  /** Фактический ключ ветки salaryHistory/months|byDispatcher, под которым лежит запись.
+   *  Служебное поле только для чтения/удаления — в базу не записывается. */
+  storageKey?: string;
 }
 
 export interface LegPlan {

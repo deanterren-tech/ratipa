@@ -78,7 +78,7 @@ const DozvolCommentRow: React.FC<{ d: any; isHighlighted?: boolean }> = ({ d, is
           />
           <button 
             onClick={handleSave}
-            className="p-1 bg-emerald-50 text-emerald-600 rounded hover:bg-emerald-100"
+            className="p-1 bg-[var(--accent-10)] text-[var(--accent-ink)] rounded hover:bg-[var(--accent-15)]"
           >
             <Save className="w-3 h-3" />
           </button>
@@ -96,7 +96,7 @@ const DozvolCommentRow: React.FC<{ d: any; isHighlighted?: boolean }> = ({ d, is
           </div>
           <button 
             onClick={() => setIsEditing(true)}
-            className="opacity-0 group-hover/comment:opacity-100 p-0.5 text-[#9CA3AF] hover:text-blue-500 hover:bg-[#F3F4F6] rounded transition"
+            className="opacity-0 group-hover/comment:opacity-100 p-0.5 text-[#9CA3AF] hover:text-[var(--accent-ink)] hover:bg-[#F3F4F6] rounded transition"
           >
             <Edit className="w-3 h-3" />
           </button>
@@ -812,7 +812,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                     {d.status === 'sent' && (
                        <button 
                          onClick={() => handleReceiveDelivery(d)} 
-                         className="mt-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/50 text-xs min-h-[44px] py-2 rounded-xl font-semibold transition flex items-center justify-center gap-1 cursor-pointer shadow-sm shadow-emerald-500/5"
+                         className="mt-1 bg-[var(--accent-10)] hover:bg-[var(--accent-15)] text-[var(--accent-ink)] border border-[var(--accent-20)] text-xs min-h-[44px] py-2 rounded-xl font-semibold transition flex items-center justify-center gap-1 cursor-pointer shadow-sm shadow-[var(--accent-5)]"
                        >
                          <Truck className="w-3.5 h-3.5" />
                          <span>Получить в {activeToLocName}</span>
@@ -1164,7 +1164,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
 
       {/* FORM MODAL FOR SENDING PERMITS (GLASSMORPHIC DIALOG) */}
       {showDeliveryForm && (
- <div data-scroll-lock="modal" className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6">
+ <div data-scroll-lock="modal" data-mobile-fullscreen className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6">
           <div className="relative z-10 w-[620px] max-w-full bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] flex flex-col max-h-[90vh] overflow-hidden">
             <div className="flex justify-between items-center px-4 sm:px-6 py-4 border-b border-[#E5E7EB] shrink-0">
               <h2 className="font-semibold text-sm text-[#121316] flex items-center gap-1.5">
@@ -1290,7 +1290,7 @@ onClick={closeDeliveryForm}
                     Выберите бланки для передачи ({filteredDozvolsAtFrom.length} доступно)
                   </label>
                   {delivDozvols.length > 0 && (
-                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                    <span className="text-[10px] font-semibold text-[var(--accent-ink)] bg-[var(--accent-10)] px-2 py-0.5 rounded border border-[var(--accent-15)]">
                       Выбрано: {delivDozvols.length} шт
                     </span>
                   )}

@@ -20,6 +20,7 @@ import {
   Lock,
 } from 'lucide-react';
 import {UI} from '../../ui/kit'
+import {openDatePicker} from '../../utils/openDatePicker'
 import {
   ModuleShell,
   SectionHeader,
@@ -68,8 +69,10 @@ const getNormalizedFieldLabel = (field: string) => {
 /**
  * Поле даты в форме: пользователь видит текст «ДД/ММ/ГГГГ», а рядом есть значок
  * календаря. Логика прежняя: текстовое поле только для показа, значение хранит
- * скрытый нативный input[type=date] (он же открывает системный календарь через
- * showPicker), поэтому формат и сохранённое значение не меняются.
+ * скрытый нативный input[type=date] (он же открывает системный календарь),
+ * поэтому формат и сохранённое значение не меняются. Открытие — через общий
+ * openDatePicker (фолбэк для браузеров без showPicker); на мобильном тап ловит
+ * сам нативный input (md:pointer-events-none), календарь открывается напрямую.
  */
 function BazaDateField({
   id,
@@ -85,8 +88,7 @@ function BazaDateField({
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   const openPicker = () => {
-    const el = document.getElementById(`picker-${id}`) as HTMLInputElement | null;
-    el?.showPicker?.();
+    openDatePicker(`picker-${id}`);
   };
   return (
     <div className="flex flex-col gap-1.5">
@@ -108,7 +110,7 @@ function BazaDateField({
           disabled={disabled}
           value={value || ''}
           onChange={onChange}
-          className="absolute inset-0 opacity-0 pointer-events-none"
+          className="absolute inset-0 opacity-0 md:pointer-events-none"
           aria-hidden="true"
           tabIndex={-1}
         />
@@ -118,7 +120,7 @@ function BazaDateField({
           onClick={openPicker}
           title={`Открыть календарь: ${label}`}
           aria-label={`Открыть календарь: ${label}`}
-          className="absolute right-1 top-1/2 flex min-h-[36px] min-w-[36px] -translate-y-1/2 items-center justify-center rounded-lg text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] disabled:opacity-30 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)]"
+          className="absolute right-1 top-1/2 flex min-h-[36px] min-w-[36px] -translate-y-1/2 items-center justify-center rounded-lg text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] disabled:opacity-30 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)] pointer-events-none md:pointer-events-auto"
         >
           <Calendar className="w-4 h-4" aria-hidden="true" />
         </button>
@@ -1143,7 +1145,7 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                   <div className="flex flex-col gap-1.5">
                     <label className={UI.fieldLabel} htmlFor="form-car-picker">
-                      Автомобиль <span className="text-[#A55329]">*</span>
+                      Автомобиль <span className="text-[var(--accent-ink)]">*</span>
                     </label>
                     <div id="form-car-picker">
                       <CouplingPicker
@@ -1476,7 +1478,7 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
                       <div className="flex items-center flex-wrap gap-x-3 gap-y-1.5">
                         <span className="text-[11px] font-mono tabular-nums text-[#6B7280]">{h.date}</span>
                         <span className={`${UI.chip} font-mono text-[#121316]`}>{h.carNumber}</span>
-                        <span className="text-[11px] font-medium text-[#A55329]">{h.user}</span>
+                        <span className="text-[11px] font-medium text-[var(--accent-ink)]">{h.user}</span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-xs text-[#4B5563]">
                         <span className="font-semibold text-[#121316]">{getNormalizedFieldLabel(h.field)}:</span>
@@ -1592,9 +1594,9 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
             <div className="flex flex-col gap-2">
               <label className={UI.fieldLabel} title="Прибыл на базу">Прибыл на базу</label>
               <div className="relative">
-                <input type="text" readOnly disabled={!canEditField('dateArrival')} value={modalData.dateArrival ? modalData.dateArrival.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className={`${UI.input} cursor-pointer pr-10`} onClick={() => (document.getElementById('modal-picker-dateArrival') as HTMLInputElement | null)?.showPicker()} />
-                <input type="date" id="modal-picker-dateArrival" disabled={!canEditField('dateArrival')} value={modalData.dateArrival || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateArrival: true})); setModalData((mm) => ({...mm, dateArrival: e.target.value})); } } className="absolute inset-0 opacity-0 pointer-events-none" />
-                <button type="button" disabled={!canEditField('dateArrival')} onClick={() => (document.getElementById('modal-picker-dateArrival') as HTMLInputElement | null)?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-[#9CA3AF] hover:text-[#121316] disabled:opacity-30 cursor-pointer">
+                <input type="text" readOnly disabled={!canEditField('dateArrival')} value={modalData.dateArrival ? modalData.dateArrival.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className={`${UI.input} cursor-pointer pr-10`} onClick={() => openDatePicker('modal-picker-dateArrival')} />
+                <input type="date" id="modal-picker-dateArrival" disabled={!canEditField('dateArrival')} value={modalData.dateArrival || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateArrival: true})); setModalData((mm) => ({...mm, dateArrival: e.target.value})); } } className="absolute inset-0 opacity-0 md:pointer-events-none" />
+                <button type="button" disabled={!canEditField('dateArrival')} onClick={() => openDatePicker('modal-picker-dateArrival')} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-[#9CA3AF] hover:text-[#121316] disabled:opacity-30 cursor-pointer pointer-events-none md:pointer-events-auto">
                   <Calendar className="w-4 h-4" aria-hidden="true" />
                 </button>
               </div>
@@ -1602,9 +1604,9 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
             <div className="flex flex-col gap-2">
               <label className={UI.fieldLabel} title="К какому числу должна быть готова машина">Срок готовности</label>
               <div className="relative">
-                <input type="text" readOnly disabled={!canEditField('dateLoading')} value={modalData.dateLoading ? modalData.dateLoading.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className={`${UI.input} cursor-pointer pr-10`} onClick={() => (document.getElementById('modal-picker-dateLoading') as HTMLInputElement | null)?.showPicker()} />
-                <input type="date" id="modal-picker-dateLoading" disabled={!canEditField('dateLoading')} value={modalData.dateLoading || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateLoading: true})); setModalData((mm) => ({...mm, dateLoading: e.target.value})); } } className="absolute inset-0 opacity-0 pointer-events-none" />
-                <button type="button" disabled={!canEditField('dateLoading')} onClick={() => (document.getElementById('modal-picker-dateLoading') as HTMLInputElement | null)?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-[#9CA3AF] hover:text-[#121316] disabled:opacity-30 cursor-pointer">
+                <input type="text" readOnly disabled={!canEditField('dateLoading')} value={modalData.dateLoading ? modalData.dateLoading.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className={`${UI.input} cursor-pointer pr-10`} onClick={() => openDatePicker('modal-picker-dateLoading')} />
+                <input type="date" id="modal-picker-dateLoading" disabled={!canEditField('dateLoading')} value={modalData.dateLoading || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateLoading: true})); setModalData((mm) => ({...mm, dateLoading: e.target.value})); } } className="absolute inset-0 opacity-0 md:pointer-events-none" />
+                <button type="button" disabled={!canEditField('dateLoading')} onClick={() => openDatePicker('modal-picker-dateLoading')} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-[#9CA3AF] hover:text-[#121316] disabled:opacity-30 cursor-pointer pointer-events-none md:pointer-events-auto">
                   <Calendar className="w-4 h-4" aria-hidden="true" />
                 </button>
               </div>
@@ -1620,9 +1622,9 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
             <div className="flex flex-col gap-2">
               <label className={UI.fieldLabel} title="Фактический выезд">Фактический выезд</label>
               <div className="relative">
-                <input type="text" readOnly disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture ? modalData.dateDeparture.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className={`${UI.input} cursor-pointer pr-10`} onClick={() => (document.getElementById('modal-picker-dateDeparture') as HTMLInputElement | null)?.showPicker()} />
-                <input type="date" id="modal-picker-dateDeparture" disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateDeparture: true})); setModalData((mm) => ({...mm, dateDeparture: e.target.value})); } } className="absolute inset-0 opacity-0 pointer-events-none" />
-                <button type="button" disabled={!canEditField('dateDeparture')} onClick={() => (document.getElementById('modal-picker-dateDeparture') as HTMLInputElement | null)?.showPicker()} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-[#9CA3AF] hover:text-[#121316] disabled:opacity-30 cursor-pointer">
+                <input type="text" readOnly disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture ? modalData.dateDeparture.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className={`${UI.input} cursor-pointer pr-10`} onClick={() => openDatePicker('modal-picker-dateDeparture')} />
+                <input type="date" id="modal-picker-dateDeparture" disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateDeparture: true})); setModalData((mm) => ({...mm, dateDeparture: e.target.value})); } } className="absolute inset-0 opacity-0 md:pointer-events-none" />
+                <button type="button" disabled={!canEditField('dateDeparture')} onClick={() => openDatePicker('modal-picker-dateDeparture')} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-[#9CA3AF] hover:text-[#121316] disabled:opacity-30 cursor-pointer pointer-events-none md:pointer-events-auto">
                   <Calendar className="w-4 h-4" aria-hidden="true" />
                 </button>
               </div>

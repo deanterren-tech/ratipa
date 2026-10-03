@@ -218,7 +218,7 @@ export default function AdminWelcomePhrasesBlock({ settings, onSave }: Props) {
                         </button>
                         <button
                           onClick={() => handleStartEdit(idx)}
-                          className="inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-[#A55329] hover:bg-[var(--accent-10)] transition-colors cursor-pointer"
+                          className="inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-[var(--accent-ink)] hover:bg-[var(--accent-10)] transition-colors cursor-pointer"
                           title="Редактировать"
                         >
                           <Edit2 size={13} />

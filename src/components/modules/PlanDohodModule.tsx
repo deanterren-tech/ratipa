@@ -2316,7 +2316,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                             </div>
                             <div className="flex gap-1.5 shrink-0 ml-3" onClick={(e) => e.stopPropagation()}>
                               <button
-                                className="min-h-[44px] md:min-h-0 px-3 py-1.5 text-[10px] font-semibold bg-white border border-emerald-200 hover:bg-emerald-50 text-emerald-700 rounded-lg transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+                                className="min-h-[44px] md:min-h-0 px-3 py-1.5 text-[10px] font-semibold bg-white border border-[var(--accent-25)] hover:bg-[var(--accent-10)] text-[var(--accent-ink)] rounded-lg transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5"
                                 title="Перенести этот маршрут в основную форму"
                                 onClick={() => applyPlToMain(pl)}
                               >

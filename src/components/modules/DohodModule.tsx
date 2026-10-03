@@ -47,6 +47,7 @@ import {
 import { buildYandexMapUrl } from "../MapRouteModal";
 import {applyDistanceToField, recalculateLegRoute} from '../../utils/distanceCalculator'
 import { UI, plural } from '../../ui/kit';
+import { currentAccentColor, hexToRgb } from '../../theme/accent';
 import { SectionHeader, FilterPills, ModalShell, EmptyState, ErrorRow } from '../../ui/components';
 import { currencyName, currencySymbol } from '../../utils/currencyMeta';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
@@ -368,7 +369,7 @@ function RouteDisplay({
       const line = new google.maps.Polyline({
         path: polylinePath,
         geodesic: true,
-        strokeColor: "#3b82f6",
+        strokeColor: currentAccentColor('ui'),
         strokeWeight: 6,
         map: map,
       });
@@ -675,7 +676,7 @@ function RouteDisplay({
       const line = new google.maps.Polyline({
         path: polylinePath,
         geodesic: true,
-        strokeColor: "#3b82f6",
+        strokeColor: currentAccentColor('ui'),
         strokeWeight: 6,
         map: map,
       });
@@ -2278,6 +2279,10 @@ export default function DohodModule({ user }: DohodModuleProps) {
   };
 
   const buildPrintHtml = (selected: RouteCalculation[]): string => {
+    // Подложка блока «Дополнительные расходы» в печатной сводке — тинт текущего акцента темы.
+    const [accentR, accentG, accentB] = hexToRgb(currentAccentColor('base'));
+    const accentTintBg = `rgba(${accentR}, ${accentG}, ${accentB}, 0.12)`;
+    const accentTintBorder = `rgba(${accentR}, ${accentG}, ${accentB}, 0.35)`;
     const legRows = (calc: RouteCalculation) => {
       return (calc.legs || [])
         .map(
@@ -2478,8 +2483,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
       color: #64748b;
       margin-top: 6px;
       padding: 4px 6px;
-      background: #fef2f2;
-      border: 1px solid #fecaca;
+      background: ${accentTintBg};
+      border: 1px solid ${accentTintBorder};
       border-radius: 3px;
     }
     @media print {
@@ -3188,14 +3193,14 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
           <SectionHeader
             icon={<Receipt className="w-4 h-4" />}
-            tone="rose"
+            tone="accent"
             title="Дополнительные расходы"
             subtitle="Разовые затраты по рейсу и статьи расходов"
           />
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-3 border border-[#E5E7EB] rounded-xl px-3.5 py-3">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center text-rose-500">
+                <div className="w-8 h-8 rounded-lg bg-[var(--accent-10)] flex items-center justify-center text-[var(--accent-ink)]">
                   <Receipt className="w-4 h-4" />
                 </div>
                 <div className="flex flex-col">
@@ -3209,7 +3214,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   min="0"
                   value={additionalExpenses}
                   onChange={(e) => setAdditionalExpenses(Number(e.target.value))}
-                  className={`${UI.input} w-28 text-right font-semibold text-rose-600`}
+                  className={`${UI.input} w-28 text-right font-semibold text-[var(--accent-ink)]`}
                 />
                 <span className="text-xs font-semibold text-[#6B7280]">€</span>
               </div>
@@ -3241,7 +3246,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         setExpenseItems(next);
                         setAdditionalExpenses(next.reduce((a, x) => a + Number(x.amount || 0), 0));
                       }}
-                      className={`${UI.input} w-28 text-right font-semibold text-rose-600`}
+                      className={`${UI.input} w-28 text-right font-semibold text-[var(--accent-ink)]`}
                     />
                     <span className="text-xs font-semibold text-[#6B7280]">€</span>
                     <button
@@ -3354,7 +3359,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none block mb-1">
                     Расходы ({globalDirection})
                   </span>
-                  <span className="text-xl font-semibold font-mono tabular-nums tracking-tight text-amber-600">
+                  <span className="text-xl font-semibold font-mono tabular-nums tracking-tight text-[var(--accent-ink)]">
                     {totalExpenses.toLocaleString("ru-RU")} €
                   </span>
                 </div>
@@ -3424,7 +3429,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         </div>
                         <div className="flex items-center justify-between gap-3 py-1.5 text-xs">
                           <span className="text-[#6B7280]">Расходы, €</span>
-                          <span className="font-mono font-semibold text-amber-600 text-right">
+                          <span className="font-mono font-semibold text-[var(--accent-ink)] text-right">
                             {row.filled ? Math.round(row.expense).toLocaleString("ru-RU") : "—"}
                           </span>
                         </div>
@@ -3475,7 +3480,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           <td className="px-3 py-2 text-xs font-mono font-semibold text-[#121316] text-right">
                             {row.filled ? Math.round(row.freight).toLocaleString("ru-RU") : "—"}
                           </td>
-                          <td className="px-3 py-2 text-xs font-mono font-semibold text-amber-600 text-right">
+                          <td className="px-3 py-2 text-xs font-mono font-semibold text-[var(--accent-ink)] text-right">
                             {row.filled ? Math.round(row.expense).toLocaleString("ru-RU") : "—"}
                           </td>
                           <td

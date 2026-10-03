@@ -1,6 +1,7 @@
 import {useState} from 'react'
 import {Calendar, X} from 'lucide-react'
 import {UI} from '../../ui/kit'
+import {openDatePicker} from '../../utils/openDatePicker'
 
 /** Склонение: 1 день, 2 дня, 10 дней. */
 function daysWord(n: number): string {
@@ -40,7 +41,7 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
   const inverted = Boolean(startDate && endDate && endDate < startDate);
 
   const openPicker = (id: string) => {
-    (document.getElementById(id) as HTMLInputElement | null)?.showPicker?.();
+    openDatePicker(id);
   };
 
   const resetDates = () => {
@@ -90,7 +91,7 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
                 id={`${f.id}-picker`}
                 value={f.value}
                 onChange={(e) => f.set(e.target.value)}
-                className="absolute inset-0 h-0 w-0 opacity-0 pointer-events-none"
+                className="absolute inset-0 opacity-0 md:pointer-events-none"
                 tabIndex={-1}
                 aria-hidden="true"
               />
@@ -98,7 +99,7 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
                 type="button"
                 aria-label={`Открыть календарь: ${f.label}`}
                 onClick={() => openPicker(`${f.id}-picker`)}
-                className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer pointer-events-none md:pointer-events-auto"
               >
                 <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
               </button>

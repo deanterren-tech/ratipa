@@ -296,7 +296,7 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
                         onClick={(e) => { e.stopPropagation(); setViewCard({ type: 'driver', driverId: d.id, driverName: d.name }); }}
                         className="inline-flex items-center gap-2 text-left hover:underline cursor-pointer max-w-[240px]"
                       >
-                        <span className="w-5 h-5 rounded-full bg-[var(--accent-10)] text-[#A55329] flex items-center justify-center text-[10px] font-semibold shrink-0">
+                        <span className="w-5 h-5 rounded-full bg-[var(--accent-10)] text-[var(--accent-ink)] flex items-center justify-center text-[10px] font-semibold shrink-0">
                           {initials(d.name)}
                         </span>
                         <span className="truncate">{d.name || '—'}</span>

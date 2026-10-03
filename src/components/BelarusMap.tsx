@@ -2,6 +2,7 @@ import {useEffect, useState, useRef} from 'react'
 import {Navigation} from 'lucide-react'
 import {AppSettings} from '../types'
 import {dbService} from '../api'
+import {currentAccentColor} from '../theme/accent'
 
 interface BelarusMapProps {
   // For multi-leg maps (Analysis)
@@ -408,7 +409,7 @@ export default function BelarusMap({
 
             // Draw markers
             markers.forEach(m => {
-              const color = m.active ? '#f43f5e' : '#94a3b8';
+              const color = m.active ? '${currentAccentColor('ui')}' : '#94a3b8';
               const isDraggable = !!m.id;
 
               const el = document.createElement('div');
@@ -446,7 +447,7 @@ export default function BelarusMap({
               if (pathPoints.length < 2) return;
 
               const isActive = ${activeLegIndex === undefined || activeLegIndex === null} || idx === ${activeLegIndex};
-              const color = isActive ? '#4f46e5' : '#cbd5e1';
+              const color = isActive ? '${currentAccentColor('ui')}' : '#cbd5e1';
               const width = isActive ? 6 : 3;
 
               const coordinates = pathPoints.map(p => [p.lng, p.lat]);
@@ -546,7 +547,7 @@ export default function BelarusMap({
     <div className="w-full h-full relative font-sans">
       {loading && (
  <div className="absolute inset-0 bg-white flex flex-col items-center justify-center z-10">
-          <Navigation className="w-8 h-8 text-indigo-500 animate-spin mb-2" />
+          <Navigation className="w-8 h-8 text-[var(--accent-ink)] animate-spin mb-2" />
           <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider font-mono">
             Обновление карты (Mapbox)...
           </span>

@@ -23,7 +23,7 @@ const iconBtnBase =
   'inline-flex items-center justify-center shrink-0 rounded-lg transition-colors cursor-pointer min-h-[44px] min-w-[38px] sm:min-h-[34px] sm:min-w-[34px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent';
 const iconBtnIdle = `${iconBtnBase} text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] disabled:hover:text-[#9CA3AF]`;
 const iconBtnDanger = `${iconBtnBase} text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 disabled:hover:text-[#9CA3AF]`;
-const iconBtnSuccess = `${iconBtnBase} text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50`;
+const iconBtnSuccess = `${iconBtnBase} text-[var(--accent-ink)] hover:text-[var(--accent-ui)] hover:bg-[var(--accent-10)]`;
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
   const copy = [...arr];

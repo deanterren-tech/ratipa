@@ -56,7 +56,7 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
 
   return (
     <div
-      data-scroll-lock="modal"
+      data-scroll-lock="modal" data-mobile-fullscreen
       className="fixed inset-0 z-[2000] bg-black/40 backdrop-blur-[2px] flex items-start justify-center p-4 sm:p-6 overflow-y-auto"
       onClick={onClose}
     >
@@ -67,7 +67,7 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-6 py-4 border-b border-[#E5E7EB]">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="p-2 bg-[#F3F4F6] text-[#A55329] rounded-lg shrink-0">
+            <div className="p-2 bg-[var(--accent-10)] text-[var(--accent-ink)] rounded-lg shrink-0">
               <Truck className="w-4 h-4" aria-hidden="true" />
             </div>
             <div className="min-w-0">
@@ -111,7 +111,7 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
               onClick={() => onOpenDriver(driverId || '', driverName)}
               className="w-full flex items-center gap-3 p-3 rounded-xl bg-[#F9FAFB] border border-[#E5E7EB] hover:bg-[#F3F4F6] transition-colors text-left cursor-pointer"
             >
-              <User className="w-4 h-4 text-[#A55329] shrink-0" aria-hidden="true" />
+              <User className="w-4 h-4 text-[var(--accent-ink)] shrink-0" aria-hidden="true" />
               <div className="flex-1 min-w-0">
                 <div className={UI.fieldLabel}>Водитель (из единой базы)</div>
                 <div className="text-xs font-semibold text-[#121316] truncate mt-0.5">{driverName}</div>

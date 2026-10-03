@@ -149,7 +149,7 @@ const MapRouteModal = ({
           {/* Top Header */}
           <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-white shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className="bg-emerald-50 text-emerald-600 p-2 rounded-xl border border-emerald-100">
+              <div className="bg-[var(--accent-10)] text-[var(--accent-ink)] p-2 rounded-xl border border-[var(--accent-20)]">
                 <Compass className="w-4 h-4" />
               </div>
               <div>
@@ -185,7 +185,7 @@ const MapRouteModal = ({
                 value={localOrigin}
                 onChange={(e) => handleOriginChange(e.target.value)}
                 placeholder="Город отправления..."
-                className="w-full bg-white text-slate-800 font-bold border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-emerald-500 transition shadow-2xs"
+                className="w-full bg-white text-slate-800 font-bold border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-[var(--accent)] transition shadow-2xs"
               />
             </div>
 
@@ -199,7 +199,7 @@ const MapRouteModal = ({
                 <button
                   type="button"
                   onClick={handleAddWaypoint}
-                  className="text-[10px] font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-0.5 transition cursor-pointer"
+                  className="text-[10px] font-semibold text-[var(--accent-ink)] hover:text-[var(--accent-ui)] flex items-center gap-0.5 transition cursor-pointer"
                 >
                   <Plus className="w-3 h-3" />
                   <span>Добавить</span>
@@ -248,7 +248,7 @@ const MapRouteModal = ({
                 value={localDestination}
                 onChange={(e) => handleDestinationChange(e.target.value)}
                 placeholder="Город назначения..."
-                className="w-full bg-white text-slate-800 font-bold border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-emerald-500 transition shadow-2xs"
+                className="w-full bg-white text-slate-800 font-bold border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-[var(--accent)] transition shadow-2xs"
               />
             </div>
 
@@ -258,7 +258,7 @@ const MapRouteModal = ({
                 Провайдер карты
               </span>
               <div className="flex gap-1">
-                <div className="flex-1 py-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 border bg-slate-900 border-slate-900 text-[#70FC8E]">
+                <div className="flex-1 py-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 border bg-slate-900 border-slate-900 text-[var(--accent)]">
                   <Navigation className="w-3.5 h-3.5" />
                   <span>Яндекс.Карты</span>
                 </div>
@@ -282,7 +282,7 @@ const MapRouteModal = ({
                   value={manualDistanceKm}
                   onChange={(e) => handleMileageChange(e.target.value)}
                   placeholder="0"
-                  className="w-full bg-white text-slate-800 font-extrabold border border-slate-200 rounded-xl px-4 py-2.5 text-base outline-none focus:border-emerald-500 transition shadow-2xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="w-full bg-white text-slate-800 font-extrabold border border-slate-200 rounded-xl px-4 py-2.5 text-base outline-none focus:border-[var(--accent)] transition shadow-2xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 select-none font-mono">
                   КМ
@@ -297,7 +297,7 @@ const MapRouteModal = ({
                   type="checkbox"
                   checked={saveToDirectoryChecked}
                   onChange={(e) => setSaveToDirectoryChecked(e.target.checked)}
-                  className="w-3.5 h-3.5 rounded text-emerald-600 border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                  className="w-3.5 h-3.5 rounded text-[var(--accent)] border-slate-300 focus:ring-[var(--accent-20)] cursor-pointer"
                 />
                 <span className="text-[11px] font-bold text-slate-700 leading-tight">
                   Сохранить в справочник расстояний
@@ -320,7 +320,7 @@ const MapRouteModal = ({
               disabled={totalMileageNum === 0}
               className={`flex-1 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-1 shadow-xs ${
                 totalMileageNum > 0
-                  ? "bg-slate-950 text-[#70FC8E] border border-black hover:bg-slate-800"
+                  ? "bg-slate-950 text-[var(--accent)] border border-black hover:bg-slate-800"
                   : "bg-slate-200 text-slate-400 cursor-not-allowed border-none"
               }`}
             >
@@ -337,7 +337,7 @@ const MapRouteModal = ({
           {!hasRoute ? (
             <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-slate-50">
               <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-slate-400 border border-slate-200 mb-4 shadow-2xs">
-                <MapPin className="w-6 h-6 text-emerald-600 animate-bounce" />
+                <MapPin className="w-6 h-6 text-[var(--accent-ink)] animate-bounce" />
               </div>
               <h4 className="text-xs font-bold uppercase text-slate-700 tracking-wider">
                 Карта готова к построению
@@ -362,7 +362,7 @@ const MapRouteModal = ({
               {/* Minimalist Footnote Bar - Semi-transparent float over the map corner */}
  <div className="absolute bottom-4 left-4 right-4 md:left-auto md:right-4 z-10 p-3 bg-white rounded-2xl border border-slate-200/60 shadow-lg flex items-center justify-between gap-4 animate-fade-in max-w-sm">
                 <div className="text-[10px] text-slate-600 font-bold flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span className="w-2 h-2 rounded-full bg-[var(--accent-ui)]"></span>
                   <span>Интерактивный Яндекс режим</span>
                 </div>
                 

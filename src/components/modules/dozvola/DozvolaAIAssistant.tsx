@@ -598,7 +598,7 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
                     <div className="flex justify-end mt-4">
                         <button 
                             onClick={saveAllPreviewedDozvols}
-                            className="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-xs font-semibold tracking-wide shadow-xs cursor-pointer transition"
+                            className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-on)] px-5 py-2.5 rounded-xl text-xs font-semibold tracking-wide shadow-xs cursor-pointer transition"
                         >
                             Применить изменения и внести бланки
                         </button>

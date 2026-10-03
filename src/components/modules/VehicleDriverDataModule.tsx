@@ -1784,7 +1784,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                             onClick={() => setPrimaryPhone(p.id)}
                             className={
                               p.isPrimary
-                                ? "inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-[var(--accent-10)] text-[#A55329] border border-[var(--accent-30)] transition-colors cursor-pointer shrink-0 min-h-[44px]"
+                                ? "inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-[var(--accent-10)] text-[var(--accent-ink)] border border-[var(--accent-30)] transition-colors cursor-pointer shrink-0 min-h-[44px]"
                                 : "inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-white text-[#4B5563] border border-[#E5E7EB] hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0 min-h-[44px]"
                             }
                           >

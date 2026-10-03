@@ -227,7 +227,7 @@ export default function AvatarCropModal({
   };
 
   return (
-    <div data-scroll-lock="modal" className="fixed inset-0 z-[5100] bg-black/50 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6">
+    <div data-scroll-lock="modal" data-mobile-fullscreen className="fixed inset-0 z-[5100] bg-black/50 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6">
       <div
         role="dialog"
         aria-modal="true"
