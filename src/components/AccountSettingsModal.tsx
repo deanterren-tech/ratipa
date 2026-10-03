@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { UserProfile, DISPATCHER_COLORS_PRESETS } from '../types'
 import { dbService } from '../api'
 import { useToast } from './ToastProvider'
@@ -158,15 +159,15 @@ export default function AccountSettingsModal({
   const ghostBtn = 'inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-lg text-xs font-medium text-[#4B5563] bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] disabled:opacity-50 disabled:cursor-not-allowed';
   const dangerBtn = 'inline-flex items-center justify-center gap-1.5 h-9 px-3.5 rounded-lg text-xs font-medium text-rose-600 bg-white border border-[#E5E7EB] hover:bg-rose-50 hover:border-rose-200 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 disabled:opacity-50 disabled:cursor-not-allowed';
 
-  return (
-    <div data-scroll-lock="modal" className="fixed inset-0 z-[5000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6">
+  return createPortal(
+    <div data-scroll-lock="modal" className="fixed inset-0 z-[5000] flex bg-white md:bg-black/40 md:backdrop-blur-[2px] md:items-center md:justify-center md:p-6">
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Настройки учётной записи"
-        className="relative z-10 w-full max-w-lg bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] flex flex-col max-h-[90vh] overflow-hidden"
+        className="z-10 w-full h-full bg-white flex flex-col overflow-hidden md:h-auto md:relative md:w-auto md:max-w-lg md:border md:border-[#E5E7EB] md:rounded-2xl md:shadow-[0_25px_60px_rgba(0,0,0,0.12)] md:max-h-[90vh]"
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB] shrink-0">
+        <div className="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top,0px)+1rem)] pb-4 md:py-4 border-b border-[#E5E7EB] shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-[#F3F4F6] text-[var(--accent-ink)] rounded-lg shrink-0">
               <UserIcon className="w-4 h-4" />
@@ -352,7 +353,7 @@ export default function AccountSettingsModal({
           </div>
         </div>
 
-        <div className="px-5 py-4 border-t border-[#E5E7EB] flex justify-end gap-2.5 shrink-0">
+        <div className="px-5 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] md:pb-4 border-t border-[#E5E7EB] flex justify-end gap-2.5 shrink-0">
           <button
             type="button"
             onClick={onClose}
@@ -383,7 +384,8 @@ export default function AccountSettingsModal({
           setError(null);
         }}
       />
-    </div>
+    </div>,
+    document.body
   );
 }
 
