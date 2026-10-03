@@ -41,11 +41,15 @@ import {
   Printer,
   Loader2,
   AlertTriangle,
+  ExternalLink,
+  Compass,
 } from "lucide-react";
-import MapRouteModal from "../MapRouteModal";
+import { buildYandexMapUrl } from "../MapRouteModal";
 import {applyDistanceToField, recalculateLegRoute} from '../../utils/distanceCalculator'
-import { UI } from '../../ui/kit';
-import { SectionHeader, FilterPills } from '../../ui/components';
+import { UI, plural } from '../../ui/kit';
+import { SectionHeader, FilterPills, ModalShell, EmptyState, ErrorRow } from '../../ui/components';
+import { currencyName, currencySymbol } from '../../utils/currencyMeta';
+import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 
 const API_KEY =
   process.env.GOOGLE_MAPS_PLATFORM_KEY ||
@@ -55,6 +59,41 @@ const hasValidKey = Boolean(API_KEY) && API_KEY !== "YOUR_API_KEY";
 
 const useMap = () => null;
 const useMapsLibrary = (...args: any[]) => null;
+
+/** Валюты конвертера НБ РБ — тот же набор, что и раньше (порядок и состав не менялись). */
+const CONVERTER_CURRENCIES: string[] = [
+  "BYN",
+  "USD",
+  "EUR",
+  "RUB",
+  "TRY",
+  "KZT",
+  "KGS",
+  "CNY",
+  "GEL",
+  "AMD",
+];
+
+/**
+ * Даты портала — через слэш: 03/10/2026.
+ * Принимает «03.10.2026, 14:35», ISO-строку или уже готовый слэш-формат.
+ * Только оформление: данные записи не изменяются.
+ */
+function formatDateSlash(input?: string | null): string {
+  if (!input) return "";
+  const rawDate = String(input).split(",")[0].trim();
+  const dotted = rawDate.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+  if (dotted) return `${dotted[1]}/${dotted[2]}/${dotted[3]}`;
+  const slashed = rawDate.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (slashed) return `${slashed[1]}/${slashed[2]}/${slashed[3]}`;
+  const parsed = new Date(rawDate);
+  if (!isNaN(parsed.getTime())) {
+    const dd = String(parsed.getDate()).padStart(2, "0");
+    const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+    return `${dd}/${mm}/${parsed.getFullYear()}`;
+  }
+  return rawDate;
+}
 
 function RouteDisplay({
   origin,
@@ -715,11 +754,302 @@ interface DohodModuleProps {
   user: UserProfile;
 }
 
+/**
+ * Окно маршрута плеча — локальная версия прежнего MapRouteModal в оформлении
+ * портала (ModalShell + UI-кит). Поведение сохранено один в один: те же поля,
+ * та же синхронизация с родителем при каждом вводе, ручной пробег, заезды,
+ * галочка «в справочник расстояний», «Применить» неактивна при нулевом пробеге.
+ */
+function MapRouteDialog({
+  isOpen,
+  onClose,
+  legIndex,
+  leg,
+  onUpdateLegRoute,
+  saveToDirectoryChecked = false,
+  setSaveToDirectoryChecked,
+  onApply,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  legIndex: number | null;
+  leg: any;
+  onUpdateLegRoute: (index: number, updatedFields: any) => void;
+  saveToDirectoryChecked?: boolean;
+  setSaveToDirectoryChecked?: (val: boolean) => void;
+  onApply: () => void;
+}) {
+  const [localOrigin, setLocalOrigin] = useState("");
+  const [localDestination, setLocalDestination] = useState("");
+  const [localWaypoints, setLocalWaypoints] = useState<string[]>([]);
+  const [manualDistanceKm, setManualDistanceKm] = useState<string>("");
+
+  // Синхронизация полей только при открытии окна — как в прежнем окне карты
+  // (чтобы курсор не прыгал и не было гонок при вводе).
+  useEffect(() => {
+    if (isOpen && leg && legIndex !== null) {
+      setLocalOrigin(leg.origin || leg.from || "");
+      setLocalDestination(leg.destination || leg.to || "");
+      setLocalWaypoints(leg.waypoints || []);
+      const currentDistance = leg.totalDistanceKm || leg.dist || leg.distance || 0;
+      setManualDistanceKm(currentDistance > 0 ? currentDistance.toString() : "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  const totalMileageNum = parseFloat(manualDistanceKm) || 0;
+
+  // Escape закрывает окно, Enter подтверждает «Применить» (когда оно доступно),
+  // фокус ставится на первое поле и возвращается на источник при закрытии.
+  useModalKeyboard({
+    isOpen: isOpen && legIndex !== null && !!leg,
+    onClose,
+    onConfirm: totalMileageNum > 0 ? onApply : undefined,
+  });
+
+  if (!isOpen || legIndex === null || !leg) return null;
+
+  // Обновления точек уходят в родителя сразу, ручной пробег не затрагивается.
+  const syncPointsToParent = (
+    originVal: string,
+    destVal: string,
+    wpsVal: string[],
+  ) => {
+    const distanceValue = parseFloat(manualDistanceKm) || 0;
+    onUpdateLegRoute(legIndex, {
+      from: originVal,
+      to: destVal,
+      origin: originVal,
+      destination: destVal,
+      waypoints: wpsVal,
+      mapProvider: "yandex",
+      totalDistanceKm: distanceValue,
+      dist: distanceValue,
+      distance: distanceValue,
+    });
+  };
+
+  const handleOriginChange = (val: string) => {
+    setLocalOrigin(val);
+    syncPointsToParent(val, localDestination, localWaypoints);
+  };
+
+  const handleDestinationChange = (val: string) => {
+    setLocalDestination(val);
+    syncPointsToParent(localOrigin, val, localWaypoints);
+  };
+
+  const handleWaypointChange = (index: number, val: string) => {
+    const updated = [...localWaypoints];
+    updated[index] = val;
+    setLocalWaypoints(updated);
+    syncPointsToParent(localOrigin, localDestination, updated);
+  };
+
+  const handleAddWaypoint = () => {
+    const updated = [...localWaypoints, ""];
+    setLocalWaypoints(updated);
+    syncPointsToParent(localOrigin, localDestination, updated);
+  };
+
+  const handleRemoveWaypoint = (index: number) => {
+    const updated = localWaypoints.filter((_, idx) => idx !== index);
+    setLocalWaypoints(updated);
+    syncPointsToParent(localOrigin, localDestination, updated);
+  };
+
+  const handleMileageChange = (val: string) => {
+    setManualDistanceKm(val);
+    const numVal = parseFloat(val) || 0;
+    onUpdateLegRoute(legIndex, {
+      totalDistanceKm: numVal,
+      dist: numVal,
+      distance: numVal,
+    });
+  };
+
+  const hasRoute = localOrigin.trim() !== "" && localDestination.trim() !== "";
+
+  // URL встроенной и внешней карты — тот же помощник buildYandexMapUrl, что и раньше.
+  const embedUrl = buildYandexMapUrl(localOrigin, localDestination, localWaypoints);
+  const yandexPoints = [localOrigin, ...localWaypoints, localDestination]
+    .map((p) => p.trim())
+    .filter((p) => p !== "");
+  const yandexExternalUrl = `https://yandex.ru/maps/?rtext=${yandexPoints
+    .map(encodeURIComponent)
+    .join("~")}&rtt=auto`;
+
+  return (
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`Маршрут плеча №${legIndex + 1}`}
+      subtitle="Точки маршрута, заезды и итоговый пробег"
+      icon={<Compass className="w-4 h-4" />}
+      iconTone="graphite"
+      maxWidth="max-w-xl"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className={`${UI.buttonGhost} w-full sm:w-auto`}>
+            Отмена
+          </button>
+          <button
+            type="button"
+            onClick={onApply}
+            disabled={totalMileageNum === 0}
+            className={`${UI.buttonDark} w-full sm:w-auto`}
+          >
+            <Check className="w-4 h-4" />
+            Применить
+          </button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-5">
+        {/* Поля маршрута */}
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <span className={UI.fieldLabel}>Откуда</span>
+            <input
+              type="text"
+              value={localOrigin}
+              onChange={(e) => handleOriginChange(e.target.value)}
+              placeholder="Город отправления…"
+              className={UI.input}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className={UI.fieldLabel}>Промежуточные пункты ({localWaypoints.length})</span>
+              <button
+                type="button"
+                onClick={handleAddWaypoint}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--accent-ink)] hover:underline cursor-pointer"
+              >
+                <Plus className="w-3 h-3" /> Добавить
+              </button>
+            </div>
+            {localWaypoints.length === 0 ? (
+              <div className="text-[11px] text-[#9CA3AF] py-2 text-center bg-[#F8F9FA] border border-dashed border-[#E5E7EB] rounded-xl">
+                Без заездов
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto custom-scrollbar pr-1">
+                {localWaypoints.map((wp, idx) => (
+                  <div
+                    key={wp + idx}
+                    className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-[#E5E7EB] focus-within:border-[var(--accent-ui)] transition-colors"
+                  >
+                    <span className="text-[10px] font-mono text-[#9CA3AF] w-4 text-center select-none">
+                      {idx + 1}
+                    </span>
+                    <input
+                      type="text"
+                      value={wp}
+                      onChange={(e) => handleWaypointChange(idx, e.target.value)}
+                      placeholder="Город заезда…"
+                      className="flex-1 min-w-0 bg-transparent border-none px-1 py-1 text-xs font-medium text-[#121316] outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveWaypoint(idx)}
+                      aria-label={`Удалить заезд ${idx + 1}`}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className={UI.fieldLabel}>Куда</span>
+            <input
+              type="text"
+              value={localDestination}
+              onChange={(e) => handleDestinationChange(e.target.value)}
+              placeholder="Город назначения…"
+              className={UI.input}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className={UI.fieldLabel}>Итоговый пробег, км</span>
+            <input
+              type="number"
+              value={manualDistanceKm}
+              onChange={(e) => handleMileageChange(e.target.value)}
+              placeholder="0"
+              className={`${UI.input} font-semibold`}
+            />
+          </div>
+
+          {setSaveToDirectoryChecked && (
+            <label className="flex items-center gap-2.5 cursor-pointer select-none border border-[#E5E7EB] rounded-xl px-3 py-2.5 bg-white hover:bg-[#F9FAFB] transition-colors">
+              <input
+                type="checkbox"
+                checked={saveToDirectoryChecked}
+                onChange={(e) => setSaveToDirectoryChecked(e.target.checked)}
+                className={UI.checkbox}
+              />
+              <span className="text-xs font-medium text-[#4B5563] leading-tight">
+                Сохранить в справочник расстояний
+              </span>
+            </label>
+          )}
+        </div>
+
+        {/* Карта маршрута */}
+        <div className="flex flex-col gap-2 min-w-0">
+          {!hasRoute ? (
+            <div className="min-h-[240px] flex flex-col items-center justify-center p-6 text-center bg-[#F8F9FA] border border-[#E5E7EB] rounded-2xl">
+              <MapPin className="w-6 h-6 text-[#9CA3AF] mb-2" />
+              <p className="text-xs font-semibold text-[#4B5563]">Карта готова к построению</p>
+              <p className="text-[11px] text-[#6B7280] mt-1 max-w-xs leading-relaxed">
+                Укажите пункт отправления и пункт назначения — появится интерактивная карта маршрута.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="h-[280px] sm:h-[340px] rounded-2xl overflow-hidden border border-[#E5E7EB] bg-[#F3F4F6]">
+                <iframe
+                  title="Интерактивная карта маршрута"
+                  src={embedUrl}
+                  className="w-full h-full border-none"
+                  allowFullScreen
+                />
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-[#6B7280]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-ui)]" aria-hidden="true" />
+                  Яндекс Карты
+                </span>
+                <a
+                  href={yandexExternalUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--accent-ink)] hover:underline"
+                >
+                  Открыть в Яндекс Картах <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
 const CalculationCard = React.memo(({
   calc,
   user,
   copyHistoryToForm,
   openEditCalcModal,
+  onPrint,
   isSelected,
   onToggleSelect,
 }: {
@@ -727,6 +1057,7 @@ const CalculationCard = React.memo(({
   user: UserProfile;
   copyHistoryToForm: (calc: RouteCalculation) => void;
   openEditCalcModal: (calc: RouteCalculation) => void;
+  onPrint: (calc: RouteCalculation) => void;
   isSelected?: boolean;
   onToggleSelect?: (id: string) => void;
 }) => {
@@ -751,12 +1082,14 @@ const CalculationCard = React.memo(({
   const dailyProfitValue =
     calc.dailyProfit ||
     (daysValue > 0 ? profitValue / daysValue : 0);
+  const freightValue = calc.freight || calc.totalFreight || 0;
+  const expensesValue = calc.expenses || calc.totalExpenses || 0;
 
   return (
     <div
       className={`p-5 bg-white border rounded-2xl shadow-xs hover:shadow-md transition duration-300 flex flex-col group ${
         isSelected
-          ? "border-[var(--accent-60)] ring-2 ring-[var(--accent-30)] bg-blue-50/20"
+          ? "border-[var(--accent-60)] ring-2 ring-[var(--accent-30)] bg-[var(--accent-5)]"
           : "border-[#E5E7EB] hover:border-[#D1D5DB]"
       }`}
     >
@@ -771,8 +1104,8 @@ const CalculationCard = React.memo(({
           >
             <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-150 ${
               isSelected
-                ? "bg-slate-900 border-slate-900 text-white"
-                : "border-slate-300 hover:border-[var(--accent-ui)] bg-white"
+                ? "bg-[#121316] border-[#121316] text-white"
+                : "border-[#D1D5DB] hover:border-[var(--accent-ui)] bg-white"
             }`}>
               {isSelected && (
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -783,22 +1116,22 @@ const CalculationCard = React.memo(({
           </button>
         )}
         <div className="flex flex-col gap-1 min-w-0">
-          <div className="text-sm font-bold text-slate-900 uppercase tracking-tight flex items-center gap-1.5 flex-wrap">
+          <div className="text-sm font-bold text-[#121316] uppercase tracking-tight flex items-center gap-1.5 flex-wrap">
             <span className="text-[var(--accent-ink)] font-mono">&rarr;</span>
             <span className="truncate">{routeTitle || "Без названия"}</span>
           </div>
-          <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider flex items-center gap-2 flex-wrap">
-            <span>{calc.datetime}</span>
-            <span className="text-slate-300">•</span>
-            <span>Направление: <strong className="text-slate-700">{calc.globalDirection || calc.direction || "Не указано"}</strong></span>
-            <span className="text-slate-300">•</span>
-            <span>Логист: <strong className="text-slate-700">{calc.username || calc.logist || "Система"}</strong></span>
+          <div className="text-[10px] font-mono text-[#6B7280] uppercase tracking-wider flex items-center gap-2 flex-wrap">
+            <span title={calc.datetime || undefined}>{formatDateSlash(calc.datetime) || "Без даты"}</span>
+            <span className="text-[#D1D5DB]">•</span>
+            <span>Направление: <strong className="text-[#4B5563]">{calc.globalDirection || calc.direction || "Не указано"}</strong></span>
+            <span className="text-[#D1D5DB]">•</span>
+            <span>Логист: <strong className="text-[#4B5563]">{calc.username || calc.logist || "Система"}</strong></span>
             {calc.additionalExpenses ? (
               <>
-                <span className="text-slate-300">•</span>
+                <span className="text-[#D1D5DB]">•</span>
                 <span>Доп. расходы: <strong className="text-rose-600">{calc.additionalExpenses} €</strong></span>
                 {Array.isArray(calc.expenseItems) && calc.expenseItems.length > 0 && (
-                  <span className="text-[10px] text-slate-400 font-normal">
+                  <span className="text-[10px] text-[#9CA3AF] font-normal">
                     ({calc.expenseItems.map((e) => e.label || "—").join(", ")})
                   </span>
                 )}
@@ -808,21 +1141,37 @@ const CalculationCard = React.memo(({
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <button
+            type="button"
+            title="Печать"
+            aria-label="Печать расчёта"
+            onClick={() => onPrint(calc)}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[#9CA3AF] hover:text-[var(--accent-ink)] hover:bg-[var(--accent-10)] border border-[#E5E7EB] hover:border-[var(--accent-25)] bg-white shadow-xs transition-colors duration-150 cursor-pointer"
+          >
+            <Printer className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
             title="Дублировать в форму"
+            aria-label="Копировать расчёт в форму"
             onClick={() => copyHistoryToForm(calc)}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[#9CA3AF] hover:text-emerald-600 hover:bg-emerald-50 border border-[#E5E7EB] hover:border-emerald-200 bg-white shadow-xs transition-colors duration-150 cursor-pointer"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[#9CA3AF] hover:text-[var(--accent-ink)] hover:bg-[var(--accent-10)] border border-[#E5E7EB] hover:border-[var(--accent-25)] bg-white shadow-xs transition-colors duration-150 cursor-pointer"
           >
             <Copy className="h-4 w-4" />
           </button>
           <button
+            type="button"
             title="Изменить"
+            aria-label="Изменить расчёт"
             onClick={() => openEditCalcModal(calc)}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[#9CA3AF] hover:text-[var(--accent-ink)] hover:bg-blue-50 border border-[#E5E7EB] hover:border-blue-200 bg-white shadow-xs transition-colors duration-150 cursor-pointer"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[#9CA3AF] hover:text-[var(--accent-ink)] hover:bg-[var(--accent-10)] border border-[#E5E7EB] hover:border-[var(--accent-25)] bg-white shadow-xs transition-colors duration-150 cursor-pointer"
           >
             <Edit className="h-4 w-4" />
           </button>
           {user.role === "root_admin" && (
             <button
+              type="button"
+              title="Удалить расчёт"
+              aria-label="Удалить расчёт"
               onClick={() =>
                 dbService.deleteRouteCalculation(
                   calc.id,
@@ -838,87 +1187,86 @@ const CalculationCard = React.memo(({
         </div>
       </div>
 
-      {/* Accented metrics block (bento style) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-        <div className={`p-3 rounded-2xl flex flex-col justify-between min-h-[64px] border ${
-          profitValue < 0 ? "bg-rose-500/5 border-rose-500/10" : "bg-emerald-500/5 border-emerald-500/10"
-        }`}>
-          <span className={`text-[10px] font-bold uppercase tracking-wider block mb-1 ${
-            profitValue < 0 ? "text-rose-600" : "text-emerald-600"
-          }`}>
-            Доход (Чистый)
-          </span>
-          <span className={`text-base font-bold font-mono tracking-tight leading-none ${
-            profitValue < 0 ? "text-rose-600" : "text-emerald-600"
-          }`}>
-            {Math.round(profitValue).toLocaleString("ru-RU")}{" "}
-            <span className="text-xs font-normal">€</span>
-          </span>
-        </div>
-
-        <div className={`p-3 rounded-2xl flex flex-col justify-between min-h-[64px] border ${
-          dailyProfitValue < 0 ? "bg-rose-500/5 border-rose-500/10" : "bg-slate-500/5 border-slate-500/10"
-        }`}>
-          <span className={`text-[10px] font-bold uppercase tracking-wider block mb-1 ${
-            dailyProfitValue < 0 ? "text-rose-600" : "text-blue-600"
-          }`}>
-            Доход в день
-          </span>
-          <span className={`text-base font-bold font-mono tracking-tight leading-none ${
-            dailyProfitValue < 0 ? "text-rose-600" : "text-blue-700"
-          }`}>
-            {Math.round(dailyProfitValue).toLocaleString("ru-RU")}{" "}
-            <span className="text-xs font-normal">€/дн</span>
-          </span>
-        </div>
-
-        <div className="bg-amber-500/5 border border-amber-500/10 p-3 rounded-2xl flex flex-col justify-between min-h-[64px]">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 block mb-1">
-            Количество дней
-          </span>
-          <span className="text-base font-bold text-amber-700 font-mono tracking-tight leading-none">
-            {daysValue}{" "}
-            <span className="text-xs font-normal">дн</span>
-          </span>
-        </div>
-
-        <div className="bg-slate-500/5 border border-slate-500/10 p-3 rounded-2xl flex flex-col justify-between min-h-[64px]">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
-            Километраж
-          </span>
-          <span className="text-base font-bold text-slate-600 font-mono tracking-tight leading-none">
-            {Math.round(totalKmValue).toLocaleString("ru-RU")}{" "}
-            <span className="text-xs font-normal">км</span>
-          </span>
-        </div>
+      {/* Ключевые суммы расчёта */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+        {[
+          {
+            label: "Чистый доход",
+            value: `${Math.round(profitValue).toLocaleString("ru-RU")} €`,
+            cls: profitValue < 0 ? "text-rose-600" : "text-[#121316]",
+            tile: profitValue < 0 ? "border-rose-200 bg-rose-50/60" : "border-[#E5E7EB] bg-[#F8F9FA]",
+          },
+          {
+            label: "Фрахт",
+            value: `${Math.round(freightValue).toLocaleString("ru-RU")} €`,
+            cls: "text-[#121316]",
+            tile: "border-[#E5E7EB] bg-[#F8F9FA]",
+          },
+          {
+            label: "Расходы",
+            value: `${Math.round(expensesValue).toLocaleString("ru-RU")} €`,
+            cls: "text-amber-600",
+            tile: "border-[#E5E7EB] bg-[#F8F9FA]",
+          },
+          {
+            label: "В сутки",
+            value: `${Math.round(dailyProfitValue).toLocaleString("ru-RU")} €/сут`,
+            cls: dailyProfitValue < 0 ? "text-rose-600" : "text-emerald-600",
+            tile: "border-[#E5E7EB] bg-[#F8F9FA]",
+          },
+          {
+            label: "Дней в пути",
+            value: `${daysValue} дн`,
+            cls: "text-[#121316]",
+            tile: "border-[#E5E7EB] bg-[#F8F9FA]",
+          },
+          {
+            label: "Пробег",
+            value: `${Math.round(totalKmValue).toLocaleString("ru-RU")} км`,
+            cls: "text-[#121316]",
+            tile: "border-[#E5E7EB] bg-[#F8F9FA]",
+          },
+        ].map((m) => (
+          <div
+            key={m.label}
+            className={`p-3 rounded-2xl flex flex-col justify-between min-h-[60px] border ${m.tile}`}
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#6B7280] block mb-1">
+              {m.label}
+            </span>
+            <span className={`text-sm font-bold font-mono tracking-tight leading-none ${m.cls}`}>
+              {m.value}
+            </span>
+          </div>
+        ))}
       </div>
 
-      {/* Visual rendering of calculation legs steps inside drop list */}
+      {/* Детализация по плечам внутри карточки журнала */}
       <div className="mt-1 border-t border-[#E5E7EB] pt-3">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2.5">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] block mb-2.5">
           Детализация по плечам
         </span>
         <div className="space-y-1.5">
           {calc.legs.map((l, i) => (
             <div
               key={i}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-2 px-3 bg-white/40 border border-slate-200/40 rounded-xl text-xs font-medium text-slate-600 hover:border-slate-300/60 hover:bg-white/60 transition"
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-2 px-3 bg-[#F8F9FA] border border-[#E5E7EB] rounded-xl text-xs font-medium text-[#4B5563] hover:border-[#D1D5DB] transition-colors"
             >
               <div className="flex items-center gap-2">
-                <span className="w-4 h-4 rounded-full bg-slate-100 text-slate-500 text-[9px] font-bold flex items-center justify-center font-mono select-none shrink-0">
+                <span className="w-4 h-4 rounded-full bg-[#F3F4F6] text-[#6B7280] text-[9px] font-bold flex items-center justify-center font-mono select-none shrink-0">
                   {i + 1}
                 </span>
                 <span
-                  className="text-slate-900 uppercase font-extrabold tracking-tight text-xs truncate max-w-[200px]"
+                  className="text-[#121316] uppercase font-extrabold tracking-tight text-xs truncate max-w-[200px]"
                   title={`${l.from || "?"} → ${l.to || "?"}`}
                 >
                   {l.from || "?"} &rarr; {l.to || "?"}
                 </span>
               </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-mono justify-end text-slate-500">
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-mono justify-end text-[#6B7280]">
                 <span>{Math.round(l.dist || l.distance || 0).toLocaleString("ru-RU")} км</span>
                 {Number(l.coeff || 0) > 0 && (
-                  <span className="text-slate-400">Коэф: {l.coeff}</span>
+                  <span className="text-[#9CA3AF]">Коэф: {l.coeff}</span>
                 )}
                 {Number(l.freight || 0) > 0 && (
                   <span className="text-emerald-600 font-bold">{Math.round(l.freight).toLocaleString("ru-RU")} €</span>
@@ -942,12 +1290,14 @@ const CalculationCard = React.memo(({
 });
 
 export default function DohodModule({ user }: DohodModuleProps) {
-  const { showConfirm } = useDialog();
+  const { showConfirm, showPrompt } = useDialog();
   const { toast } = useToast();
   
   const [calculationHistory, setCalculationHistory] = useState<
     RouteCalculation[]
   >([]);
+  // Журнал: пока не пришёл первый снимок из базы — показываем загрузку.
+  const [historyReady, setHistoryReady] = useState(false);
   const [routeTemplates, setRouteTemplates] = useState<RouteTemplate[]>([]);
   const [ferries, setFerries] = useState<FerryTemplate[]>([]);
   const [distances, setDistances] = useState<DistancePreset[]>([]);
@@ -990,6 +1340,18 @@ export default function DohodModule({ user }: DohodModuleProps) {
     GEL: { scale: 1, rate: 1.2 },
     AMD: { scale: 1000, rate: 8.35 },
   });
+
+  // Состояния конвертера НБ РБ: загрузка, ошибка и дата обновления курса.
+  const [nbrbLoading, setNbrbLoading] = useState(true);
+  const [nbrbError, setNbrbError] = useState<string | null>(null);
+  const [nbrbDate, setNbrbDate] = useState<string | null>(null);
+  // Какие поля конвертера заполнены — для кнопки очистки, как в топ-баре.
+  const [convHasValue, setConvHasValue] = useState<Record<string, boolean>>(() =>
+    CONVERTER_CURRENCIES.reduce<Record<string, boolean>>((acc, code) => {
+      acc[code] = true;
+      return acc;
+    }, {}),
+  );
 
   const [pdSettings, setPdSettings] = useState<any>({
     useDistanceLookup: false,
@@ -1085,45 +1447,22 @@ export default function DohodModule({ user }: DohodModuleProps) {
     });
   }, [calculationHistory, historySearch, activeHistoryDirectionTab]);
 
+  // Шаблоны: тот же фильтр по подстроке, что и раньше (теперь используется и для пустого состояния).
+  const filteredTemplates = useMemo(() => {
+    return routeTemplates.filter((t) =>
+      t.name.toLowerCase().includes(routeSearch.toLowerCase()),
+    );
+  }, [routeTemplates, routeSearch]);
+
   const visibleHistory = useMemo(() => {
     return filteredHistory.slice(0, historyPage);
   }, [filteredHistory, historyPage]);
 
-  useEffect(() => {
-    const today = new Date();
-    const nextWeek = new Date(today);
-    nextWeek.setDate(today.getDate() + 10);
-    setTripStartDate(today.toISOString().split("T")[0]);
-    setTripEndDate(nextWeek.toISOString().split("T")[0]);
-
-    const diffDays =
-      Math.ceil(
-        Math.abs(nextWeek.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-      ) || 1;
-    setTripDays(diffDays);
-
-    const subHistory = dbService.getRouteCalculations(setCalculationHistory, 100);
-    const subRouteTpl = dbService.getRouteTemplates(setRouteTemplates);
-    const subFerries = dbService.getFerryTemplates(setFerries);
-    const subDistances = dbService.getDistances((list) => {
-      setDistances(list);
-      setRoutesReady(true);
-    });
-    const subDirs = directoryService.getDirectionsMap((data: Record<string, number>) => {
-      if (data) {
-        const list: DirectionPreset[] = Object.keys(data).map((key) => ({
-          id: key,
-          name: key,
-          coeff: Number(data[key] || 0),
-        }));
-        setDirections(list);
-      } else {
-        setDirections([]);
-      }
-    });
-    const subPdSettings = pdService.subscribePlanDohodSettings(setPdSettings);
-
-    // Fetch live NBRB rates directly with fallbacks
+  // Курсы НБ РБ: адрес, разбор и запасные значения — прежние; добавлены только
+  // статусы интерфейса (загрузка/ошибка) и дата курса.
+  const fetchNbrbRates = () => {
+    setNbrbLoading(true);
+    setNbrbError(null);
     fetch("https://api.nbrb.by/exrates/rates?periodicity=0")
       .then((res) => res.json())
       .then((data: any[]) => {
@@ -1161,12 +1500,77 @@ export default function DohodModule({ user }: DohodModuleProps) {
               };
             }
           });
+          const apiDate = data
+            .map((item) => item && (item.Cur_Date || item.Date))
+            .find((d) => typeof d === "string" && d.length > 0);
+          if (apiDate) setNbrbDate(apiDate);
         }
         setNbrbRates(updated);
+        setNbrbLoading(false);
       })
       .catch((err) => {
         console.warn("Failed to fetch NBRB rates:", err);
+        setNbrbError(
+          "Не удалось загрузить курсы НБ РБ. Показаны последние известные значения.",
+        );
+        setNbrbLoading(false);
       });
+  };
+
+  // Очистка всех сумм конвертера — то же, что оставить поле пустым.
+  const clearConverterField = () => {
+    CONVERTER_CURRENCIES.forEach((code) => {
+      const el = document.getElementById(`conv-multi-${code}`) as HTMLInputElement | null;
+      if (el) el.value = "";
+    });
+    setConvHasValue(() =>
+      CONVERTER_CURRENCIES.reduce<Record<string, boolean>>((acc, code) => {
+        acc[code] = false;
+        return acc;
+      }, {}),
+    );
+  };
+
+  useEffect(() => {
+    const today = new Date();
+    const nextWeek = new Date(today);
+    nextWeek.setDate(today.getDate() + 10);
+    setTripStartDate(today.toISOString().split("T")[0]);
+    setTripEndDate(nextWeek.toISOString().split("T")[0]);
+
+    const diffDays =
+      Math.ceil(
+        Math.abs(nextWeek.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+      ) || 1;
+    setTripDays(diffDays);
+
+    const subHistory = dbService.getRouteCalculations((list) => {
+      setCalculationHistory(list);
+      setHistoryReady(true);
+    }, 100);
+    const subRouteTpl = dbService.getRouteTemplates(setRouteTemplates);
+    const subFerries = dbService.getFerryTemplates(setFerries);
+    const subDistances = dbService.getDistances((list) => {
+      setDistances(list);
+      setRoutesReady(true);
+    });
+    const subDirs = directoryService.getDirectionsMap((data: Record<string, number>) => {
+      if (data) {
+        const list: DirectionPreset[] = Object.keys(data).map((key) => ({
+          id: key,
+          name: key,
+          coeff: Number(data[key] || 0),
+        }));
+        setDirections(list);
+      } else {
+        setDirections([]);
+      }
+    });
+    const subPdSettings = pdService.subscribePlanDohodSettings(setPdSettings);
+
+    // Курсы НБ РБ: тот же запрос, что и раньше; добавлены состояния загрузки/ошибки
+    // и дата обновления для интерфейса.
+    fetchNbrbRates();
 
     return () => {
       subHistory();
@@ -1611,8 +2015,14 @@ export default function DohodModule({ user }: DohodModuleProps) {
     toast("Расчёт сохранён в журнал", 'success');
   };
 
-  const saveCurrentAsTemplate = () => {
-    const name = prompt("Введите название для нового шаблона мульти-рейса:");
+  const saveCurrentAsTemplate = async () => {
+    // Название шаблона спрашиваем диалогом портала, а не системным prompt.
+    const name = await showPrompt(
+      "Введите название для нового шаблона мульти-рейса:",
+      "",
+      "Новый шаблон мульти-рейса",
+      { confirmLabel: "Шаблонизировать" },
+    );
     if (!name || !name.trim()) return;
     const validLegs = legs.filter((l) => l.from || l.to || l.dist || l.freight);
     if (validLegs.length === 0) {
@@ -1628,6 +2038,18 @@ export default function DohodModule({ user }: DohodModuleProps) {
       user.name,
       user.role,
     );
+  };
+
+  // Удаление шаблона — через подтверждение портала (действие необратимое).
+  const confirmDeleteTemplate = async (tpl: RouteTemplate) => {
+    const ok = await showConfirm(
+      `Удалить шаблон «${tpl.name}»? Действие нельзя отменить.`,
+      "Удаление шаблона",
+      { variant: "danger", confirmLabel: "Удалить" },
+    );
+    if (ok && tpl.id) {
+      dbService.deleteRouteTemplate(tpl.id, user.name, user.role);
+    }
   };
 
   const loadTemplate = (tpl: RouteTemplate) => {
@@ -1741,9 +2163,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
     setSelectedCalcIds(new Set());
   };
 
-  const printSelectedCalculations = () => {
-    if (selectedCalcIds.size === 0) return;
-    const selected = calculationHistory.filter((c) => selectedCalcIds.has(c.id));
+  const printCalculations = (selected: RouteCalculation[]) => {
     if (selected.length === 0) return;
 
     const printHtml = buildPrintHtml(selected);
@@ -1773,6 +2193,18 @@ export default function DohodModule({ user }: DohodModuleProps) {
       document.body.removeChild(iframe);
       setSelectedCalcIds(new Set());
     }, 1000);
+  };
+
+  // Печать группы выбранных расчётов (пакетная печать из журнала).
+  const printSelectedCalculations = () => {
+    if (selectedCalcIds.size === 0) return;
+    const selected = calculationHistory.filter((c) => selectedCalcIds.has(c.id));
+    printCalculations(selected);
+  };
+
+  // Печать одного расчёта — кнопкой «Печать» в карточке журнала.
+  const printSingleCalculation = (calc: RouteCalculation) => {
+    printCalculations([calc]);
   };
 
   const buildPrintHtml = (selected: RouteCalculation[]): string => {
@@ -2039,8 +2471,13 @@ export default function DohodModule({ user }: DohodModuleProps) {
     closeEditCalcModal();
   };
 
-
-  
+  // Клавиатура окна правки: Escape закрывает, Enter сохраняет,
+  // фокус ставится на первое поле и возвращается при закрытии.
+  useModalKeyboard({
+    isOpen: !!editingCalcId,
+    onClose: closeEditCalcModal,
+    onConfirm: saveEditCalcModal,
+  });
 
   return (
     <div className="w-full space-y-6 font-sans">
@@ -2377,7 +2814,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => addLegRowAfter(idx)}
-                      className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl bg-blue-50/50 hover:bg-blue-100 text-blue-600 border border-blue-100/30 transition cursor-pointer shadow-sm"
+                      className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] hover:text-[#121316] transition-colors cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
                     </button>
@@ -2466,7 +2903,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                           type="button"
                           onClick={() => openMapRouteModal(idx, leg.from, leg.to)}
                           title="Маршрут"
-                          className="text-[#9CA3AF] hover:text-[var(--accent-ui)] hover:bg-[#F3F4F6] p-1.5 rounded-md transition cursor-pointer"
+                          className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-[#9CA3AF] hover:text-[var(--accent-ui)] hover:bg-[#F3F4F6] rounded-lg transition-colors cursor-pointer"
                         >
                           <Map className="w-4 h-4" />
                         </button>
@@ -2874,10 +3311,82 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 </div>
               </div>
 
-              {/* Разбивка по плечам */}
+              {/* Разбивка по плечам: карточки на узких экранах, таблица от 900px */}
               <div>
                 <div className={`${UI.caption} mb-2`}>Разбивка по плечам</div>
-                <div className="overflow-x-auto">
+
+                {/* Карточки плеч — без горизонтальной прокрутки */}
+                <div className="min-[900px]:hidden flex flex-col gap-2.5">
+                  {legBreakdown.map((row) => (
+                    <div
+                      key={row.index}
+                      className={`rounded-2xl border p-4 ${
+                        row.filled && row.margin < 0
+                          ? "border-rose-200 bg-rose-50/40"
+                          : "border-[#E5E7EB] bg-white"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-5 h-5 rounded-full bg-[#F3F4F6] text-[#6B7280] text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                            {row.index + 1}
+                          </span>
+                          <span
+                            className="text-sm font-semibold text-[#121316] truncate"
+                            title={`${row.from || "?"} → ${row.to || "?"}`}
+                          >
+                            {row.from || row.to ? `${row.from || "?"} → ${row.to || "?"}` : "—"}
+                          </span>
+                        </div>
+                        {row.filled && row.margin < 0 ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-rose-600 shrink-0">
+                            <AlertTriangle className="w-3 h-3" /> Убыток
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-3 flex flex-col divide-y divide-[#E5E7EB]">
+                        <div className="flex items-center justify-between gap-3 py-1.5 text-xs">
+                          <span className="text-[#6B7280]">Пробег, км</span>
+                          <span className="font-mono font-semibold text-[#121316] text-right">
+                            {row.filled
+                              ? `${Math.round(row.totalKm).toLocaleString("ru-RU")}${
+                                  row.emptyRun > 0
+                                    ? ` (+${Math.round(row.emptyRun).toLocaleString("ru-RU")} доезд)`
+                                    : ""
+                                }`
+                              : "—"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 py-1.5 text-xs">
+                          <span className="text-[#6B7280]">Ставка, €</span>
+                          <span className="font-mono font-semibold text-[#121316] text-right">
+                            {row.filled ? Math.round(row.freight).toLocaleString("ru-RU") : "—"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 py-1.5 text-xs">
+                          <span className="text-[#6B7280]">Расходы, €</span>
+                          <span className="font-mono font-semibold text-amber-600 text-right">
+                            {row.filled ? Math.round(row.expense).toLocaleString("ru-RU") : "—"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 py-1.5 text-xs">
+                          <span className="text-[#6B7280]">Маржа, €</span>
+                          <span
+                            className={`font-mono font-semibold text-right ${
+                              row.filled && row.margin < 0 ? "text-rose-600" : "text-[#121316]"
+                            }`}
+                          >
+                            {row.filled ? Math.round(row.margin).toLocaleString("ru-RU") : "—"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Таблица — от 900px и выше */}
+                <div className="hidden min-[900px]:block overflow-x-auto">
                   <table className="w-full text-left min-w-[560px]">
                     <thead>
                       <tr className="border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">
@@ -2985,127 +3494,170 @@ export default function DohodModule({ user }: DohodModuleProps) {
             icon={<Landmark className="w-4 h-4" />}
             tone="graphite"
             title="Конвертер валют НБ РБ"
-            subtitle="Курсы обновляются автоматически с открытого API НБ РБ"
+            subtitle="Курсы приходят с открытого API НБ РБ; дата курса указана рядом"
           >
+            <button
+              type="button"
+              onClick={fetchNbrbRates}
+              disabled={nbrbLoading}
+              className={UI.buttonIcon}
+              title="Обновить курсы из НБ РБ"
+              aria-label="Обновить курсы из НБ РБ"
+            >
+              <RefreshCw className={`w-4 h-4 ${nbrbLoading ? "animate-spin" : ""}`} />
+            </button>
             <span className={UI.chip}>API NBRB.BY</span>
           </SectionHeader>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-[#F8F9FA] border border-[#E5E7EB] p-3 rounded-2xl text-xs select-none">
-            <span className="text-[#6B7280] font-semibold shrink-0 mr-1">
-              Курсы НБ РБ:
-            </span>
-            <span className="text-[#121316] font-semibold shrink-0">
-              1 USD = {(nbrbRates["USD"]?.rate || 3.25).toFixed(4)}
-            </span>
-            <span className="text-[#121316] font-semibold shrink-0">
-              1 EUR = {(nbrbRates["EUR"]?.rate || 3.55).toFixed(4)}
-            </span>
-            <span className="text-[#121316] font-semibold shrink-0">
-              100 RUB = {(nbrbRates["RUB"]?.rate || 3.42).toFixed(4)}
-            </span>
-            <span className="text-[#121316] font-semibold shrink-0">
-              10 TRY = {(nbrbRates["TRY"]?.rate || 1.0).toFixed(4)}
-            </span>
-            <span className="text-[#121316] font-semibold shrink-0">
-              10 CNY = {(nbrbRates["CNY"]?.rate || 4.5).toFixed(4)}
-            </span>
-          </div>
+          {/* Состояние загрузки/ошибки и дата обновления курса */}
+          {nbrbError ? (
+            <ErrorRow text={nbrbError} onRetry={fetchNbrbRates} />
+          ) : (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-[#F8F9FA] border border-[#E5E7EB] p-3 rounded-2xl text-xs select-none">
+              <span className="inline-flex items-center gap-1.5 text-[#6B7280] font-medium shrink-0 mr-1">
+                {nbrbLoading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Загружаем курсы НБ РБ…
+                  </>
+                ) : (
+                  <>
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>
+                      Курсы НБ РБ
+                      {nbrbDate ? (
+                        <>
+                          {" на "}
+                          <span className="font-semibold text-[#121316]">{formatDateSlash(nbrbDate)}</span>
+                        </>
+                      ) : null}
+                      :
+                    </span>
+                  </>
+                )}
+              </span>
+              <span className="text-[#121316] font-semibold shrink-0">
+                1 USD = {(nbrbRates["USD"]?.rate || 3.25).toFixed(4)}
+              </span>
+              <span className="text-[#121316] font-semibold shrink-0">
+                1 EUR = {(nbrbRates["EUR"]?.rate || 3.55).toFixed(4)}
+              </span>
+              <span className="text-[#121316] font-semibold shrink-0">
+                100 RUB = {(nbrbRates["RUB"]?.rate || 3.42).toFixed(4)}
+              </span>
+              <span className="text-[#121316] font-semibold shrink-0">
+                10 TRY = {(nbrbRates["TRY"]?.rate || 1.0).toFixed(4)}
+              </span>
+              <span className="text-[#121316] font-semibold shrink-0">
+                10 CNY = {(nbrbRates["CNY"]?.rate || 4.5).toFixed(4)}
+              </span>
+            </div>
+          )}
 
-          <div className="w-full rounded-2xl p-1 flex flex-col gap-3 max-h-[60vh] md:max-h-[400px] overflow-y-auto custom-scrollbar">
-            {[
-              "BYN",
-              "USD",
-              "EUR",
-              "RUB",
-              "TRY",
-              "KZT",
-              "KGS",
-              "CNY",
-              "GEL",
-              "AMD",
-            ].map((cur) => (
+          {/* Карточки валют — тот же вид поля и результата, что в конвертере топ-бара */}
+          <div className="w-full flex flex-col gap-3 max-h-[60vh] md:max-h-[420px] overflow-y-auto custom-scrollbar pr-1">
+            {CONVERTER_CURRENCIES.map((cur) => (
               <div
                 key={cur}
-                className="flex items-center w-full bg-white border border-[#E5E7EB] rounded-xl overflow-hidden focus-within:border-[var(--accent)] transition-colors"
+                className="rounded-xl border border-[#E5E7EB] bg-white hover:border-[#D1D5DB] p-2.5 transition-colors"
               >
-                <div className="bg-[#F8F9FA] flex-shrink-0 px-4 py-3 border-r border-[#E5E7EB] font-semibold text-[#4B5563] min-w-[85px] text-center select-none flex items-center justify-center text-sm">
-                  {cur}
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-6 h-6 rounded-lg bg-[#F3F4F6] text-[#4B5563] flex items-center justify-center text-[12px] font-bold shrink-0">
+                      {currencySymbol(cur)}
+                    </span>
+                    <span className="text-[11px] font-medium text-[#4B5563] truncate">{currencyName(cur)}</span>
+                    <span className="text-[10px] font-semibold text-[#9CA3AF] tabular-nums shrink-0">{cur}</span>
+                  </div>
+                  <span className="text-[11px] text-[#9CA3AF] font-mono tabular-nums shrink-0">
+                    {cur === "BYN"
+                      ? "базовая"
+                      : nbrbRates[cur]
+                        ? `1 ${cur} = ${(nbrbRates[cur].rate / (nbrbRates[cur].scale || 1)).toFixed(4)} BYN`
+                        : "—"}
+                  </span>
                 </div>
-                <input
-                  type="number"
-                  id={`conv-multi-${cur}`}
-                  placeholder="0.00"
-                  defaultValue={
-                    cur === "USD"
-                      ? 100
-                      : (
-                          (100 *
-                            ((nbrbRates["USD"]?.rate || 3.25) /
-                              (nbrbRates["USD"]?.scale || 1))) /
-                          ((nbrbRates[cur]?.rate || 1) /
-                            (nbrbRates[cur]?.scale || 1))
-                        ).toFixed(2)
-                  }
-                  onInput={(e) => {
-                    const inputVal = parseFloat(
-                      (e.target as HTMLInputElement).value,
-                    );
-                    if (isNaN(inputVal)) {
-                      [
-                        "BYN",
-                        "USD",
-                        "EUR",
-                        "RUB",
-                        "TRY",
-                        "KZT",
-                        "KGS",
-                        "CNY",
-                        "GEL",
-                        "AMD",
-                      ].forEach((toCur) => {
-                        if (toCur !== cur) {
+                <div className="relative flex items-center">
+                  <input
+                    type="number"
+                    id={`conv-multi-${cur}`}
+                    placeholder="0.00"
+                    defaultValue={
+                      cur === "USD"
+                        ? 100
+                        : (
+                            (100 *
+                              ((nbrbRates["USD"]?.rate || 3.25) /
+                                (nbrbRates["USD"]?.scale || 1))) /
+                            ((nbrbRates[cur]?.rate || 1) /
+                              (nbrbRates[cur]?.scale || 1))
+                          ).toFixed(2)
+                    }
+                    onInput={(e) => {
+                      const rawValue = (e.target as HTMLInputElement).value;
+                      const inputVal = parseFloat(rawValue);
+                      if (isNaN(inputVal)) {
+                        CONVERTER_CURRENCIES.forEach((toCur) => {
+                          if (toCur !== cur) {
+                            const el = document.getElementById(
+                              `conv-multi-${toCur}`,
+                            ) as HTMLInputElement;
+                            if (el) el.value = "";
+                          }
+                        });
+                        setConvHasValue((prev) => {
+                          const next = { ...prev };
+                          next[cur] = rawValue.trim() !== "";
+                          CONVERTER_CURRENCIES.forEach((toCur) => {
+                            if (toCur !== cur) next[toCur] = false;
+                          });
+                          return next;
+                        });
+                        return;
+                      }
+
+                      const fromCur = cur;
+                      const rateFrom = nbrbRates[fromCur]
+                        ? nbrbRates[fromCur].rate / nbrbRates[fromCur].scale
+                        : 1;
+
+                      CONVERTER_CURRENCIES.forEach((toCur) => {
+                        if (toCur !== fromCur) {
+                          const rateTo = nbrbRates[toCur]
+                            ? nbrbRates[toCur].rate / nbrbRates[toCur].scale
+                            : 1;
                           const el = document.getElementById(
                             `conv-multi-${toCur}`,
                           ) as HTMLInputElement;
-                          if (el) el.value = "";
+                          if (el)
+                            el.value = ((inputVal * rateFrom) / rateTo).toFixed(
+                              4,
+                            );
                         }
                       });
-                      return;
-                    }
-
-                    const fromCur = cur;
-                    const rateFrom = nbrbRates[fromCur]
-                      ? nbrbRates[fromCur].rate / nbrbRates[fromCur].scale
-                      : 1;
-
-                    [
-                      "BYN",
-                      "USD",
-                      "EUR",
-                      "RUB",
-                      "TRY",
-                      "KZT",
-                      "KGS",
-                      "CNY",
-                      "GEL",
-                      "AMD",
-                    ].forEach((toCur) => {
-                      if (toCur !== fromCur) {
-                        const rateTo = nbrbRates[toCur]
-                          ? nbrbRates[toCur].rate / nbrbRates[toCur].scale
-                          : 1;
-                        const el = document.getElementById(
-                          `conv-multi-${toCur}`,
-                        ) as HTMLInputElement;
-                        if (el)
-                          el.value = ((inputVal * rateFrom) / rateTo).toFixed(
-                            4,
-                          );
-                      }
-                    });
-                  }}
-                  className="w-full bg-transparent px-4 py-3 text-right text-base font-semibold text-slate-800 outline-none placeholder:text-slate-300"
-                />
+                      setConvHasValue((prev) => {
+                        const next = { ...prev };
+                        next[cur] = rawValue.trim() !== "";
+                        CONVERTER_CURRENCIES.forEach((toCur) => {
+                          if (toCur !== cur) next[toCur] = true;
+                        });
+                        return next;
+                      });
+                    }}
+                    className="w-full h-10 pl-3 pr-10 rounded-xl border border-[#E5E7EB] bg-white text-base font-semibold tabular-nums text-[#121316] placeholder:text-[#D1D5DB] outline-none transition-colors hover:border-[#D1D5DB] focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-20)]"
+                  />
+                  {convHasValue[cur] ? (
+                    <button
+                      type="button"
+                      onClick={() => clearConverterField()}
+                      title={`Очистить сумму в ${cur}`}
+                      aria-label={`Очистить сумму в ${cur}`}
+                      className="absolute right-1.5 h-8 w-8 rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <X size={13} strokeWidth={1.5} />
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ))}
           </div>
@@ -3133,106 +3685,113 @@ export default function DohodModule({ user }: DohodModuleProps) {
           </SectionHeader>
 
           <div className="flex flex-col gap-3">
-            {routeTemplates
-              .filter((t) =>
-                t.name.toLowerCase().includes(routeSearch.toLowerCase()),
-              )
-              .map((t, idx) => {
-                const totalDist = (t.legs || []).reduce((acc, l) => acc + (l.dist || l.distance || 0), 0);
-                return (
-                  <div
-                    key={idx}
-                    className="group bg-white border border-[#E5E7EB] hover:border-[#D1D5DB] rounded-2xl p-4 sm:p-5 flex flex-col gap-4 transition-colors duration-200"
-                  >
-                    {/* Top Row: Info and Actions */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-[#E5E7EB]">
-                      {/* Left: Icon, Name and Badges */}
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="p-2.5 rounded-xl bg-[#F3F4F6] text-[#121316] shrink-0">
-                          <FolderOpen className="h-5 w-5" />
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="font-bold text-sm text-[#121316] truncate" title={t.name}>
-                            {t.name}
-                          </h4>
-                          <div className="flex items-center gap-2 mt-1">
-                            {t.globalDir && (
-                              <span className={UI.chip}>
-                                {t.globalDir}
-                              </span>
-                            )}
-                            <span className={UI.chip}>
-                              {t.legs?.length || 0} {t.legs?.length === 1 ? 'плечо' : t.legs?.length < 5 ? 'плеча' : 'плеч'}
-                            </span>
-                          </div>
-                        </div>
+            {filteredTemplates.map((t, idx) => {
+              const legs = t.legs || [];
+              const totalDist = legs.reduce((acc, l) => acc + (l.dist || l.distance || 0), 0);
+              const totalRate = legs.reduce((acc, l) => acc + Number(l.freight || 0), 0);
+              return (
+                <div
+                  key={t.id || idx}
+                  className="group bg-white border border-[#E5E7EB] hover:border-[#D1D5DB] rounded-2xl p-4 sm:p-5 flex flex-col gap-4 transition-colors duration-200"
+                >
+                  {/* Верхняя строка: название, маршрут и действия */}
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-[#E5E7EB]">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="p-2.5 rounded-xl bg-[#F3F4F6] text-[#121316] shrink-0">
+                        <FolderOpen className="h-5 w-5" />
                       </div>
-
-                      {/* Right: Total Distance and Buttons */}
-                      <div className="flex items-center justify-between md:justify-end gap-5 shrink-0">
-                        <div className="text-left md:text-right md:mr-2">
-                          <span className="text-[11px] text-[#6B7280] font-semibold uppercase tracking-wider block">
-                            Общий пробег
-                          </span>
-                          <span className="text-[#121316] font-bold text-xs md:text-sm">
-                            {totalDist.toLocaleString("ru-RU")} км
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => loadTemplate(t)}
-                            className={`${UI.buttonDark} px-3.5 w-auto`}
-                          >
-                            Развернуть
-                          </button>
-                          {true && (
-                            <button
-                              onClick={() =>
-                                dbService.deleteRouteTemplate(
-                                  t.id!,
-                                  user.name,
-                                  user.role,
-                                )
-                              }
-                              className="text-rose-500 hover:bg-rose-50 hover:text-rose-600 p-2 rounded-xl transition cursor-pointer active:scale-95"
-                              title="Удалить шаблон"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                      <div className="min-w-0">
+                        <h4 className="font-semibold text-sm text-[#121316] truncate" title={t.name}>
+                          {t.name}
+                        </h4>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          {t.globalDir && (
+                            <span className={UI.chip}>
+                              {t.globalDir}
+                            </span>
                           )}
+                          <span className={UI.chip}>
+                            {legs.length} {plural(legs.length, 'плечо', 'плеча', 'плеч')}
+                          </span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Bottom Row: Legs Timeline Flow (Full Width, beautifully styled) */}
-                    <div className="bg-white/30 p-3 rounded-xl border border-slate-200/20">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-xs font-bold text-slate-700 w-full">
-                        {(t.legs || []).map((l, i) => (
-                          <div key={i} className="flex items-center gap-2">
-                            {i > 0 && (
-                              <span className="text-slate-300 font-bold text-[11px] select-none px-0.5">&rarr;</span>
-                            )}
-                            <span className="bg-white px-3 py-1.5 rounded-xl border border-[#E5E7EB] text-[10px] sm:text-[11px] font-bold text-slate-800 flex items-center gap-2 shadow-xs hover:border-[var(--accent-ui)] transition-colors duration-150">
-                              <span className="truncate max-w-[140px] text-slate-900" title={l.from}>{l.from || "?"}</span>
-                              <span className="text-slate-300 font-normal select-none">&bull;</span>
-                              <span className="truncate max-w-[140px] text-slate-700" title={l.to}>{l.to || "?"}</span>
-                              <span className="text-[10px] text-[var(--accent-ink)] font-bold bg-blue-50/50 px-1.5 py-0.5 rounded-xl border border-blue-100/30 ml-1 shrink-0">
-                                {Number(l.dist || l.distance || 0).toLocaleString("ru-RU")} км
-                              </span>
-                            </span>
-                          </div>
-                        ))}
+                    <div className="flex flex-wrap items-center justify-between md:justify-end gap-4 shrink-0">
+                      <div className="text-left md:text-right">
+                        <span className="text-[11px] text-[#6B7280] font-medium uppercase tracking-wider block">
+                          Общий пробег
+                        </span>
+                        <span className="text-[#121316] font-semibold font-mono text-xs md:text-sm">
+                          {totalDist.toLocaleString("ru-RU")} км
+                        </span>
+                      </div>
+                      <div className="text-left md:text-right">
+                        <span className="text-[11px] text-[#6B7280] font-medium uppercase tracking-wider block">
+                          Ставка
+                        </span>
+                        <span className="text-[#121316] font-semibold font-mono text-xs md:text-sm">
+                          {totalRate.toLocaleString("ru-RU")} €
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => loadTemplate(t)}
+                          className={`${UI.buttonDark} px-3.5 w-auto`}
+                          title="Развернуть шаблон в конструктор"
+                        >
+                          Развернуть
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => confirmDeleteTemplate(t)}
+                          className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-xl bg-white border border-[#E5E7EB] text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-colors cursor-pointer"
+                          title="Удалить шаблон"
+                          aria-label={`Удалить шаблон ${t.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
                   </div>
-                );
-              })}
-            {routeTemplates.length === 0 && (
-              <div className="py-10 text-center text-xs text-[#6B7280] font-medium border border-dashed border-[#E5E7EB] rounded-2xl">
-                {routeSearch.trim()
-                  ? "Шаблоны не найдены — измените запрос поиска."
-                  : "Шаблонов пока нет. Заполните расчёт и нажмите «Шаблонизировать» — шаблон появится здесь."}
+
+                  {/* Маршрут шаблона */}
+                  <div className="rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] p-3">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-2 w-full">
+                      {legs.map((l, i) => (
+                        <div key={i} className="flex items-center gap-2 min-w-0">
+                          {i > 0 && (
+                            <span className="text-[#D1D5DB] font-bold text-[11px] select-none px-0.5">&rarr;</span>
+                          )}
+                          <span className="bg-white px-3 py-1.5 rounded-xl border border-[#E5E7EB] text-[10px] sm:text-[11px] font-semibold text-[#121316] flex items-center gap-2 shadow-xs hover:border-[var(--accent-ui)] transition-colors duration-150 min-w-0">
+                            <span className="truncate max-w-[140px] text-[#121316]" title={l.from}>{l.from || "?"}</span>
+                            <span className="text-[#D1D5DB] font-normal select-none">&bull;</span>
+                            <span className="truncate max-w-[140px] text-[#4B5563]" title={l.to}>{l.to || "?"}</span>
+                            <span className="text-[10px] text-[var(--accent-ink)] font-semibold bg-[var(--accent-10)] px-1.5 py-0.5 rounded-md border border-[var(--accent-25)] ml-1 shrink-0">
+                              {Number(l.dist || l.distance || 0).toLocaleString("ru-RU")} км
+                            </span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {filteredTemplates.length === 0 && (
+              <div className="border border-dashed border-[#E5E7EB] rounded-2xl">
+                <EmptyState
+                  kind={routeSearch.trim() ? "no-results" : "empty"}
+                  query={routeSearch.trim() || undefined}
+                  title={routeSearch.trim() ? "Шаблоны не найдены" : "Шаблонов пока нет"}
+                  hint={
+                    routeSearch.trim()
+                      ? "Измените запрос поиска — названия шаблонов фильтруются по подстроке."
+                      : "Заполните расчёт и нажмите «Шаблонизировать» — шаблон появится здесь и будет доступен всем."
+                  }
+                />
               </div>
             )}
           </div>
@@ -3312,46 +3871,60 @@ export default function DohodModule({ user }: DohodModuleProps) {
           </div>
 
           <div className="pr-1 space-y-2 pb-4">
-            {visibleHistory.map((calc) => (
-              <CalculationCard
-                key={calc.id}
-                calc={calc}
-                user={user}
-                copyHistoryToForm={copyHistoryToForm}
-                openEditCalcModal={openEditCalcModal}
-                isSelected={selectedCalcIds.has(calc.id)}
-                onToggleSelect={toggleSelectCalc}
-              />
-            ))}
-            {filteredHistory.length === 0 && (
-              <div className="py-10 text-center text-xs text-[#6B7280] font-medium">
-                {calculationHistory.length === 0
-                  ? "Журнал пуст — сохранённые расчёты появятся здесь."
-                  : "Ничего не найдено — измените запрос или снимите фильтр направления."}
+            {!historyReady ? (
+              <div className={UI.loading}>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Загружаем журнал расчётов…
               </div>
-            )}
-            {historyPage < filteredHistory.length && (
-              <button
-                type="button"
-                onClick={() => setHistoryPage((p) => p + 10)}
-                className="w-full py-2.5 rounded-xl border border-dashed border-[#E5E7EB] text-[#6B7280] text-xs font-medium hover:bg-[#F3F4F6] hover:text-[#121316] hover:border-[#D1D5DB] transition-colors min-h-[44px]"
-              >
-                Показать ещё 10
-                <span className="text-[#9CA3AF] font-normal">
-                  {" "}(осталось {filteredHistory.length - historyPage})
-                </span>
-              </button>
+            ) : (
+              <>
+                {visibleHistory.map((calc) => (
+                  <CalculationCard
+                    key={calc.id}
+                    calc={calc}
+                    user={user}
+                    copyHistoryToForm={copyHistoryToForm}
+                    openEditCalcModal={openEditCalcModal}
+                    onPrint={printSingleCalculation}
+                    isSelected={selectedCalcIds.has(calc.id)}
+                    onToggleSelect={toggleSelectCalc}
+                  />
+                ))}
+                {filteredHistory.length === 0 && (
+                  <EmptyState
+                    kind={calculationHistory.length === 0 ? "empty" : "no-results"}
+                    query={historySearch.trim() || undefined}
+                    title={calculationHistory.length === 0 ? "Журнал пуст" : "Ничего не найдено"}
+                    hint={
+                      calculationHistory.length === 0
+                        ? "Сохранённые расчёты появятся здесь — заполните форму и нажмите «Сохранить расчёт»."
+                        : "Измените запрос или снимите фильтр направления."
+                    }
+                  />
+                )}
+                {historyPage < filteredHistory.length && (
+                  <button
+                    type="button"
+                    onClick={() => setHistoryPage((p) => p + 10)}
+                    className="w-full py-2.5 rounded-xl border border-dashed border-[#E5E7EB] text-[#6B7280] text-xs font-medium hover:bg-[#F3F4F6] hover:text-[#121316] hover:border-[#D1D5DB] transition-colors min-h-[44px]"
+                  >
+                    Показать ещё 10
+                    <span className="text-[#9CA3AF] font-normal">
+                      {" "}(осталось {filteredHistory.length - historyPage})
+                    </span>
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
       </div>
 
-      <MapRouteModal
+      <MapRouteDialog
         isOpen={mapModalOpen}
         onClose={cancelMapRoute}
         legIndex={mapLegIndex}
         leg={mapLegIndex !== null ? legs[mapLegIndex] : null}
-        presets={distances}
         onUpdateLegRoute={(idx, updated) => {
           setLegs((prev) => {
             const copy = [...prev];
@@ -3364,18 +3937,34 @@ export default function DohodModule({ user }: DohodModuleProps) {
         onApply={applyMapRoute}
       />
 
-      {editingCalcId && (
-        <div data-scroll-lock="modal" className="fixed inset-0 z-50 flex flex-col md:items-center md:justify-center bg-slate-900/40 animate-fade-in">
-          <div className="bg-white w-full h-full md:h-auto md:rounded-2xl md:w-full md:max-w-lg mx-0 md:mx-4 shadow-2xl border border-[#E5E7EB] md:my-4 flex flex-col">
-            <div className="p-4 md:p-6 border-b border-[#E5E7EB] flex items-center justify-between shrink-0 bg-white">
-              <h3 className="text-xs md:text-sm font-semibold uppercase tracking-wider text-[#121316] flex items-center gap-2">
-                <Edit className="w-4 h-4 md:w-5 md:h-5 text-[#121316]" /> Редактирование калькуляции
-              </h3>
-              <button onClick={closeEditCalcModal} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[#9CA3AF] hover:text-[#121316] transition-colors cursor-pointer">
-                <X className="w-5 h-5" strokeWidth={2.5} />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+      <ModalShell
+        isOpen={!!editingCalcId}
+        onClose={closeEditCalcModal}
+        title="Редактирование калькуляции"
+        subtitle="Правка сохранённого расчёта из журнала"
+        icon={<Edit className="w-4 h-4" />}
+        iconTone="graphite"
+        maxWidth="max-w-lg"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={closeEditCalcModal}
+              className={`${UI.buttonGhost} w-full sm:w-auto`}
+            >
+              Отмена
+            </button>
+            <button
+              type="button"
+              onClick={saveEditCalcModal}
+              className={`${UI.buttonDark} w-full sm:w-auto`}
+            >
+              <Check className="w-4 h-4" /> Сохранить
+            </button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className={UI.fieldLabel}>
                   Направление
@@ -3478,19 +4067,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   className={UI.input}
                 />
               </div>
-            </div>
-
-            <div className="p-4 md:p-6 border-t border-[#E5E7EB] flex flex-col sm:flex-row justify-end gap-2 shrink-0">
-              <button onClick={closeEditCalcModal} className={`${UI.buttonGhost} w-full sm:w-auto`}>
-                Отмена
-              </button>
-              <button onClick={saveEditCalcModal} className={`${UI.buttonDark} w-full sm:w-auto`}>
-                Сохранить
-              </button>
-            </div>
-          </div>
         </div>
-      )}
+      </ModalShell>
     </div>
   );
 }

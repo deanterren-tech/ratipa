@@ -38,7 +38,7 @@ import {
   CircleDollarSign, MessageSquare, FileText, Pencil} from "lucide-react";
 import MapRouteModal from "../MapRouteModal";
 import { UI } from "../../ui/kit";
-import { ModuleShell, SectionHeader, SearchField, FoundCount, EmptyState } from "../../ui/components";
+import { ModuleShell, SectionHeader, SearchField, FoundCount, EmptyState, ModalShell } from "../../ui/components";
 
 interface PlanDohodModuleProps {
   user: UserProfile;
@@ -657,7 +657,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               setIsNbMinimized(false);
               localStorage.setItem("ratipa_notebook_minimized", "false");
             }}
-            className="bg-amber-500 hover:bg-amber-600 font-sans text-white text-xs font-semibold py-2.5 px-5 rounded-full flex items-center gap-2 shadow-[0_8px_20px_rgba(245,158,11,0.25)] border border-amber-500 transition-all duration-150 transform hover:scale-105 active:scale-95 cursor-pointer"
+            className="bg-[#121316] hover:bg-black text-white text-xs font-semibold py-2.5 px-5 min-h-[44px] rounded-full flex items-center gap-2 shadow-sm transition-colors cursor-pointer"
           >
             <BookOpen size={14} />
             <span>Блокнот ({cars.length})</span>
@@ -685,18 +685,18 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
           height: isMobile ? "100%" : `${nbCoords.h}px`,
           zIndex: 20000,
         }}
-        className={`bg-white ${isMobile ? "" : "rounded-[2rem]"} border border-slate-200 shadow-[0_15px_45px_rgba(0,0,0,0.1)] flex flex-col pointer-events-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150`}
+        className={`bg-white ${isMobile ? "" : "rounded-2xl"} border border-[#E5E7EB] shadow-sm flex flex-col pointer-events-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150`}
       >
         {/* Header Drag Handle */}
         <div
           onMouseDown={handleNbDragStart}
-          className="flex items-center justify-between border-b border-slate-100 p-4 bg-slate-50/80 cursor-grab active:cursor-grabbing select-none"
+          className="flex items-center justify-between border-b border-[#E5E7EB] px-4 py-3 bg-[#F8F9FA] cursor-grab active:cursor-grabbing select-none"
         >
           <div className="flex items-center gap-2">
-            <span className="p-1 px-2.5 bg-amber-500/10 text-amber-600 font-medium text-[10px] rounded-full tracking-wider font-mono">
+            <span className="px-2 py-0.5 bg-white border border-[#E5E7EB] text-[#4B5563] font-medium text-[10px] rounded-md tracking-wider font-mono">
               Блокнот
             </span>
-            <h3 className="text-sm font-semibold text-slate-800 tracking-tight">
+            <h3 className="text-sm font-semibold text-[#121316] tracking-tight">
               Блокнот по авто
             </h3>
           </div>
@@ -707,7 +707,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 setIsNbMinimized(true);
                 localStorage.setItem("ratipa_notebook_minimized", "true");
               }}
-              className="text-slate-400 hover:text-slate-600 transition p-1 rounded-lg hover:bg-slate-200 cursor-pointer"
+              className="min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer"
               title="Свернуть"
             >
               <Minus size={15} />
@@ -718,7 +718,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 setIsNotebookOpen(false);
                 localStorage.setItem("ratipa_notebook_visible", "false");
               }}
-              className="text-slate-400 hover:text-slate-600 transition p-1 rounded-lg hover:bg-slate-200 cursor-pointer"
+              className="min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer"
               title="Закрыть"
             >
               <X size={15} />
@@ -731,13 +731,13 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
           {/* Switcher selector */}
           {permittedToSwitch ? (
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-semibold text-slate-400 tracking-wider uppercase font-sans">
+              <label className="text-[10px] font-semibold text-[#9CA3AF] tracking-wider uppercase font-sans">
                 Выбор Блокнота
               </label>
               <select
                 value={selectedNotebookUser}
                 onChange={(e) => setSelectedNotebookUser(e.target.value)}
-                className="p-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-xl text-xs font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                className={`${UI.select} w-full`}
               >
                 {notebookUsersList.map((u) => (
                   <option key={u} value={u}>
@@ -748,10 +748,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             </div>
           ) : (
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-semibold text-slate-400 tracking-wider uppercase font-sans">
+              <label className="text-[10px] font-semibold text-[#9CA3AF] tracking-wider uppercase font-sans">
                 Ваш Блокнот
               </label>
-              <div className="p-2 bg-slate-50 text-xs font-semibold text-slate-800 rounded-xl border border-slate-200 tracking-wide font-sans">
+              <div className="p-2 bg-[#F8F9FA] text-xs font-semibold text-[#121316] rounded-xl border border-[#E5E7EB] tracking-wide font-sans">
                 {selectedNotebookUser === user.name
                   ? `Личный блокнот`
                   : `Блокнот: ${selectedNotebookUser}`}
@@ -760,7 +760,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 <button
                   type="button"
                   onClick={() => setSelectedNotebookUser(user.name)}
-                  className="py-1 px-2 rounded-lg text-[10px] font-semibold tracking-wider transition bg-slate-900 text-white shadow-sm cursor-pointer"
+                  className="inline-flex w-full items-center justify-center min-h-[44px] md:min-h-0 py-1 px-2 rounded-lg text-[10px] font-semibold tracking-wider transition-colors bg-[#121316] text-white shadow-sm hover:bg-black cursor-pointer"
                 >
                   Мой
                 </button>
@@ -768,51 +768,51 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             </div>
           )}
 
-          <div className="text-[10px] font-medium text-slate-500 text-center bg-blue-500/5 py-1.5 px-2.5 rounded-xl border border-blue-500/10">
+          <div className="text-[10px] font-medium text-[#6B7280] text-center bg-[#F8F9FA] py-1.5 px-2.5 rounded-xl border border-[#E5E7EB]">
             {selectedNotebookUser === user.name
               ? "Редактируется ваш личный блокнот"
               : `Просмотр блокнота: ${selectedNotebookUser}`}
           </div>
 
           {/* Status counters */}
-          <div className="grid grid-cols-3 gap-1.5 bg-slate-50 p-2 rounded-xl border border-slate-100 select-none">
+          <div className="grid grid-cols-3 gap-1.5 bg-[#F8F9FA] p-2 rounded-xl border border-[#E5E7EB] select-none">
             <div className="text-center">
-              <div className="text-[10px] text-slate-400 font-semibold tracking-tight">На базе</div>
+              <div className="text-[10px] text-[#9CA3AF] font-semibold tracking-tight">На базе</div>
               <div className="text-sm font-bold text-emerald-600 font-sans">{countBaza}</div>
             </div>
-            <div className="text-center border-x border-slate-200/60">
-              <div className="text-[10px] text-slate-400 font-semibold tracking-tight">В рейсе</div>
+            <div className="text-center border-x border-[#E5E7EB]">
+              <div className="text-[10px] text-[#9CA3AF] font-semibold tracking-tight">В рейсе</div>
               <div className="text-sm font-bold text-sky-600 font-sans">{countReis}</div>
             </div>
             <div className="text-center">
-              <div className="text-[10px] text-slate-400/80 font-semibold tracking-tight">Без ст.</div>
-              <div className="text-sm font-bold text-slate-500 font-sans">{countNone}</div>
+              <div className="text-[10px] text-[#9CA3AF] font-semibold tracking-tight">Без ст.</div>
+              <div className="text-sm font-bold text-[#6B7280] font-sans">{countNone}</div>
             </div>
           </div>
 
-          <div className="flex gap-1.5 border-t border-slate-100 pt-2">
+          <div className="flex gap-1.5 border-t border-[#E5E7EB] pt-2">
             <button
               type="button"
               onClick={handleAddMyCarsToNotebook}
-              className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200/85 text-slate-800 rounded-xl text-[11px] font-semibold tracking-wide transition cursor-pointer text-center"
+              className="flex-1 min-h-[44px] md:min-h-0 py-2 px-3 bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#121316] rounded-xl text-[11px] font-semibold tracking-wide transition-colors cursor-pointer text-center"
             >
               Внести свои авто
             </button>
           </div>
 
           {/* Status selector for adding */}
-          <div className="flex flex-col gap-1 border-t border-slate-100 pt-2">
-            <span className="text-[9px] font-bold text-slate-400/90 tracking-wider uppercase font-sans">
+          <div className="flex flex-col gap-1 border-t border-[#E5E7EB] pt-2">
+            <span className="text-[10px] font-bold text-[#6B7280] tracking-wider uppercase font-sans">
               Статус для добавления авто
             </span>
-            <div className="flex bg-slate-100 p-0.5 rounded-lg text-[10px] font-semibold w-full">
+            <div className="flex bg-[#F3F4F6] p-0.5 rounded-lg text-[10px] font-semibold w-full">
               <button
                 type="button"
                 onClick={() => setAddCarStatus("baza")}
-                className={`flex-1 py-1 text-center rounded-md transition cursor-pointer text-[9px] ${
+                className={`flex-1 py-1 min-h-[44px] md:min-h-0 text-center rounded-md transition-colors cursor-pointer text-[10px] ${
                   addCarStatus === "baza"
                     ? "bg-emerald-500 text-white shadow-sm font-bold"
-                    : "text-slate-500 hover:text-slate-700"
+                    : "text-[#6B7280] hover:text-[#121316]"
                 }`}
               >
                 На базе
@@ -820,10 +820,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               <button
                 type="button"
                 onClick={() => setAddCarStatus("reis")}
-                className={`flex-1 py-1 text-center rounded-md transition cursor-pointer text-[9px] ${
+                className={`flex-1 py-1 min-h-[44px] md:min-h-0 text-center rounded-md transition-colors cursor-pointer text-[10px] ${
                   addCarStatus === "reis"
                     ? "bg-sky-500 text-white shadow-sm font-bold"
-                    : "text-slate-500 hover:text-slate-700"
+                    : "text-[#6B7280] hover:text-[#121316]"
                 }`}
               >
                 В рейсе
@@ -831,10 +831,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               <button
                 type="button"
                 onClick={() => setAddCarStatus("none")}
-                className={`flex-1 py-1 text-center rounded-md transition cursor-pointer text-[9px] ${
+                className={`flex-1 py-1 min-h-[44px] md:min-h-0 text-center rounded-md transition-colors cursor-pointer text-[10px] ${
                   addCarStatus === "none"
-                    ? "bg-white text-slate-800 shadow-sm font-semibold"
-                    : "text-slate-500 hover:text-slate-700"
+                    ? "bg-white text-[#121316] shadow-sm font-semibold"
+                    : "text-[#6B7280] hover:text-[#121316]"
                 }`}
               >
                 Без статуса
@@ -853,7 +853,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleAddCarToNotebook();
               }}
-              className="flex-1 p-2 bg-white border border-slate-200 text-slate-800 rounded-xl text-xs font-medium outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all placeholder:text-slate-400 uppercase"
+              className="flex-1 px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] text-[#121316] rounded-xl text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors placeholder:text-[#9CA3AF] uppercase"
             />
             <datalist id="notebook-vehicles-list">
               {savedCars.map((car) => (
@@ -863,7 +863,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             <button
               type="button"
               onClick={handleAddCarToNotebook}
-              className="min-h-[44px] min-w-[44px] bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium flex items-center justify-center rounded-xl transition cursor-pointer text-base leading-none"
+              className="min-h-[44px] min-w-[44px] bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#4B5563] font-medium flex items-center justify-center rounded-xl transition-colors cursor-pointer text-base leading-none"
             >
               +
             </button>
@@ -884,7 +884,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                   }}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => handleNotebookCarDrop(e, car)}
-                  className={`bg-white border rounded-xl p-2.5 flex flex-col space-y-1.5 transition group relative cursor-move ${isHighlighted ? "border-blue-300 ring-2 ring-blue-500/10 shadow-sm" : "border-slate-200/60 hover:border-slate-300"}`}
+                  className={`bg-white border rounded-xl p-2.5 flex flex-col space-y-1.5 transition-colors group relative cursor-move ${isHighlighted ? "border-[var(--accent-ui)] ring-2 ring-[var(--accent-20)]" : "border-[#E5E7EB] hover:border-[#D1D5DB]"}`}
                 >
                   <div className="flex items-center justify-between">
                     <button
@@ -906,10 +906,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                           }
                         }, 100);
                       }}
-                      className="flex-shrink-0 transition transform hover:scale-[1.01] active:scale-98 cursor-pointer text-left"
+                      className="flex-shrink-0 flex items-center min-h-[44px] md:min-h-0 transition-colors cursor-pointer text-left"
                       title="Нажмите, чтобы подсветить рейс"
                     >
-                      <div className="px-2.5 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 tracking-tight select-none">
+                      <div className="px-2.5 py-1 bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg text-xs font-bold text-[#4B5563] tracking-tight select-none">
                         {car}
                       </div>
                     </button>
@@ -917,7 +917,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                     <button
                       type="button"
                       onClick={() => handleRemoveCarFromNotebook(car)}
-                      className="text-slate-400 hover:text-slate-600 transition p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
+                      className="min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center p-1 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer"
                       title="Удалить машину"
                     >
                       <X size={12} />
@@ -948,14 +948,14 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                         localStorage.getItem(`ratipa_nb_height_${user.name}`) ||
                         "auto",
                     }}
-                    className="w-full p-2 bg-white text-xs border border-slate-200 text-slate-800 rounded-xl focus:outline-none placeholder:text-[10px] font-medium leading-relaxed resize-y focus:border-slate-400 font-sans min-h-[48px] focus:ring-1 focus:ring-slate-400 transition-all"
+                    className="w-full p-2 bg-white text-xs border border-[#E5E7EB] text-[#121316] rounded-xl focus:outline-none placeholder:text-[10px] font-medium leading-relaxed resize-y focus:border-[var(--accent)] font-sans min-h-[48px] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                   />
                 </div>
               );
             })}
 
             {cars.length === 0 && (
-              <div className="text-center py-8 text-slate-400 text-xs font-mono font-medium tracking-wide bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+              <div className="text-center py-8 text-[#9CA3AF] text-xs font-mono font-medium tracking-wide bg-[#F8F9FA] rounded-2xl border border-dashed border-[#E5E7EB]">
                 Блокнот пуст. Внесите номера авто выше.
               </div>
             )}
@@ -1026,7 +1026,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             title={handle.dir === "se" ? "Растянуть блокнот" : ""}
           >
             {handle.dir === "se" && (
-              <div className="w-2.5 h-2.5 border-r-2 border-b-2 border-slate-400 group-hover:border-slate-700 transition-colors pointer-events-none" />
+              <div className="w-2.5 h-2.5 border-r-2 border-b-2 border-[#D1D5DB] group-hover:border-[#6B7280] transition-colors pointer-events-none" />
             )}
           </div>
         ))}
@@ -1694,28 +1694,28 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     const profitPerDayPlan = Math.round(rawProfitPerDayPlan);
 
     return (
- <div data-scroll-lock="modal" className="fixed inset-0 z-[100] flex items-start md:items-center justify-center bg-slate-900/60 animate-fade-in overflow-y-auto overscroll-contain">
- <div className="bg-white w-full md:max-w-[1400px] mx-0 md:mx-4 shadow-2xl rounded-2xl flex flex-col relative min-h-[100dvh] md:min-h-0 md:max-h-[calc(100vh-2rem)] overflow-hidden">
+ <div data-scroll-lock="modal" className="fixed inset-0 z-[100] flex items-start md:items-center justify-center bg-black/40 backdrop-blur-[2px] animate-fade-in overflow-y-auto overscroll-contain">
+ <div className="bg-white w-full md:max-w-[1400px] mx-0 md:mx-4 md:border md:border-[#E5E7EB] shadow-[0_25px_60px_rgba(0,0,0,0.12)] rounded-2xl flex flex-col relative min-h-[100dvh] md:min-h-0 md:max-h-[calc(100vh-2rem)] overflow-hidden">
           
           {/* Header */}
-          <div className="bg-white px-4 md:px-6 py-3 md:py-4 flex flex-col md:flex-row md:items-center gap-4 md:gap-10 sticky top-0 z-10 border-b border-slate-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)] shrink-0">
+          <div className="bg-white px-4 md:px-6 py-3 md:py-4 flex flex-col md:flex-row md:items-center gap-4 md:gap-10 sticky top-0 z-10 border-b border-[#E5E7EB] shrink-0">
             {/* Close button — top-right corner */}
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="absolute top-3 right-3 z-30 w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer"
+              className="absolute top-3 right-3 z-30 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 md:w-9 md:h-9 flex items-center justify-center text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer"
               aria-label="Закрыть"
             >
               <X className="w-5 h-5" strokeWidth={2} />
             </button>
             <div className="flex flex-col min-w-0 pr-10">  <div className="flex items-center gap-3">
-                <Calculator className="w-5 h-5 text-slate-400 shrink-0" />
-                <h2 className="text-base md:text-lg font-semibold text-slate-900 tracking-tight truncate">
+                <Calculator className="w-5 h-5 text-[#9CA3AF] shrink-0" />
+                <h2 className="text-base md:text-lg font-semibold text-[#121316] tracking-tight truncate">
                   {editingTripId ? "Редактирование плана" : "Новый план"}
                 </h2>
               </div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium text-slate-500 ml-0 mt-1.5">
-                <span className="text-blue-600 font-semibold">Авто: {carNumber || "—"}</span>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium text-[#6B7280] ml-0 mt-1.5">
+                <span className="text-[var(--accent-ink)] font-semibold">Авто: {carNumber || "—"}</span>
                 <span>Направление: {direction || "—"}</span>
                 <span>Диспетчер: {dispatcher || "—"}</span>
                 <span>Сроки: {dateStart ? new Date(dateStart).toLocaleDateString('ru-RU').replace(/\./g, '/') : "—"} — {dateEnd ? new Date(dateEnd).toLocaleDateString('ru-RU').replace(/\./g, '/') : "—"}</span>
@@ -1723,10 +1723,10 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
               {/* Metadata: кто обновил */}
               {(currentEditingTrip as any)?.updatedBy && (
                 <div className="flex items-center gap-1.5 mt-2">
-                  <span className="inline-flex items-center gap-1 bg-slate-100/80 border border-slate-200/60 px-2.5 py-1 rounded-lg font-semibold text-slate-700 shadow-sm text-[11px]">
+                  <span className="inline-flex items-center gap-1 bg-[#F3F4F6] border border-[#E5E7EB] px-2.5 py-1 rounded-lg font-semibold text-[#4B5563] shadow-sm text-[11px]">
                     ✎ {resolvePersonName((currentEditingTrip as any).updatedBy, dispatcherDirectory)}
                     {(currentEditingTrip as any).updatedAt && (
-                      <span className="font-medium text-slate-400 font-mono">
+                      <span className="font-medium text-[#9CA3AF] font-mono">
                         · {(currentEditingTrip as any).updatedAt}
                       </span>
                     )}
@@ -1736,22 +1736,26 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             </div>
 
             <div className="flex items-center justify-start mt-3 md:mt-0 md:justify-end">
-              <div className="flex bg-slate-100 rounded-full p-1 gap-1 border border-slate-200/50 shrink-0">
+              <div className="flex bg-[#F3F4F6] rounded-xl p-0.5 gap-0.5 border border-[#E5E7EB] shrink-0" role="tablist" aria-label="Разделы формы рейса">
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={modalTab === "main"}
                   onClick={() => setModalTab("main")}
-                  className={`px-3 md:px-4 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap ${modalTab === "main" ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-800"}`}
+                  className={`min-h-[44px] md:min-h-0 px-3 md:px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${modalTab === "main" ? "bg-white shadow-sm text-[#121316]" : "text-[#6B7280] hover:text-[#121316]"}`}
                 >
                   Форма
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={modalTab === "potential"}
                   onClick={() => setModalTab("potential")}
-                  className={`px-3 md:px-4 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap ${modalTab === "potential" ? "bg-white shadow-sm text-purple-700" : "text-slate-500 hover:text-slate-800 animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.15)]"}`}
+                  className={`min-h-[44px] md:min-h-0 px-3 md:px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${modalTab === "potential" ? "bg-white shadow-sm text-[#121316]" : "text-[#6B7280] hover:text-[#121316]"}`}
                 >
                   Потенц. грузы
                   {potentialLoads.length > 0 && (
-                    <span className="ml-1.5 bg-purple-500 text-white rounded-full px-1.5 py-0.5 text-[8px] font-bold">
+                    <span className="ml-1.5 bg-[var(--accent-ui)] text-[var(--accent-on)] rounded-full px-1.5 py-0.5 text-[10px] font-bold">
                       {potentialLoads.length}
                     </span>
                   )}
@@ -1766,14 +1770,14 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
               <>
                 <div className="grid grid-cols-1 gap-6">
                   {/* Основные реквизиты */}
- <div className="bg-white rounded-2xl p-6 border border-slate-200/50 flex flex-col">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2 mb-5">
-                      <FileText className="w-4 h-4 text-slate-400"/>
+ <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] flex flex-col">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-[#6B7280] flex items-center gap-2 mb-5">
+                      <FileText className="w-4 h-4 text-[#9CA3AF]"/>
                       Основные реквизиты
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Автомобиль</label>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Автомобиль</label>
                         <CouplingPicker
                           value={carNumber}
                           onSelect={(rec) => {
@@ -1783,11 +1787,11 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Направление</label>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Направление</label>
                         <select
                           value={direction}
                           onChange={(e) => handleDirChange(e.target.value)}
-                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all appearance-none min-h-[44px]"
+                          className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors appearance-none min-h-[44px]"
                         >
                           {Object.keys(directions).map((d) => (
                             <option key={d} value={d}>{d}</option>
@@ -1795,11 +1799,11 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         </select>
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Диспетчер</label>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Диспетчер</label>
                         <select
                           value={dispatcher}
                           onChange={(e) => setDispatcher(e.target.value)}
-                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all appearance-none min-h-[44px]"
+                          className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors appearance-none min-h-[44px]"
                         >
                           <option value="">Не выбран</option>
                           {dispatchers.map((d) => (
@@ -1808,21 +1812,21 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         </select>
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-blue-500 mb-1.5 block">Дата старта</label>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent-ink)] mb-1.5 block">Дата старта</label>
                         <input
                           type="date"
                           value={dateStart}
                           onChange={(e) => setDateStart(e.target.value)}
-                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all min-h-[44px]"
+                          className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors min-h-[44px]"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Дата финиша</label>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Дата финиша</label>
                         <input
                           type="date"
                           value={dateEnd}
                           onChange={(e) => setDateEnd(e.target.value)}
-                          className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all min-h-[44px]"
+                          className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors min-h-[44px]"
                         />
                       </div>
                     </div>
@@ -1831,13 +1835,13 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 </div>
 
                 {/* Плечи маршрута */}
-                <div className="bg-white rounded-2xl p-6 border border-slate-100">
+                <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB]">
                   <div className="flex justify-between items-center mb-5">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-slate-400"/>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-[#6B7280] flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-[#9CA3AF]"/>
                       Плечи маршрута
                     </h3>
-                    <span className="text-[11px] text-slate-400 hover:text-slate-600 transition font-medium cursor-pointer">Маршрутная сетка</span>
+                    <span className="text-[11px] text-[#9CA3AF] hover:text-[#121316] transition-colors font-medium cursor-pointer">Маршрутная сетка</span>
                   </div>
 
                   
@@ -1846,23 +1850,23 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     <table className="w-full w-full flex-wrap border-collapse relative">
                       <thead>
                         <tr>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left w-8">#</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Откуда</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Куда</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Км</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Доезд (км)</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Фрахт €</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Инфо ставка (Доп)</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Паром € (Доп)</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-left">Коэфф.</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400 text-right"></th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left w-8">#</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Откуда</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Куда</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Км</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Доезд (км)</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Фрахт €</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Инфо ставка (Доп)</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Паром € (Доп)</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Коэфф.</th>
+                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-right"></th>
                         </tr>
                       </thead>
                       <tbody className="space-y-2">
                         {legs.map((leg, idx) => (
                           <tr key={idx}>
 
-                            <td className="py-1.5 text-xs font-semibold text-slate-400 font-mono">{idx + 1}</td>
+                            <td className="py-1.5 text-xs font-semibold text-[#9CA3AF] font-mono">{idx + 1}</td>
                             <td className="py-1.5 pr-2">
                               <input
                                 autoComplete="off"
@@ -1870,7 +1874,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                 onChange={(e) => updateLeg(idx, { from: e.target.value })}
                                 onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx, field: 'from', isPl: false, rect}); }}
                                 onBlur={() => { checkLegDistance(idx); }}
-                                className="w-full text-left px-3 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:bg-white focus:border-slate-400 transition"
+                                className="w-full text-left px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                               />
                             </td>
                             <td className="py-1.5 pr-2">
@@ -1880,7 +1884,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                 onChange={(e) => updateLeg(idx, { to: e.target.value })}
                                 onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx, field: 'to', isPl: false, rect}); }}
                                 onBlur={() => { checkLegDistance(idx); }}
-                                className="w-full text-left px-3 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:bg-white focus:border-slate-400 transition"
+                                className="w-full text-left px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                               />
                             </td>
                             <td className="py-1.5 pr-2 relative">
@@ -1898,12 +1902,12 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                 }}
                                 value={leg.km || ""}
                                 onChange={(e) => updateLeg(idx, { km: Number(e.target.value) })}
-                                className="w-full text-left pl-3 pr-8 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 transition"
+                                className="w-full text-left pl-3 pr-8 py-1.5 bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium font-mono tabular-nums outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                               />
                               <button
                                 type="button"
                                 onClick={() => openMapRouteModal(idx, leg.from, leg.to, false)}
-                                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition"
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#D1D5DB] hover:text-[#4B5563] transition-colors"
                               >
                                 <MapPin className="w-3.5 h-3.5" />
                               </button>
@@ -1914,7 +1918,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                 onFocus={(e) => e.target.select()}
                                 value={leg.emptyRunKm || ""}
                                 onChange={(e) => updateLeg(idx, { emptyRunKm: Number(e.target.value) })}
-                                className="w-full text-left px-3 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 transition"
+                                className="w-full text-left px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium font-mono tabular-nums outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                               />
                             </td>
                             <td className="py-1.5 pr-2">
@@ -1923,11 +1927,11 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                 onFocus={(e) => e.target.select()}
                                 value={leg.rate || ""}
                                 onChange={(e) => updateLeg(idx, { rate: Number(e.target.value) })}
-                                className="w-full text-left px-3 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 transition"
+                                className="w-full text-left px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium font-mono tabular-nums outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                               />
                             </td>
                             <td className="py-1.5 pr-2">
-                              <div className="flex bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg overflow-hidden focus-within:bg-white focus-within:border-slate-400 transition">
+                              <div className="flex bg-white border border-[#E5E7EB] rounded-xl overflow-hidden focus-within:border-[var(--accent)] transition-colors">
                                 <input
                                   type="text"
                                   value={leg.referenceRate || ""}
@@ -1937,7 +1941,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                 <select
                                   value={leg.referenceCurrency || ""}
                                   onChange={(e) => updateLeg(idx, { referenceCurrency: e.target.value })}
-                                  className="bg-transparent border-l border-slate-200 text-slate-500 text-[10px] font-semibold outline-none px-1 cursor-pointer"
+                                  className="bg-transparent border-l border-[#E5E7EB] text-[#6B7280] text-[10px] font-semibold outline-none px-1 cursor-pointer"
                                 >
                                   <option value=""></option>
                                   {currencies.map((c) => (
@@ -1952,7 +1956,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                 onFocus={(e) => e.target.select()}
                                 value={leg.ferry || ""}
                                 onChange={(e) => updateLeg(idx, { ferry: Number(e.target.value) })}
-                                className="w-full text-left px-3 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 transition"
+                                className="w-full text-left px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium font-mono tabular-nums outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                               />
                             </td>
                             <td className="py-1.5 pr-2">
@@ -1961,14 +1965,14 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                 step="0.01"
                                 value={leg.coeff}
                                 onChange={(e) => updateLeg(idx, { coeff: Number(e.target.value) })}
-                                className="w-full px-3 py-1.5 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 transition"
+                                className="w-full px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium font-mono tabular-nums outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                               />
                             </td>
                             <td className="py-1.5 text-right whitespace-nowrap space-x-1">
                               <button
                                 type="button"
                                 onClick={() => addLeg(idx)}
-                                className="w-6 h-6 inline-flex items-center justify-center text-slate-400 hover:text-slate-800 transition"
+                                className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
                               >
                                 <Plus className="w-3.5 h-3.5" />
                               </button>
@@ -1976,7 +1980,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                 type="button"
                                 onClick={() => removeLeg(idx)}
                                 disabled={legs.length <= 1}
-                                className="w-6 h-6 inline-flex items-center justify-center text-slate-400 hover:text-rose-500 transition disabled:opacity-30"
+                                className="w-7 h-7 inline-flex items-center justify-center rounded-md text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-40 cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -1990,23 +1994,23 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                   {/* Mobile Cards View for Legs */}
                   <div className="block lg:hidden space-y-4 pr-1 pb-4">
                     {legs.map((leg, idx) => (
-                      <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-4 relative shadow-sm">
-                        <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                      <div key={idx} className="bg-white border border-[#E5E7EB] rounded-xl p-4 flex flex-col gap-4 relative shadow-sm">
+                        <div className="flex justify-between items-center pb-2 border-b border-[#E5E7EB]">
                           <div className="flex items-center gap-3">
-                            <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">#{idx + 1}</span>
+                            <span className="text-xs font-semibold text-[#6B7280] bg-[#F3F4F6] px-2 py-1 rounded-md">#{idx + 1}</span>
 
                           </div>
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => addLeg(idx)}
-                              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full bg-blue-50 hover:bg-blue-100 text-blue-600 transition cursor-pointer"
+                              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#4B5563] hover:text-[#121316] transition-colors cursor-pointer"
                             >
                               <Plus className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => removeLeg(idx)}
                               disabled={legs.length <= 1}
-                              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 transition disabled:opacity-30 cursor-pointer"
+                              className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors disabled:opacity-30 cursor-pointer"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -2015,32 +2019,32 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-bold text-slate-400">Откуда</span>
+                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Откуда</span>
                             <input
                               autoComplete="off"
                               value={leg.from}
                               onChange={(e) => updateLeg(idx, { from: e.target.value })}
                               onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx, field: 'from', isPl: false, rect}); }}
                               onBlur={() => { checkLegDistance(idx); }}
-                              className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[var(--accent-ui)] transition shadow-sm"
+                              className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold text-[#121316] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                             />
                           </div>
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-bold text-slate-400">Куда</span>
+                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Куда</span>
                             <input
                               autoComplete="off"
                               value={leg.to}
                               onChange={(e) => updateLeg(idx, { to: e.target.value })}
                               onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx, field: 'to', isPl: false, rect}); }}
                               onBlur={() => { checkLegDistance(idx); }}
-                              className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 outline-none focus:bg-white focus:border-[var(--accent-ui)] transition shadow-sm"
+                              className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold text-[#121316] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                             />
                           </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1.5 relative">
-                            <span className="text-[10px] uppercase font-bold text-slate-400">Км</span>
+                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Км</span>
                             <input
                               type="number"
                               value={leg.km || ""}
@@ -2054,28 +2058,28 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                   setShowAddDistModal(true);
                                 }
                               }}
-                              className="w-full pl-3 pr-8 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums text-slate-800 outline-none focus:bg-white focus:border-[var(--accent-ui)] transition shadow-sm"
+                              className="w-full pl-3 pr-12 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold font-mono tabular-nums text-[#121316] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                             />
                             <button
                               type="button"
                               onClick={() => openMapRouteModal(idx, leg.from, leg.to, false)}
-                              className="absolute right-2 bottom-1.5 text-slate-400 hover:text-slate-600 p-1"
+                              className="absolute right-0.5 top-1/2 -translate-y-1/2 min-h-[44px] min-w-[44px] flex items-center justify-center text-[#9CA3AF] hover:text-[var(--accent-ink)] rounded-lg transition-colors"
                             >
                               <MapPin className="w-3.5 h-3.5" />
                             </button>
                           </div>
                           <div className="flex flex-col gap-1.5 relative">
-                            <span className="text-[10px] uppercase font-bold text-slate-400">Доезд (км)</span>
+                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Доезд (км)</span>
                             <input
                               type="number"
                               value={leg.emptyRun || ""}
                               onChange={(e) => updateLeg(idx, { emptyRun: Number(e.target.value) })}
-                              className="w-full pl-3 pr-8 py-2 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums text-slate-800 outline-none focus:bg-white focus:border-[var(--accent-ui)] transition shadow-sm"
+                              className="w-full pl-3 pr-12 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold font-mono tabular-nums text-[#121316] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                             />
                             <button
                               type="button"
                               onClick={() => openMapRouteModal(idx, leg.from, leg.to, true)}
-                              className="absolute right-2 bottom-1.5 text-slate-400 hover:text-slate-600 p-1"
+                              className="absolute right-0.5 top-1/2 -translate-y-1/2 min-h-[44px] min-w-[44px] flex items-center justify-center text-[#9CA3AF] hover:text-[var(--accent-ink)] rounded-lg transition-colors"
                             >
                               <MapPin className="w-3.5 h-3.5" />
                             </button>
@@ -2084,19 +2088,19 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-bold text-slate-400">Фрахт</span>
+                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Фрахт</span>
                             <div className="flex gap-1">
                               <input
                                 type="number"
                                 value={leg.rate ?? ""}
                                 placeholder="0"
                                 onChange={(e) => updateLeg(idx, { rate: Number(e.target.value) })}
-                                className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums text-slate-900 outline-none"
+                                className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold font-mono tabular-nums text-[#121316] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                               />
                               <select
                                 value={leg.freightCurrency}
                                 onChange={(e) => updateLeg(idx, { freightCurrency: e.target.value })}
-                                className="w-16 px-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold"
+                                className="w-16 px-1 bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg text-[10px] font-bold"
                               >
                                 {currencies.map((c) => (
                                   <option key={c.id} value={c.code}>{c.code}</option>
@@ -2105,19 +2109,19 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                             </div>
                           </div>
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-bold text-slate-400">Инфо ставка</span>
+                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Инфо ставка</span>
                             <div className="flex gap-1">
                               <input
                                 type="number"
                                 value={leg.referenceRate ?? ""}
                                 placeholder="0"
                                 onChange={(e) => updateLeg(idx, { referenceRate: e.target.value })}
-                                className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums text-slate-900 outline-none"
+                                className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold font-mono tabular-nums text-[#121316] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                               />
                               <select
                                 value={leg.referenceCurrency || "EUR"}
                                 onChange={(e) => updateLeg(idx, { referenceCurrency: e.target.value })}
-                                className="w-16 px-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold"
+                                className="w-16 px-1 bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg text-[10px] font-bold"
                               >
                                 <option value=""></option>
                                 {currencies.map((c) => (
@@ -2130,22 +2134,22 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-bold text-slate-400">Паром €</span>
+                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Паром €</span>
                             <input
                               type="number"
                               value={leg.ferry || ""}
                               onChange={(e) => updateLeg(idx, { ferry: Number(e.target.value) })}
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums outline-none"
+                              className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold font-mono tabular-nums outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                             />
                           </div>
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-bold text-slate-400">Коэфф.</span>
+                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Коэфф.</span>
                             <input
                               type="number"
                               step="0.01"
                               value={leg.coeff}
                               onChange={(e) => updateLeg(idx, { coeff: Number(e.target.value) })}
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold font-mono tabular-nums outline-none"
+                              className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold font-mono tabular-nums outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                             />
                           </div>
                         </div>
@@ -2158,44 +2162,44 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 </div>
 
                 {/* Financial Params & Comment */}
-                <div className="bg-white rounded-2xl p-6 border border-slate-100 flex flex-col gap-6">
+                <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] flex flex-col gap-6">
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2 mb-5">
-                      <CircleDollarSign className="w-4 h-4 text-slate-400"/>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-[#6B7280] flex items-center gap-2 mb-5">
+                      <CircleDollarSign className="w-4 h-4 text-[#9CA3AF]"/>
                       Финансовые параметры
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Доп расходы €</label>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Доп расходы €</label>
                         <input
                           type="number"
                           value={extraExpense || ""}
                           onChange={(e) => setExtraExpense(Number(e.target.value))}
-                          className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                          className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 min-h-[44px] text-sm font-medium font-mono tabular-nums outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Коммент расходов</label>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Коммент расходов</label>
                         <input
                           type="text"
                           value={extraExpenseNote}
                           onChange={(e) => setExtraExpenseNote(e.target.value)}
-                          className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                          className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 min-h-[44px] text-sm font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Факт км</label>
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Факт км</label>
                         <input
                           type="number"
                           placeholder="Введите факт км"
                           value={factKm || ""}
                           onChange={(e) => setFactKm(e.target.value ? Number(e.target.value) : undefined)}
-                          className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                          className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 min-h-[44px] text-sm font-medium font-mono tabular-nums outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2 block">Цвет плашки рейса</label>
-                        <div className="flex gap-2">
+                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-2 block">Цвет плашки рейса</label>
+                        <div className="flex flex-wrap gap-2">
                           {[
                             "bg-slate-200",
                             "bg-blue-300",
@@ -2210,7 +2214,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                               type="button"
                               key={cc}
                               onClick={() => setStripColor(cc)}
-                              className={`w-6 h-6 rounded-full border-2 ${stripColor === cc ? "border-slate-800 scale-110" : "border-transparent"} ${cc} transition`}
+                              className={`shrink-0 w-11 h-11 md:w-7 md:h-7 rounded-full border-2 ${stripColor === cc ? "border-[#121316] scale-110" : "border-transparent"} ${cc} transition-colors cursor-pointer`}
                             />
                           ))}
                         </div>
@@ -2218,9 +2222,9 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     </div>
                   </div>
 
-                  <div className="border-t border-slate-100 pt-6">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2 mb-4">
-                      <MessageSquare className="w-4 h-4 text-slate-400"/>
+                  <div className="border-t border-[#E5E7EB] pt-6">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-[#6B7280] flex items-center gap-2 mb-4">
+                      <MessageSquare className="w-4 h-4 text-[#9CA3AF]"/>
                       Комментарий к рейсу
                     </h3>
                     <input
@@ -2228,7 +2232,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                       value={tripNote}
                       onChange={(e) => setTripNote(e.target.value)}
                       placeholder="Введите дополнительные примечания к рейсу..."
-                      className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2.5 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all"
+                      className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2.5 min-h-[44px] text-sm font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                     />
                   </div>
                 </div>
@@ -2239,12 +2243,15 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
               <div className="flex flex-col gap-6">
                 {/* Left side: List of saved Potential Loads */}
-                <div className="bg-white rounded-2xl p-5 border border-slate-200/60 flex flex-col gap-4">
-                  <h3 className="text-xs font-semibold text-slate-800 tracking-tight border-b border-slate-100 pb-3 flex items-center justify-between">
-                    <span>Расчеты возможных рейсов</span>
-                    <span className="text-xs bg-slate-100 text-slate-600 font-mono font-semibold px-2 py-0.5 rounded-full">{potentialLoads.length}/10</span>
-                  </h3>
-                  <p className="text-[10px] text-slate-400 leading-relaxed flex items-center gap-1">
+                <div className="bg-white rounded-2xl p-5 border border-[#E5E7EB] flex flex-col gap-4">
+                  <SectionHeader
+                    icon={<Lightbulb className="w-4 h-4" aria-hidden="true" />}
+                    tone="accent"
+                    title="Расчеты возможных рейсов"
+                  >
+                    <span className={UI.countBadge}>{potentialLoads.length}/10</span>
+                  </SectionHeader>
+                  <p className="text-[10px] text-[#9CA3AF] leading-relaxed flex items-center gap-1">
                     <Lightbulb className="w-3 h-3 text-[#9CA3AF] shrink-0" aria-hidden="true" />
                     Здесь вы можете создать несколько вариантов маршрута. Выберите наиболее выгодный (где прибыль больше) и нажмите «Как основной».
                   </p>
@@ -2257,23 +2264,23 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                       return (
                         <div
                           key={pl.id}
-                          className={`p-4 rounded-2xl border ${plEditingId === pl.id ? "border-slate-400 bg-slate-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300 shadow-sm"} transition cursor-pointer flex flex-col gap-3 relative`}
+                          className={`p-4 rounded-2xl border transition-colors cursor-pointer flex flex-col gap-3 relative ${plEditingId === pl.id ? "border-[var(--accent-ui)] bg-[#F8F9FA] ring-2 ring-[var(--accent-20)]" : "border-[#E5E7EB] bg-white hover:border-[#D1D5DB] shadow-xs"}`}
                           onClick={() => editPotentialLoad(pl)}
                         >
                           <div className="flex justify-between items-center">
                             <div className="flex-1 min-w-0">
-                              <span className="font-semibold text-sm text-slate-800 tracking-tight truncate block max-w-full">
+                              <span className="font-semibold text-sm text-[#121316] tracking-tight truncate block max-w-full">
                                 {pl.name}
                               </span>
                               {pl.dateStart && pl.dateEnd && (
-                                <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
+                                <span className="text-[10px] text-[#9CA3AF] font-mono mt-0.5 block">
                                   {pl.dateStart.split('-').reverse().join('/')} → {pl.dateEnd.split('-').reverse().join('/')} · {days} дн.
                                 </span>
                               )}
                             </div>
                             <div className="flex gap-1.5 shrink-0 ml-3" onClick={(e) => e.stopPropagation()}>
                               <button
-                                className="px-3 py-1.5 text-[10px] font-semibold bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+                                className="min-h-[44px] md:min-h-0 px-3 py-1.5 text-[10px] font-semibold bg-white border border-emerald-200 hover:bg-emerald-50 text-emerald-700 rounded-lg transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5"
                                 title="Перенести этот маршрут в основную форму"
                                 onClick={() => applyPlToMain(pl)}
                               >
@@ -2281,7 +2288,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                 Как основной
                               </button>
                               <button
-                                className="w-8 h-8 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-rose-100 text-rose-500 transition cursor-pointer"
+                                className="min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 md:w-8 md:h-8 flex items-center justify-center rounded-lg bg-[#F3F4F6] hover:bg-rose-50 text-rose-500 hover:text-rose-600 transition-colors cursor-pointer"
                                 title="Удалить"
                                 onClick={() => deletePotentialLoad(pl.id)}
                               >
@@ -2290,86 +2297,86 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                             </div>
                           </div>
 
-                          <div className="bg-white rounded-xl border border-slate-100/80 p-2.5">
-                            <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Маршрут</div>
+                          <div className="bg-[#F8F9FA] rounded-xl border border-[#E5E7EB] p-2.5">
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-[#6B7280] mb-2">Маршрут</div>
                             {pl.legs && pl.legs.length > 0 ? (
                               <div className="space-y-1.5">
                                 {pl.legs.slice(0, 5).map((leg, idx) => (
                                   <div key={idx} className="flex items-center gap-2 text-xs">
-                                    <span className="text-slate-500 font-mono w-5 shrink-0 text-[10px]">{idx + 1}.</span>
-                                    <span className="text-slate-700 font-medium truncate min-w-0 flex-[1.5]">{leg.from || "?"}</span>
-                                    <span className="text-slate-300 shrink-0">→</span>
-                                    <span className="text-slate-700 font-medium truncate min-w-0 flex-[1.5]">{leg.to || "?"}</span>
+                                    <span className="text-[#6B7280] font-mono w-5 shrink-0 text-[10px]">{idx + 1}.</span>
+                                    <span className="text-[#4B5563] font-medium truncate min-w-0 flex-[1.5]">{leg.from || "?"}</span>
+                                    <span className="text-[#D1D5DB] shrink-0">→</span>
+                                    <span className="text-[#4B5563] font-medium truncate min-w-0 flex-[1.5]">{leg.to || "?"}</span>
                                     <div className="flex items-center gap-3 shrink-0 font-mono tabular-nums">
-                                      <span className="text-slate-500">{leg.km} <span className="text-[9px] text-slate-400">км</span></span>
-                                      <span className="text-slate-800 font-semibold">{leg.rate || 0} <span className="text-[9px] text-slate-400">€</span></span>
-                                      {leg.referenceRate && <span className="text-slate-400 text-[10px]">({leg.referenceRate} {leg.referenceCurrency})</span>}
+                                      <span className="text-[#6B7280]">{leg.km} <span className="text-[10px] text-[#9CA3AF]">км</span></span>
+                                      <span className="text-[#121316] font-semibold">{leg.rate || 0} <span className="text-[10px] text-[#9CA3AF]">€</span></span>
+                                      {leg.referenceRate && <span className="text-[#9CA3AF] text-[10px]">({leg.referenceRate} {leg.referenceCurrency})</span>}
                                     </div>
                                   </div>
                                 ))}
                                 {pl.legs.length > 5 && (
-                                  <div className="text-[9px] text-slate-400 font-mono pl-7">+{pl.legs.length - 5} плеч</div>
+                                  <div className="text-[10px] text-[#9CA3AF] font-mono pl-7">+{pl.legs.length - 5} плеч</div>
                                 )}
                               </div>
                             ) : (
-                              <div className="text-[10px] text-slate-400">Нет маршрута</div>
+                              <div className="text-[10px] text-[#9CA3AF]">Нет маршрута</div>
                             )}
                           </div>
 
                           <div className="grid grid-cols-3 gap-2">
-                            <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100/60 flex flex-col">
-                              <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-0.5">Прибыль</span>
+                            <div className="bg-[#F8F9FA] p-2 rounded-xl border border-[#E5E7EB] flex flex-col">
+                              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#9CA3AF] mb-0.5">Прибыль</span>
                               <span className={`text-sm font-bold font-mono tabular-nums ${pl.profit < 3000 ? "text-rose-600" : "text-emerald-600"}`}>
                                 {Math.round(pl.profit).toLocaleString("ru-RU")} <span className="text-[10px] font-semibold">€</span>
                               </span>
                             </div>
-                            <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100/60 flex flex-col">
-                              <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-0.5">В день</span>
-                              <span className={`text-sm font-bold font-mono tabular-nums ${profitPerDay < 100 ? "text-rose-600" : "text-blue-600"}`}>
+                            <div className="bg-[#F8F9FA] p-2 rounded-xl border border-[#E5E7EB] flex flex-col">
+                              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#9CA3AF] mb-0.5">В день</span>
+                              <span className={`text-sm font-bold font-mono tabular-nums ${profitPerDay < 100 ? "text-rose-600" : "text-[#121316]"}`}>
                                 {profitPerDay.toLocaleString("ru-RU")} <span className="text-[10px] font-semibold">€</span>
                               </span>
                             </div>
-                            <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100/60 flex flex-col">
-                              <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-0.5">Фрахт</span>
-                              <span className="text-sm font-bold text-slate-700 font-mono tabular-nums">
+                            <div className="bg-[#F8F9FA] p-2 rounded-xl border border-[#E5E7EB] flex flex-col">
+                              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#9CA3AF] mb-0.5">Фрахт</span>
+                              <span className="text-sm font-bold text-[#4B5563] font-mono tabular-nums">
                                 {Math.round(pl.totalFreight).toLocaleString("ru-RU")} <span className="text-[10px] font-semibold">€</span>
                               </span>
                             </div>
-                            <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100/60 flex flex-col">
-                              <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-0.5">Расходы</span>
-                              <span className="text-sm font-bold text-slate-700 font-mono tabular-nums">
+                            <div className="bg-[#F8F9FA] p-2 rounded-xl border border-[#E5E7EB] flex flex-col">
+                              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#9CA3AF] mb-0.5">Расходы</span>
+                              <span className="text-sm font-bold text-[#4B5563] font-mono tabular-nums">
                                 {Math.round(pl.totalExpenses).toLocaleString("ru-RU")} <span className="text-[10px] font-semibold">€</span>
                               </span>
                             </div>
-                            <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100/60 flex flex-col">
-                              <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-0.5">Пробег</span>
-                              <span className="text-sm font-bold text-slate-700 font-mono tabular-nums">
+                            <div className="bg-[#F8F9FA] p-2 rounded-xl border border-[#E5E7EB] flex flex-col">
+                              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#9CA3AF] mb-0.5">Пробег</span>
+                              <span className="text-sm font-bold text-[#4B5563] font-mono tabular-nums">
                                 {Math.round(pl.totalKm).toLocaleString("ru-RU")} <span className="text-[10px] font-semibold">км</span>
                               </span>
                             </div>
-                            <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100/60 flex flex-col">
-                              <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-0.5">Дней в пути</span>
-                              <span className="text-sm font-bold text-slate-700 font-mono tabular-nums">{days}</span>
+                            <div className="bg-[#F8F9FA] p-2 rounded-xl border border-[#E5E7EB] flex flex-col">
+                              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#9CA3AF] mb-0.5">Дней в пути</span>
+                              <span className="text-sm font-bold text-[#4B5563] font-mono tabular-nums">{days}</span>
                             </div>
                           </div>
                         </div>
                       );
                     })}
                     {potentialLoads.length === 0 && (
-                      <span className="text-xs text-slate-400 font-medium font-mono text-center block py-6">
+                      <span className="text-xs text-[#9CA3AF] font-medium font-mono text-center block py-6">
                         Нет сохраненных просчетов
                       </span>
                     )}
                   </div>
 
                   {potentialLoads.length < 10 && plEditingId === null && (
-                    <div className="w-full mt-auto py-2 px-3 bg-slate-100 text-slate-600 border border-slate-200 font-semibold text-[11px] rounded-xl text-center cursor-default font-sans">
+                    <div className="w-full mt-auto py-2 px-3 bg-[#F3F4F6] text-[#4B5563] border border-[#E5E7EB] font-semibold text-[11px] rounded-xl text-center cursor-default font-sans">
                       Можно создать еще {10 - potentialLoads.length}
                     </div>
                   )}
                   {plEditingId !== null && (
                     <button
-                      className="w-full mt-auto py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-xs rounded-xl transition cursor-pointer text-center"
+                      className="w-full mt-auto min-h-[44px] py-2 bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] hover:text-[#121316] font-semibold text-xs rounded-xl transition-colors cursor-pointer text-center"
                       onClick={() => {
                         setPlEditingId(null);
                         setPlName("");
@@ -2382,31 +2389,31 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 </div>
 
                 {/* Right side: Editor */}
-                <div className="bg-white rounded-2xl p-5 border border-slate-200/60 flex flex-col gap-5">
-                  <div className="flex items-center gap-4 border-b border-slate-100 pb-4">
+                <div className="bg-white rounded-2xl p-5 border border-[#E5E7EB] flex flex-col gap-5">
+                  <div className="flex items-center gap-4 border-b border-[#E5E7EB] pb-4">
                     <input
                       type="text"
                       placeholder="Название (напр: Груз на Москву)..."
                       value={plName}
                       onChange={(e) => setPlName(e.target.value)}
-                      className="flex-1 bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-xs font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all placeholder:text-slate-400"
+                      className="flex-1 bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors placeholder:text-[#9CA3AF]"
                     />
                     <button
                       onClick={savePotentialLoad}
-                      className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-sm transition tracking-wide min-w-[120px] cursor-pointer"
+                      className="inline-flex items-center justify-center gap-1.5 px-5 py-2 min-h-[44px] bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-on)] rounded-xl text-xs font-semibold shadow-sm transition-colors min-w-[120px] cursor-pointer"
                     >
                       {plEditingId ? "Обновить" : "Сохранить"}
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 border-b border-slate-100 pb-4">
+                  <div className="grid grid-cols-2 gap-4 border-b border-[#E5E7EB] pb-4">
                     <div>
-                      <label className="text-[10px] font-semibold uppercase tracking-wider text-blue-500 mb-1.5 block">Дата старта</label>
-                      <input type="date" value={plDateStart} onChange={(e) => setPlDateStart(e.target.value)} className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all min-h-[44px]" />
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent-ink)] mb-1.5 block">Дата старта</label>
+                      <input type="date" value={plDateStart} onChange={(e) => setPlDateStart(e.target.value)} className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors min-h-[44px]" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 block">Дата финиша</label>
-                      <input type="date" value={plDateEnd} onChange={(e) => setPlDateEnd(e.target.value)} className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 text-slate-800 rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all min-h-[44px]" />
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Дата финиша</label>
+                      <input type="date" value={plDateEnd} onChange={(e) => setPlDateEnd(e.target.value)} className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors min-h-[44px]" />
                     </div>
                   </div>
 
@@ -2414,21 +2421,21 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                   <div className="hidden lg:block overflow-x-auto pb-2">
                     <table className="w-full text-left border-collapse min-w-[600px]">
                       <thead>
-                        <tr className="border-b border-slate-100">
-                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Откуда</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Куда</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Км</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Доезд (км)</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Фрахт €</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Инфо ставка (Доп)</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Паром € (Доп)</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-slate-400 tracking-wider font-sans">Коэфф.</th>
+                        <tr className="border-b border-[#E5E7EB]">
+                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Откуда</th>
+                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Куда</th>
+                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Км</th>
+                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Доезд (км)</th>
+                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Фрахт €</th>
+                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Инфо ставка (Доп)</th>
+                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Паром € (Доп)</th>
+                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Коэфф.</th>
                           <th className="p-2 w-20"></th>
                         </tr>
                       </thead>
                       <tbody>
                         {plLegs.map((leg, i) => (
-                          <tr key={i} className="border-b border-slate-100/60 last:border-b-0">
+                          <tr key={i} className="border-b border-[#E5E7EB] last:border-b-0">
                             <td className="p-1">
                               <input
                                 type="text"
@@ -2441,7 +2448,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                 }}
                                 onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'from', isPl: true, rect}); }}
                                 onBlur={() => { checkLegDistance(i, true); }}
-                                className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all font-sans"
+                                className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors font-sans"
                               />
                             </td>
                             <td className="p-1">
@@ -2456,7 +2463,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                 }}
                                 onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'to', isPl: true, rect}); }}
                                 onBlur={() => { checkLegDistance(i, true); }}
-                                className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all font-sans"
+                                className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors font-sans"
                               />
                             </td>
                             <td className="p-1 relative">
@@ -2469,11 +2476,11 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                   nl[i].km = Number(e.target.value);
                                   setPlLegs(nl);
                                 }}
-                                className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-lg pl-2.5 pr-8 py-1.5 text-xs font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all tabular-nums font-mono"
+                                className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-lg pl-2.5 pr-8 py-1.5 text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors tabular-nums font-mono"
                               />
                               <button
                                 onClick={() => openMapRouteModal(i, leg.from, leg.to, true)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-500 transition cursor-pointer"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#9CA3AF] hover:text-[var(--accent-ink)] transition-colors cursor-pointer"
                               >
                                 <MapPin className="w-3.5 h-3.5" />
                               </button>
@@ -2488,7 +2495,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                   nl[i].emptyRunKm = Number(e.target.value);
                                   setPlLegs(nl);
                                 }}
-                                className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:bg-white focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all tabular-nums font-mono"
+                                className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors tabular-nums font-mono"
                               />
                             </td>
                             <td className="p-1">
@@ -2501,11 +2508,11 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                   nl[i].rate = Number(e.target.value);
                                   setPlLegs(nl);
                                 }}
-                                className="w-full bg-white hover:bg-slate-50/50 border border-slate-200 text-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 transition-all tabular-nums font-mono"
+                                className="w-full bg-white hover:bg-[#F8F9FA] border border-[#E5E7EB] text-[#4B5563] rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors tabular-nums font-mono"
                               />
                             </td>
                             <td className="p-1">
-                              <div className="flex bg-slate-50 hover:bg-slate-100/50 border border-slate-200 rounded-lg overflow-hidden focus-within:bg-white focus-within:border-slate-400 transition">
+                              <div className="flex bg-white border border-[#E5E7EB] rounded-xl overflow-hidden focus-within:border-[var(--accent)] transition-colors">
                                 <input type="text" value={leg.referenceRate || ""}
                                   onChange={(e) => {
                                     const nl = [...plLegs];
@@ -2524,7 +2531,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                     if (eur > 0) nl[i].rate = eur;
                                     setPlLegs(nl);
                                   }}
-                                  className="bg-transparent border-l border-slate-200 text-slate-500 text-[10px] font-semibold outline-none px-1 cursor-pointer"
+                                  className="bg-transparent border-l border-[#E5E7EB] text-[#6B7280] text-[10px] font-semibold outline-none px-1 cursor-pointer"
                                 >
                                   <option value=""></option>
                                   {currencies.map((c) => (
@@ -2540,7 +2547,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                   nl[i].ferry = Number(e.target.value);
                                   setPlLegs(nl);
                                 }}
-                                className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 transition"
+                                className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-lg px-2.5 py-1.5 text-xs font-medium font-mono tabular-nums outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                               />
                             </td>
                             <td className="p-1">
@@ -2550,7 +2557,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                   nl[i].coeff = Number(e.target.value);
                                   setPlLegs(nl);
                                 }}
-                                className="w-full bg-slate-50 hover:bg-slate-100/50 border border-slate-200 text-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-medium font-mono tabular-nums outline-none focus:bg-white focus:border-slate-400 transition"
+                                className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-lg px-2.5 py-1.5 text-xs font-medium font-mono tabular-nums outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                               />
                             </td>
                             <td className="p-1 w-20 text-right">
@@ -2568,7 +2575,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                     });
                                     setPlLegs(nl);
                                   }}
-                                  className="w-7 h-7 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center hover:bg-slate-200 transition cursor-pointer"
+                                  className="w-7 h-7 rounded-lg bg-[#F3F4F6] text-[#4B5563] flex items-center justify-center hover:bg-[#E5E7EB] transition-colors cursor-pointer"
                                 >
                                   <Plus className="w-3.5 h-3.5" />
                                 </button>
@@ -2580,7 +2587,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                       setPlLegs(nl);
                                     }
                                   }}
-                                  className="w-7 h-7 rounded-lg bg-rose-50 text-rose-500 flex items-center justify-center hover:bg-rose-100 transition cursor-pointer"
+                                  className="w-7 h-7 rounded-lg bg-rose-50 text-rose-500 flex items-center justify-center hover:bg-rose-100 transition-colors cursor-pointer"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -2595,9 +2602,9 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                   {/* Mobile: Cards for Legs */}
                   <div className="block lg:hidden space-y-3">
                     {plLegs.map((leg, i) => (
-                      <div key={i} className="bg-white border border-slate-200 rounded-xl p-3.5 flex flex-col gap-3 relative shadow-sm">
-                        <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                          <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">#{i + 1}</span>
+                      <div key={i} className="bg-white border border-[#E5E7EB] rounded-xl p-3.5 flex flex-col gap-3 relative shadow-sm">
+                        <div className="flex justify-between items-center pb-2 border-b border-[#E5E7EB]">
+                          <span className="text-xs font-bold text-[#6B7280] bg-[#F3F4F6] px-2 py-1 rounded-md">#{i + 1}</span>
                           <div className="flex gap-2">
                             <button
                               onClick={() => {
@@ -2605,7 +2612,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                 nl.splice(i + 1, 0, { from: "", to: "", km: 0, rate: 0, ferry: 0, coeff: directions[direction] || 0 });
                                 setPlLegs(nl);
                               }}
-                              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition cursor-pointer"
+                              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#4B5563] transition-colors cursor-pointer"
                             >
                               <Plus className="w-4 h-4" />
                             </button>
@@ -2618,7 +2625,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                                 }
                               }}
                               disabled={plLegs.length <= 1}
-                              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 transition disabled:opacity-30 cursor-pointer"
+                              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 transition-colors disabled:opacity-30 cursor-pointer"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -2626,28 +2633,28 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1">
-                            <span className="text-[10px] uppercase font-semibold text-slate-400">Откуда</span>
-                            <input type="text" autoComplete="off" value={leg.from} onChange={(e) => { const nl = [...plLegs]; nl[i].from = e.target.value; setPlLegs(nl); }} onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'from', isPl: true, rect}); }} onBlur={() => { checkLegDistance(i, true); }} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:bg-white" />
+                            <span className="text-[10px] uppercase font-semibold text-[#9CA3AF]">Откуда</span>
+                            <input type="text" autoComplete="off" value={leg.from} onChange={(e) => { const nl = [...plLegs]; nl[i].from = e.target.value; setPlLegs(nl); }} onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'from', isPl: true, rect}); }} onBlur={() => { checkLegDistance(i, true); }} className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors" />
                           </div>
                           <div className="flex flex-col gap-1">
-                            <span className="text-[10px] uppercase font-semibold text-slate-400">Куда</span>
-                            <input type="text" autoComplete="off" value={leg.to} onChange={(e) => { const nl = [...plLegs]; nl[i].to = e.target.value; setPlLegs(nl); }} onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'to', isPl: true, rect}); }} onBlur={() => { checkLegDistance(i, true); }} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:bg-white" />
+                            <span className="text-[10px] uppercase font-semibold text-[#9CA3AF]">Куда</span>
+                            <input type="text" autoComplete="off" value={leg.to} onChange={(e) => { const nl = [...plLegs]; nl[i].to = e.target.value; setPlLegs(nl); }} onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'to', isPl: true, rect}); }} onBlur={() => { checkLegDistance(i, true); }} className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors" />
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1 relative">
-                            <span className="text-[10px] uppercase font-semibold text-slate-400">Км</span>
-                            <input type="number" value={leg.km || ""} onChange={(e) => { const nl = [...plLegs]; nl[i].km = Number(e.target.value); setPlLegs(nl); }} onBlur={(e) => { const kmVal = Number(e.currentTarget.value); if (leg.from && leg.to && kmVal > 0 && !findDistance(leg.from, leg.to)) { setAddDistFrom(leg.from); setAddDistTo(leg.to); setAddDistKm(kmVal); setShowAddDistModal(true); } }} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium font-mono outline-none focus:bg-white" />
-                            <button onClick={() => openMapRouteModal(i, leg.from, leg.to, true)} className="absolute right-2 bottom-2 text-slate-400 hover:text-blue-500 transition"><MapPin className="w-3.5 h-3.5" /></button>
+                            <span className="text-[10px] uppercase font-semibold text-[#9CA3AF]">Км</span>
+                            <input type="number" value={leg.km || ""} onChange={(e) => { const nl = [...plLegs]; nl[i].km = Number(e.target.value); setPlLegs(nl); }} onBlur={(e) => { const kmVal = Number(e.currentTarget.value); if (leg.from && leg.to && kmVal > 0 && !findDistance(leg.from, leg.to)) { setAddDistFrom(leg.from); setAddDistTo(leg.to); setAddDistKm(kmVal); setShowAddDistModal(true); } }} className="w-full pl-3 pr-12 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium font-mono outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors" />
+                            <button onClick={() => openMapRouteModal(i, leg.from, leg.to, true)} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[44px] min-w-[44px] flex items-center justify-center text-[#9CA3AF] hover:text-[var(--accent-ink)] transition-colors"><MapPin className="w-3.5 h-3.5" /></button>
                           </div>
                           <div className="flex flex-col gap-1">
-                            <span className="text-[10px] uppercase font-semibold text-slate-400">Доезд (км)</span>
-                            <input type="number" value={leg.emptyRunKm || ""} onChange={(e) => { const nl = [...plLegs]; nl[i].emptyRunKm = Number(e.target.value); setPlLegs(nl); }} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium font-mono outline-none focus:bg-white" />
+                            <span className="text-[10px] uppercase font-semibold text-[#9CA3AF]">Доезд (км)</span>
+                            <input type="number" value={leg.emptyRunKm || ""} onChange={(e) => { const nl = [...plLegs]; nl[i].emptyRunKm = Number(e.target.value); setPlLegs(nl); }} className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium font-mono outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors" />
                           </div>
                         </div>
                         <div className="flex flex-col gap-1">
-                          <span className="text-[10px] uppercase font-semibold text-slate-400">Ставка €</span>
-                          <input type="number" value={leg.rate || ""} onChange={(e) => { const nl = [...plLegs]; nl[i].rate = Number(e.target.value); setPlLegs(nl); }} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold font-mono text-slate-700 outline-none focus:bg-white" />
+                          <span className="text-[10px] uppercase font-semibold text-[#9CA3AF]">Ставка €</span>
+                          <input type="number" value={leg.rate || ""} onChange={(e) => { const nl = [...plLegs]; nl[i].rate = Number(e.target.value); setPlLegs(nl); }} className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold font-mono text-[#4B5563] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors" />
                         </div>
                       </div>
                     ))}
@@ -2657,58 +2664,58 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             ) : null}
           </div>
           {/* UNIFIED STICKY FOOTER: stats + actions, always visible */}
-          <div className="shrink-0 bg-white border-t border-slate-200/60 shadow-[0_-4px_20px_rgba(0,0,0,0.04)] z-20 md:sticky md:bottom-0">
+          <div className="shrink-0 bg-white border-t border-[#E5E7EB] z-20 md:sticky md:bottom-0">
             {/* Light stats block — single layer, app style */}
-            <div className="px-4 sm:px-6 lg:px-8 py-4 bg-slate-50/40">
+            <div className="px-4 sm:px-6 lg:px-8 py-4 bg-[#F8F9FA]">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                 {/* Прибыль общая — green */}
-                <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-emerald-400">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Прибыль общая</span>
+                <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280]">Прибыль общая</span>
                   <div className="flex items-baseline gap-1">
                     <span className={`text-lg font-bold font-mono tabular-nums ${Math.round(modalTab === "potential" ? calculatePlTotals().profit : profit) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(modalTab === "potential" ? calculatePlTotals().profit : profit).toLocaleString("ru-RU")}</span>
-                    <span className="text-sm font-semibold text-emerald-500">€</span>
+                    <span className="text-sm font-semibold text-[#9CA3AF]">€</span>
                   </div>
                 </div>
                 {/* Прибыль в день — blue */}
-                <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-blue-400">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Прибыль в день</span>
+                <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280]">Прибыль в день</span>
                   <div className="flex items-baseline gap-1">
                     <span className={`text-lg font-bold font-mono tabular-nums ${Math.round(modalTab === "potential" ? (calculatePlTotals().days > 0 ? Math.round(calculatePlTotals().profit / calculatePlTotals().days) : 0) : rawProfitPerDay) < 100 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(rawProfitPerDay).toLocaleString("ru-RU")}</span>
-                    <span className="text-sm font-semibold text-blue-500">€</span>
+                    <span className="text-sm font-semibold text-[#9CA3AF]">€</span>
                   </div>
                 </div>
                 {/* Количество дней — orange */}
-                <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-orange-400">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Количество дней</span>
+                <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280]">Количество дней</span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{modalTab === "potential" ? (calculatePlTotals().days > 0 ? calculatePlTotals().days : 1) : (daysPlan || daysFact || 0)}</span>
-                    <span className="text-sm font-semibold text-orange-500">дн.</span>
+                    <span className="text-lg font-bold text-[#121316] font-mono tabular-nums">{modalTab === "potential" ? (calculatePlTotals().days > 0 ? calculatePlTotals().days : 1) : (daysPlan || daysFact || 0)}</span>
+                    <span className="text-sm font-semibold text-[#9CA3AF]">дн.</span>
                   </div>
                 </div>
                 {/* План км */}
-                <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-slate-300">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{factKm && factKm > 0 ? "Километраж" : "План км"}</span>
+                <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280]">{factKm && factKm > 0 ? "Километраж" : "План км"}</span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalKm : (factKm && factKm > 0 ? factKm : totalKm)).toLocaleString("ru-RU")}</span>
-                    <span className="text-sm font-semibold text-slate-500">км</span>
-                    {factKm && factKm > 0 && <span className="text-[9px] uppercase tracking-wider text-emerald-500 ml-1.5 font-semibold">Факт</span>}
+                    <span className="text-lg font-bold text-[#121316] font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalKm : (factKm && factKm > 0 ? factKm : totalKm)).toLocaleString("ru-RU")}</span>
+                    <span className="text-sm font-semibold text-[#9CA3AF]">км</span>
+                    {factKm && factKm > 0 && <span className="text-[10px] uppercase tracking-wider text-emerald-600 ml-1.5 font-semibold">Факт</span>}
                   </div>
                 </div>
                 {/* Фрахт — blue */}
-                <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-blue-400">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Фрахт</span>
+                <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280]">Фрахт</span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalFreight : totalFreight).toLocaleString("ru-RU")}</span>
-                    <span className="text-sm font-semibold text-blue-500">€</span>
+                    <span className="text-lg font-bold text-[#121316] font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalFreight : totalFreight).toLocaleString("ru-RU")}</span>
+                    <span className="text-sm font-semibold text-[#9CA3AF]">€</span>
                   </div>
                 </div>
-                {/* Расходы — orange */}
-                <div className="bg-white rounded-2xl border border-slate-200/60 px-4 py-3 flex flex-col gap-0.5 border-l-4 border-orange-400">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{factKm && factKm > 0 ? "Расходы" : "Расходы (План)"}</span>
+                {/* Расходы */}
+                <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280]">{factKm && factKm > 0 ? "Расходы" : "Расходы (План)"}</span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-slate-800 font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalExpenses : totalExpenses).toLocaleString("ru-RU")}</span>
-                    <span className="text-sm font-semibold text-orange-500">€</span>
-                    {factKm && factKm > 0 && <span className="text-[9px] uppercase tracking-wider text-emerald-500 ml-1.5 font-semibold">Факт</span>}
+                    <span className="text-lg font-bold text-[#121316] font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalExpenses : totalExpenses).toLocaleString("ru-RU")}</span>
+                    <span className="text-sm font-semibold text-[#9CA3AF]">€</span>
+                    {factKm && factKm > 0 && <span className="text-[10px] uppercase tracking-wider text-emerald-600 ml-1.5 font-semibold">Факт</span>}
                   </div>
                 </div>
               </div>
@@ -2720,7 +2727,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 {isEditing && currentEditingTrip && (
                   <button
                     onClick={() => deleteTrip(editingTripId!, true)}
-                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-3 md:px-4 py-2.5 rounded-xl text-sm font-bold uppercase tracking-tight transition flex items-center gap-2"
+                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-3 md:px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-bold uppercase tracking-tight transition-colors flex items-center gap-2 cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4" /> Удалить
                   </button>
@@ -2734,14 +2741,14 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         pdService.restoreTrip(editingTripId, user.name, user.role);
                         setIsModalOpen(false);
                       }}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-bold text-sm uppercase tracking-tight transition flex-1 md:flex-none"
+                      className="bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] hover:text-[#121316] px-4 py-2.5 min-h-[44px] rounded-xl font-bold text-sm uppercase tracking-tight transition-colors flex-1 md:flex-none cursor-pointer"
                     >
                       Из архива
                     </button>
                   ) : (
                     <button
                       onClick={() => finishTripToArchive(currentEditingTrip, true)}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-bold text-sm uppercase tracking-tight transition flex items-center justify-center gap-2 flex-1 md:flex-none"
+                      className="bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] hover:text-[#121316] px-4 py-2.5 min-h-[44px] rounded-xl font-bold text-sm uppercase tracking-tight transition-colors flex items-center justify-center gap-2 flex-1 md:flex-none cursor-pointer"
                     >
                       <Archive className="w-4 h-4 hidden md:block" /> В архив
                     </button>
@@ -2750,7 +2757,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 <button
                   onClick={saveTrip}
                   disabled={isSubmitting}
-                  className={`${isSubmitting ? "bg-blue-300 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-500"} text-white px-6 py-2.5 rounded-xl font-bold text-sm uppercase tracking-tight transition flex items-center justify-center gap-2 shadow-sm flex-1 md:flex-none`}
+                  className={`${isSubmitting ? "bg-[var(--accent)] opacity-50 cursor-not-allowed" : "bg-[var(--accent)] hover:bg-[var(--accent-hover)] cursor-pointer"} text-[var(--accent-on)] px-6 py-2.5 min-h-[44px] rounded-xl font-bold text-sm uppercase tracking-tight transition-colors flex items-center justify-center gap-2 shadow-sm flex-1 md:flex-none`}
                 >
                   <Save className="w-4 h-4 hidden md:block" /> {isSubmitting ? "Сохранение..." : "Сохранить"}
                 </button>
@@ -3061,13 +3068,13 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
         {/* Table Headers */}
         <div className="hidden lg:flex px-6 pb-3 border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase self-start w-full cursor-pointer select-none tracking-normal">
           <div
-            className="min-w-[200px] hover:text-[#121316] transition flex items-center gap-1"
+            className="min-w-[200px] hover:text-[#121316] transition-colors flex items-center gap-1"
             onClick={() => handleSort("carNumber")}
           >
             Автомобиль {renderSortIndicator("carNumber")}
           </div>
           <div
-            className="min-w-[140px] hover:text-[#121316] transition flex items-center gap-1"
+            className="min-w-[140px] hover:text-[#121316] transition-colors flex items-center gap-1"
             onClick={() => handleSort("dateStart")}
           >
             Даты {renderSortIndicator("dateStart")}
@@ -3075,32 +3082,32 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
           <div className="flex-1 min-w-[220px]">Маршрут</div>
           <div className="min-w-[480px] flex gap-4 pl-6 justify-end">
             <span
-              className="w-20 hover:text-[#121316] transition flex items-center gap-1 justify-end"
+              className="w-20 hover:text-[#121316] transition-colors flex items-center gap-1 justify-end"
               onClick={() => handleSort("km")}
             >
               Км {renderSortIndicator("km")}
             </span>
             <span
-              className="w-20 hover:text-[#121316] transition flex items-center gap-1 justify-end"
+              className="w-20 hover:text-[#121316] transition-colors flex items-center gap-1 justify-end"
               onClick={() => handleSort("freight")}
             >
               Фрахт {renderSortIndicator("freight")}
             </span>
             <span
-              className="w-20 hover:text-[#121316] transition flex items-center gap-1 justify-end"
+              className="w-20 hover:text-[#121316] transition-colors flex items-center gap-1 justify-end"
               onClick={() => handleSort("expenses")}
             >
               Расходы {renderSortIndicator("expenses")}
             </span>
             <span
-              className="w-24 hover:text-[#121316] transition flex items-center gap-1 justify-end"
+              className="w-24 hover:text-[#121316] transition-colors flex items-center gap-1 justify-end"
               onClick={() => handleSort("profit")}
             >
               Прибыль {renderSortIndicator("profit")}
             </span>
             <span className="w-12 text-right">Дни</span>
             <span
-              className="w-20 text-right hover:text-[#121316] transition flex items-center gap-1 justify-end"
+              className="w-20 text-right hover:text-[#121316] transition-colors flex items-center gap-1 justify-end"
               onClick={() => handleSort("profitDay")}
             >
               В день {renderSortIndicator("profitDay")}
@@ -3203,15 +3210,15 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 mt-1">
-                      <button onClick={() => loadTripToForm(trip)} className="p-1.5 text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] rounded-md transition cursor-pointer" title="Редактировать">
+                      <button onClick={() => loadTripToForm(trip)} className="p-1.5 text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] rounded-md transition-colors cursor-pointer" title="Редактировать">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                       {!archived ? (
-                        <button onClick={(e) => { e.stopPropagation(); finishTripToArchive(trip); }} className="p-1.5 text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] rounded-md transition cursor-pointer" title="В архив">
+                        <button onClick={(e) => { e.stopPropagation(); finishTripToArchive(trip); }} className="p-1.5 text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] rounded-md transition-colors cursor-pointer" title="В архив">
                           <Archive className="w-3.5 h-3.5" />
                         </button>
                       ) : user.role === "root_admin" ? (
-                        <button onClick={(e) => { e.stopPropagation(); deleteTrip(trip.id); }} className="p-1.5 text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 rounded-md transition cursor-pointer" title="Удалить">
+                        <button onClick={(e) => { e.stopPropagation(); deleteTrip(trip.id); }} className="p-1.5 text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer" title="Удалить">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       ) : null}
@@ -3289,15 +3296,15 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                       <span className={`text-sm font-bold font-mono tabular-nums ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>
                         {Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}€
                       </span>
-                      <button onClick={() => loadTripToForm(trip)} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#6B7280] hover:text-[#121316] transition cursor-pointer shrink-0" title="Редактировать">
+                      <button onClick={() => loadTripToForm(trip)} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#6B7280] hover:text-[#121316] transition-colors cursor-pointer shrink-0" title="Редактировать">
                         <Pencil className="w-4 h-4" />
                       </button>
                       {!archived ? (
-                        <button onClick={(e) => { e.stopPropagation(); finishTripToArchive(trip); }} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#6B7280] hover:text-[#121316] transition cursor-pointer shrink-0" title="В архив">
+                        <button onClick={(e) => { e.stopPropagation(); finishTripToArchive(trip); }} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#6B7280] hover:text-[#121316] transition-colors cursor-pointer shrink-0" title="В архив">
                           <Archive className="w-4 h-4" />
                         </button>
                       ) : user.role === "root_admin" ? (
-                        <button onClick={(e) => { e.stopPropagation(); deleteTrip(trip.id); }} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-700 transition cursor-pointer shrink-0" title="Удалить">
+                        <button onClick={(e) => { e.stopPropagation(); deleteTrip(trip.id); }} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-700 transition-colors cursor-pointer shrink-0" title="Удалить">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       ) : null}
@@ -3320,7 +3327,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                       </span>
                     )}
                     {(trip as any).updatedBy && (
-                      <span className="inline-flex items-center gap-1 bg-[#F3F4F6] border border-[#E5E7EB] px-1.5 py-0.5 rounded-lg font-semibold text-[#6B7280] shadow-sm text-[9px] ml-auto">
+                      <span className="inline-flex items-center gap-1 bg-[#F3F4F6] border border-[#E5E7EB] px-1.5 py-0.5 rounded-lg font-semibold text-[#6B7280] shadow-sm text-[10px] ml-auto">
                         ✎ {(trip as any).updatedBy}
                         {(trip as any).updatedAt && (
                           <span className="font-medium text-[#9CA3AF] font-mono">· {(trip as any).updatedAt}</span>
@@ -3333,27 +3340,27 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 {/* Metrics Grid for BOTH — shown below mobile block, hidden on desktop */}
                 <div className="grid grid-cols-3 gap-2 w-full lg:hidden">
                   <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
-                    <span className="text-[9px] font-medium text-[#9CA3AF] uppercase tracking-wider">Км</span>
+                    <span className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-wider">Км</span>
                     <span className="text-xs font-semibold text-[#4B5563] font-mono tabular-nums">{Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU")}</span>
                   </div>
                   <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
-                    <span className="text-[9px] font-medium text-[#9CA3AF] uppercase tracking-wider">Фрахт</span>
+                    <span className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-wider">Фрахт</span>
                     <span className="text-xs font-semibold text-[#4B5563] font-mono tabular-nums">{Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}</span>
                   </div>
                   <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
-                    <span className="text-[9px] font-medium text-[#9CA3AF] uppercase tracking-wider">Расходы</span>
+                    <span className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-wider">Расходы</span>
                     <span className="text-xs font-semibold text-rose-600/90 font-mono tabular-nums">{Math.round(trip.totalExpenses !== undefined ? trip.totalExpenses : (trip.totalFreight - (trip.profit || 0))).toLocaleString("ru-RU")}</span>
                   </div>
                   <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
-                    <span className="text-[9px] font-medium text-[#9CA3AF] uppercase tracking-wider">Прибыль</span>
+                    <span className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-wider">Прибыль</span>
                     <span className={`text-xs font-bold font-mono tabular-nums ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}</span>
                   </div>
                   <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
-                    <span className="text-[9px] font-medium text-[#9CA3AF] uppercase tracking-wider">Дни</span>
+                    <span className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-wider">Дни</span>
                     <span className="text-xs font-semibold font-mono text-[#6B7280] tabular-nums">{trip.days || "—"}</span>
                   </div>
                   <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
-                    <span className="text-[9px] font-medium text-[#9CA3AF] uppercase tracking-wider">В день</span>
+                    <span className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-wider">В день</span>
                     <span className={`text-xs font-semibold font-mono tabular-nums ${Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)) < 100 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)).toLocaleString("ru-RU")}</span>
                   </div>
                 </div>
@@ -3409,7 +3416,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                   <div className="flex items-center gap-4 text-[10px] text-[#9CA3AF] font-sans">
                     <div className="flex flex-col text-right">
                       <span className="font-semibold text-[#121316]">{log.user}</span>
-                      <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wider font-mono">{log.role}</span>
+                      <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wider font-mono">{log.role}</span>
                     </div>
                     <div className="text-right whitespace-nowrap font-mono text-[#6B7280]">
                       {new Date(log.date).toLocaleString("ru-RU", {
@@ -3442,67 +3449,60 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
   };
 
   const announceModal = showAnnounce ? (
-    <div data-scroll-lock="modal" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={dismissAnnounce}>
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200/60 max-w-lg w-full mx-4 p-6 md:p-8 relative" onClick={e => e.stopPropagation()}>
-        <button onClick={dismissAnnounce} className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 transition-colors">
-          <X size={20} />
-        </button>
-
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center">
-            <Calculator className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Потенциальные грузы</h2>
-            <p className="text-[11px] text-slate-400 font-medium">Новая возможность в Плане дохода</p>
-          </div>
-        </div>
-
-        <div className="space-y-4 text-sm text-slate-600 leading-relaxed">
-          <p>
-            <strong className="text-slate-800">Теперь вы можете сохранять потенциальные грузы</strong> прямо в Плане дохода, чтобы просчитывать их рентабельность и сравнивать с текущими рейсами.
-          </p>
-
-          <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 space-y-3">
-            <div className="flex items-start gap-2.5">
-              <span className="w-5 h-5 rounded-lg bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
-              <div>
-                <span className="font-semibold text-slate-800">Добавьте груз</span>
-                <p className="text-[12px] text-slate-500">В модалке редактирования рейса переключитесь на вкладку «Потенц. грузы» и нажмите «+ Добавить».</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-2.5">
-              <span className="w-5 h-5 rounded-lg bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
-              <div>
-                <span className="font-semibold text-slate-800">Заполните маршрут</span>
-                <p className="text-[12px] text-slate-500">Укажите плечи (откуда→куда), километраж, фрахт — система сама посчитает прибыль, расходы и рентабельность.</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-2.5">
-              <span className="w-5 h-5 rounded-lg bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
-              <div>
-                <span className="font-semibold text-slate-800">Примените к рейсу</span>
-                <p className="text-[12px] text-slate-500">Нажмите «Вставить в форму» — маршрут и расчёты скопируются в основную форму рейса.</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="border-t border-slate-100 pt-3 mt-3">
-            <p className="text-[12px] text-slate-400">
-              Можно сохранить до <strong className="text-slate-600">10 потенциальных грузов</strong> на один рейс. 
-              Данные хранятся в вашем браузере и не теряются при обновлении страницы.
-            </p>
-          </div>
-        </div>
-
+    <ModalShell
+      isOpen={showAnnounce}
+      onClose={dismissAnnounce}
+      title="Потенциальные грузы"
+      subtitle="Новая возможность в Плане дохода"
+      icon={<Calculator className="w-4 h-4" aria-hidden="true" />}
+      iconTone="accent"
+      ariaLabel="Потенциальные грузы"
+      footer={
         <button
           onClick={dismissAnnounce}
-          className="mt-6 w-full bg-slate-900 text-white text-sm font-bold py-3.5 px-5 rounded-xl hover:bg-slate-800 transition-all active:scale-[0.98]"
+          className={`${UI.buttonPrimary} w-full`}
         >
           Понятно, спасибо!
         </button>
+      }
+    >
+      <div className="space-y-4 text-sm text-[#4B5563] leading-relaxed">
+        <p>
+          <strong className="text-[#121316]">Теперь вы можете сохранять потенциальные грузы</strong> прямо в Плане дохода, чтобы просчитывать их рентабельность и сравнивать с текущими рейсами.
+        </p>
+
+        <div className="bg-[#F8F9FA] rounded-xl p-4 border border-[#E5E7EB] space-y-3">
+          <div className="flex items-start gap-2.5">
+            <span className="w-5 h-5 rounded-lg bg-[#121316] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+            <div>
+              <span className="font-semibold text-[#121316]">Добавьте груз</span>
+              <p className="text-[12px] text-[#6B7280]">В модалке редактирования рейса переключитесь на вкладку «Потенц. грузы» и нажмите «+ Добавить».</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-2.5">
+            <span className="w-5 h-5 rounded-lg bg-[#121316] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+            <div>
+              <span className="font-semibold text-[#121316]">Заполните маршрут</span>
+              <p className="text-[12px] text-[#6B7280]">Укажите плечи (откуда→куда), километраж, фрахт — система сама посчитает прибыль, расходы и рентабельность.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-2.5">
+            <span className="w-5 h-5 rounded-lg bg-[#121316] text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
+            <div>
+              <span className="font-semibold text-[#121316]">Примените к рейсу</span>
+              <p className="text-[12px] text-[#6B7280]">Нажмите «Вставить в форму» — маршрут и расчёты скопируются в основную форму рейса.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-[#E5E7EB] pt-3 mt-3">
+          <p className="text-[12px] text-[#9CA3AF]">
+            Можно сохранить до <strong className="text-[#4B5563]">10 потенциальных грузов</strong> на один рейс.
+            Данные хранятся в вашем браузере и не теряются при обновлении страницы.
+          </p>
+        </div>
       </div>
-    </div>
+    </ModalShell>
   ) : null;
 
   return (
@@ -3771,7 +3771,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
       {cityDropdown?.rect && (
         <div
           ref={cityDropdownRef}
-          className="fixed z-[200] bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto"
+          className="fixed z-[200] bg-white border border-[#E5E7EB] rounded-xl shadow-sm max-h-40 overflow-y-auto"
           style={{
             top: cityDropdown.rect.bottom + 4 + 'px',
             left: cityDropdown.rect.left + 'px',
@@ -3791,7 +3791,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
           }).slice(0, 30).map(c => (
             <div
               key={c}
-              className="px-3 py-1.5 text-xs cursor-pointer hover:bg-slate-100 text-slate-700 font-medium truncate"
+              className="px-3 py-2 text-xs cursor-pointer hover:bg-[#F3F4F6] text-[#4B5563] font-medium truncate"
               onMouseDown={(e) => {
                 e.preventDefault();
                 if (cityDropdown.isPl) {
@@ -3813,22 +3813,37 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
       {/* Add Distance to DB Modal */}
       {showAddDistModal && (
-        <div data-scroll-lock="modal" className="fixed inset-0 z-[100] bg-slate-900/60 flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowAddDistModal(false)}>
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl w-full max-w-md p-6 space-y-4 my-4" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-base font-bold text-slate-900">Добавить маршрут в базу</h2>
-            <p className="text-xs text-slate-500">Маршрут «{addDistFrom} → {addDistTo}» не найден в базе расстояний. Добавить?</p>
+        <ModalShell
+          isOpen={showAddDistModal}
+          onClose={() => setShowAddDistModal(false)}
+          title="Добавить маршрут в базу"
+          subtitle={`Маршрут «${addDistFrom} → ${addDistTo}» не найден в базе расстояний. Добавить?`}
+          icon={<MapPin className="w-4 h-4" aria-hidden="true" />}
+          iconTone="graphite"
+          ariaLabel="Добавить маршрут в базу"
+          maxWidth="max-w-md"
+          footer={
+            <>
+              <button onClick={() => setShowAddDistModal(false)} className={UI.buttonGhost}>Отмена</button>
+              <button onClick={() => { const [a, b] = [addDistFrom.trim(), addDistTo.trim()].sort((x, y) => x.localeCompare(y)); const id = 'dist_' + Date.now().toString(); const checkpoints = addDistCheckpoints.split(',').filter(Boolean).map(s => s.trim()); dbService.saveDistance({ id, from: a, to: b, distance: addDistKm || 0, countryFrom: addDistCountryFrom, countryTo: addDistCountryTo, checkpoints: checkpoints.length > 0 ? checkpoints : undefined, }, user.name, user.role); setShowAddDistModal(false); addToast('Маршрут добавлен в базу расстояний', 'success'); }} className={UI.buttonPrimary}>
+                <Plus className="w-3.5 h-3.5" aria-hidden="true" /> Добавить
+              </button>
+            </>
+          }
+        >
+          <div className="flex flex-col gap-4">
             <div className="bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5 text-xs text-amber-800 font-medium">
               <strong>Самостоятельный расчёт:</strong> Вносите расстояния, которые вы считаете/знаете сами (карты, опыт), а не только из путевых листов водителей. Это общая база для всех.
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Город A</label>
+                <label className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wider">Город A</label>
                 <input type="text" value={addDistFrom} onChange={(e) => setAddDistFrom(e.target.value)}
-                  className="w-full mt-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:border-slate-400 bg-slate-50 transition" />
+                  className={`${UI.input} mt-1`} />
                 <div className="mt-1">
                   <select value={addDistCountryFrom} onChange={(e) => setAddDistCountryFrom(e.target.value)}
-                    className="w-full px-2 py-1.5 text-[10px] font-semibold rounded-lg border border-slate-200 outline-none focus:border-slate-400 bg-white transition cursor-pointer text-slate-700">
+                    className="w-full px-2 py-1.5 text-[10px] font-semibold rounded-lg border border-[#E5E7EB] outline-none focus:border-[var(--accent)] bg-white transition-colors cursor-pointer text-[#4B5563]">
                     <option value="">Страна A</option>
                     {['BY','RUS','KZ','UZ','TJ','KG','MN','CN','TR','IR','GE','AM','AZ'].map(c => (
                       <option key={c} value={c}>{c === 'BY' ? '🇧🇾' : c === 'RUS' ? '🇷🇺' : c === 'KZ' ? '🇰🇿' : c === 'UZ' ? '🇺🇿' : c === 'TJ' ? '🇹🇯' : c === 'KG' ? '🇰🇬' : c === 'MN' ? '🇲🇳' : c === 'CN' ? '🇨🇳' : c === 'TR' ? '🇹🇷' : c === 'IR' ? '🇮🇷' : c === 'GE' ? '🇬🇪' : c === 'AM' ? '🇦🇲' : c === 'AZ' ? '🇦🇿' : ''} {c}</option>
@@ -3837,12 +3852,12 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 </div>
               </div>
               <div>
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Город B</label>
+                <label className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wider">Город B</label>
                 <input type="text" value={addDistTo} onChange={(e) => setAddDistTo(e.target.value)}
-                  className="w-full mt-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:border-slate-400 bg-slate-50 transition" />
+                  className={`${UI.input} mt-1`} />
                 <div className="mt-1">
                   <select value={addDistCountryTo} onChange={(e) => setAddDistCountryTo(e.target.value)}
-                    className="w-full px-2 py-1.5 text-[10px] font-semibold rounded-lg border border-slate-200 outline-none focus:border-slate-400 bg-white transition cursor-pointer text-slate-700">
+                    className="w-full px-2 py-1.5 text-[10px] font-semibold rounded-lg border border-[#E5E7EB] outline-none focus:border-[var(--accent)] bg-white transition-colors cursor-pointer text-[#4B5563]">
                     <option value="">Страна B</option>
                     {['BY','RUS','KZ','UZ','TJ','KG','MN','CN','TR','IR','GE','AM','AZ'].map(c => (
                       <option key={c} value={c}>{c === 'BY' ? '🇧🇾' : c === 'RUS' ? '🇷🇺' : c === 'KZ' ? '🇰🇿' : c === 'UZ' ? '🇺🇿' : c === 'TJ' ? '🇹🇯' : c === 'KG' ? '🇰🇬' : c === 'MN' ? '🇲🇳' : c === 'CN' ? '🇨🇳' : c === 'TR' ? '🇹🇷' : c === 'IR' ? '🇮🇷' : c === 'GE' ? '🇬🇪' : c === 'AM' ? '🇦🇲' : c === 'AZ' ? '🇦🇿' : ''} {c}</option>
@@ -3853,21 +3868,21 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             </div>
 
             <div>
-              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Расстояние (км)</label>
+              <label className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wider">Расстояние (км)</label>
               <input type="number" min="1" value={addDistKm || ''} onChange={(e) => setAddDistKm(parseFloat(e.target.value) || 0)}
                 placeholder="0"
-                className="w-full mt-1 px-3 py-2.5 text-sm rounded-xl border border-slate-200 outline-none focus:border-slate-400 bg-white transition" />
+                className={`${UI.input} mt-1`} />
             </div>
 
             <div>
-              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                <MapPin className="w-3 h-3" /> Погранпереходы (через запятую)
+              <label className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wider flex items-center gap-1">
+                <MapPin className="w-3 h-3" aria-hidden="true" /> Погранпереходы (через запятую)
               </label>
               <div className="flex flex-wrap gap-1 mt-1 mb-1.5">
                 {addDistCheckpoints.split(',').filter(Boolean).map((cp, i) => (
-                  <span key={i} className="px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-700 rounded-lg flex items-center gap-1">
+                  <span key={i} className="px-2 py-0.5 text-[10px] font-semibold bg-[#F3F4F6] text-[#4B5563] border border-[#E5E7EB] rounded-lg flex items-center gap-1">
                     {cp.trim()}
-                    <button type="button" onClick={() => { const list = addDistCheckpoints.split(',').filter(Boolean); list.splice(i, 1); setAddDistCheckpoints(list.join(', ')); }} className="text-slate-400 hover:text-rose-500 cursor-pointer">×</button>
+                    <button type="button" onClick={() => { const list = addDistCheckpoints.split(',').filter(Boolean); list.splice(i, 1); setAddDistCheckpoints(list.join(', ')); }} className="text-[#9CA3AF] hover:text-rose-500 cursor-pointer p-1 -m-1" aria-label="Удалить погранпереход">×</button>
                   </span>
                 ))}
               </div>
@@ -3888,22 +3903,15 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     }
                   }}
                   placeholder="КПП..."
-                  className="flex-1 px-3 py-2 text-sm rounded-xl border border-slate-200 outline-none focus:border-slate-400 bg-white transition" />
-                <button type="button" onClick={() => { const val = addDistCpInput.trim(); if (val) { const existing = addDistCheckpoints.split(',').filter(Boolean).map(s => s.trim()); if (!existing.includes(val)) { setAddDistCheckpoints([...existing, val].join(', ')); setAddDistCpInput(''); } } }} className="px-3 py-2 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition cursor-pointer">+</button>
+                  className={`${UI.input} flex-1`} />
+                <button type="button" onClick={() => { const val = addDistCpInput.trim(); if (val) { const existing = addDistCheckpoints.split(',').filter(Boolean).map(s => s.trim()); if (!existing.includes(val)) { setAddDistCheckpoints([...existing, val].join(', ')); setAddDistCpInput(''); } } }} className={`${UI.buttonGhost} shrink-0 min-w-[44px] px-3`}>+</button>
               </div>
               <datalist id="add-dist-cp-list">
                 {allCheckpoints.filter((c: any) => { const existing = addDistCheckpoints.split(',').filter(Boolean).map(s => s.trim().toLowerCase()); return !existing.includes(c.name.toLowerCase()); }).map((c: any) => <option key={c.id} value={c.name} />)}
               </datalist>
             </div>
-
-            <div className="flex justify-end gap-2 pt-1">
-              <button onClick={() => setShowAddDistModal(false)} className="px-4 py-2 text-xs font-medium text-slate-500 rounded-xl hover:bg-slate-100 transition cursor-pointer">Отмена</button>
-              <button onClick={() => { const [a, b] = [addDistFrom.trim(), addDistTo.trim()].sort((x, y) => x.localeCompare(y)); const id = 'dist_' + Date.now().toString(); const checkpoints = addDistCheckpoints.split(',').filter(Boolean).map(s => s.trim()); dbService.saveDistance({ id, from: a, to: b, distance: addDistKm || 0, countryFrom: addDistCountryFrom, countryTo: addDistCountryTo, checkpoints: checkpoints.length > 0 ? checkpoints : undefined, }, user.name, user.role); setShowAddDistModal(false); addToast('Маршрут добавлен в базу расстояний', 'success'); }} className="inline-flex items-center gap-1.5 bg-slate-900 text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-slate-800 shadow-sm transition cursor-pointer">
-                <Plus className="w-3.5 h-3.5" /> Добавить
-              </button>
-            </div>
           </div>
-        </div>
+        </ModalShell>
       )}
     </div>
   );
