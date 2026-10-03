@@ -1,10 +1,12 @@
 import  { useState } from 'react';
+import { useDialog } from '../DialogProvider';
 import { Database } from 'lucide-react';
 import { firebaseConfig as activeConfig, getCustomFirebaseConfig } from '../../firebaseConfig';
 import { UI } from '../../ui/kit';
 import { SectionHeader } from '../../ui/components';
 
 export default function AdminFirebaseConfigBlock() {
+  const { showConfirm } = useDialog();
   const [config, setConfig] = useState(() => {
      const stored = getCustomFirebaseConfig();
      if (stored) {
@@ -18,7 +20,12 @@ export default function AdminFirebaseConfigBlock() {
      window.location.reload();
   };
   
-  const handleReset = () => {
+  const handleReset = async () => {
+     const ok = await showConfirm(
+       'Вернуть общие настройки Firebase для этого браузера? Локальные ключи будут удалены, страница перезагрузится.',
+       'Сбросить настройки Firebase?',
+     );
+     if (!ok) return;
      localStorage.removeItem('ratipa_custom_firebase_config');
      window.location.reload();
   };

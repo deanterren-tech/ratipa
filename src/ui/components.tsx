@@ -59,6 +59,23 @@ export function ModuleShell({
                     role="tab"
                     aria-selected={isActive}
                     onClick={() => onTabChange?.(t.key)}
+                    onKeyDown={(e) => {
+                      // Стрелки / Home / End — как в стандартном списке вкладок,
+                      // чтобы разделом можно было пользоваться без мыши.
+                      const keys = tabs.map((x) => x.key);
+                      const at = keys.indexOf(t.key);
+                      let next = -1;
+                      if (e.key === 'ArrowRight') next = (at + 1) % keys.length;
+                      else if (e.key === 'ArrowLeft') next = (at - 1 + keys.length) % keys.length;
+                      else if (e.key === 'Home') next = 0;
+                      else if (e.key === 'End') next = keys.length - 1;
+                      if (next < 0) return;
+                      e.preventDefault();
+                      onTabChange?.(keys[next]);
+                      const nav = e.currentTarget.parentElement;
+                      const buttons = nav ? nav.querySelectorAll<HTMLButtonElement>('[role="tab"]') : null;
+                      buttons?.[next]?.focus();
+                    }}
                     className={`${UI.tab} ${isActive ? UI.tabActive : UI.tabIdle}`}
                   >
                     {t.label}

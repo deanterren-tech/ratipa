@@ -4,6 +4,8 @@ import {useState, useEffect, useRef} from 'react'
 import {UserProfile, AppSettings} from '../../types'
 import { dbService, directoryService } from '../../api';
 import {
+  ChevronDown,
+  ChevronUp,
   Lock,
   LogOut,
   ShieldAlert,
@@ -33,7 +35,20 @@ interface AdminModuleProps {
   user: UserProfile;
 }
 
-type AdminTab = 'users' | 'errors' | 'system' | 'welcome' | 'links' | 'agent' | 'broadcast';
+type AdminTab = 'users' | 'broadcast' | 'links' | 'integrations' | 'planning' | 'system' | 'agent' | 'errors';
+
+/** Подтверждение сохранения настроек — одинаковое на всех вкладках с инлайновой записью. */
+function SaveFlash() {
+  return (
+    <span
+      aria-live="polite"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700"
+    >
+      <Check className="h-3.5 w-3.5" aria-hidden="true" />
+      Настройки сохранены
+    </span>
+  );
+}
 
 export default function AdminModule({ user }: AdminModuleProps) {
   const { showConfirm } = useDialog();
@@ -162,15 +177,39 @@ export default function AdminModule({ user }: AdminModuleProps) {
     );
   }
 
+  // Вкладки идут по частоте ежедневной работы: люди → общение → материалы →
+  // внешние системы → планирование → системное → диагностика.
+  const sheetAndGpsFields = [
+    'planZagruzokSheetUrl', 'planZagruzokBlacklistUrl', 'dispositionSheetUrl', 'bookIssueSheetUrl',
+    'tabelSheetUrl', 'mdpJournalSheetUrl', 'googleDriveUrl', 'instructionsDriveUrl',
+    'gpsBeltranssputnikUrl', 'gpsWialonUrl', 'gpsEraGlonassUrl',
+  ] as const;
+  const integrationCount = settings
+    ? sheetAndGpsFields.filter((f) => String(settings[f] || '').trim() !== '').length
+    : 0;
+
   const tabsList = [
-    { key: 'users', label: 'Пользователи и Сессии', count: userListCount },
-    { key: 'errors', label: 'Ошибки', count: 0 },
-    { key: 'welcome', label: 'Бегущая строка', count: settings?.customPhrases?.length || 0 },
-    { key: 'links', label: 'Ссылки и интеграции', count: (settings?.quickLinks?.length || 0) + (settings?.externalTabs?.length || 0) },
-    { key: 'system', label: 'Система и Настройки', count: 0 },
+    { key: 'users', label: 'Сотрудники и доступ', count: userListCount },
+    { key: 'broadcast', label: 'Сообщения', count: settings?.customPhrases?.length || 0 },
+    { key: 'links', label: 'Ссылки и материалы', count: (settings?.quickLinks?.length || 0) + (settings?.externalTabs?.length || 0) },
+    { key: 'integrations', label: 'Интеграции', count: integrationCount },
+    { key: 'planning', label: 'Планирование', count: 0 },
+    { key: 'system', label: 'Система', count: 0 },
     { key: 'agent', label: 'Агент (API)', count: 0 },
-    { key: 'broadcast', label: 'Сообщения', count: 0 },
+    { key: 'errors', label: 'Ошибки', count: 0 },
   ].map((t) => ({ ...t, count: t.count > 0 ? t.count : undefined }));
+
+  // Порядок модулей в меню (восстановленная настройка: AppShell читает settings.moduleOrder,
+  // а интерфейс для правки был потерян).
+  const orderedModules = (() => {
+    const order = (settings?.moduleOrder && settings.moduleOrder.length)
+      ? [...settings.moduleOrder]
+      : allModules.map((m) => m.key);
+    allModules.forEach((m) => { if (!order.includes(m.key)) order.push(m.key); });
+    return order
+      .map((key) => allModules.find((m) => m.key === key))
+      .filter(Boolean) as typeof allModules;
+  })();
 
   return (
     <ModuleShell
@@ -194,14 +233,46 @@ export default function AdminModule({ user }: AdminModuleProps) {
           <AdminOnlinePresenceBlock user={user} />
         </div>
 
-        {/* ОШИБКИ: дашборд сбоев портала */}
-        <div className={activeTab === 'errors' ? 'space-y-8' : 'hidden'}>
-          <ErrorsBlock user={user} />
-        </div>
-
-        {/* СИСТЕМА И НАСТРОЙКИ */}
+        {/* СИСТЕМА: состояние базы, порядок меню, сессии, журнал действий */}
         <div className={activeTab === 'system' ? 'space-y-8' : 'hidden'}>
           <AdminFirebaseConfigBlock />
+
+          <div className="flex flex-col gap-4">
+            <SectionHeader
+              icon={<Layers className="w-4 h-4" />}
+              tone="graphite"
+              title="Порядок модулей в меню"
+              subtitle="Определяет порядок пунктов в верхнем меню портала. Меняйте стрелками — сохраняется сразу."
+            />
+            <div className="bg-white border border-[#E5E7EB] rounded-2xl divide-y divide-[#F3F4F6] overflow-hidden">
+              {orderedModules.map((m, index) => (
+                <div key={m.key} className="flex items-center gap-3 px-4 py-2 min-h-[44px]">
+                  <span className="w-5 shrink-0 text-[11px] font-mono text-[#9CA3AF]">{index + 1}</span>
+                  <m.icon className="w-3.5 h-3.5 shrink-0 text-[#6B7280]" aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate text-xs text-[#121316]">{m.label}</span>
+                  <button
+                    type="button"
+                    aria-label={`Поднять «${m.label}» выше`}
+                    disabled={index === 0}
+                    onClick={() => moveModule(m.key, 'up')}
+                    className="min-h-[36px] min-w-[36px] inline-flex items-center justify-center rounded-lg text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] disabled:opacity-30 disabled:cursor-default cursor-pointer"
+                  >
+                    <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Опустить «${m.label}» ниже`}
+                    disabled={index === orderedModules.length - 1}
+                    onClick={() => moveModule(m.key, 'down')}
+                    className="min-h-[36px] min-w-[36px] inline-flex items-center justify-center rounded-lg text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] disabled:opacity-30 disabled:cursor-default cursor-pointer"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <span className={UI.hint}>Скрытые для роли модули продолжают работать — настройка меняет только порядок.</span>
+          </div>
 
           {/* Force Logout All Sessions — только для Root Admin */}
           {user.role === 'root_admin' && (
@@ -235,23 +306,15 @@ export default function AdminModule({ user }: AdminModuleProps) {
           <AdminAuditLogsBlock logs={logs} />
         </div>
 
-        {/* БЕГУЩАЯ СТРОКА */}
-        <div className={activeTab === 'welcome' ? 'space-y-8' : 'hidden'}>
+        {/* СООБЩЕНИЯ: рассылка, объявления, бегущая строка на главной */}
+        <div className={activeTab === 'broadcast' ? 'space-y-8' : 'hidden'}>
+          <AdminBroadcastBlock user={user} />
+          <AdminAnnouncementsBlock user={user} settings={settings} />
           <AdminWelcomePhrasesBlock settings={settings} onSave={saveSettings} />
         </div>
 
-        {/* ССЫЛКИ И ИНТЕГРАЦИИ */}
-        <div className="flex h-5 items-center justify-end">
-          {savedFlash && (
-            <span
-              aria-live="polite"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700"
-            >
-              <Check className="h-3.5 w-3.5" aria-hidden="true" />
-              Настройки сохранены
-            </span>
-          )}
-        </div>
+        {/* ССЫЛКИ И МАТЕРИАЛЫ */}
+        <div className="flex h-5 items-center justify-end">{savedFlash ? <SaveFlash /> : null}</div>
         <div
           className={activeTab === 'links' ? 'space-y-8' : 'hidden'}
           onKeyDownCapture={(e) => {
@@ -263,6 +326,11 @@ export default function AdminModule({ user }: AdminModuleProps) {
           }}
         >
           <AdminLinksBlock user={user} settings={settings} onSave={saveSettings} />
+        </div>
+
+        {/* ИНТЕГРАЦИИ: Google Таблицы и GPS-мониторинг */}
+        <div className={activeTab === 'integrations' ? 'space-y-8' : 'hidden'}>
+          <div className="flex h-5 items-center justify-end">{savedFlash ? <SaveFlash /> : null}</div>
 
           {/* Интеграции: Google Sheets & GPS */}
           {settings && (
@@ -270,8 +338,8 @@ export default function AdminModule({ user }: AdminModuleProps) {
               <SectionHeader
                 icon={<Layers className="w-4 h-4" />}
                 tone="graphite"
-                title="Интеграции Google Sheets & GPS"
-                subtitle="Настройки встроенных системных вкладок фреймов и спутникового позиционирования автопарка"
+                title="Google Таблицы и GPS-мониторинг"
+                subtitle="Адреса встроенных таблиц портала и систем спутникового контроля автопарка. Ссылки сохраняются при уходе из поля."
               />
 
               {/* Google Таблицы */}
@@ -387,7 +455,16 @@ export default function AdminModule({ user }: AdminModuleProps) {
             </div>
           )}
 
-          {/* Planning Blocks — настройки вкладок Текущего планирования и Плана загрузок */}
+        </div>
+
+        {/* ПЛАНИРОВАНИЕ: вкладки текущего планирования и план загрузок */}
+        <div className={activeTab === 'planning' ? 'space-y-8' : 'hidden'}>
+          <SectionHeader
+            icon={<Layers className="w-4 h-4" />}
+            tone="graphite"
+            title="Планирование"
+            subtitle="Вкладки раздела «Текущее планирование» и параметры «Плана загрузок»."
+          />
           <CurrentPlanningSettingsBlock user={user} />
           <PlanZagruzokSettingsBlock user={user} />
         </div>
@@ -397,10 +474,9 @@ export default function AdminModule({ user }: AdminModuleProps) {
           <AdminAgentBlock user={user} />
         </div>
 
-        {/* СООБЩЕНИЯ */}
-        <div className={activeTab === 'broadcast' ? 'space-y-8' : 'hidden'}>
-          <AdminBroadcastBlock user={user} />
-          <AdminAnnouncementsBlock user={user} settings={settings} />
+        {/* ОШИБКИ: диагностика сбоев портала */}
+        <div className={activeTab === 'errors' ? 'space-y-8' : 'hidden'}>
+          <ErrorsBlock user={user} />
         </div>
 
       </div>
