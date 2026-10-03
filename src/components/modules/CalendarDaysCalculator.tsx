@@ -55,13 +55,13 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
   ];
 
   return (
-    <div className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-5 flex flex-col gap-4 h-full">
-      <div className="flex items-center gap-2 pb-3 border-b border-[#E5E7EB]">
-        <Calendar className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" aria-hidden="true" />
-        <div className="min-w-0">
+    <div className="flex flex-col gap-4 h-full">
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <Calendar className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" aria-hidden="true" />
           <h3 className="text-sm font-semibold text-[#121316]">Калькулятор дней</h3>
-          <p className="text-[11px] text-[#6B7280] leading-relaxed">Даты начала и конца рейса, формат ДД/ММ/ГГГГ</p>
         </div>
+        <p className="text-[11px] text-[#6B7280] leading-relaxed">Даты начала и конца рейса, формат ДД/ММ/ГГГГ</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -115,10 +115,10 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
         </p>
       )}
 
-      <div className="mt-auto pt-4 border-t border-[#E5E7EB] flex flex-col gap-2">
-        <span className="text-xs text-[#6B7280]">Всего дней в рейсе</span>
+      <div className="mt-auto pt-3 flex flex-col gap-1.5">
         <div className="flex items-baseline gap-2">
-          <span className="text-3xl font-semibold tabular-nums text-[#121316] leading-none">{totalDays}</span>
+          <span className="text-xs text-[#6B7280]">Всего дней в рейсе</span>
+          <span className="text-2xl font-semibold tabular-nums text-[#121316] leading-none">{totalDays}</span>
           <span className="text-sm text-[#6B7280]">{daysWord(totalDays)}</span>
         </div>
         <div className="flex items-center justify-between gap-2 min-h-[32px]">
