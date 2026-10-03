@@ -3,7 +3,7 @@ import { UserProfile, AppSettings } from '../types'
 import UserAvatar from './UserAvatar'
 import TopBarCalendar from './TopBarCalendar'
 import { getUserFullName } from '../utils/userName'
-import { NavHomeIcon, NavLoadsIcon, NavCompassIcon, NavExitIcon, NavGridIcon } from './common/NavIcons';
+import { NavHomeIcon, NavLoadsIcon, NavExitIcon, NavGridIcon } from './common/NavIcons';
 import MobileMoreHub from './MobileMoreHub';
 import { currencySymbol, currencyName } from '../utils/currencyMeta'
 import { APP_VERSION, APP_VERSION_LABEL } from '../version'
@@ -1386,7 +1386,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                 {[
                   { key: 'dashboard', label: 'Главная', icon: NavHomeIcon },
                   { key: 'planZagruzok', label: 'Загрузки', icon: NavLoadsIcon },
-                  { key: 'disposition', label: 'Карта', icon: NavCompassIcon },
                   { key: 'baza', label: 'Выезд', icon: NavExitIcon },
                   { key: '__menu', label: 'Ещё', icon: NavGridIcon, isMenu: true },
                 ].map((item) => {
@@ -1412,14 +1411,14 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                           setIsContextMenuOpen(true);
                         }
                       }}
-                      className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 min-h-[60px] transition-all duration-200 relative outline-none ${
+                      className={`flex-1 flex flex-col items-center justify-center gap-1 py-2 min-h-[64px] transition-all duration-200 relative outline-none ${
                         active
                           ? 'text-white bg-gradient-to-b from-[#17233A] to-[#0D1729] mx-1 my-2 rounded-full border border-[#8CA0BC]/60 border-t-[#C9DCF2]/70 border-b-[#C2D4EA]/65 shadow-[inset_0_0_26px_rgba(150,180,230,0.16),inset_0_-10px_24px_rgba(150,180,230,0.14),inset_0_1px_0_rgba(255,255,255,0.12),0_6px_16px_rgba(15,26,46,0.32)]'
                           : 'text-[#6B7280] hover:text-[#4B5563] bg-transparent'
                       }`}
                     >
-                      <Icon className={`h-[22px] w-[22px] ${active ? 'drop-shadow-[0_0_6px_rgba(255,255,255,0.55)]' : ''}`} />
-                      <span className={`text-[9px] leading-tight text-center ${active ? 'font-semibold text-[#D2DDEA]' : 'font-medium'}`}>{item.label}</span>
+                      <Icon className={`h-6 w-6 ${active ? 'drop-shadow-[0_0_6px_rgba(255,255,255,0.55)]' : ''}`} />
+                      <span className={`text-[10px] leading-tight text-center ${active ? 'font-semibold text-[#D2DDEA]' : 'font-medium'}`}>{item.label}</span>
                     </button>
                   );
                 })}
