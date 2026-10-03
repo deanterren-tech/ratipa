@@ -2550,27 +2550,25 @@ export default function DohodModule({ user }: DohodModuleProps) {
   });
 
   return (
-    <div className="w-full space-y-6 font-sans">
+    <div className="w-full flex flex-col font-sans">
       
       
 
-      {/* Main Left Workspace */}
-      <div className="w-full space-y-6">
-        {/* Шапка модуля */}
+      {/* Рабочая область: шаги расчёта — секции прямо на холсте */}
+      <div className="w-full flex flex-col">
+        {/* Шапка модуля: заголовок и краткая подпись, как в «Учёте дозволов» */}
         <div className="flex flex-col gap-1">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9CA3AF]">Модуль Доход</span>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#121316] flex items-center gap-2.5">
-            <Calculator className="w-7 h-7 text-[#121316]" />
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-[#121316]">
             Калькуляция дохода
           </h1>
-          <p className="text-sm text-[#6B7280]">
+          <p className="text-xs text-[#6B7280] max-w-3xl">
             Порядок работы: маршрут и ставки → сроки и расходы → результат. Блоки заполняются сверху вниз.
           </p>
         </div>
 
 
-        {/* Шаг 1. Маршрут и ставки */}
-        <div className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-5 flex flex-col gap-5">
+        {/* Шаг 1. Маршрут и ставки — секция на холсте, отделена тонкой линией */}
+        <section className="mt-4 pt-4 border-t border-[#E5E7EB] flex flex-col gap-4">
           <SectionHeader
             icon={<MapPin className="w-4 h-4" />}
             tone="graphite"
@@ -2630,7 +2628,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   <th className="px-3 pb-2.5 text-right font-semibold w-24">Действия</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#E5E7EB]">
+              <tbody className="divide-y divide-[#F3F4F6]">
                 {legs.map((leg, idx) => (
                   <tr
                     key={idx}
@@ -2878,7 +2876,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
           {/* Mobile Cards View */}
           <div className="block lg:hidden space-y-4 pr-1 pb-4">
             {legs.map((leg, idx) => (
-              <div key={idx} className="bg-white rounded-2xl p-4 border border-[#E5E7EB] shadow-xs flex flex-col gap-4 relative">
+              <div key={idx} className="bg-white rounded-2xl p-4 border border-[#E5E7EB] flex flex-col gap-4 relative">
                 <div className="flex justify-between items-center pb-2 border-b border-[#E5E7EB]">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#4B5563] bg-[#F3F4F6] px-2 py-1 rounded-lg border border-[#E5E7EB]">#{idx + 1}</span>
                   <div className="flex items-center gap-2">
@@ -3141,10 +3139,10 @@ export default function DohodModule({ user }: DohodModuleProps) {
               </button>
             )}
           </div>
-        </div>
+        </section>
 
-        {/* Шаг 2. Сроки и расходы */}
-        <div className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-5 flex flex-col gap-5">
+        {/* Шаг 2. Сроки и расходы — секция на холсте */}
+        <section className="mt-5 pt-5 border-t border-[#E5E7EB] flex flex-col gap-5">
           <SectionHeader
             icon={<Clock className="w-4 h-4" />}
             tone="graphite"
@@ -3195,7 +3193,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
             subtitle="Разовые затраты по рейсу и статьи расходов"
           />
           <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-[#E5E7EB] rounded-2xl p-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-[#E5E7EB] rounded-xl px-3.5 py-3">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center text-rose-500">
                   <Receipt className="w-4 h-4" />
@@ -3253,7 +3251,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         setExpenseItems(next);
                         setAdditionalExpenses(next.reduce((a, x) => a + Number(x.amount || 0), 0));
                       }}
-                      className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-xl bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 transition-colors cursor-pointer"
+                      className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg bg-white border border-[#E5E7EB] hover:bg-rose-50 hover:border-rose-200 text-rose-600 transition-colors cursor-pointer"
                       title="Удалить статью"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -3275,10 +3273,10 @@ export default function DohodModule({ user }: DohodModuleProps) {
               Добавить статью расхода
             </button>
           </div>
-        </div>
+        </section>
 
-        {/* Шаг 3. Результат расчёта */}
-        <div className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-5 flex flex-col gap-5">
+        {/* Шаг 3. Результат расчёта — секция на холсте */}
+        <section className="mt-5 pt-5 border-t border-[#E5E7EB] flex flex-col gap-5">
           <SectionHeader
             icon={<TrendingUp className="w-4 h-4" />}
             tone="graphite"
@@ -3296,94 +3294,84 @@ export default function DohodModule({ user }: DohodModuleProps) {
             </div>
           ) : (
             <>
-              {/* Крупный блок итогов */}
-              <div
-                className={`rounded-2xl border p-5 ${
-                  totalProfit < 0 ? "border-rose-200 bg-rose-50/60" : "border-[#E5E7EB] bg-[#F8F9FA]"
-                }`}
-              >
-                <div className="flex flex-wrap items-end justify-between gap-4">
-                  <div>
-                    <span
-                      className={`text-[11px] font-semibold uppercase tracking-wider block ${
-                        totalProfit < 0 ? "text-rose-600" : "text-[#6B7280]"
-                      }`}
-                    >
-                      Чистая прибыль
+              {/* Итог: главное число — как сводная сумма у дозволов, без плашки */}
+              <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+                <div>
+                  <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none block mb-1">
+                    Чистая прибыль
+                  </span>
+                  <span
+                    className={`flex items-baseline gap-1.5 font-mono tabular-nums text-2xl sm:text-3xl font-semibold tracking-tight ${
+                      totalProfit < 0 ? "text-rose-600" : "text-[#121316]"
+                    }`}
+                  >
+                    {totalProfit.toLocaleString("ru-RU")}
+                    <span className="text-sm font-medium text-[#6B7280]">€</span>
+                  </span>
+                </div>
+                <div className="flex flex-col items-start sm:items-end gap-1">
+                  <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">
+                    Суточная доходность
+                  </span>
+                  <span
+                    className={`font-mono tabular-nums text-lg sm:text-xl font-semibold ${
+                      currentDailyProfit < 0 ? "text-rose-600" : "text-emerald-600"
+                    }`}
+                  >
+                    {Math.round(currentDailyProfit).toLocaleString("ru-RU")}
+                    <span className="text-sm font-medium text-[#6B7280]"> €/сут</span>
+                  </span>
+                  {totalProfit < 0 ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-600">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Рейс убыточный — доходы не покрывают расходы
                     </span>
-                    <span
-                      className={`mt-1 flex items-baseline gap-1.5 font-mono tabular-nums text-3xl sm:text-4xl font-bold tracking-tight ${
-                        totalProfit < 0 ? "text-rose-600" : "text-[#121316]"
-                      }`}
-                    >
-                      {totalProfit.toLocaleString("ru-RU")}
-                      <span className="text-base font-semibold text-[#6B7280]">€</span>
-                    </span>
-                  </div>
-                  <div className="flex flex-col items-start sm:items-end gap-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280]">
-                      Суточная доходность
-                    </span>
-                    <span
-                      className={`font-mono text-xl font-bold ${
-                        currentDailyProfit < 0 ? "text-rose-600" : "text-emerald-600"
-                      }`}
-                    >
-                      {Math.round(currentDailyProfit).toLocaleString("ru-RU")}
-                      <span className="text-sm font-semibold text-[#6B7280]"> €/сут</span>
-                    </span>
-                    {totalProfit < 0 ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-600">
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                        Рейс убыточный — доходы не покрывают расходы
-                      </span>
-                    ) : null}
-                  </div>
+                  ) : null}
                 </div>
               </div>
 
-              {/* Показатели экономики */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="border border-[#E5E7EB] p-4 rounded-2xl">
-                  <span className="text-[11px] text-[#6B7280] uppercase tracking-wider block font-semibold mb-1">
+              {/* Показатели экономики: подпись + моно-значение, без плашек */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-4 pt-4 border-t border-[#E5E7EB]">
+                <div>
+                  <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none block mb-1">
                     Общий пробег
                   </span>
-                  <span className="text-xl font-bold tracking-tight text-[#121316]">
+                  <span className="text-xl font-semibold font-mono tabular-nums tracking-tight text-[#121316]">
                     {totalKm.toLocaleString("ru-RU")} км
                   </span>
                 </div>
 
-                <div className="border border-[#E5E7EB] p-4 rounded-2xl">
-                  <span className="text-[11px] text-[#6B7280] uppercase tracking-wider block font-semibold mb-1">
+                <div>
+                  <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none block mb-1">
                     Общий фрахт
                   </span>
-                  <span className="text-xl font-bold tracking-tight text-[var(--accent-ink)]">
+                  <span className="text-xl font-semibold font-mono tabular-nums tracking-tight text-[var(--accent-ink)]">
                     {totalFreight.toLocaleString("ru-RU")} €
                   </span>
                 </div>
 
-                <div className="border border-[#E5E7EB] p-4 rounded-2xl">
-                  <span className="text-[11px] text-[#6B7280] uppercase tracking-wider block font-semibold mb-1">
+                <div>
+                  <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none block mb-1">
                     Расходы ({globalDirection})
                   </span>
-                  <span className="text-xl font-bold tracking-tight text-amber-600">
+                  <span className="text-xl font-semibold font-mono tabular-nums tracking-tight text-amber-600">
                     {totalExpenses.toLocaleString("ru-RU")} €
                   </span>
                 </div>
 
-                <div className="border border-[#E5E7EB] p-4 rounded-2xl">
-                  <span className="text-[11px] text-[#6B7280] uppercase tracking-wider block font-semibold mb-1">
+                <div>
+                  <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none block mb-1">
                     Дней в пути
                   </span>
-                  <span className="text-xl font-bold tracking-tight text-[#121316]">
+                  <span className="text-xl font-semibold font-mono tabular-nums tracking-tight text-[#121316]">
                     {tripDays}
                   </span>
                 </div>
               </div>
 
               {/* Разбивка по плечам: карточки на узких экранах, таблица от 900px */}
-              <div>
-                <div className={`${UI.caption} mb-2`}>Разбивка по плечам</div>
+              <div className="pt-4 border-t border-[#E5E7EB]">
+                <div className={`${UI.caption} mb-3`}>Разбивка по плечам</div>
 
                 {/* Карточки плеч — без горизонтальной прокрутки */}
                 <div className="min-[900px]:hidden flex flex-col gap-2.5">
@@ -3460,17 +3448,17 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   <table className="w-full text-left min-w-[560px]">
                     <thead>
                       <tr className="border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">
-                        <th className="px-3 py-2 font-semibold w-10 whitespace-nowrap">#</th>
-                        <th className="px-3 py-2 font-semibold whitespace-nowrap">Плечо</th>
-                        <th className="px-3 py-2 font-semibold text-right whitespace-nowrap">Пробег, км</th>
-                        <th className="px-3 py-2 font-semibold text-right whitespace-nowrap">Ставка, €</th>
-                        <th className="px-3 py-2 font-semibold text-right whitespace-nowrap">Расходы, €</th>
-                        <th className="px-3 py-2 font-semibold text-right whitespace-nowrap">Маржа, €</th>
+                        <th className="px-3 py-2.5 font-semibold w-10 whitespace-nowrap">#</th>
+                        <th className="px-3 py-2.5 font-semibold whitespace-nowrap">Плечо</th>
+                        <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">Пробег, км</th>
+                        <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">Ставка, €</th>
+                        <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">Расходы, €</th>
+                        <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">Маржа, €</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#E5E7EB]">
+                    <tbody className="divide-y divide-[#F3F4F6]">
                       {legBreakdown.map((row) => (
-                        <tr key={row.index}>
+                        <tr key={row.index} className="hover:bg-[#F9FAFB] transition-colors">
                           <td className="px-3 py-2 text-xs font-semibold text-[#9CA3AF]">{row.index + 1}</td>
                           <td className="px-3 py-2 text-xs font-medium text-[#4B5563]">
                             {row.from || row.to
@@ -3505,9 +3493,9 @@ export default function DohodModule({ user }: DohodModuleProps) {
               </div>
 
               {/* Статьи расходов */}
-              <div>
-                <div className={`${UI.caption} mb-2`}>Статьи расходов</div>
-                <div className="flex flex-col divide-y divide-[#E5E7EB] border border-[#E5E7EB] rounded-2xl overflow-hidden">
+              <div className="pt-4 border-t border-[#E5E7EB]">
+                <div className={`${UI.caption} mb-3`}>Статьи расходов</div>
+                <div className="flex flex-col divide-y divide-[#E5E7EB] border border-[#E5E7EB] rounded-xl overflow-hidden">
                   <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-white">
                     <span className="text-xs text-[#4B5563]">Пробег × коэффициент</span>
                     <span className="text-xs font-mono font-semibold text-[#121316]">
@@ -3550,15 +3538,15 @@ export default function DohodModule({ user }: DohodModuleProps) {
               </div>
             </>
           )}
-        </div>
+        </section>
       </div>
 
-      {/* Widgets under Constructor - Responsive Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Custom Currency Converter Widget */}
+      {/* Виджеты под конструктором: конвертер и шаблоны — на холсте, как блоки у дозволов */}
+      <div className="mt-5 pt-5 border-t border-[#E5E7EB] grid grid-cols-1 lg:grid-cols-2 gap-x-10 gap-y-10 items-start">
+        {/* Конвертер валют НБ РБ — колонка на холсте */}
         <div
           id="nbrb-converter-widget"
-          className="bg-white rounded-2xl p-5 border border-[#E5E7EB] shadow-xs flex flex-col gap-4"
+          className="flex flex-col gap-4 min-w-0"
         >
           <SectionHeader
             icon={<Landmark className="w-4 h-4" />}
@@ -3583,7 +3571,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
           {nbrbError ? (
             <ErrorRow text={nbrbError} onRetry={fetchNbrbRates} />
           ) : (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-[#F8F9FA] border border-[#E5E7EB] p-3 rounded-2xl text-xs select-none">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-[#F9FAFB] border border-[#E5E7EB] px-3 py-2.5 rounded-xl text-xs select-none">
               <span className="inline-flex items-center gap-1.5 text-[#6B7280] font-medium shrink-0 mr-1">
                 {nbrbLoading ? (
                   <>
@@ -3625,11 +3613,11 @@ export default function DohodModule({ user }: DohodModuleProps) {
           )}
 
           {/* Карточки валют — тот же вид поля и результата, что в конвертере топ-бара */}
-          <div className="w-full flex flex-col gap-3 max-h-[60vh] md:max-h-[420px] overflow-y-auto custom-scrollbar pr-1">
+          <div className="w-full flex flex-col divide-y divide-[#F3F4F6] max-h-[60vh] md:max-h-[420px] overflow-y-auto custom-scrollbar border border-[#E5E7EB] rounded-xl px-3">
             {CONVERTER_CURRENCIES.map((cur) => (
               <div
                 key={cur}
-                className="rounded-xl border border-[#E5E7EB] bg-white hover:border-[#D1D5DB] p-2.5 transition-colors"
+                className="py-2.5 transition-colors"
               >
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2 min-w-0">
@@ -3734,8 +3722,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
 
         </div>
 
-        {/* Templates Board */}
-        <div className="bg-white rounded-2xl p-5 border border-[#E5E7EB] shadow-xs flex flex-col gap-5">
+        {/* Шаблоны мульти-рейсов — колонка на холсте */}
+        <div className="flex flex-col gap-4 min-w-0">
           <SectionHeader
             icon={<FileSpreadsheet className="w-4 h-4" />}
             tone="graphite"
@@ -3748,13 +3736,13 @@ export default function DohodModule({ user }: DohodModuleProps) {
                 placeholder="Поиск по названию..."
                 value={routeSearch}
                 onChange={(e) => setRouteSearch(e.target.value)}
-                className={`${UI.inputSm} pl-9`}
+                className={`${UI.searchInput} pl-9`}
               />
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#9CA3AF] pointer-events-none" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#9CA3AF] pointer-events-none" />
             </div>
           </SectionHeader>
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col divide-y divide-[#F3F4F6]">
             {filteredTemplates.map((t, idx) => {
               const legs = t.legs || [];
               const totalDist = legs.reduce((acc, l) => acc + (l.dist || l.distance || 0), 0);
@@ -3762,10 +3750,10 @@ export default function DohodModule({ user }: DohodModuleProps) {
               return (
                 <div
                   key={t.id || idx}
-                  className="group bg-white border border-[#E5E7EB] hover:border-[#D1D5DB] rounded-2xl p-4 sm:p-5 flex flex-col gap-4 transition-colors duration-200"
+                  className="group flex flex-col gap-3 py-4 transition-colors duration-200"
                 >
                   {/* Верхняя строка: название, маршрут и действия */}
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-[#E5E7EB]">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-[#F3F4F6]">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="p-2.5 rounded-xl bg-[#F3F4F6] text-[#121316] shrink-0">
                         <FolderOpen className="h-5 w-5" />
@@ -3828,7 +3816,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   </div>
 
                   {/* Маршрут шаблона */}
-                  <div className="rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] p-3">
+                  <div className="rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2.5">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-2 w-full">
                       {legs.map((l, i) => (
                         <div key={i} className="flex items-center gap-2 min-w-0">
@@ -3851,7 +3839,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
               );
             })}
             {filteredTemplates.length === 0 && (
-              <div className="border border-dashed border-[#E5E7EB] rounded-2xl">
+              <div className="border border-dashed border-[#E5E7EB] rounded-xl">
                 <EmptyState
                   kind={routeSearch.trim() ? "no-results" : "empty"}
                   query={routeSearch.trim() || undefined}
@@ -3868,9 +3856,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
         </div>
       </div>
 
-      {/* History of Saved Calculations - FULL WIDTH BOTTOM */}
-      <div className="w-full">
-        <div className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-5 flex flex-col">
+      {/* Журнал расчётов — секция на холсте */}
+      <div className="w-full mt-5 pt-5 border-t border-[#E5E7EB] flex flex-col">
           <SectionHeader
             icon={<FileSpreadsheet className="w-4 h-4" />}
             tone="graphite"
@@ -3886,13 +3873,14 @@ export default function DohodModule({ user }: DohodModuleProps) {
               placeholder="Поиск по направлениям, дате, логисту..."
               value={historySearch}
               onChange={(e) => setHistorySearch(e.target.value)}
-              className={`${UI.inputSm} pl-9`}
+              className={`${UI.searchInput} pl-9`}
             />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#9CA3AF] pointer-events-none" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#9CA3AF] pointer-events-none" />
           </div>
 
-          {/* Directions Tabs */}
-          <div className="mb-4">
+          {/* Направления журнала: подпись и пилюли — как фильтры дозволов */}
+          <div className="mb-4 flex flex-col gap-2">
+            <span className="text-[10px] font-semibold text-[#9CA3AF] tracking-wider uppercase select-none">Направление</span>
             <FilterPills
               items={[
                 { key: "Все", label: `Все направления (${calculationHistory.length})` },
@@ -3907,8 +3895,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
             />
           </div>
 
-          {/* Selection toolbar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4 px-1">
+          {/* Панель выделения: над списком, отделена линией как тулбар у дозволов */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4 pb-3 border-b border-[#E5E7EB]">
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -3973,21 +3961,22 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   />
                 )}
                 {historyPage < filteredHistory.length && (
-                  <button
-                    type="button"
-                    onClick={() => setHistoryPage((p) => p + 10)}
-                    className="w-full py-2.5 rounded-xl border border-dashed border-[#E5E7EB] text-[#6B7280] text-xs font-medium hover:bg-[#F3F4F6] hover:text-[#121316] hover:border-[#D1D5DB] transition-colors min-h-[44px]"
-                  >
-                    Показать ещё 10
-                    <span className="text-[#9CA3AF] font-normal">
-                      {" "}(осталось {filteredHistory.length - historyPage})
-                    </span>
-                  </button>
+                  <div className="flex justify-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setHistoryPage((p) => p + 10)}
+                      className="inline-flex items-center gap-2 px-5 rounded-xl text-xs font-medium text-[#121316] bg-white border border-[#E5E7EB] hover:border-[#D1D5DB] hover:bg-[#F9FAFB] transition-colors cursor-pointer min-h-[44px]"
+                    >
+                      Показать ещё 10
+                      <span className="text-[#9CA3AF] font-normal">
+                        (осталось {filteredHistory.length - historyPage})
+                      </span>
+                    </button>
+                  </div>
                 )}
               </>
             )}
           </div>
-        </div>
       </div>
 
       <MapRouteDialog
