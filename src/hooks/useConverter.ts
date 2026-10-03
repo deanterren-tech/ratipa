@@ -10,6 +10,8 @@ export function useConverter() {
   const [availableCurrencies, setAvailableCurrencies] = useState<any[]>([]);
   /** Время последнего успешного обновления курсов — только для подписи в окне. */
   const [ratesUpdatedAt, setRatesUpdatedAt] = useState<string>(() => localStorage.getItem('ratipa_converter_rates_at') || '');
+  /** Последняя неудачная попытка обновить курсы — показывается в окне понятным текстом. */
+  const [ratesError, setRatesError] = useState<string>('');
 
   const [selectedCurrencyCodes, setSelectedCurrencyCodes] = useState<string[]>(() => {
     const saved = localStorage.getItem('ratipa_selected_currencies');
@@ -77,6 +79,7 @@ export function useConverter() {
 
   const fetchNbrbRates = useCallback(async () => {
     setIsRatesLoading(true);
+    setRatesError('');
     try {
       let response = await fetch('/api/nbrb-rates');
       const contentType = response.headers.get('content-type') || '';
@@ -109,7 +112,9 @@ export function useConverter() {
       } else {
         throw new Error('Expected data structure');
       }
-    } catch (error) {
+    } catch {
+      // Текст ошибки только для окна: расчёт и сохранённые курсы не меняются.
+      setRatesError('Не удалось получить курсы НБРБ. Показаны сохранённые значения — попробуйте обновить ещё раз.');
     } finally {
       setIsRatesLoading(false);
     }
@@ -161,6 +166,7 @@ export function useConverter() {
     converterPanelRef,
     fetchNbrbRates,
     ratesUpdatedAt,
+    ratesError,
     availableCurrencies,
   };
 }

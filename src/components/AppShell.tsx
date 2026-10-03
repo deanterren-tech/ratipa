@@ -296,6 +296,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     converterPanelRef,
     fetchNbrbRates,
     ratesUpdatedAt,
+    ratesError,
     availableCurrencies,
   } = conv;
 
@@ -608,10 +609,10 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       )}
 
       {/* Modern Responsive Capsule Header */}
-<header className="bg-white text-[#121316] border-b border-[#E5E7EB] h-14 md:h-[3.75rem] flex items-center justify-between px-3 sm:px-5 lg:px-6 shrink-0 sticky top-0 z-50 select-none gap-2 sm:gap-3">
+<header className="relative bg-white text-[#121316] border-b border-[#E5E7EB] h-14 md:h-[3.75rem] flex items-center justify-between px-3 sm:px-5 lg:px-6 shrink-0 sticky top-0 z-50 select-none gap-2 sm:gap-3">
         
         {/* На узких экранах: конвертер валют и календарь рядом */}
-        <div className="md:hidden flex items-center gap-1.5 shrink-0">
+        <div className="md:hidden flex items-center gap-2 shrink-0">
           <div className="relative font-sans" ref={converterRef}>
             <button
               type="button"
@@ -619,24 +620,41 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
               aria-haspopup="dialog"
               aria-expanded={isConverterOpen}
               aria-label="Конвертер валют"
-              className={`relative h-8 w-8 rounded-lg border transition-colors cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
+              className={`relative h-8 w-8 shrink-0 rounded-lg border transition-colors cursor-pointer flex items-center justify-center select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] active:scale-[0.98] ${
                 isConverterOpen
-                  ? 'bg-[#F3F4F6] text-[#121316] border-[#D1D5DB]'
-                  : 'bg-white text-[#6B7280] hover:text-[#121316] border-[#E5E7EB]'
+                  ? 'text-[var(--accent-ink)] bg-[var(--accent-10)] hover:bg-[var(--accent-15)] border-[var(--accent-25)]'
+                  : 'bg-white text-[#6B7280] border-[#E5E7EB] hover:bg-[#F3F4F6] hover:text-[#121316] hover:border-[#D1D5DB]'
               }`}
               title="Конвертер валют"
             >
-              <DollarSign size={16} aria-hidden="true" />
+              <DollarSign size={15} strokeWidth={1.5} aria-hidden="true" />
             </button>
           </div>
           <TopBarCalendar />
+        </div>
+
+        {/* Mobile: логотип строго по центру экрана (absolute, вне flex-потока) */}
+        <div className="md:hidden absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none">
+          <div className="flex items-center gap-2.5 cursor-pointer group rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] pointer-events-auto"
+               tabIndex={0} role="button"
+               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleNavigate(user.role === 'mechanic' ? 'baza' : 'dashboard'); } }}
+               onClick={() => handleNavigate(user.role === 'mechanic' ? 'baza' : 'dashboard')}>
+            <img
+              src="/portal.svg"
+              alt="Ratipa Portal"
+              width={1261}
+              height={385}
+              className="h-6 w-auto shrink-0 select-none opacity-90 transition-opacity duration-300 ease-out group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none"
+              draggable={false}
+            />
+          </div>
         </div>
 
         <div className="flex items-center gap-3 sm:gap-5 flex-1 min-w-0">
           {/* Left Brand Area */}
           <div className="flex items-center shrink-0 flex-1 md:flex-none justify-center md:justify-start">
             
-            <div className="flex items-center gap-2.5 cursor-pointer group rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]" tabIndex={0} role="button"
+            <div className="hidden md:flex items-center gap-2.5 cursor-pointer group rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]" tabIndex={0} role="button"
                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleNavigate(user.role === 'mechanic' ? 'baza' : 'dashboard'); } }}
                  onClick={() => handleNavigate(user.role === 'mechanic' ? 'baza' : 'dashboard')}>
               {/* Полный фирменный логотип (portal.svg). Пропорции сохранены:
@@ -832,27 +850,25 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             )}
           </div>
 
-          {/* Конвертер валют (широкие экраны), рядом — календарь */}
-          <div className="hidden md:block relative font-sans" ref={converterDesktopRef}>
-            <button
-              type="button"
-              onClick={() => setIsConverterOpen(!isConverterOpen)}
-              aria-haspopup="dialog"
-              aria-expanded={isConverterOpen}
-              aria-label="Конвертер валют"
-              className={`relative h-8 w-8 rounded-lg border transition-colors cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
-                isConverterOpen
-                  ? 'bg-[#F3F4F6] text-[#121316] border-[#D1D5DB]'
-                  : 'bg-white text-[#6B7280] hover:text-[#121316] border-[#E5E7EB]'
-              }`}
-              title="Конвертер валют"
-            >
-              <DollarSign size={16} aria-hidden="true" />
-            </button>
-          </div>
-
-          {/* Компактный календарь */}
-          <div className="hidden md:block">
+          {/* Конвертер валют и календарь (широкие экраны) — одна пара, общий шаг 8 px */}
+          <div className="hidden md:flex items-center gap-2 shrink-0">
+            <div className="relative font-sans" ref={converterDesktopRef}>
+              <button
+                type="button"
+                onClick={() => setIsConverterOpen(!isConverterOpen)}
+                aria-haspopup="dialog"
+                aria-expanded={isConverterOpen}
+                aria-label="Конвертер валют"
+                className={`relative h-8 w-8 shrink-0 rounded-lg border transition-colors cursor-pointer flex items-center justify-center select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] active:scale-[0.98] ${
+                  isConverterOpen
+                    ? 'text-[var(--accent-ink)] bg-[var(--accent-10)] hover:bg-[var(--accent-15)] border-[var(--accent-25)]'
+                    : 'bg-white text-[#6B7280] border-[#E5E7EB] hover:bg-[#F3F4F6] hover:text-[#121316] hover:border-[#D1D5DB]'
+                }`}
+                title="Конвертер валют"
+              >
+                <DollarSign size={15} strokeWidth={1.5} aria-hidden="true" />
+              </button>
+            </div>
             <TopBarCalendar />
           </div>
 
@@ -1007,32 +1023,32 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                   className="fixed w-[376px] max-w-[calc(100vw-1.5rem)] max-h-[calc(100vh-120px)] overflow-y-auto bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_16px_40px_rgba(15,23,42,0.16)] z-[2000]"
                 >
                   {/* Заголовок: знак валюты, название, источник курса и действия */}
-                  <div className="flex items-center gap-2.5 px-4 py-3 border-b border-[#F3F4F6] select-none">
-                    <span className="w-8 h-8 rounded-lg bg-[var(--accent-8)] border border-[var(--accent-20)] text-[var(--accent-ink)] flex items-center justify-center shrink-0">
-                      <DollarSign size={15} aria-hidden="true" />
+                  <div className="flex items-center gap-3 px-4 py-4 border-b border-[#E5E7EB] select-none">
+                    <span className="w-9 h-9 rounded-xl bg-[var(--accent-8)] border border-[var(--accent-20)] text-[var(--accent-ink)] flex items-center justify-center shrink-0">
+                      <DollarSign size={16} strokeWidth={1.5} aria-hidden="true" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-xs font-semibold text-[#121316] tracking-tight">Конвертер валют</h3>
-                      <p className="text-[10px] text-[#6B7280] mt-0.5 truncate">
+                      <h3 className="text-sm font-semibold text-[#121316] tracking-tight">Конвертер валют</h3>
+                      <p className="text-[11px] text-[#6B7280] mt-0.5 truncate">
                         {isEditingCurrencies
                           ? 'Отметьте валюты для списка'
                           : `Курсы НБРБ${ratesUpdatedAt ? ` · обновлено ${ratesUpdatedAt}` : ''}`}
                       </p>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setIsEditingCurrencies(!isEditingCurrencies); }}
                         title="Выбор валют"
                         aria-label="Выбор валют"
                         aria-pressed={isEditingCurrencies}
-                        className={`h-7 w-7 rounded-lg border flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
+                        className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] active:scale-[0.98] ${
                           isEditingCurrencies
-                            ? 'bg-[var(--accent-8)] text-[var(--accent-ink)] border-[var(--accent-25)]'
-                            : 'bg-white text-[#6B7280] border-[#E5E7EB] hover:bg-[#F3F4F6] hover:text-[#121316]'
+                            ? 'bg-[var(--accent-10)] text-[var(--accent-ink)] border-[var(--accent-25)] hover:bg-[var(--accent-15)]'
+                            : 'bg-white text-[#6B7280] border-[#E5E7EB] hover:bg-[#F3F4F6] hover:text-[#121316] hover:border-[#D1D5DB]'
                         }`}
                       >
-                        <Sliders size={13} aria-hidden="true" />
+                        <Sliders size={14} strokeWidth={1.5} aria-hidden="true" />
                       </button>
 
                       <button
@@ -1041,9 +1057,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                         disabled={isRatesLoading}
                         title="Обновить курсы из НБРБ"
                         aria-label="Обновить курсы из НБРБ"
-                        className="h-7 w-7 rounded-lg border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#121316] flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+                        className="h-8 w-8 rounded-lg border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#121316] hover:border-[#D1D5DB] flex items-center justify-center transition-colors cursor-pointer active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
                       >
-                        <RefreshCw size={13} className={isRatesLoading ? 'animate-spin' : ''} aria-hidden="true" />
+                        <RefreshCw size={14} strokeWidth={1.5} className={isRatesLoading ? 'animate-spin' : ''} aria-hidden="true" />
                       </button>
 
                       <button
@@ -1051,26 +1067,32 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                         onClick={(e) => { e.stopPropagation(); setIsConverterOpen(false); }}
                         title="Закрыть"
                         aria-label="Закрыть конвертер"
-                        className="h-7 w-7 rounded-lg border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#121316] flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+                        className="h-8 w-8 rounded-lg border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#121316] hover:border-[#D1D5DB] flex items-center justify-center transition-colors cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
                       >
-                        <X size={13} aria-hidden="true" />
+                        <X size={14} strokeWidth={1.5} aria-hidden="true" />
                       </button>
                     </div>
                   </div>
 
                   {isEditingCurrencies ? (
                     /* Выбор валют: отмечаемые строки, минимум одна остаётся */
-                    <div className="px-3 py-3">
-                      <div className="flex items-center justify-between px-1 mb-2">
+                    <div className="px-4 py-4">
+                      <div className="flex items-center justify-between px-0.5 mb-2">
                         <span className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">Валюты в списке</span>
                         <button
                           type="button"
                           onClick={() => setIsEditingCurrencies(false)}
-                          className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent-ink)] hover:underline cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+                          className="text-[11px] font-semibold uppercase tracking-wider text-[var(--accent-ink)] hover:underline cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
                         >
                           Готово
                         </button>
                       </div>
+                      {ratesError && (
+                        <div role="alert" className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 mb-2 text-[11px] leading-snug text-rose-700">
+                          <AlertTriangle size={14} strokeWidth={1.5} className="shrink-0 mt-px" aria-hidden="true" />
+                          <span>{ratesError}</span>
+                        </div>
+                      )}
                       <div className="grid grid-cols-2 gap-1.5 max-h-[300px] overflow-y-auto custom-scrollbar pr-1" role="group" aria-label="Валюты в списке">
                         {(availableCurrencies.length > 0 ? availableCurrencies : [
                           { id: "1", code: "USD" }, { id: "2", code: "EUR" }, { id: "3", code: "RUB" },
@@ -1118,7 +1140,13 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                     </div>
                   ) : (
                     /* Значения: поле редактируемой валюты выделено, остальные пересчитаны */
-                    <div className="px-3 py-3 space-y-2 max-h-[62vh] md:max-h-[430px] overflow-y-auto custom-scrollbar">
+                    <div className="px-4 py-4 space-y-2 max-h-[62vh] md:max-h-[430px] overflow-y-auto custom-scrollbar">
+                      {ratesError && (
+                        <div role="alert" className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-[11px] leading-snug text-rose-700">
+                          <AlertTriangle size={14} strokeWidth={1.5} className="shrink-0 mt-px" aria-hidden="true" />
+                          <span>{ratesError}</span>
+                        </div>
+                      )}
                       {selectedCurrencyCodes.map(code => {
                         const isActive = activeCurrency === code;
                         const rate = rates[code];
@@ -1130,22 +1158,22 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                             className={`rounded-xl border p-2.5 transition-colors ${
                               isActive
                                 ? 'border-[var(--accent-30)] bg-[var(--accent-5)]'
-                                : 'border-[#F3F4F6] bg-[#F9FAFB]/70 hover:border-[#E5E7EB]'
+                                : 'border-[#E5E7EB] bg-white hover:border-[#D1D5DB]'
                             }`}
                           >
-                            <div className="flex items-center justify-between gap-2 mb-1.5">
-                              <div className="flex items-center gap-1.5 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <div className="flex items-center gap-2 min-w-0">
                                 <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[12px] font-bold shrink-0 transition-colors ${
                                   isActive
                                     ? 'bg-[var(--accent-solid)] text-[var(--accent-on)]'
-                                    : 'bg-white border border-[#E5E7EB] text-[#6B7280]'
+                                    : 'bg-[#F3F4F6] text-[#4B5563]'
                                 }`}>
                                   {symbol}
                                 </span>
-                                <span className="text-[11px] font-semibold text-[#121316] truncate">{currencyName(code)}</span>
+                                <span className="text-[11px] font-medium text-[#4B5563] truncate">{currencyName(code)}</span>
                                 <span className="text-[10px] font-semibold text-[#9CA3AF] tabular-nums shrink-0">{code}</span>
                               </div>
-                              <span className="text-[10px] text-[#9CA3AF] font-mono tabular-nums shrink-0">
+                              <span className="text-[11px] text-[#9CA3AF] font-mono tabular-nums shrink-0">
                                 {code === 'BYN' ? 'базовая' : (rate ? `1 ${code} = ${Number(rate).toFixed(4)} BYN` : '—')}
                               </span>
                             </div>
@@ -1157,7 +1185,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                                 onChange={(e) => { setActiveCurrency(code); setActiveValue(e.target.value.replace(',', '.')); }}
                                 aria-label={`Сумма в ${code}`}
                                 placeholder="0.00"
-                                className={`w-full h-10 pl-3 pr-9 rounded-lg border bg-white text-sm font-semibold tabular-nums text-[#121316] placeholder:text-[#D1D5DB] transition-colors focus:outline-none ${
+                                className={`w-full h-10 pl-3 pr-10 rounded-xl border bg-white text-base font-semibold tabular-nums text-[#121316] placeholder:text-[#D1D5DB] transition-colors focus:outline-none ${
                                   isActive
                                     ? 'border-[var(--accent-ui)] ring-2 ring-[var(--accent-30)]'
                                     : 'border-[#E5E7EB] hover:border-[#D1D5DB] focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)]'
@@ -1169,9 +1197,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                                   onClick={() => { setActiveCurrency(code); setActiveValue(''); }}
                                   title={`Очистить сумму в ${code}`}
                                   aria-label={`Очистить сумму в ${code}`}
-                                  className="absolute right-1.5 h-7 w-7 rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+                                  className="absolute right-1.5 h-8 w-8 rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] flex items-center justify-center transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
                                 >
-                                  <X size={12} aria-hidden="true" />
+                                  <X size={13} strokeWidth={1.5} aria-hidden="true" />
                                 </button>
                               )}
                             </div>
@@ -1182,15 +1210,15 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                   )}
 
                   {/* Подвал: что редактируется сейчас и откуда курсы */}
-                  <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-t border-[#F3F4F6] select-none">
-                    <span className="text-[10px] text-[#6B7280] truncate">
+                  <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-[#E5E7EB] select-none">
+                    <span className="text-[11px] text-[#6B7280] truncate">
                       {isEditingCurrencies ? (
                         'В списке одна валюта останется всегда'
                       ) : (
                         <>Редактируется: <span className="font-semibold text-[var(--accent-ink)] tabular-nums">{activeCurrency}</span></>
                       )}
                     </span>
-                    <span className="text-[10px] text-[#9CA3AF] shrink-0">Источник: НБРБ</span>
+                    <span className="text-[11px] text-[#9CA3AF] shrink-0">Источник: НБРБ</span>
                   </div>
                 </motion.div>
               )}
@@ -1203,7 +1231,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         {/* Dynamic active viewport card frame */}
         <main 
           ref={mainScrollRef} 
-          className={`flex-1 w-full max-w-full relative pb-24 md:pb-0 ${
+          className={`flex-1 w-full max-w-full relative pb-52 md:pb-0 ${
                       activeModule === 'dashboard' 
                         ? 'p-0 bg-[#F9FAFB] overflow-hidden' 
                         : activeModule === 'admin'
@@ -1330,46 +1358,50 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         </AnimatePresence>
       )}
 
-      {/* === Mobile Glass Bottom Navigation === */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[rgba(255,255,255,0.5)] backdrop-blur-[14px] border-t border-[rgba(229,229,229,0.2)] flex items-stretch justify-around px-2 pt-2 safe-bottom select-none shadow-[0_-4px_20px_rgba(0,0,0,0.06)]" style={{paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))'}}>
-        {[
-          { key: 'dashboard', label: 'Главная', icon: Home },
-          { key: 'planZagruzok', label: 'Загрузки', icon: FileSpreadsheet },
-          { key: 'disposition', label: 'Карта', icon: Map },
-          { key: 'baza', label: 'Выезд', icon: Truck },
-        ].map((item) => {
-          const Icon = item.icon;
-          const active = activeModule === item.key;
-          return (
-            <button
-              key={item.key}
-              onClick={() => { setIsMobileMenuOpen(false); handleNavigate(item.key); }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setIsContextTarget(item.key);
-                setIsContextMenuOpen(true);
-              }}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 rounded-xl transition-all duration-150 ${active ? 'text-[#121316]' : 'text-[#6B7280] hover:text-[#4B5563]'}`}
-            >
-              <Icon className={`h-5 w-5 ${active ? 'stroke-[2]' : 'stroke-[1.5]'}`} fill={active ? 'currentColor' : 'none'} />
-              <span className={`text-[10px] leading-tight text-center ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
-              {active && <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-4.5 h-0.5 rounded-full bg-[#121316]" />}
-            </button>
-          );
-        })}
-        <button
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            setIsContextTarget('');
-            setIsContextMenuOpen(true);
-          }}
-          className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 rounded-xl transition-all duration-150 ${isMobileMenuOpen ? 'text-[#121316]' : 'text-[#6B7280] hover:text-[#4B5563]'}`}
-        >
-          <Menu className={`h-5 w-5 ${isMobileMenuOpen ? 'stroke-[2] fill-currentColor' : 'stroke-[1.5] fill-none'}`} />
-          <span className={`text-[10px] leading-tight text-center ${isMobileMenuOpen ? 'font-semibold' : 'font-medium'}`}>Ещё</span>
-        </button>
-      </nav>
+      {/* === Mobile Floating Nav с крупной активной капсулой === */}
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-end justify-center pb-0 safe-bottom pointer-events-none select-none"
+                 style={{paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))'}}>
+              <div className="mx-1.5 bg-white/70 backdrop-blur-[14px] border border-white/30 rounded-[32px] shadow-[0_4px_24px_rgba(0,0,0,0.08)] flex items-stretch justify-around overflow-hidden w-full pointer-events-auto">
+                {[
+                  { key: 'dashboard', label: 'Главная', icon: LayoutDashboard },
+                  { key: 'planZagruzok', label: 'Загрузки', icon: FileSpreadsheet },
+                  { key: 'disposition', label: 'Карта', icon: Map },
+                  { key: 'baza', label: 'Выезд', icon: Truck },
+                  { key: '__menu', label: 'Ещё', icon: Grid3x3, isMenu: true },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const active = item.isMenu ? isMobileMenuOpen : activeModule === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      onClick={() => {
+                        if (item.isMenu) {
+                          setIsMobileMenuOpen(!isMobileMenuOpen);
+                        } else {
+                          setIsMobileMenuOpen(false);
+                          handleNavigate(item.key);
+                        }
+                      }}
+                      onContextMenu={(e) => {
+                        if (!item.isMenu) {
+                          e.preventDefault();
+                          setIsContextTarget(item.key);
+                          setIsContextMenuOpen(true);
+                        }
+                      }}
+                      className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 min-h-[60px] transition-all duration-200 relative outline-none ${
+                        active
+                          ? 'text-white bg-[#3765F6] mx-1 my-2 rounded-2xl shadow-md'
+                          : 'text-[#6B7280] hover:text-[#4B5563] bg-transparent'
+                      }`}
+                    >
+                      <Icon className={`h-5 w-5 ${active ? 'stroke-[2.5] fill-white' : 'stroke-[1.5] fill-none text-[#6B7280]'}`} />
+                      <span className={`text-[9px] leading-tight text-center ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </nav>
 
       {/* === Context Menu (right-click) === */}
       {isContextMenuOpen && (
@@ -1402,69 +1434,124 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         </div>
       )}
 
-      {/* === Mobile Glass Все инструменты === */}
-      {isMobileMenuOpen && (
-<div data-scroll-lock="modal" className="md:hidden fixed inset-0 z-40 bg-[rgba(0,0,0,0.12)] backdrop-blur-[4px]" onClick={() => setIsMobileMenuOpen(false)}>
-          <div className="min-h-full flex items-end justify-center px-2 pt-2 pb-28" onClick={(e) => e.stopPropagation()}>
-            <motion.div
-              initial={{ y: 40, opacity: 0, scale: 0.96 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-              className="w-full bg-[rgba(255,255,255,0.65)] backdrop-blur-[20px] border border-[rgba(229,229,229,0.15)] shadow-[0_8px_30px_rgba(0,0,0,0.08)] rounded-[1.75rem] p-5 overflow-hidden"
-            >
-              <div className="flex items-center justify-between mb-4 px-1">
-                <span className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-widest">Все инструменты</span>
-                <button onClick={() => setIsMobileMenuOpen(false)} className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[#9CA3AF] hover:text-[#4B5563] transition cursor-pointer text-[11px] rounded-xl">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="grid grid-cols-3 gap-2.5">
-              {allowedModules.map((mod) => {
-                const Icon = mod.icon || Calendar;
-                const active = activeModule === mod.key;
-                return (
-                  <button
-                    key={mod.key}
-                    onClick={() => { setIsMobileMenuOpen(false); handleNavigate(mod.key); }}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      setIsContextTarget(mod.key);
-                      setIsContextMenuOpen(true);
-                      setIsMobileMenuOpen(false);
-                    }}
-                    className={`flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl transition-all duration-100 active:scale-95 ${
-                      active
-                        ? 'bg-[rgba(18,19,22,0.08)] text-[#121316] border border-[rgba(18,19,22,0.12)]'
-                        : 'bg-[rgba(249,250,251,0.4)] text-[#4B5563] hover:bg-[rgba(243,244,246,0.5)] border border-transparent'
-                    }`}
+      {/* === Mobile Все инструменты — grouped list === */}
+            {isMobileMenuOpen && (
+              <div data-scroll-lock="modal" className="md:hidden fixed inset-0 z-40 bg-black/20 backdrop-blur-[3px] motion-safe"
+                   onClick={() => setIsMobileMenuOpen(false)}>
+                <div ref={mobileMenuRef}
+                     className="flex items-end justify-center px-3 pb-2 min-h-full"
+                     onClick={(e) => e.stopPropagation()}>
+                  <motion.div
+                    initial={{ y: 40, opacity: 0, scale: 0.96 }}
+                    animate={{ y: 0, opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                    className="w-full bg-white border border-slate-200/40 shadow-[0_8px_30px_rgba(0,0,0,0.08)] rounded-2xl flex flex-col max-h-[80vh]"
+                    onMouseDown={(e) => e.stopPropagation()}
                   >
-                    <Icon className="h-5 w-5" strokeWidth={1.5} fill="none" />
-                    <span className="text-[10px] font-medium leading-tight text-center">{mod.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="grid grid-cols-2 gap-2.5 mt-5 pt-4 border-t border-[rgba(229,229,229,0.15)]">
-              <button
-                onClick={() => window.location.reload()}
-                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[rgba(243,244,246,0.5)] hover:bg-[rgba(229,229,229,0.4)] transition-colors text-[#4B5563] font-medium text-xs min-h-[44px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
-              >
-                <RefreshCw className="h-4 w-4" /> Обновить
-              </button>
-              <button
-                onClick={() => { setIsMobileMenuOpen(false); setIsAccountOpen(true); }}
-                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[rgba(243,244,246,0.5)] hover:bg-[rgba(229,229,229,0.4)] transition-colors text-[#4B5563] font-medium text-xs min-h-[44px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
-              >
-                <Settings className="h-4 w-4" /> Учётная запись
-              </button>
-            </div>
-            <div className="mt-3 text-center">
-              <span className="text-[10px] font-medium text-[#9CA3AF] tabular-nums">{APP_VERSION_LABEL}</span>
-            </div>
-            </motion.div>
-          </div>
-        </div>
-      )}
+                    {/* Header — всегда видим */}
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 shrink-0">
+                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                        <Grid3x3 className="w-4 h-4" /> Все инструменты
+                      </span>
+                      <button onClick={() => setIsMobileMenuOpen(false)}
+                              className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer rounded-xl">
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* Content — scrollable */}
+                    <div className="overflow-y-auto flex-1 px-4 py-3 custom-scrollbar space-y-3"
+                         style={{ WebkitOverflowScrolling: 'touch' }}>
+                      {(() => {
+                        const menuGroups = [
+                          { id: 'g_ops', label: 'Текущее', icon: Map,
+                            items: ['disposition', 'baza', 'documents', 'vehicleDriverData', 'dozvola', 'instructions'] },
+                          { id: 'g_planning', label: 'Планирование', icon: Calendar,
+                            items: ['planZagruzok', 'planDohod', 'currentPlanning', 'dohod'] },
+                          { id: 'g_report', label: 'Отчетность', icon: Wallet,
+                            items: ['salary', 'bookIssue', 'tabel', 'mdpJournal'] },
+                          { id: 'g_settings', label: 'Настройки', icon: Settings2,
+                            items: ['settings', 'appSettings', 'admin', 'agentAudit'] },
+                        ];
+
+                        const visibleGroups = menuGroups
+                          .map((g) => ({ ...g, allowedItems: g.items.filter((k) => allowedModules.some((m: any) => m.key === k)) }))
+                          .filter((g) => g.allowedItems.length > 0);
+
+                        return visibleGroups.map((group) => {
+                          // Иконка группы — из локального списка выше (компонент lucide),
+                          // каст не нужен: типы выводятся из литерала menuGroups.
+                          const GroupIcon = group.icon;
+                          return (
+                            <div key={group.id}>
+                              {/* Заголовок группы */}
+                              <div className="flex items-center gap-2 px-2 py-1.5 mb-1.5">
+                                <GroupIcon className="w-3.5 h-3.5 text-slate-400" />
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{group.label}</span>
+                              </div>
+
+                              {/* Пункты группы */}
+                              <div className="bg-slate-50/40 rounded-xl overflow-hidden divide-y divide-slate-100/60 border border-slate-200/20">
+                                {group.allowedItems.map((key) => {
+                                  const mod = allModules.find((m) => m.key === key);
+                                  if (!mod) return null;
+                                  const Icon = mod.icon || Calendar;
+                                  const isActive = activeModule === key;
+                                  return (
+                                    <button
+                                      key={key}
+                                      onClick={() => { setIsMobileMenuOpen(false); handleNavigate(key); }}
+                                      onContextMenu={(e) => {
+                                        e.preventDefault();
+                                        setIsContextTarget(key);
+                                        setIsContextMenuOpen(true);
+                                        setIsMobileMenuOpen(false);
+                                      }}
+                                      className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-[44px] text-left transition-all duration-100 cursor-pointer ${
+                                        isActive
+                                          ? 'bg-[#3765F6]/10 text-slate-900 font-semibold'
+                                          : 'bg-transparent text-slate-700 hover:bg-slate-100/60 font-medium'
+                                      }`}
+                                    >
+                                      <Icon className={`h-5 w-5 ${isActive ? 'stroke-[2] fill-[#3765F6]' : 'stroke-[1.2] fill-none text-slate-500'}`} />
+                                      <span className="flex-1 text-xs">{mod.label}</span>
+                                      {isActive && (
+                                        <span className="w-1.5 h-1.5 rounded-full bg-[#3765F6] shrink-0" />
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+
+                      {/* Нижние кнопки: Обновить + Учётная запись */}
+                      <div className="flex flex-wrap gap-2.5 pt-3 border-t border-slate-100">
+                        <button
+                          onClick={() => window.location.reload()}
+                          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-100/50 hover:bg-slate-200/40 transition-colors text-slate-600 font-medium text-xs min-h-[44px] cursor-pointer"
+                        >
+                          <RefreshCw className="h-4 w-4" /> Обновить
+                        </button>
+                        <button
+                          onClick={() => { setIsMobileMenuOpen(false); setIsAccountOpen(true); }}
+                          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-100/50 hover:bg-slate-200/40 transition-colors text-slate-600 font-medium text-xs min-h-[44px] cursor-pointer"
+                        >
+                          <Settings className="h-4 w-4" /> Учётная запись
+                        </button>
+                      </div>
+
+                      {/* Версия */}
+                      <div className="text-center py-0.5">
+                        <span className="text-[10px] font-medium text-slate-400 tabular-nums">{APP_VERSION_LABEL}</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+              </div>
+            )}
 
       <CommandCenter 
         user={user} 

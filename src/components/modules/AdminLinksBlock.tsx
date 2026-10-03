@@ -1,8 +1,9 @@
-import React, {useState} from 'react'
-import {UserProfile, AppSettings, QuickLink, ExternalTab, CurrentPlanningTab, PlanZagruzokTab} from '../../types'
-import {ExternalLink, Link, Plus, X, Check, Globe, GripVertical, Table2, FileSpreadsheet, Pencil, Trash2} from 'lucide-react'
-import { UI } from '../../ui/kit';
-import { SectionHeader } from '../../ui/components';
+import React, {useMemo, useRef, useState} from 'react'
+import {UserProfile, AppSettings, QuickLink, ExternalTab} from '../../types'
+import {Check, ChevronDown, ChevronUp, ExternalLink, Globe, GripVertical, Link, Pencil, Plus, RefreshCw, Trash2, X} from 'lucide-react'
+import { UI, plural } from '../../ui/kit';
+import { SectionHeader, SearchField, EmptyState } from '../../ui/components';
+import { useDialog } from '../DialogProvider';
 
 interface Props {
   user: UserProfile;
@@ -10,8 +11,19 @@ interface Props {
   onSave: (s: AppSettings) => void;
 }
 
-const iconBtnDanger = 'inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer';
-const iconBtnSuccess = 'inline-flex items-center justify-center p-1.5 rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer';
+/** Общая форма элемента обоих списков: QuickLink и ExternalTab совпадают по структуре. */
+interface LinkItem {
+  id: string;
+  title: string;
+  url: string;
+}
+
+/* Кнопки-иконки карточки: на тач-экранах крупные (min 44px), на десктопе компактнее. */
+const iconBtnBase =
+  'inline-flex items-center justify-center shrink-0 rounded-lg transition-colors cursor-pointer min-h-[44px] min-w-[38px] sm:min-h-[34px] sm:min-w-[34px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent';
+const iconBtnIdle = `${iconBtnBase} text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] disabled:hover:text-[#9CA3AF]`;
+const iconBtnDanger = `${iconBtnBase} text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 disabled:hover:text-[#9CA3AF]`;
+const iconBtnSuccess = `${iconBtnBase} text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50`;
 
 function moveItem<T>(arr: T[], from: number, to: number): T[] {
   const copy = [...arr];
@@ -20,469 +32,502 @@ function moveItem<T>(arr: T[], from: number, to: number): T[] {
   return copy;
 }
 
-function DragHandle() {
+/** Enter в поле = отправить форму: родитель перехватывает Enter и снимает фокус,
+ *  поэтому подтверждаем отправку явно, не полагаясь на неявный submit. */
+function submitOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  e.currentTarget.form?.requestSubmit();
+}
+
+/** Глобальный хук портала (useKeyboardShortcuts) перехватывает Enter на кнопках
+ *  вне полей ввода: вместо действия кнопки он нажимает скрытую «Сохранить и
+ *  перезагрузить» и перезагружает страницу. Гасим всплытие Enter у своих
+ *  элементов — тогда срабатывает штатное действие (клик или переход по ссылке),
+ *  а доступность с клавиатуры не зависит от чужого хука. Space работает и так. */
+function isolateEnter(e: React.KeyboardEvent) {
+  if (e.key === 'Enter') e.stopPropagation();
+}
+
+interface LinksSectionProps {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  items: LinkItem[];
+  writable: boolean;
+  /** Слово для подписей: «ссылка/ссылки/ссылок», винительный «ссылку» и родительный «ссылки». */
+  nounOne: string;
+  nounFew: string;
+  nounMany: string;
+  nounAcc: string;
+  nounGen: string;
+  addTitlePlaceholder: string;
+  emptyTitle: string;
+  emptyHint: string;
+  emptyActionLabel: string;
+  onAdd: (title: string, url: string) => void;
+  onUpdate: (id: string, title: string, url: string) => void;
+  onDelete: (item: LinkItem) => void;
+  onReorder: (items: LinkItem[]) => void;
+}
+
+/** Раздел со списком ссылок: добавление, поиск, правка, удаление и порядок. */
+function LinksSection({
+  icon, title, subtitle, items, writable,
+  nounOne, nounFew, nounMany, nounAcc, nounGen,
+  addTitlePlaceholder, emptyTitle, emptyHint, emptyActionLabel,
+  onAdd, onUpdate, onDelete, onReorder,
+}: LinksSectionProps) {
+  const [search, setSearch] = useState('');
+  const [addTitle, setAddTitle] = useState('');
+  const [addUrl, setAddUrl] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editUrl, setEditUrl] = useState('');
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const addTitleRef = useRef<HTMLInputElement>(null);
+
+  const query = search.trim().toLowerCase();
+  const filtered = useMemo(
+    () => (query
+      ? items.filter((it) => it.title.toLowerCase().includes(query) || it.url.toLowerCase().includes(query))
+      : items),
+    [items, query],
+  );
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    const t = addTitle.trim();
+    const u = addUrl.trim();
+    if (!t || !u) return;
+    onAdd(t, u);
+    setAddTitle('');
+    setAddUrl('');
+    addTitleRef.current?.focus();
+  };
+
+  const startEdit = (item: LinkItem) => {
+    setEditingId(item.id);
+    setEditTitle(item.title);
+    setEditUrl(item.url);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditTitle('');
+    setEditUrl('');
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingId) return;
+    const t = editTitle.trim();
+    const u = editUrl.trim();
+    if (!t || !u) return;
+    onUpdate(editingId, t, u);
+    cancelEdit();
+  };
+
+  /** Стрелки двигают по полному списку — поиск не меняет фактический порядок. */
+  const moveBy = (id: string, dir: -1 | 1) => {
+    const from = items.findIndex((it) => it.id === id);
+    const to = from + dir;
+    if (from < 0 || to < 0 || to >= items.length) return;
+    onReorder(moveItem(items, from, to));
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const fromId = dragId;
+    setDragId(null);
+    setOverId(null);
+    if (!writable || !fromId || fromId === targetId) return;
+    const from = items.findIndex((it) => it.id === fromId);
+    const to = items.findIndex((it) => it.id === targetId);
+    if (from < 0 || to < 0 || from === to) return;
+    onReorder(moveItem(items, from, to));
+  };
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    if (!writable) return;
+    setDragId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      // Firefox не начинает перетаскивание без данных
+      e.dataTransfer.setData('text/plain', id);
+    } catch {
+      /* не критично */
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    if (!writable || dragId === null || dragId === id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (overId !== id) setOverId(id);
+  };
+
+  const handleDragLeave = (e: React.DragEvent, id: string) => {
+    // Курсор перешёл на дочерний элемент карточки — это не уход
+    const next = e.relatedTarget as Node | null;
+    if (next && e.currentTarget.contains(next)) return;
+    if (overId === id) setOverId(null);
+  };
+
   return (
-    <div className="cursor-grab active:cursor-grabbing text-[#9CA3AF] hover:text-[#4B5563] p-0.5 rounded transition shrink-0">
-      <GripVertical className="w-3.5 h-3.5" />
-    </div>
+    <section className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-5 flex flex-col gap-4">
+      <SectionHeader icon={icon} tone="graphite" title={title} subtitle={subtitle}>
+        <span className={UI.countBadge}>{items.length}</span>
+      </SectionHeader>
+
+      {writable && (
+        <form onSubmit={handleAdd} className="flex flex-col sm:flex-row gap-2 sm:items-center">
+          <input
+            ref={addTitleRef}
+            type="text"
+            value={addTitle}
+            onChange={(e) => setAddTitle(e.target.value)}
+            onKeyDown={submitOnEnter}
+            placeholder={addTitlePlaceholder}
+            aria-label={addTitlePlaceholder}
+            className={UI.input}
+            required
+          />
+          <input
+            type="url"
+            value={addUrl}
+            onChange={(e) => setAddUrl(e.target.value)}
+            onKeyDown={submitOnEnter}
+            placeholder="https://…"
+            aria-label={`Адрес ${nounGen}`}
+            className={UI.input}
+            required
+          />
+          <button type="submit" className={`${UI.buttonPrimary} shrink-0`} onKeyDown={isolateEnter}>
+            <Plus size={14} strokeWidth={2.5} aria-hidden="true" />
+            Добавить
+          </button>
+        </form>
+      )}
+
+      {items.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <SearchField
+            value={search}
+            onChange={setSearch}
+            placeholder="Поиск по названию или адресу…"
+            ariaLabel={`Поиск: ${title}`}
+          />
+          {query !== '' && (
+            <span className={UI.hint} aria-live="polite">
+              Найдено: {filtered.length} {plural(filtered.length, nounOne, nounFew, nounMany)}
+            </span>
+          )}
+        </div>
+      )}
+
+      {items.length === 0 ? (
+        <EmptyState
+          kind="empty"
+          title={emptyTitle}
+          hint={emptyHint}
+          actionLabel={writable ? emptyActionLabel : undefined}
+          onAction={writable ? () => addTitleRef.current?.focus() : undefined}
+        />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          kind="no-results"
+          title="Ничего не найдено"
+          hint={`Проверьте название или адрес: поиск идёт по обоим полям. Сейчас в списке ${items.length} ${plural(items.length, nounOne, nounFew, nounMany)}.`}
+          actionLabel="Сбросить поиск"
+          onAction={() => setSearch('')}
+          query={search.trim()}
+        />
+      ) : (
+        <ul className="flex flex-col gap-2" aria-label={`${title} — список`}>
+          {filtered.map((item) => {
+            const fullIdx = items.findIndex((it) => it.id === item.id);
+            const isDragged = dragId === item.id;
+            const isOver = overId === item.id && dragId !== null && dragId !== item.id;
+
+            if (editingId === item.id) {
+              return (
+                <li key={item.id}>
+                  <form
+                    onSubmit={handleSaveEdit}
+                    className="flex flex-col sm:flex-row gap-2 bg-white border border-[#E5E7EB] rounded-2xl p-3 sm:items-center"
+                  >
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      onKeyDown={submitOnEnter}
+                      placeholder={addTitlePlaceholder}
+                      aria-label={`Название ${nounGen} — правка`}
+                      className={`${UI.input} flex-1`}
+                      required
+                    />
+                    <input
+                      type="url"
+                      value={editUrl}
+                      onChange={(e) => setEditUrl(e.target.value)}
+                      onKeyDown={submitOnEnter}
+                      placeholder="https://…"
+                      aria-label={`Адрес ${nounGen} — правка`}
+                      className={`${UI.input} flex-1`}
+                      required
+                    />
+                    <div className="flex items-center justify-end gap-1 shrink-0">
+                      <button
+                        type="submit"
+                        className={iconBtnSuccess}
+                        title="Сохранить"
+                        aria-label={`Сохранить ${nounAcc} «${item.title}»`}
+                        onKeyDown={isolateEnter}
+                      >
+                        <Check size={15} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className={iconBtnIdle}
+                        title="Отмена"
+                        aria-label={`Отменить изменение ${nounOne} «${item.title}»`}
+                        onKeyDown={isolateEnter}
+                      >
+                        <X size={15} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </form>
+                </li>
+              );
+            }
+
+            return (
+              <li
+                key={item.id}
+                draggable={writable}
+                onDragStart={(e) => handleDragStart(e, item.id)}
+                onDragOver={(e) => handleDragOver(e, item.id)}
+                onDragLeave={(e) => handleDragLeave(e, item.id)}
+                onDrop={(e) => handleDrop(e, item.id)}
+                onDragEnd={() => { setDragId(null); setOverId(null); }}
+                className={`flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2.5 bg-white border rounded-2xl p-3 sm:px-4 sm:py-2.5 transition-colors ${
+                  isOver
+                    ? 'border-[var(--accent)] ring-2 ring-[var(--accent-20)]'
+                    : isDragged
+                      ? 'border-[#E5E7EB] opacity-50'
+                      : 'border-[#E5E7EB] hover:border-[#D1D5DB] hover:bg-[#F9FAFB]'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  {writable && (
+                    <span
+                      className="hidden sm:inline-flex items-center justify-center shrink-0 text-[#9CA3AF] hover:text-[#4B5563] cursor-grab active:cursor-grabbing transition-colors"
+                      title="Перетащите, чтобы изменить порядок"
+                      aria-hidden="true"
+                    >
+                      <GripVertical size={15} />
+                    </span>
+                  )}
+                  <span className="w-5 shrink-0 text-center text-[11px] font-mono text-[#9CA3AF]" aria-hidden="true">
+                    {fullIdx + 1}
+                  </span>
+                  <span className="hidden sm:flex w-8 h-8 rounded-lg bg-[#F3F4F6] text-[#6B7280] items-center justify-center shrink-0" aria-hidden="true">
+                    <ExternalLink size={14} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      draggable={false}
+                      title={item.url}
+                      onKeyDown={isolateEnter}
+                      className="block truncate text-xs font-semibold text-[#121316] hover:text-[var(--accent)] transition-colors rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]"
+                    >
+                      {item.title}
+                    </a>
+                    <span className="block truncate text-[11px] font-mono text-[#6B7280] mt-0.5" title={item.url}>
+                      {item.url}
+                    </span>
+                  </span>
+                </div>
+
+                {writable && (
+                  <div className="flex items-center justify-end gap-0.5 shrink-0">
+                    <button
+                      type="button"
+                      className={iconBtnIdle}
+                      disabled={fullIdx <= 0}
+                      onClick={() => moveBy(item.id, -1)}
+                      onKeyDown={isolateEnter}
+                      title="Поднять выше"
+                      aria-label={`Переместить ${nounAcc} «${item.title}» выше`}
+                    >
+                      <ChevronUp size={15} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className={iconBtnIdle}
+                      disabled={fullIdx >= items.length - 1}
+                      onClick={() => moveBy(item.id, 1)}
+                      onKeyDown={isolateEnter}
+                      title="Опустить ниже"
+                      aria-label={`Переместить ${nounAcc} «${item.title}» ниже`}
+                    >
+                      <ChevronDown size={15} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className={iconBtnIdle}
+                      onClick={() => startEdit(item)}
+                      onKeyDown={isolateEnter}
+                      title="Изменить"
+                      aria-label={`Изменить ${nounAcc} «${item.title}»`}
+                    >
+                      <Pencil size={14} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className={iconBtnDanger}
+                      onClick={() => onDelete(item)}
+                      onKeyDown={isolateEnter}
+                      title="Удалить"
+                      aria-label={`Удалить ${nounAcc} «${item.title}»`}
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                    </button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {writable && items.length > 0 && (
+        <p className={UI.hint}>
+          Порядок {nounMany} меняется перетаскиванием за ручку или кнопками со стрелками — сохраняется сразу.
+        </p>
+      )}
+    </section>
   );
 }
 
 export default function AdminLinksBlock({ user, settings, onSave }: Props) {
-  const [linkTitle, setLinkTitle] = useState('');
-  const [linkUrl, setLinkUrl] = useState('');
-  const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
-  const [editingLinkTitle, setEditingLinkTitle] = useState('');
-  const [editingLinkUrl, setEditingLinkUrl] = useState('');
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-
-  // External tabs
-  const [extTitle, setExtTitle] = useState('');
-  const [extUrl, setExtUrl] = useState('');
-  const [editingExtId, setEditingExtId] = useState<string | null>(null);
-  const [editingExtTitle, setEditingExtTitle] = useState('');
-  const [editingExtUrl, setEditingExtUrl] = useState('');
-
-  // Current Planning tabs
-  const [cpTitle, setCpTitle] = useState('');
-  const [cpUrl, setCpUrl] = useState('');
-  const [editingCpId] = useState<string | null>(null);
-  const [editingCpTitle, setEditingCpTitle] = useState('');
-  const [editingCpUrl, setEditingCpUrl] = useState('');
-
-  // Plan Zagruzok tabs
-  const [pzTitle, setPzTitle] = useState('');
-  const [pzUrl, setPzUrl] = useState('');
-  const [editingPzId, setEditingPzId] = useState<string | null>(null);
-  const [editingPzTitle, setEditingPzTitle] = useState('');
-  const [editingPzUrl, setEditingPzUrl] = useState('');
+  const { showConfirm } = useDialog();
 
   const isWritePermitted = user.role === 'admin' || user.role === 'root_admin' || user.permissions?.settings === 'write';
 
-  // --- Drag handlers ---
-  const onDragStart = (idx: number) => setDragIdx(idx);
-  const onDragOver = (e: React.DragEvent, idx: number) => {
-    e.preventDefault();
-    if (dragIdx === null || dragIdx === idx) return;
-    // Visual feedback would require re-render — we just move on drop
-    (e.currentTarget as HTMLElement).style.borderTop = '2px solid var(--accent-ui)';
-  };
-  const onDragLeave = (e: React.DragEvent) => {
-    (e.currentTarget as HTMLElement).style.borderTop = '';
-  };
-  const onDrop = <T,>(e: React.DragEvent, toIdx: number, list: T[], setter: (list: T[]) => void) => {
-    e.preventDefault();
-    (e.currentTarget as HTMLElement).style.borderTop = '';
-    if (dragIdx === null || dragIdx === toIdx) return;
-    setter(moveItem(list, dragIdx, toIdx));
-    setDragIdx(null);
-  };
-  const onDragEnd = () => setDragIdx(null);
-
-  // Quick Links handlers
-  const handleAddLink = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!linkTitle || !linkUrl || !settings) return;
-    const newLink: QuickLink = {
-      id: "link_" + Date.now(),
-      title: linkTitle.trim(),
-      url: linkUrl.trim()
-    };
-    onSave({ ...settings, quickLinks: [...(settings.quickLinks || []), newLink] });
-    setLinkTitle('');
-    setLinkUrl('');
-  };
-
-  const handleDeleteLink = (id: string) => {
-    if (!settings) return;
-    onSave({ ...settings, quickLinks: (settings.quickLinks || []).filter(l => l.id !== id) });
-  };
-
-  const handleStartEditLink = (link: QuickLink) => {
-    setEditingLinkId(link.id);
-    setEditingLinkTitle(link.title);
-    setEditingLinkUrl(link.url);
-  };
-
-  const handleSaveEditLink = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingLinkId || !editingLinkTitle || !editingLinkUrl || !settings) return;
-    const updated = (settings.quickLinks || []).map(l =>
-      l.id === editingLinkId ? { ...l, title: editingLinkTitle.trim(), url: editingLinkUrl.trim() } : l
+  if (!settings) {
+    return (
+      <div className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-6 flex items-center gap-3">
+        <RefreshCw size={16} className="animate-spin text-[#9CA3AF]" aria-hidden="true" />
+        <span className="text-xs text-[#6B7280]">Загружаем настройки ссылок…</span>
+      </div>
     );
-    onSave({ ...settings, quickLinks: updated });
-    setEditingLinkId(null);
-    setEditingLinkTitle('');
-    setEditingLinkUrl('');
+  }
+
+  const current: AppSettings = settings;
+
+  /* Обе вкладки сохраняются тем же вызовом onSave({...settings, ...}) — сигнатура не меняется. */
+  const addLink = (title: string, url: string) => {
+    const newLink: QuickLink = { id: 'link_' + Date.now(), title, url };
+    onSave({ ...current, quickLinks: [...(current.quickLinks || []), newLink] });
   };
 
-  const handleReorderLinks = (reordered: QuickLink[]) => {
-    if (!settings) return;
-    onSave({ ...settings, quickLinks: reordered });
+  const updateLink = (id: string, title: string, url: string) => {
+    onSave({
+      ...current,
+      quickLinks: (current.quickLinks || []).map((l) => (l.id === id ? { ...l, title, url } : l)),
+    });
   };
 
-  // External Tabs handlers
-  const handleAddExt = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!extTitle || !extUrl || !settings) return;
-    const newTab = { id: "ext_" + Date.now(), title: extTitle.trim(), url: extUrl.trim() };
-    onSave({ ...settings, externalTabs: [...(settings.externalTabs || []), newTab] });
-    setExtTitle('');
-    setExtUrl('');
-  };
-
-  const handleDeleteExt = (id: string) => {
-    if (!settings) return;
-    onSave({ ...settings, externalTabs: (settings.externalTabs || []).filter(t => t.id !== id) });
-  };
-
-  const handleStartEditExt = (tab: ExternalTab) => {
-    setEditingExtId(tab.id);
-    setEditingExtTitle(tab.title);
-    setEditingExtUrl(tab.url);
-  };
-
-  const handleSaveEditExt = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingExtId || !editingExtTitle || !editingExtUrl || !settings) return;
-    const updated = (settings.externalTabs || []).map(t =>
-      t.id === editingExtId ? { ...t, title: editingExtTitle.trim(), url: editingExtUrl.trim() } : t
+  const deleteLink = async (item: LinkItem) => {
+    const ok = await showConfirm(
+      `Удалить ссылку «${item.title}»? Она пропадёт из блока «Полезные ссылки» на главной странице.`,
+      'Удалить ссылку?',
+      { variant: 'danger', confirmLabel: 'Удалить' },
     );
-    onSave({ ...settings, externalTabs: updated });
-    setEditingExtId(null);
-    setEditingExtTitle('');
-    setEditingExtUrl('');
+    if (!ok) return;
+    onSave({ ...current, quickLinks: (current.quickLinks || []).filter((l) => l.id !== item.id) });
   };
 
-  const handleReorderExt = (reordered: ExternalTab[]) => {
-    if (!settings) return;
-    onSave({ ...settings, externalTabs: reordered });
+  const reorderLinks = (reordered: LinkItem[]) => {
+    onSave({ ...current, quickLinks: reordered });
   };
 
-  // Current Planning Tabs handlers
-  const handleAddCp = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!cpTitle || !cpUrl || !settings) return;
-    const newTab: CurrentPlanningTab = { id: "cp_" + Date.now(), name: cpTitle.trim(), sheetUrl: cpUrl.trim() };
-    onSave({ ...settings, currentPlanningTabs: [...(settings.currentPlanningTabs || []), newTab] });
-    setCpTitle('');
-    setCpUrl('');
+  const addTab = (title: string, url: string) => {
+    const newTab: ExternalTab = { id: 'ext_' + Date.now(), title, url };
+    onSave({ ...current, externalTabs: [...(current.externalTabs || []), newTab] });
   };
 
-  const handleDeleteCp = (id: string) => {
-    if (!settings) return;
-    onSave({ ...settings, currentPlanningTabs: (settings.currentPlanningTabs || []).filter(t => t.id !== id) });
+  const updateTab = (id: string, title: string, url: string) => {
+    onSave({
+      ...current,
+      externalTabs: (current.externalTabs || []).map((t) => (t.id === id ? { ...t, title, url } : t)),
+    });
   };
 
-  const handleReorderCp = (reordered: CurrentPlanningTab[]) => {
-    if (!settings) return;
-    onSave({ ...settings, currentPlanningTabs: reordered });
+  const deleteTab = async (item: LinkItem) => {
+    const ok = await showConfirm(
+      `Удалить вкладку «${item.title}»? Она пропадёт из верхнего меню портала.`,
+      'Удалить вкладку?',
+      { variant: 'danger', confirmLabel: 'Удалить' },
+    );
+    if (!ok) return;
+    onSave({ ...current, externalTabs: (current.externalTabs || []).filter((t) => t.id !== item.id) });
   };
 
-  // Plan Zagruzok Tabs handlers
-  const handleAddPz = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!pzTitle || !pzUrl || !settings) return;
-    const newTab: PlanZagruzokTab = { id: "pz_" + Date.now(), name: pzTitle.trim(), sheetUrl: pzUrl.trim() };
-    onSave({ ...settings, planZagruzokTabs: [...(settings.planZagruzokTabs || []), newTab] });
-    setPzTitle('');
-    setPzUrl('');
+  const reorderTabs = (reordered: LinkItem[]) => {
+    onSave({ ...current, externalTabs: reordered });
   };
-
-  const handleDeletePz = (id: string) => {
-    if (!settings) return;
-    onSave({ ...settings, planZagruzokTabs: (settings.planZagruzokTabs || []).filter(t => t.id !== id) });
-  };
-
-  const handleReorderPz = (reordered: PlanZagruzokTab[]) => {
-    if (!settings) return;
-    onSave({ ...settings, planZagruzokTabs: reordered });
-  };
-
-  const draggableRow = (idx: number) => ({
-    draggable: true,
-    onDragStart: () => onDragStart(idx),
-    onDragOver: (e: React.DragEvent) => onDragOver(e, idx),
-    onDragLeave,
-    onDrop: (e: React.DragEvent) => isWritePermitted ? null : null,
-    onDragEnd,
-  });
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Виджет быстрых ссылок */}
-      <div className="flex flex-col gap-3 pb-6 border-b border-[#E5E7EB] last:border-0 last:pb-0">
-        <SectionHeader
-          icon={<Link className="w-4 h-4" />}
-          tone="graphite"
-          title="Виджет быстрых ссылок на Dashboard"
-          subtitle="Ссылки отображаются на главной панели под блоком новостей"
-        >
-          <span className={UI.countBadge}>{settings?.quickLinks?.length || 0}</span>
-        </SectionHeader>
+      <LinksSection
+        icon={<Link className="w-4 h-4" aria-hidden="true" />}
+        title="Полезные ссылки на главной"
+        subtitle="Показываются всем пользователям в нижней части главной страницы."
+        items={current.quickLinks || []}
+        writable={isWritePermitted}
+        nounOne="ссылка"
+        nounFew="ссылки"
+        nounMany="ссылок"
+        nounAcc="ссылку"
+        nounGen="ссылки"
+        addTitlePlaceholder="Название ссылки"
+        emptyTitle="Ссылок пока нет"
+        emptyHint="Добавьте первую — она появится на главной странице у всех пользователей."
+        emptyActionLabel="Добавить первую ссылку"
+        onAdd={addLink}
+        onUpdate={updateLink}
+        onDelete={deleteLink}
+        onReorder={reorderLinks}
+      />
 
-        {isWritePermitted && (
-          <form onSubmit={handleAddLink} className="flex flex-col sm:flex-row gap-2">
-            <input type="text" placeholder="Название" required
-              value={linkTitle} onChange={e => setLinkTitle(e.target.value)}
-              className={UI.input}
-            />
-            <input type="url" placeholder="https://..." required
-              value={linkUrl} onChange={e => setLinkUrl(e.target.value)}
-              className={UI.input}
-            />
-            <button type="submit" className={`${UI.buttonPrimary} shrink-0`}>
-              <Plus size={14} strokeWidth={2.5} /> Добавить
-            </button>
-          </form>
-        )}
-
-        <div className="flex flex-col gap-1.5 max-h-[250px] overflow-y-auto custom-scrollbar">
-          {settings?.quickLinks?.map((link, idx) => {
-            const isEditing = editingLinkId === link.id;
-            if (isEditing) {
-              return (
-                <form key={link.id} onSubmit={handleSaveEditLink}
-                  className="flex flex-col sm:flex-row gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-2"
-                >
-                  <input type="text" value={editingLinkTitle} required
-                    onChange={e => setEditingLinkTitle(e.target.value)}
-                    className={`${UI.inputSm} flex-1`}
-                  />
-                  <input type="url" value={editingLinkUrl} required
-                    onChange={e => setEditingLinkUrl(e.target.value)}
-                    className={`${UI.inputSm} flex-1`}
-                  />
-                  <div className="flex gap-0.5 justify-end shrink-0">
-                    <button type="submit" className={iconBtnSuccess} title="Сохранить"><Check size={14} /></button>
-                    <button type="button" onClick={() => setEditingLinkId(null)}
-                      className={UI.buttonIcon} title="Отмена"><X size={14} /></button>
-                  </div>
-                </form>
-              );
-            }
-            return (
-              <div key={link.id}
-                {...draggableRow(idx)}
-                onDrop={(e) => { e.preventDefault(); if (dragIdx === null || dragIdx === idx || !settings) return; onSave({ ...settings, quickLinks: moveItem(settings.quickLinks!, dragIdx, idx) }); setDragIdx(null); }}
-                className={`flex items-center justify-between gap-2 px-3 py-2.5 bg-white border rounded-xl transition-colors ${dragIdx === idx ? 'border-[var(--accent)] ring-2 ring-[var(--accent-20)]' : 'border-[#E5E7EB] hover:bg-[#F9FAFB]'}`}
-              >
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <DragHandle />
-                  <ExternalLink size={12} className="text-[#9CA3AF] shrink-0" />
-                  <a href={link.url} target="_blank" rel="noopener noreferrer"
-                    className="text-xs font-medium text-[#4B5563] hover:text-[#121316] truncate max-w-[220px] transition-colors"
-                  >{link.title}</a>
-                </div>
-                {isWritePermitted && (
-                  <div className="flex gap-0.5 shrink-0">
-                    <button onClick={() => handleStartEditLink(link)}
-                      className={UI.buttonIcon} title="Редактировать">
-                      <Pencil size={13} />
-                    </button>
-                    <button onClick={() => handleDeleteLink(link.id)}
-                      className={iconBtnDanger} title="Удалить">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {(!settings?.quickLinks || settings.quickLinks.length === 0) && (
-            <div className="py-6 text-center text-xs text-[#6B7280]">Нет ссылок</div>
-          )}
-        </div>
-      </div>
-
-      {/* Кастомные вкладки на внешние сайты */}
-      <div className="flex flex-col gap-3 pb-6 border-b border-[#E5E7EB] last:border-0 last:pb-0">
-        <SectionHeader
-          icon={<Globe className="w-4 h-4" />}
-          tone="graphite"
-          title="Кастомные меню-вкладки на внешние сайты"
-          subtitle="Отображаются в верхнем навигационном меню RATIPA"
-        >
-          <span className={UI.countBadge}>{settings?.externalTabs?.length || 0}</span>
-        </SectionHeader>
-
-        {isWritePermitted && (
-          <form onSubmit={handleAddExt} className="flex flex-col sm:flex-row gap-2">
-            <input type="text" placeholder="Название" required
-              value={extTitle} onChange={e => setExtTitle(e.target.value)}
-              className={UI.input}
-            />
-            <input type="url" placeholder="https://..." required
-              value={extUrl} onChange={e => setExtUrl(e.target.value)}
-              className={UI.input}
-            />
-            <button type="submit" className={`${UI.buttonPrimary} shrink-0`}>
-              <Plus size={14} strokeWidth={2.5} /> Добавить
-            </button>
-          </form>
-        )}
-
-        <div className="flex flex-col gap-1.5 max-h-[250px] overflow-y-auto custom-scrollbar">
-          {(settings?.externalTabs || []).map((tab, idx) => {
-            const isEditing = editingExtId === tab.id;
-            if (isEditing) {
-              return (
-                <form key={tab.id} onSubmit={handleSaveEditExt}
-                  className="flex flex-col sm:flex-row gap-2 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl p-2"
-                >
-                  <input type="text" value={editingExtTitle} required
-                    onChange={e => setEditingExtTitle(e.target.value)}
-                    className={`${UI.inputSm} flex-1`}
-                  />
-                  <input type="url" value={editingExtUrl} required
-                    onChange={e => setEditingExtUrl(e.target.value)}
-                    className={`${UI.inputSm} flex-1`}
-                  />
-                  <div className="flex gap-0.5 justify-end shrink-0">
-                    <button type="submit" className={iconBtnSuccess} title="Сохранить"><Check size={14} /></button>
-                    <button type="button" onClick={() => setEditingExtId(null)}
-                      className={UI.buttonIcon} title="Отмена"><X size={14} /></button>
-                  </div>
-                </form>
-              );
-            }
-            return (
-              <div key={tab.id}
-                {...draggableRow(idx)}
-                onDrop={(e) => { e.preventDefault(); if (dragIdx === null || dragIdx === idx || !settings) return; onSave({ ...settings, externalTabs: moveItem(settings.externalTabs!, dragIdx, idx) }); setDragIdx(null); }}
-                className={`flex items-center justify-between gap-2 px-3 py-2.5 bg-white border rounded-xl transition-colors ${dragIdx === idx ? 'border-[var(--accent)] ring-2 ring-[var(--accent-20)]' : 'border-[#E5E7EB] hover:bg-[#F9FAFB]'}`}
-              >
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <DragHandle />
-                  <Globe size={12} className="text-[#9CA3AF] shrink-0" />
-                  <span className="text-xs font-medium text-[#4B5563] truncate max-w-[220px]">{tab.title}</span>
-                </div>
-                {isWritePermitted && (
-                  <div className="flex gap-0.5 shrink-0">
-                    <button onClick={() => handleStartEditExt(tab)}
-                      className={UI.buttonIcon} title="Редактировать">
-                      <Pencil size={13} />
-                    </button>
-                    <button onClick={() => handleDeleteExt(tab.id)}
-                      className={iconBtnDanger} title="Удалить">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {(!settings?.externalTabs || settings.externalTabs.length === 0) && (
-            <div className="py-6 text-center text-xs text-[#6B7280]">Нет вкладок</div>
-          )}
-        </div>
-      </div>
-
-      {/* Вкладки «Текущее планирование» */}
-      <div className="flex flex-col gap-3 pb-6 border-b border-[#E5E7EB] last:border-0 last:pb-0">
-        <SectionHeader
-          icon={<Table2 className="w-4 h-4" />}
-          tone="graphite"
-          title="Вкладки «Текущее планирование»"
-          subtitle="Вкладки отображаются в модуле Текущего планирования"
-        >
-          <span className={UI.countBadge}>{settings?.currentPlanningTabs?.length || 0}</span>
-        </SectionHeader>
-
-        {isWritePermitted && (
-          <form onSubmit={handleAddCp} className="flex flex-col sm:flex-row gap-2">
-            <input type="text" placeholder="Название вкладки" required
-              value={cpTitle} onChange={e => setCpTitle(e.target.value)}
-              className={UI.input}
-            />
-            <input type="url" placeholder="https://docs.google.com/..." required
-              value={cpUrl} onChange={e => setCpUrl(e.target.value)}
-              className={UI.input}
-            />
-            <button type="submit" className={`${UI.buttonPrimary} shrink-0`}>
-              <Plus size={14} strokeWidth={2.5} /> Добавить
-            </button>
-          </form>
-        )}
-
-        <div className="flex flex-col gap-1.5 max-h-[250px] overflow-y-auto custom-scrollbar">
-          {(settings?.currentPlanningTabs || []).map((tab, idx) => (
-            <div key={tab.id}
-              {...draggableRow(idx)}
-              onDrop={(e) => { e.preventDefault(); if (dragIdx === null || dragIdx === idx || !settings) return; onSave({ ...settings, currentPlanningTabs: moveItem(settings.currentPlanningTabs!, dragIdx, idx) }); setDragIdx(null); }}
-              className={`flex items-center justify-between gap-2 px-3 py-2.5 bg-white border rounded-xl transition-colors ${dragIdx === idx ? 'border-[var(--accent)] ring-2 ring-[var(--accent-20)]' : 'border-[#E5E7EB] hover:bg-[#F9FAFB]'}`}
-            >
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <DragHandle />
-                <Table2 size={12} className="text-[#9CA3AF] shrink-0" />
-                <span className="text-xs font-medium text-[#4B5563] truncate max-w-[220px]">{tab.name}</span>
-              </div>
-              {isWritePermitted && (
-                <button onClick={() => handleDeleteCp(tab.id)}
-                  className={`${iconBtnDanger} shrink-0`} title="Удалить">
-                  <Trash2 size={13} />
-                </button>
-              )}
-            </div>
-          ))}
-          {(!settings?.currentPlanningTabs || settings.currentPlanningTabs.length === 0) && (
-            <div className="py-6 text-center text-xs text-[#6B7280]">Нет вкладок</div>
-          )}
-        </div>
-      </div>
-
-      {/* Вкладки «План загрузок» */}
-      <div className="flex flex-col gap-3 pb-6 border-b border-[#E5E7EB] last:border-0 last:pb-0">
-        <SectionHeader
-          icon={<FileSpreadsheet className="w-4 h-4" />}
-          tone="graphite"
-          title="Вкладки «План загрузок»"
-          subtitle="Дополнительные вкладки в модуле Плана загрузок"
-        >
-          <span className={UI.countBadge}>{settings?.planZagruzokTabs?.length || 0}</span>
-        </SectionHeader>
-
-        {isWritePermitted && (
-          <form onSubmit={handleAddPz} className="flex flex-col sm:flex-row gap-2">
-            <input type="text" placeholder="Название вкладки" required
-              value={pzTitle} onChange={e => setPzTitle(e.target.value)}
-              className={UI.input}
-            />
-            <input type="url" placeholder="https://docs.google.com/..." required
-              value={pzUrl} onChange={e => setPzUrl(e.target.value)}
-              className={UI.input}
-            />
-            <button type="submit" className={`${UI.buttonPrimary} shrink-0`}>
-              <Plus size={14} strokeWidth={2.5} /> Добавить
-            </button>
-          </form>
-        )}
-
-        <div className="flex flex-col gap-1.5 max-h-[250px] overflow-y-auto custom-scrollbar">
-          {(settings?.planZagruzokTabs || []).map((tab, idx) => (
-            <div key={tab.id}
-              {...draggableRow(idx)}
-              onDrop={(e) => { e.preventDefault(); if (dragIdx === null || dragIdx === idx || !settings) return; onSave({ ...settings, planZagruzokTabs: moveItem(settings.planZagruzokTabs!, dragIdx, idx) }); setDragIdx(null); }}
-              className={`flex items-center justify-between gap-2 px-3 py-2.5 bg-white border rounded-xl transition-colors ${dragIdx === idx ? 'border-[var(--accent)] ring-2 ring-[var(--accent-20)]' : 'border-[#E5E7EB] hover:bg-[#F9FAFB]'}`}
-            >
-              <div className="flex items-center gap-2 min-w-0 flex-1">
-                <DragHandle />
-                <FileSpreadsheet size={12} className="text-[#9CA3AF] shrink-0" />
-                <span className="text-xs font-medium text-[#4B5563] truncate max-w-[220px]">{tab.name}</span>
-              </div>
-              {isWritePermitted && (
-                <button onClick={() => handleDeletePz(tab.id)}
-                  className={`${iconBtnDanger} shrink-0`} title="Удалить">
-                  <Trash2 size={13} />
-                </button>
-              )}
-            </div>
-          ))}
-          {(!settings?.planZagruzokTabs || settings.planZagruzokTabs.length === 0) && (
-            <div className="py-6 text-center text-xs text-[#6B7280]">Нет вкладок</div>
-          )}
-        </div>
-      </div>
+      <LinksSection
+        icon={<Globe className="w-4 h-4" aria-hidden="true" />}
+        title="Внешние вкладки"
+        subtitle="Появляются в верхнем меню портала и открываются в новой вкладке браузера."
+        items={current.externalTabs || []}
+        writable={isWritePermitted}
+        nounOne="вкладка"
+        nounFew="вкладки"
+        nounMany="вкладок"
+        nounAcc="вкладку"
+        nounGen="вкладки"
+        addTitlePlaceholder="Название вкладки"
+        emptyTitle="Вкладок пока нет"
+        emptyHint="Добавьте первую — она появится в верхнем меню портала."
+        emptyActionLabel="Добавить первую вкладку"
+        onAdd={addTab}
+        onUpdate={updateTab}
+        onDelete={deleteTab}
+        onReorder={reorderTabs}
+      />
     </div>
   );
 }

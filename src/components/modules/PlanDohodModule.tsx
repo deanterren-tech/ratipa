@@ -25,15 +25,20 @@ import {
   Save,
   MapPin,
   Calculator,
-  TrendingUp,
   Archive,
   History,
   X,
   BookOpen,
   Minus,
-  Search,
+  Calendar,
+  Loader2,
+  SlidersHorizontal,
+  Truck,
+  Lightbulb,
   CircleDollarSign, MessageSquare, FileText, Pencil} from "lucide-react";
 import MapRouteModal from "../MapRouteModal";
+import { UI } from "../../ui/kit";
+import { ModuleShell, SectionHeader, SearchField, FoundCount, EmptyState } from "../../ui/components";
 
 interface PlanDohodModuleProps {
   user: UserProfile;
@@ -177,22 +182,31 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   }, [user.name]);
 
   // Lazy-load Archive Trips
+  const [archiveListLoaded, setArchiveListLoaded] = useState(false);
   useEffect(() => {
     if (activeTab !== "archive") {
       setArchiveTrips([]);
+      setArchiveListLoaded(false);
       return;
     }
-    const unsubArchive = pdService.subscribeTrips(setArchiveTrips, true);
+    setArchiveListLoaded(false);
+    const unsubArchive = pdService.subscribeTrips((list) => {
+      setArchiveTrips(list);
+      setArchiveListLoaded(true);
+    }, true);
     return () => {
       unsubArchive();
     };
   }, [activeTab]);
 
   // Lazy-load Audit Logs
+  const [logsLoaded, setLogsLoaded] = useState(false);
   useEffect(() => {
     if (activeTab !== "history") return;
+    setLogsLoaded(false);
     const unsubLogs = dbService.getAuditLogs((data) => {
       setLogs(data.filter((l) => l.module === "PlanDohod"));
+      setLogsLoaded(true);
     });
     return () => unsubLogs();
   }, [activeTab]);
@@ -646,7 +660,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             className="bg-amber-500 hover:bg-amber-600 font-sans text-white text-xs font-semibold py-2.5 px-5 rounded-full flex items-center gap-2 shadow-[0_8px_20px_rgba(245,158,11,0.25)] border border-amber-500 transition-all duration-150 transform hover:scale-105 active:scale-95 cursor-pointer"
           >
             <BookOpen size={14} />
-            <span>📋 Блокнот ({cars.length})</span>
+            <span>Блокнот ({cars.length})</span>
           </button>
         </div>
       );
@@ -738,7 +752,6 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 Ваш Блокнот
               </label>
               <div className="p-2 bg-slate-50 text-xs font-semibold text-slate-800 rounded-xl border border-slate-200 tracking-wide font-sans">
-                📋{" "}
                 {selectedNotebookUser === user.name
                   ? `Личный блокнот`
                   : `Блокнот: ${selectedNotebookUser}`}
@@ -1138,16 +1151,16 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
   const getDispatcherActiveTabStyle = (d: string) => {
     if (activeDispatcherTab !== d)
-      return "bg-slate-50 text-slate-500 hover:bg-slate-100";
+      return "bg-white border-[#E5E7EB] text-[#4B5563] hover:bg-[#F3F4F6] hover:text-[#121316]";
     if (d === "All" || d === "Все диспетчеры")
-      return "bg-slate-900 text-white shadow-xs border-slate-900 font-semibold";
+      return "bg-[#121316] border-[#121316] text-white font-semibold";
 
     const colorKey = dispatchersColors[d];
     const preset = DISPATCHER_COLORS_PRESETS.find((p) => p.key === colorKey);
     if (preset) {
-      return `${preset.bg} ${preset.darkText} border-b-2 border-slate-500`;
+      return `${preset.bg} ${preset.darkText} border-[#E5E7EB]`;
     }
-    return "bg-blue-100 text-[#1e40af] border-b-2 border-blue-500";
+    return "bg-blue-50 text-[#1e40af] border-[#E5E7EB]";
   };
 
   const handleDirChange = (val: string) => {
@@ -1422,7 +1435,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     }
     setPlEditingId(null);
     setPlName("");
-    addToast("💡 Сравните варианты во вкладке «Потенц. грузы» и выберите наиболее выгодный маршрут.", 'info');
+    addToast("Сравните варианты во вкладке «Потенц. грузы» и выберите наиболее выгодный маршрут.", 'info');
     setIsModalOpen(true);
   }, [directions]);
 
@@ -2232,7 +2245,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     <span className="text-xs bg-slate-100 text-slate-600 font-mono font-semibold px-2 py-0.5 rounded-full">{potentialLoads.length}/10</span>
                   </h3>
                   <p className="text-[10px] text-slate-400 leading-relaxed flex items-center gap-1">
-                    <span className="text-slate-300 text-[9px]">💡</span>
+                    <Lightbulb className="w-3 h-3 text-[#9CA3AF] shrink-0" aria-hidden="true" />
                     Здесь вы можете создать несколько вариантов маршрута. Выберите наиболее выгодный (где прибыль больше) и нажмите «Как основной».
                   </p>
 
@@ -2906,11 +2919,36 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
   const renderTripsGrid = (archived: boolean) => {
     const list = archived ? archiveTripsComputed : activeTripsComputed;
 
-    if (list.length === 0) {
+    if (archived && !archiveListLoaded) {
       return (
-        <div className="text-center font-medium text-slate-400 py-12 font-mono text-sm border border-dashed border-slate-200/50 rounded-2xl">
-          Список пуст
+        <div className={UI.loading} role="status">
+          <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+          <span>Загрузка архива…</span>
         </div>
+      );
+    }
+
+    if (list.length === 0) {
+      const isFiltering =
+        searchCarQuery.trim().length > 0 ||
+        (!archived &&
+          ((activeDispatcherTab !== "Все диспетчеры" && activeDispatcherTab !== "All") ||
+            activeDirectionTab !== "All"));
+      return (
+        <EmptyState
+          kind={isFiltering ? "no-results" : "empty"}
+          title={isFiltering ? undefined : archived ? "Архив пуст" : "Список планирования пуст"}
+          hint={
+            isFiltering
+              ? archived
+                ? "Измените номер в поиске."
+                : "Измените номер в поиске или снимите фильтры по диспетчеру и направлению."
+              : archived
+                ? "Рейсы появятся здесь после завершения — на карточке нажмите «В архив»."
+                : "Создайте первый рейс кнопкой «Новый план» — карточка появится в этом списке."
+          }
+          query={searchCarQuery.trim() || undefined}
+        />
       );
     }
 
@@ -2949,7 +2987,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     const renderSortIndicator = (sortKey: string) => {
       if (sortConfig?.key !== sortKey) return null;
       return (
-        <span className="text-slate-500 ml-1">
+        <span className="text-[#9CA3AF] ml-1">
           {sortConfig.dir === "asc" ? "↑" : "↓"}
         </span>
       );
@@ -2961,52 +2999,52 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
     const renderKpiSummary = (isBottom: boolean) => {
       return (
-        <div className={`grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-6 bg-slate-50/40 border border-slate-200/50 rounded-2xl p-4 sm:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.01)] ${isBottom ? "mt-4" : "mb-2"}`}>
+        <div className={`grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-4 sm:p-5 ${isBottom ? "mt-4" : "mb-2"}`}>
           <div className="flex flex-col">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
+            <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-widest mb-1.5">
               Общая прибыль
             </span>
             <span className={`text-2xl lg:text-3xl font-bold tracking-tight font-sans tabular-nums ${sumProfit >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-              {Math.round(sumProfit).toLocaleString("ru-RU")} <span className="text-sm font-medium text-slate-400">€</span>
+              {Math.round(sumProfit).toLocaleString("ru-RU")} <span className="text-sm font-medium text-[#9CA3AF]">€</span>
             </span>
           </div>
-          <div className="flex flex-col lg:border-l lg:border-slate-200/60 lg:pl-6">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
+          <div className="flex flex-col lg:border-l lg:border-[#E5E7EB] lg:pl-6">
+            <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-widest mb-1.5">
               Маржинальность
             </span>
-            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900 font-sans tabular-nums">
+            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-[#121316] font-sans tabular-nums">
               {marginRate}%
             </span>
           </div>
-          <div className="flex flex-col lg:border-l lg:border-slate-200/60 lg:pl-6">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
+          <div className="flex flex-col lg:border-l lg:border-[#E5E7EB] lg:pl-6">
+            <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-widest mb-1.5">
               Прибыль в день
             </span>
-            <span className={`text-2xl lg:text-3xl font-bold tracking-tight font-sans tabular-nums ${profitPerDayValue < 100 ? "text-rose-600" : "text-slate-900"}`}>
-              {profitPerDayValue.toLocaleString("ru-RU")} <span className="text-sm font-medium text-slate-400">€</span>
+            <span className={`text-2xl lg:text-3xl font-bold tracking-tight font-sans tabular-nums ${profitPerDayValue < 100 ? "text-rose-600" : "text-[#121316]"}`}>
+              {profitPerDayValue.toLocaleString("ru-RU")} <span className="text-sm font-medium text-[#9CA3AF]">€</span>
             </span>
           </div>
-          <div className="flex flex-col lg:border-l lg:border-slate-200/60 lg:pl-6">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
+          <div className="flex flex-col lg:border-l lg:border-[#E5E7EB] lg:pl-6">
+            <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-widest mb-1.5">
               Общий пробег
             </span>
-            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900 font-sans tabular-nums">
-              {Math.round(sumKm).toLocaleString("ru-RU")} <span className="text-xs font-medium text-slate-400">км</span>
+            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-[#121316] font-sans tabular-nums">
+              {Math.round(sumKm).toLocaleString("ru-RU")} <span className="text-xs font-medium text-[#9CA3AF]">км</span>
             </span>
           </div>
-          <div className="flex flex-col lg:border-l lg:border-slate-200/60 lg:pl-6 col-span-2 lg:col-span-1">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5">
+          <div className="flex flex-col lg:border-l lg:border-[#E5E7EB] lg:pl-6 col-span-2 lg:col-span-1">
+            <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-widest mb-1.5">
               Качество списка
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl lg:text-3xl font-bold tracking-tight text-slate-900 font-sans tabular-nums">
+              <span className="text-2xl lg:text-3xl font-bold tracking-tight text-[#121316] font-sans tabular-nums">
                 {listQuality}%
               </span>
               <span className="text-xs font-semibold text-emerald-600 font-sans">
                 +{profitableCount} в плюс
               </span>
             </div>
-            <span className="text-[10px] text-slate-400 font-medium mt-0.5">
+            <span className="text-[10px] text-[#6B7280] font-medium mt-0.5">
               Всего: {profitableCount} из {list.length}
             </span>
           </div>
@@ -3021,15 +3059,15 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
         {archived && renderKpiSummary(false)}
 
         {/* Table Headers */}
-        <div className="hidden lg:flex px-6 pb-3 border-b border-slate-200/40 text-xs font-medium text-slate-400 self-start w-full cursor-pointer select-none tracking-normal">
+        <div className="hidden lg:flex px-6 pb-3 border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase self-start w-full cursor-pointer select-none tracking-normal">
           <div
-            className="min-w-[200px] hover:text-slate-700 transition flex items-center gap-1"
+            className="min-w-[200px] hover:text-[#121316] transition flex items-center gap-1"
             onClick={() => handleSort("carNumber")}
           >
             Автомобиль {renderSortIndicator("carNumber")}
           </div>
           <div
-            className="min-w-[140px] hover:text-slate-700 transition flex items-center gap-1"
+            className="min-w-[140px] hover:text-[#121316] transition flex items-center gap-1"
             onClick={() => handleSort("dateStart")}
           >
             Даты {renderSortIndicator("dateStart")}
@@ -3037,32 +3075,32 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
           <div className="flex-1 min-w-[220px]">Маршрут</div>
           <div className="min-w-[480px] flex gap-4 pl-6 justify-end">
             <span
-              className="w-20 hover:text-slate-700 transition flex items-center gap-1 justify-end"
+              className="w-20 hover:text-[#121316] transition flex items-center gap-1 justify-end"
               onClick={() => handleSort("km")}
             >
               Км {renderSortIndicator("km")}
             </span>
             <span
-              className="w-20 hover:text-slate-700 transition flex items-center gap-1 justify-end"
+              className="w-20 hover:text-[#121316] transition flex items-center gap-1 justify-end"
               onClick={() => handleSort("freight")}
             >
               Фрахт {renderSortIndicator("freight")}
             </span>
             <span
-              className="w-20 hover:text-slate-700 transition flex items-center gap-1 justify-end"
+              className="w-20 hover:text-[#121316] transition flex items-center gap-1 justify-end"
               onClick={() => handleSort("expenses")}
             >
               Расходы {renderSortIndicator("expenses")}
             </span>
             <span
-              className="w-24 hover:text-slate-700 transition flex items-center gap-1 justify-end"
+              className="w-24 hover:text-[#121316] transition flex items-center gap-1 justify-end"
               onClick={() => handleSort("profit")}
             >
               Прибыль {renderSortIndicator("profit")}
             </span>
             <span className="w-12 text-right">Дни</span>
             <span
-              className="w-20 text-right hover:text-slate-700 transition flex items-center gap-1 justify-end"
+              className="w-20 text-right hover:text-[#121316] transition flex items-center gap-1 justify-end"
               onClick={() => handleSort("profitDay")}
             >
               В день {renderSortIndicator("profitDay")}
@@ -3089,7 +3127,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
               const d = (dir || "").toLowerCase();
               if (d.includes("китай")) return "bg-amber-50 text-amber-700 border-amber-200/40";
               if (d.includes("турция")) return "bg-blue-50 text-blue-700 border-blue-200/40";
-              return "bg-slate-50 text-slate-600 border-slate-200/40";
+              return "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]";
             };
 
             // Set up clean dispatcher badges
@@ -3098,15 +3136,15 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             const colorKey = dispatchersColors[dispatcherName];
             const preset = DISPATCHER_COLORS_PRESETS.find((p) => p.key === colorKey);
             const dispBadgeStyle = preset
-              ? `${preset.bg} ${preset.darkText} border-slate-200/40`
-              : "bg-slate-50 text-slate-600 border-slate-200/40";
+              ? `${preset.bg} ${preset.darkText} border-[#E5E7EB]`
+              : "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]";
 
             return (
               <div
                 key={trip.id}
                 data-trip-id={trip.id}
                 onClick={() => loadTripToForm(trip)}
-                className={`car-strip-item bg-white rounded-2xl p-3.5 sm:p-4.5 border hover:shadow-[0_8px_30px_rgba(15,23,42,0.04)] hover:border-slate-350 transition-all duration-200 group relative flex flex-col xl:flex-row gap-4 xl:gap-5 items-stretch xl:items-center cursor-pointer w-full ${isHighlighted ? "border-amber-500 ring-2 ring-amber-500/25 shadow-[0_10px_25px_rgba(245,158,11,0.06)] scale-[1.002]" : "border-slate-200/60"}`}
+                className={`car-strip-item bg-white rounded-2xl p-3.5 sm:p-4 border transition-colors duration-150 group relative hover:border-[#D1D5DB] hover:bg-[#F9FAFB] flex flex-col xl:flex-row gap-4 xl:gap-5 items-stretch xl:items-center cursor-pointer w-full ${isHighlighted ? "border-amber-400 ring-2 ring-amber-400/20" : "border-[#E5E7EB]"}`}
                 draggable={true}
                 onDragStart={(e) => {
                   e.dataTransfer.setData("tripId", trip.id);
@@ -3126,37 +3164,37 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                   <div className="flex flex-col gap-2 min-w-[200px] shrink-0 justify-between">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-base font-bold text-slate-900 tracking-tight font-sans">
+                        <span className="text-base font-bold text-[#121316] tracking-tight font-sans">
                           {trip.carNumber}
                         </span>
                         <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${getDirectionBadgeClass(trip.direction || "")}`}>
                           {trip.direction || "—"}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
-                        <span className="text-[11px] text-slate-400">Диспетчер:</span>
+                      <div className="flex items-center gap-1.5 text-xs text-[#6B7280] mt-1">
+                        <span className="text-[11px] text-[#9CA3AF]">Диспетчер:</span>
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${dispBadgeStyle}`}>
                           {formatToTitleCase(dispatcherName)}
                         </span>
                       </div>
                       {/* Dates inline under dispatcher */}
-                      <div className="flex items-center gap-3 mt-2 text-xs text-slate-500 font-sans">
-                        <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wider">Старт</span>
-                        <span className="text-slate-800 font-semibold font-mono">
+                      <div className="flex items-center gap-3 mt-2 text-xs text-[#6B7280] font-sans">
+                        <span className="text-[#9CA3AF] text-[10px] font-medium uppercase tracking-wider">Старт</span>
+                        <span className="text-[#121316] font-semibold font-mono">
                           {trip.dateStart ? new Date(trip.dateStart).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}
                         </span>
-                        <span className="text-slate-400 text-[10px] font-medium uppercase tracking-wider">Финиш</span>
-                        <span className="text-slate-800 font-semibold font-mono">
+                        <span className="text-[#9CA3AF] text-[10px] font-medium uppercase tracking-wider">Финиш</span>
+                        <span className="text-[#121316] font-semibold font-mono">
                           {trip.dateEnd ? new Date(trip.dateEnd).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}
                         </span>
                       </div>
                       {/* Metadata: кто обновил */}
                       <div className="flex items-center gap-1.5 mt-2">
                         {(trip as any).updatedBy && (
-                          <span className="inline-flex items-center gap-1 bg-slate-100/80 border border-slate-200/60 px-2 py-0.5 rounded-lg font-semibold text-slate-700 shadow-sm text-[10px]">
+                          <span className="inline-flex items-center gap-1 bg-[#F3F4F6] border border-[#E5E7EB] px-2 py-0.5 rounded-lg font-semibold text-[#4B5563] shadow-sm text-[10px]">
                             ✎ {resolvePersonName((trip as any).updatedBy, dispatcherDirectory)}
                             {(trip as any).updatedAt && (
-                              <span className="font-medium text-slate-400 font-mono">
+                              <span className="font-medium text-[#9CA3AF] font-mono">
                                 · {(trip as any).updatedAt}
                               </span>
                             )}
@@ -3165,15 +3203,15 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 mt-1">
-                      <button onClick={() => loadTripToForm(trip)} className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md transition cursor-pointer" title="Редактировать">
+                      <button onClick={() => loadTripToForm(trip)} className="p-1.5 text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] rounded-md transition cursor-pointer" title="Редактировать">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                       {!archived ? (
-                        <button onClick={(e) => { e.stopPropagation(); finishTripToArchive(trip); }} className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-md transition cursor-pointer" title="В архив">
+                        <button onClick={(e) => { e.stopPropagation(); finishTripToArchive(trip); }} className="p-1.5 text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] rounded-md transition cursor-pointer" title="В архив">
                           <Archive className="w-3.5 h-3.5" />
                         </button>
                       ) : user.role === "root_admin" ? (
-                        <button onClick={(e) => { e.stopPropagation(); deleteTrip(trip.id); }} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition cursor-pointer" title="Удалить">
+                        <button onClick={(e) => { e.stopPropagation(); deleteTrip(trip.id); }} className="p-1.5 text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 rounded-md transition cursor-pointer" title="Удалить">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       ) : null}
@@ -3181,54 +3219,54 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                   </div>
 
                   {/* Block 3: Itinerary */}
-                  <div className="flex-1 bg-slate-50/20 rounded-xl p-3 border border-slate-200/40 min-w-[220px]">
-                    <div className="text-xs font-semibold text-slate-800 mb-2 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="tracking-tight text-slate-800 font-semibold">{routeTitle}</span>
+                  <div className="flex-1 bg-[#F8F9FA] rounded-xl p-3 border border-[#E5E7EB] min-w-[220px]">
+                    <div className="text-xs font-semibold text-[#121316] mb-2 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-[#9CA3AF]" />
+                      <span className="tracking-tight text-[#121316] font-semibold">{routeTitle}</span>
                     </div>
                     {trip.legs && trip.legs.length > 0 ? (
-                      <div className="flex flex-col gap-1.5 pl-1 border-l-2 border-slate-200/30 ml-1.5">
+                      <div className="flex flex-col gap-1.5 pl-1 border-l-2 border-[#E5E7EB] ml-1.5">
                         {trip.legs.map((leg, i) => {
                           const isActive = trip.activeLegIndex === i;
                           return (
-                            <div key={i} className={`flex items-center gap-2 text-xs p-1 -ml-2 rounded-md ${isActive ? "bg-slate-900/5 text-slate-900 font-medium" : "text-slate-500"}`}>
-                              <div className={`w-2 h-2 rounded-full border flex-shrink-0 -ml-[10px] ${isActive ? "bg-slate-900 border-white shadow-xs scale-110" : "bg-slate-200 border-white"}`} />
+                            <div key={i} className={`flex items-center gap-2 text-xs p-1 -ml-2 rounded-md ${isActive ? "bg-[#F3F4F6] text-[#121316] font-medium" : "text-[#6B7280]"}`}>
+                              <div className={`w-2 h-2 rounded-full border flex-shrink-0 -ml-[10px] ${isActive ? "bg-[#121316] border-white shadow-xs scale-110" : "bg-[#D1D5DB] border-white"}`} />
                               <span className="truncate">{leg.from || "?"} ➔ {leg.to || "?"}</span>
                             </div>
                           );
                         })}
                       </div>
                     ) : (
-                      <div className="text-[10px] text-slate-400 italic">Маршрут не задан</div>
+                      <div className="text-[10px] text-[#9CA3AF] italic">Маршрут не задан</div>
                     )}
                   </div>
 
                   {/* Block 4: Metrics — grid on mobile, flex row on xl */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:flex xl:items-center xl:gap-6 gap-3 w-full xl:w-[500px] xl:pl-6 justify-between xl:justify-end border-t xl:border-t-0 border-slate-100 pt-3 xl:pt-0 shrink-0">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:flex xl:items-center xl:gap-6 gap-3 w-full xl:w-[500px] xl:pl-6 justify-between xl:justify-end border-t xl:border-t-0 border-[#E5E7EB] pt-3 xl:pt-0 shrink-0">
                     <div className="flex flex-col xl:text-right min-w-0">
-                      <span className="text-[10px] xl:text-[11px] font-medium text-slate-400 leading-tight">Км</span>
-                      <span className="text-xs xl:text-sm font-semibold text-slate-700 font-mono tabular-nums whitespace-nowrap">{Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU")}</span>
+                      <span className="text-[10px] xl:text-[11px] font-medium text-[#9CA3AF] leading-tight">Км</span>
+                      <span className="text-xs xl:text-sm font-semibold text-[#4B5563] font-mono tabular-nums whitespace-nowrap">{Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU")}</span>
                     </div>
                     <div className="flex flex-col xl:text-right min-w-0">
-                      <span className="text-[10px] xl:text-[11px] font-medium text-slate-400 leading-tight">Фрахт</span>
-                      <span className="text-xs xl:text-sm font-semibold text-slate-700 font-mono tabular-nums whitespace-nowrap">{Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}</span>
+                      <span className="text-[10px] xl:text-[11px] font-medium text-[#9CA3AF] leading-tight">Фрахт</span>
+                      <span className="text-xs xl:text-sm font-semibold text-[#4B5563] font-mono tabular-nums whitespace-nowrap">{Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}</span>
                     </div>
                     <div className="flex flex-col xl:text-right min-w-0">
-                      <span className="text-[10px] xl:text-[11px] font-medium text-slate-400 leading-tight">Расходы</span>
+                      <span className="text-[10px] xl:text-[11px] font-medium text-[#9CA3AF] leading-tight">Расходы</span>
                       <span className="text-xs xl:text-sm font-semibold text-rose-600/90 font-mono tabular-nums whitespace-nowrap">{Math.round(trip.totalExpenses !== undefined ? trip.totalExpenses : (trip.totalFreight - (trip.profit || 0))).toLocaleString("ru-RU")}</span>
                     </div>
                     <div className="flex flex-col xl:text-right min-w-0">
-                      <span className="text-[10px] xl:text-[11px] font-medium text-slate-400 leading-tight">Прибыль</span>
+                      <span className="text-[10px] xl:text-[11px] font-medium text-[#9CA3AF] leading-tight">Прибыль</span>
                       <span className={`text-sm xl:text-base font-bold font-mono tabular-nums whitespace-nowrap ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>
                         {Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}
                       </span>
                     </div>
                     <div className="flex flex-col xl:text-right min-w-0">
-                      <span className="text-[10px] xl:text-[11px] font-medium text-slate-400 leading-tight">Дни</span>
-                      <span className="text-xs xl:text-sm font-semibold font-mono text-slate-600 tabular-nums whitespace-nowrap">{trip.days || "—"}</span>
+                      <span className="text-[10px] xl:text-[11px] font-medium text-[#9CA3AF] leading-tight">Дни</span>
+                      <span className="text-xs xl:text-sm font-semibold font-mono text-[#6B7280] tabular-nums whitespace-nowrap">{trip.days || "—"}</span>
                     </div>
                     <div className="flex flex-col xl:text-right min-w-0">
-                      <span className="text-[10px] xl:text-[11px] font-medium text-slate-400 leading-tight">В день</span>
+                      <span className="text-[10px] xl:text-[11px] font-medium text-[#9CA3AF] leading-tight">В день</span>
                       <span className={`text-xs xl:text-sm font-semibold font-mono tabular-nums whitespace-nowrap ${Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)) < 100 ? "text-rose-600" : "text-emerald-600"}`}>
                         {Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)).toLocaleString("ru-RU")}
                       </span>
@@ -3240,7 +3278,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 <div className="flex lg:hidden flex-col gap-2 w-full">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-base font-bold text-slate-900 tracking-tight font-sans truncate">
+                      <span className="text-base font-bold text-[#121316] tracking-tight font-sans truncate">
                         {trip.carNumber}
                       </span>
                       <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border shrink-0 ${getDirectionBadgeClass(trip.direction || "")}`}>
@@ -3251,11 +3289,11 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                       <span className={`text-sm font-bold font-mono tabular-nums ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>
                         {Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}€
                       </span>
-                      <button onClick={() => loadTripToForm(trip)} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition cursor-pointer shrink-0" title="Редактировать">
+                      <button onClick={() => loadTripToForm(trip)} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#6B7280] hover:text-[#121316] transition cursor-pointer shrink-0" title="Редактировать">
                         <Pencil className="w-4 h-4" />
                       </button>
                       {!archived ? (
-                        <button onClick={(e) => { e.stopPropagation(); finishTripToArchive(trip); }} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition cursor-pointer shrink-0" title="В архив">
+                        <button onClick={(e) => { e.stopPropagation(); finishTripToArchive(trip); }} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#6B7280] hover:text-[#121316] transition cursor-pointer shrink-0" title="В архив">
                           <Archive className="w-4 h-4" />
                         </button>
                       ) : user.role === "root_admin" ? (
@@ -3266,26 +3304,26 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     </div>
                   </div>
                   
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#6B7280]">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border shrink-0 ${dispBadgeStyle}`}>
                       {formatToTitleCase(dispatcherName)}
                     </span>
-                    <span className="text-slate-300 hidden sm:inline">·</span>
-                    <span className="truncate text-slate-600 font-medium hidden sm:inline">{routeTitle}</span>
-                    <span className="text-slate-300 hidden sm:inline">·</span>
-                    <span className="text-slate-400 font-mono shrink-0">
+                    <span className="text-[#D1D5DB] hidden sm:inline">·</span>
+                    <span className="truncate text-[#6B7280] font-medium hidden sm:inline">{routeTitle}</span>
+                    <span className="text-[#D1D5DB] hidden sm:inline">·</span>
+                    <span className="text-[#9CA3AF] font-mono shrink-0">
                       {trip.dateStart ? new Date(trip.dateStart).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}—{trip.dateEnd ? new Date(trip.dateEnd).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}
                     </span>
                     {trip.currentMonth && archived && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-blue-50 text-blue-600 border border-blue-100 shrink-0">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-[#F3F4F6] text-[#4B5563] border border-[#E5E7EB] shrink-0">
                         {trip.currentMonth}
                       </span>
                     )}
                     {(trip as any).updatedBy && (
-                      <span className="inline-flex items-center gap-1 bg-slate-100/80 border border-slate-200/60 px-1.5 py-0.5 rounded-lg font-semibold text-slate-600 shadow-sm text-[9px] ml-auto">
+                      <span className="inline-flex items-center gap-1 bg-[#F3F4F6] border border-[#E5E7EB] px-1.5 py-0.5 rounded-lg font-semibold text-[#6B7280] shadow-sm text-[9px] ml-auto">
                         ✎ {(trip as any).updatedBy}
                         {(trip as any).updatedAt && (
-                          <span className="font-medium text-slate-400 font-mono">· {(trip as any).updatedAt}</span>
+                          <span className="font-medium text-[#9CA3AF] font-mono">· {(trip as any).updatedAt}</span>
                         )}
                       </span>
                     )}
@@ -3294,40 +3332,34 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
                 {/* Metrics Grid for BOTH — shown below mobile block, hidden on desktop */}
                 <div className="grid grid-cols-3 gap-2 w-full lg:hidden">
-                  <div className="flex flex-col bg-slate-50/50 rounded-lg px-2.5 py-1.5">
-                    <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Км</span>
-                    <span className="text-xs font-semibold text-slate-700 font-mono tabular-nums">{Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU")}</span>
+                  <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
+                    <span className="text-[9px] font-medium text-[#9CA3AF] uppercase tracking-wider">Км</span>
+                    <span className="text-xs font-semibold text-[#4B5563] font-mono tabular-nums">{Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU")}</span>
                   </div>
-                  <div className="flex flex-col bg-slate-50/50 rounded-lg px-2.5 py-1.5">
-                    <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Фрахт</span>
-                    <span className="text-xs font-semibold text-slate-700 font-mono tabular-nums">{Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}</span>
+                  <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
+                    <span className="text-[9px] font-medium text-[#9CA3AF] uppercase tracking-wider">Фрахт</span>
+                    <span className="text-xs font-semibold text-[#4B5563] font-mono tabular-nums">{Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}</span>
                   </div>
-                  <div className="flex flex-col bg-slate-50/50 rounded-lg px-2.5 py-1.5">
-                    <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Расходы</span>
+                  <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
+                    <span className="text-[9px] font-medium text-[#9CA3AF] uppercase tracking-wider">Расходы</span>
                     <span className="text-xs font-semibold text-rose-600/90 font-mono tabular-nums">{Math.round(trip.totalExpenses !== undefined ? trip.totalExpenses : (trip.totalFreight - (trip.profit || 0))).toLocaleString("ru-RU")}</span>
                   </div>
-                  <div className="flex flex-col bg-slate-50/50 rounded-lg px-2.5 py-1.5">
-                    <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Прибыль</span>
+                  <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
+                    <span className="text-[9px] font-medium text-[#9CA3AF] uppercase tracking-wider">Прибыль</span>
                     <span className={`text-xs font-bold font-mono tabular-nums ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}</span>
                   </div>
-                  <div className="flex flex-col bg-slate-50/50 rounded-lg px-2.5 py-1.5">
-                    <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Дни</span>
-                    <span className="text-xs font-semibold font-mono text-slate-600 tabular-nums">{trip.days || "—"}</span>
+                  <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
+                    <span className="text-[9px] font-medium text-[#9CA3AF] uppercase tracking-wider">Дни</span>
+                    <span className="text-xs font-semibold font-mono text-[#6B7280] tabular-nums">{trip.days || "—"}</span>
                   </div>
-                  <div className="flex flex-col bg-slate-50/50 rounded-lg px-2.5 py-1.5">
-                    <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">В день</span>
+                  <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
+                    <span className="text-[9px] font-medium text-[#9CA3AF] uppercase tracking-wider">В день</span>
                     <span className={`text-xs font-semibold font-mono tabular-nums ${Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)) < 100 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)).toLocaleString("ru-RU")}</span>
                   </div>
                 </div>
               </div>
             );
           })}
-
-          {list.length === 0 && (
-            <div className="text-sm text-slate-400 font-medium py-12 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200/50">
-              Список планирования пуст
-            </div>
-          )}
         </div>
 
         {/* KPI Summary Dashboard Panel - BELOW for Active */}
@@ -3338,51 +3370,61 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
   const renderHistory = () => {
     return (
-      <div className="bg-white rounded-[2rem] p-6 lg:p-8 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)]">
-        <h2 className="text-sm font-semibold text-slate-800 tracking-tight mb-6 flex items-center gap-2">
-          <History className="w-5 h-5 text-blue-500" /> История изменений
-        </h2>
-        <div className="space-y-2.5 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-          {[...logs]
-            .sort(
-              (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-            )
-            .map((log, idx) => (
-              <div
-                key={`${log.id || 'log'}_${idx}`}
-                className="p-3.5 bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 transition-colors"
-              >
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-xs font-semibold text-slate-800">
-                    {log.actionType}
-                  </span>
-                  <span className="text-[11px] text-slate-500 leading-relaxed font-sans">
-                    {log.details}
-                  </span>
-                </div>
-                <div className="flex items-center gap-4 text-[10px] text-slate-400 font-sans">
-                  <div className="flex flex-col text-right">
-                    <span className="font-semibold text-slate-600">{log.user}</span>
-                    <span className="text-[9px] text-slate-400 uppercase tracking-wider font-mono">{log.role}</span>
+      <div className="pt-5 flex flex-col gap-4">
+        <SectionHeader
+          icon={<History className="w-4 h-4" aria-hidden="true" />}
+          title="История изменений"
+          subtitle="Кто и когда менял планы рейсов"
+        />
+        {!logsLoaded ? (
+          <div className={UI.loading} role="status">
+            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+            <span>Загрузка истории…</span>
+          </div>
+        ) : logs.length === 0 ? (
+          <EmptyState
+            kind="empty"
+            title="История пуста"
+            hint="Действия по планам рейсов появятся здесь."
+          />
+        ) : (
+          <div className="flex flex-col max-h-[700px] overflow-y-auto custom-scrollbar pr-1">
+            {[...logs]
+              .sort(
+                (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+              )
+              .map((log, idx) => (
+                <div
+                  key={`${log.id || 'log'}_${idx}`}
+                  className="flex flex-col md:flex-row md:items-center justify-between gap-2 py-3.5 border-b border-[#E5E7EB] last:border-0"
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-xs font-semibold text-[#121316]">
+                      {log.actionType}
+                    </span>
+                    <span className="text-[11px] text-[#4B5563] leading-relaxed font-sans">
+                      {log.details}
+                    </span>
                   </div>
-                  <div className="text-right whitespace-nowrap font-mono text-slate-400">
-                    {new Date(log.date).toLocaleString("ru-RU", {
-                      year: "numeric",
-                      month: "2-digit",
-                      day: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                  <div className="flex items-center gap-4 text-[10px] text-[#9CA3AF] font-sans">
+                    <div className="flex flex-col text-right">
+                      <span className="font-semibold text-[#121316]">{log.user}</span>
+                      <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wider font-mono">{log.role}</span>
+                    </div>
+                    <div className="text-right whitespace-nowrap font-mono text-[#6B7280]">
+                      {new Date(log.date).toLocaleString("ru-RU", {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          {logs.length === 0 && (
-            <div className="text-xs text-slate-400 font-medium py-6 text-center bg-slate-50/50 border border-dashed border-slate-200 rounded-2xl font-mono">
-              История пуста
-            </div>
-          )}
-        </div>
+              ))}
+          </div>
+        )}
       </div>
     );
   };
@@ -3447,7 +3489,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
           <div className="border-t border-slate-100 pt-3 mt-3">
             <p className="text-[12px] text-slate-400">
-              💡 Можно сохранить до <strong className="text-slate-600">10 потенциальных грузов</strong> на один рейс. 
+              Можно сохранить до <strong className="text-slate-600">10 потенциальных грузов</strong> на один рейс. 
               Данные хранятся в вашем браузере и не теряются при обновлении страницы.
             </p>
           </div>
@@ -3464,229 +3506,251 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
   ) : null;
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full">
       {announceModal}
-      <div className="bg-white rounded-[2rem] p-6 border border-slate-200/60 shadow-[0_8px_30px_rgba(0,0,0,0.01)] flex flex-col space-y-5">
-        
-        {/* Page Header Area */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-          <div>
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest block mb-1">
-              Модуль План Firebase
-            </span>
-            <h1 className="text-xl md:text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2.5">
-              <TrendingUp className="w-5 h-5 md:w-7 md:h-7 text-slate-800" /> План дохода
-            </h1>
-          </div>
-
-          {/* Navigation Tabs segment */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex flex-wrap gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/50 max-w-full custom-scrollbar items-center lg:flex-nowrap lg:overflow-x-auto">
-              <button
-                onClick={() => setActiveTab("active")}
-                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${activeTab === "active" ? "bg-white text-slate-900 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/30"} min-h-[44px]`}
-              >
-                <Calculator className="w-3.5 h-3.5 text-slate-400" /> Активные
-              </button>
-              <button
-                onClick={() => setActiveTab("archive")}
-                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${activeTab === "archive" ? "bg-white text-slate-900 shadow-xs border border-slate-200/40" : "text-slate-500 hover:text-slate-900 hover:bg-slate-200/30"} min-h-[44px]`}
-              >
-                <Archive className="w-3.5 h-3.5 text-slate-400" /> Архив
-              </button>
-              <button
-                type="button"
-                onClick={toggleNotebook}
-                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 border ${isNotebookOpen ? "bg-amber-50 text-amber-900 border-amber-200/30 shadow-xs" : "text-slate-500 border-transparent hover:text-slate-900 hover:bg-slate-200/30"} min-h-[44px]`}
-              >
-                <BookOpen className="w-3.5 h-3.5 text-amber-500" /> Блокнот
-              </button>
-              <button
-                onClick={() => setActiveTab("history")}
-                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 border ${activeTab === "history" ? "bg-white text-slate-900 shadow-xs border border-slate-200/40" : "text-slate-500 border-transparent hover:text-slate-900 hover:bg-slate-200/30"} min-h-[44px]`}
-              >
-                <History className="w-3.5 h-3.5 text-slate-400" /> История
-              </button>
-            </div>
-
+      <ModuleShell
+        title="План дохода"
+        tabs={[
+          { key: "active", label: "Активные" },
+          { key: "archive", label: "Архив" },
+          { key: "history", label: "История" },
+        ]}
+        activeTab={activeTab}
+        onTabChange={(key) => setActiveTab(key as "active" | "archive" | "history")}
+        tabsAriaLabel="Вкладки модуля «План дохода»"
+        actions={
+          <>
             <button
+              type="button"
+              onClick={toggleNotebook}
+              aria-pressed={isNotebookOpen}
+              className={`${UI.buttonGhost} ${isNotebookOpen ? "border-[#D1D5DB] bg-[#F3F4F6] text-[#121316]" : ""}`}
+            >
+              <BookOpen className="w-3.5 h-3.5" strokeWidth={1.5} aria-hidden="true" />
+              Блокнот
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 resetForm();
                 setIsModalOpen(true);
               }}
-              className="px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 bg-slate-900 text-white hover:bg-slate-800 shadow-sm border border-slate-800 min-h-[44px]"
+              className={UI.buttonPrimary}
             >
-              <Plus className="w-4 h-4 shrink-0" /> Новый план
+              <Plus className="w-4 h-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+              Новый план
             </button>
-          </div>
-        </div>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-5">
+          <span className={UI.caption}>Модуль План Firebase</span>
 
-        {/* Filter Groups Segment */}
-        <div className={activeTab === "active" ? "block" : "hidden"}>
-          {activeDispatchers.length > 0 && (
-            <div className="flex flex-col gap-3 pb-1">
-              
-              {/* Dispatchers Row */}
-              <div className="flex flex-wrap items-center gap-1.5 pb-1">
-                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest shrink-0 mr-1.5">
-                  Диспетчеры:
-                </span>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {activeDispatchers.map((d) => (
-                    <button
-                      key={d}
-                      draggable={d !== "Все диспетчеры"}
-                      onDragStart={(e) => {
-                        if (d === "Все диспетчеры") return;
-                        e.dataTransfer.setData("dispatcher", d);
-                      }}
-                      onClick={() => setActiveDispatcherTab(d)}
-                      className={`px-3 py-1 rounded-full text-xs font-medium transition-all duration-150 flex items-center gap-1 truncate max-w-[160px] border ${getDispatcherActiveTabStyle(d)}`}
-                    >
-                      {d === "All" || d === "Все диспетчеры" ? "Все диспетчеры" : formatToTitleCase(d)}
-                    </button>
-                  ))}
-                </div>
-              </div>
+          {/* Отбор рейсов (вкладка «Активные») */}
+          <div className={activeTab === "active" ? "flex flex-col gap-3" : "hidden"}>
+            {activeDispatchers.length > 0 && (
+              <>
+                <SectionHeader
+                  icon={<SlidersHorizontal className="w-4 h-4" aria-hidden="true" />}
+                  title="Отбор рейсов"
+                  subtitle="Фильтры по диспетчеру и направлению"
+                />
 
-              {/* Directions Row */}
-              {Object.keys(directions).length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100/70 pt-2.5 pb-1">
-                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest shrink-0 mr-1.5">
-                    Направления:
-                  </span>
+                {/* Dispatchers Row */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={UI.caption}>Диспетчеры:</span>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {["All", ...Object.keys(directions)].map((dir) => (
+                    {activeDispatchers.map((d) => (
                       <button
-                        key={dir}
-                        onClick={() => setActiveDirectionTab(dir)}
-                        className={`px-3 py-1 rounded-full text-xs font-medium transition-all duration-150 border truncate max-w-[160px] ${
-                          activeDirectionTab === dir
-                            ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                            : "bg-slate-50 text-slate-500 border-slate-200/50 hover:bg-slate-100 hover:text-slate-800"
-                        }`}
+                        key={d}
+                        type="button"
+                        draggable={d !== "Все диспетчеры"}
+                        onDragStart={(e) => {
+                          if (d === "Все диспетчеры") return;
+                          e.dataTransfer.setData("dispatcher", d);
+                        }}
+                        onClick={() => setActiveDispatcherTab(d)}
+                        aria-pressed={activeDispatcherTab === d}
+                        className={`${UI.filterPill} border flex items-center gap-1 truncate max-w-[160px] ${getDispatcherActiveTabStyle(d)}`}
                       >
-                        {dir === "All" ? "Все направления" : dir}
+                        {d === "All" || d === "Все диспетчеры" ? "Все диспетчеры" : formatToTitleCase(d)}
                       </button>
                     ))}
                   </div>
                 </div>
-              )}
-            </div>
-          )}
-        </div>
 
-        <div className={activeTab === "archive" ? "" : "hidden"}>
-          <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3 pb-1">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest shrink-0 mr-1.5">
-              Месяцы архива:
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {archiveTripsMonths.map((month) => (
-                <button
-                  key={month}
-                  onClick={() => setArchiveMonth(month)}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const tripId = e.dataTransfer.getData("tripId");
-                    if (tripId) {
-                      pdService.updateTrip(
-                        tripId,
-                        { currentMonth: month },
-                        user.name,
-                        user.role,
-                      );
-                    }
-                  }}
-                  className={`px-3 py-1 rounded-full text-xs font-medium border transition whitespace-nowrap min-w-max ${
-                    archiveMonth === month
-                      ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                      : "bg-slate-50 text-slate-500 border-slate-200/50 hover:bg-slate-100 hover:text-slate-800"
-                  }`}
-                >
-                  📅 {month}
-                </button>
-              ))}
-            </div>
+                {/* Directions Row */}
+                {Object.keys(directions).length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 border-t border-[#E5E7EB] pt-3">
+                    <span className={UI.caption}>Направления:</span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {["All", ...Object.keys(directions)].map((dir) => (
+                        <button
+                          key={dir}
+                          type="button"
+                          onClick={() => setActiveDirectionTab(dir)}
+                          aria-pressed={activeDirectionTab === dir}
+                          className={`${UI.filterPill} border truncate max-w-[160px] ${
+                            activeDirectionTab === dir
+                              ? "bg-[#121316] text-white border-[#121316]"
+                              : "bg-white text-[#4B5563] border-[#E5E7EB] hover:bg-[#F3F4F6] hover:text-[#121316]"
+                          }`}
+                        >
+                          {dir === "All" ? "Все направления" : dir}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
-        </div>
-      </div>
 
-      <div className="space-y-6">
-        {(activeTab === "active" || activeTab === "archive") && (
-          <div className="bg-slate-50/50 border border-slate-200 rounded-2xl p-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-[0_1px_2px_rgba(0,0,0,0.01)]">
-            <div className="flex items-center gap-3 flex-1 min-w-0 bg-white border border-slate-200/60 rounded-xl px-3 py-1.5">
-              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <input
-                type="text"
-                placeholder="Быстрый поиск автомобиля по номеру в таблице..."
-                value={searchCarQuery}
-                onChange={(e) => setSearchCarQuery(e.target.value)}
-                className="w-full bg-transparent text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400 min-h-[44px]"
-              />
-              {searchCarQuery && (
-                <button
-                  onClick={() => setSearchCarQuery("")}
-                  className="text-xs hover:bg-slate-100 p-1 rounded-lg text-slate-400 hover:text-slate-700 transition"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 px-2 shrink-0 self-end md:self-auto">
-              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Масштаб:</span>
-              <div className="flex items-center bg-white border border-slate-200/60 rounded-lg p-0.5 gap-1 shadow-2xs">
-                <button 
-                  onClick={() => {
-                    const newScale = Math.max(50, tableScale - 10);
-                    setTableScale(newScale);
-                    localStorage.setItem(scaleKey, String(newScale));
-                  }}
-                  className="w-6 h-6 flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-600 rounded text-xs font-bold transition select-none cursor-pointer"
-                  title="Уменьшить масштаб таблицы"
-                >
-                  <Minus className="w-3 h-3" />
-                </button>
-                <span className="text-[11px] font-bold font-mono text-slate-750 min-w-[32px] text-center select-none">{tableScale}%</span>
-                <button 
-                  onClick={() => {
-                    const newScale = Math.min(150, tableScale + 10);
-                    setTableScale(newScale);
-                    localStorage.setItem(scaleKey, String(newScale));
-                  }}
-                  className="w-6 h-6 flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-600 rounded text-xs font-bold transition select-none cursor-pointer"
-                  title="Увеличить масштаб таблицы"
-                >
-                  <Plus className="w-3 h-3" />
-                </button>
+          {/* Месяцы архива (вкладка «Архив») */}
+          <div className={activeTab === "archive" ? "flex flex-col gap-3" : "hidden"}>
+            <SectionHeader
+              icon={<Calendar className="w-4 h-4" aria-hidden="true" />}
+              title="Месяцы архива"
+              subtitle="Рейсы сгруппированы по месяцу завершения"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap gap-1.5">
+                {archiveTripsMonths.map((month) => (
+                  <button
+                    key={month}
+                    type="button"
+                    onClick={() => setArchiveMonth(month)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const tripId = e.dataTransfer.getData("tripId");
+                      if (tripId) {
+                        pdService.updateTrip(
+                          tripId,
+                          { currentMonth: month },
+                          user.name,
+                          user.role,
+                        );
+                      }
+                    }}
+                    aria-pressed={archiveMonth === month}
+                    className={`${UI.filterPill} border whitespace-nowrap min-w-max flex items-center gap-1.5 ${
+                      archiveMonth === month
+                        ? "bg-[#121316] text-white border-[#121316]"
+                        : "bg-white text-[#4B5563] border-[#E5E7EB] hover:bg-[#F3F4F6] hover:text-[#121316]"
+                    }`}
+                  >
+                    <Calendar className="w-3 h-3" aria-hidden="true" />
+                    {month}
+                  </button>
+                ))}
               </div>
-              {tableScale !== 100 && (
-                <button 
-                  onClick={() => {
-                    setTableScale(100);
-                    localStorage.setItem(scaleKey, "100");
-                  }}
-                  className="text-[10px] font-semibold text-blue-600 hover:text-blue-800 hover:underline pl-1 transition cursor-pointer"
-                  title="Сбросить к 100%"
-                >
-                  Сбросить
-                </button>
-              )}
             </div>
           </div>
-        )}
-        <div className={activeTab === "active" ? "" : "hidden"}>
-          {renderTripsGrid(false)}
+
+          {/* Список рейсов: поиск, масштаб, результаты */}
+          <div className="flex flex-col gap-4">
+            {(activeTab === "active" || activeTab === "archive") && (
+              <SectionHeader
+                icon={activeTab === "archive"
+                  ? <Archive className="w-4 h-4" aria-hidden="true" />
+                  : <Truck className="w-4 h-4" aria-hidden="true" />}
+                title={activeTab === "archive" ? "Рейсы в архиве" : "Список рейсов"}
+                subtitle={activeTab === "archive"
+                  ? "Выбранный месяц архива"
+                  : "Нажмите на карточку, чтобы открыть план"}
+              />
+            )}
+
+            {(activeTab === "active" || activeTab === "archive") && (
+              <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+                <SearchField
+                  value={searchCarQuery}
+                  onChange={setSearchCarQuery}
+                  placeholder="Быстрый поиск автомобиля по номеру в таблице..."
+                  ariaLabel="Быстрый поиск по автомобилям"
+                />
+                {activeTab === "archive" && !archiveListLoaded ? null : (
+                  <FoundCount
+                    count={activeTab === "archive" ? archiveTripsComputed.length : activeTripsComputed.length}
+                    onReset={
+                      searchCarQuery.trim() ||
+                      (activeTab === "active"
+                        ? (activeDispatcherTab !== "Все диспетчеры" && activeDispatcherTab !== "All") || activeDirectionTab !== "All"
+                        : archiveMonth !== null)
+                        ? () => {
+                            setSearchCarQuery("");
+                            if (activeTab === "active") {
+                              setActiveDirectionTab("All");
+                              setActiveDispatcherTab(activeDispatchers[0] || "Все диспетчеры");
+                            } else {
+                              setArchiveMonth(null);
+                            }
+                          }
+                        : undefined
+                    }
+                  />
+                )}
+                <div className="flex items-center gap-2 lg:ml-auto shrink-0">
+                  <span className={UI.caption}>Масштаб:</span>
+                  <div className="flex items-center bg-white border border-[#E5E7EB] rounded-xl p-0.5 gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newScale = Math.max(50, tableScale - 10);
+                        setTableScale(newScale);
+                        localStorage.setItem(scaleKey, String(newScale));
+                      }}
+                      className={`${UI.buttonIcon} w-8 h-8`}
+                      title="Уменьшить масштаб таблицы"
+                      aria-label="Уменьшить масштаб таблицы"
+                    >
+                      <Minus className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                    <span className="text-[11px] font-semibold font-mono text-[#121316] min-w-[36px] text-center select-none">{tableScale}%</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newScale = Math.min(150, tableScale + 10);
+                        setTableScale(newScale);
+                        localStorage.setItem(scaleKey, String(newScale));
+                      }}
+                      className={`${UI.buttonIcon} w-8 h-8`}
+                      title="Увеличить масштаб таблицы"
+                      aria-label="Увеличить масштаб таблицы"
+                    >
+                      <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
+                  {tableScale !== 100 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTableScale(100);
+                        localStorage.setItem(scaleKey, "100");
+                      }}
+                      className={UI.buttonLink}
+                      title="Сбросить к 100%"
+                    >
+                      Сбросить
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className={activeTab === "active" ? "" : "hidden"}>
+              {renderTripsGrid(false)}
+            </div>
+            <div className={activeTab === "archive" ? "" : "hidden"}>
+              {renderTripsGrid(true)}
+            </div>
+            <div className={activeTab === "history" ? "" : "hidden"}>
+              {renderHistory()}
+            </div>
+          </div>
         </div>
-        <div className={activeTab === "archive" ? "" : "hidden"}>
-          {renderTripsGrid(true)}
-        </div>
-        <div className={activeTab === "history" ? "" : "hidden"}>
-          {renderHistory()}
-        </div>
-      </div>
+      </ModuleShell>
 
       {renderNotebookWidget()}
       {renderCurrentFormModal()}
@@ -3754,7 +3818,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             <h2 className="text-base font-bold text-slate-900">Добавить маршрут в базу</h2>
             <p className="text-xs text-slate-500">Маршрут «{addDistFrom} → {addDistTo}» не найден в базе расстояний. Добавить?</p>
             <div className="bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5 text-xs text-amber-800 font-medium">
-              <strong>📐 Самостоятельный расчёт:</strong> Вносите расстояния, которые вы считаете/знаете сами (карты, опыт), а не только из путевых листов водителей. Это общая база для всех.
+              <strong>Самостоятельный расчёт:</strong> Вносите расстояния, которые вы считаете/знаете сами (карты, опыт), а не только из путевых листов водителей. Это общая база для всех.
             </div>
 
             <div className="grid grid-cols-2 gap-3">
