@@ -51,7 +51,7 @@ export default function SplashScreen({
         </div>
 
         <p className="text-xs font-medium text-gray-500 tracking-wide select-none">
-          Загрузка Ratipa Portal
+          Контур управления перевозками
         </p>
 
         {/* Нейтральный индикатор без числового значения */}
