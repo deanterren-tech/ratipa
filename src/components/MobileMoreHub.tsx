@@ -11,9 +11,12 @@
  * → фолбэк menuGroups, getSubtabLabel, фильтрация по правам getAllowedSubtabs).
  *
  * Иконки — заливной набор HubIcons по ключу модуля (MODULE_STYLE). Живые
- * показатели: рейсы (tripsdashboard, не архив), автопарк (vehicleFleet) и
- * водители (drivers) — подписки живут только пока хаб открыт; показываются
- * у «План Дохода» и «Авто и Водители».
+ * показатели: рейсы (tripsdashboard, не архив), автопарк и водители — цифры
+ * берутся ИЗ ТЕХ ЖЕ ИСТОЧНИКОВ, что показывают «Справочники» и сам раздел
+ * «Авто и Водители»: единая база сцепок (getCouplingsFlat — как «База сцепок»
+ * во вкладке «Автопарк и Водители») и справочник водителей (getDriversFlat —
+ * как вкладка «База водителей»). Подписки живут только пока хаб открыт;
+ * показываются у «План Дохода» и «Авто и Водители».
  */
 import { useEffect, useState, type ComponentType, type CSSProperties } from 'react';
 import { motion } from 'motion/react';
@@ -27,6 +30,7 @@ import {
   HubGridIcon,
 } from './common/HubIcons';
 import { dbService } from '../api';
+import { getCouplingsFlat, getDriversFlat } from '../services/fleetService';
 import { UserProfile } from '../types';
 import { APP_VERSION_LABEL } from '../version';
 import { getUserFullName } from '../utils/userName';
@@ -112,8 +116,12 @@ export default function MobileMoreHub({ user, groups, onNavigate, onOpenAccount 
 
   useEffect(() => {
     const u1 = dbService.getTrips((list) => setTrips((list || []).filter((t) => !t.isArchived).length));
-    const u2 = dbService.getVehicleFleet((list) => setFleet((list || []).length));
-    const u3 = dbService.getDrivers((list) => setDrivers((list || []).length));
+    // Автопарк — счёт из единой базы сцепок: тот же источник и та же цифра,
+    // что «База сцепок» в «Справочниках» и «Реестр автопарка и экипажей» в
+    // разделе «Авто и Водители» (не сырой узел tractors).
+    const u2 = getCouplingsFlat((list: any[]) => setFleet((list || []).length));
+    // Водители — справочник водителей: как «База водителей» в «Справочниках».
+    const u3 = getDriversFlat((list: any[]) => setDrivers((list || []).length));
     return () => {
       if (typeof u1 === 'function') u1();
       if (typeof u2 === 'function') u2();
