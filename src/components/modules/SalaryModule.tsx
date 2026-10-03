@@ -3,13 +3,12 @@ import {UserProfile, SalaryLog, CarRateGroup, AppSettings, Driver, Vehicle} from
 import { dbService, database, onValue } from '../../api'
 import {pdService} from '../../api'
 import { ref } from 'firebase/database'
-import {Wallet, Calculator, Trash2, Edit, Copy, Calendar, TrendingUp, History, ChevronDown, CheckCircle2, Loader2} from 'lucide-react'
+import {Wallet, Calculator, Trash2, Edit, Copy, Calendar, TrendingUp, History, ChevronDown, CheckCircle2} from 'lucide-react'
 import {UI} from '../../ui/kit'
-import {ModuleShell, SectionHeader, SearchField, FilterPills, StatusText, EmptyState, FoundCount, ModalShell, ErrorRow} from '../../ui/components'
+import {ModuleShell, SectionHeader, SearchField, FilterPills, StatusText, EmptyState, FoundCount, ModalShell} from '../../ui/components'
 import CalendarDaysCalculator from './CalendarDaysCalculator';
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
-import {useModalKeyboard} from '../../hooks/useModalKeyboard'
 import {normalizePlate, findCarByPlate, getDriverById, getDriverIdForCar, formatCoupling} from '../../utils/salaryAutofill'
 import {formatDriverShortName} from '../../utils/driverSync'
 import {CarConflictModal} from '../common/CarConflictModal'
@@ -20,36 +19,11 @@ interface SalaryModuleProps {
   user: UserProfile;
 }
 
-/** Ключи вкладок журнала: текущий месяц, архив выбранного месяца, группировка по логисту. */
-type JournalTab = 'current' | 'archive' | 'dispatcher';
-
-/** Вкладки журнала — подпись и счётчик записей берутся из живой подписки. */
-const JOURNAL_TABS: Array<{ key: JournalTab; label: string }> = [
-  { key: 'current', label: 'Текущий месяц' },
-  { key: 'archive', label: 'Архив месяцев' },
-  { key: 'dispatcher', label: 'По диспетчерам' },
-];
-
-interface ScopeState {
-  logs: SalaryLog[];
-  loaded: boolean;
-  error: string | null;
-}
-
-/** Новые сверху: по числовой части ключа (timestamp), затем по строке ключа. */
-const sortByNewest = (list: SalaryLog[]): SalaryLog[] => {
-  list.sort((a, b) => {
-    const aTime = parseInt(String(a.id || '').replace(/\D/g, '')) || 0;
-    const bTime = parseInt(String(b.id || '').replace(/\D/g, '')) || 0;
-    return bTime - aTime;
-  });
-  return list;
-};
-
 
 export default function SalaryModule({ user }: SalaryModuleProps) {
   const { showConfirm } = useDialog();
   const { toast } = useToast();
+  const [logs, setLogs] = useState<SalaryLog[]>([]);
   const [carsPool, setCarsPool] = useState<CarRateGroup[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [driversMap, setDriversMap] = useState<Record<string, string>>({});
@@ -58,26 +32,13 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Tab control states for Recent Logs
-  const [activeTab, setActiveTab] = useState<JournalTab>('current');
+  const [activeTab, setActiveTab] = useState<'current' | 'archive' | 'dispatcher'>('current');
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [selectedDispatcher, setSelectedDispatcher] = useState<string>('');
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [availableDispatchers, setAvailableDispatchers] = useState<string[]>([]);
   const [isMigrating, setIsMigrating] = useState(false);
-  // Повторная подписка на журнал после ошибки загрузки («Повторить»).
-  const [journalReloadKey, setJournalReloadKey] = useState(0);
 
-  // Данные журнала по каждой вкладке: подписки живут параллельно, поэтому
-  // переключение мгновенное, а на вкладках видны честные счётчики записей.
-  const [scopeState, setScopeState] = useState<Record<JournalTab, ScopeState>>({
-    current: { logs: [], loaded: false, error: null },
-    archive: { logs: [], loaded: false, error: null },
-    dispatcher: { logs: [], loaded: false, error: null },
-  });
-
-  const setScope = (key: JournalTab, patch: Partial<ScopeState>) => {
-    setScopeState(prev => ({ ...prev, [key]: { ...prev[key], ...patch } }));
-  };
 
   // Form State
   const [carNumber, setCarNumber] = useState('');
@@ -133,13 +94,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const saveEditModal = () => {
     if (editingSalaryData && editingSalaryData.id) {
       const mark = [editDirection, editCircles].filter(Boolean).join(", ");
-      try {
-        dbService.updateSalary(editingSalaryData.id, { ...editingSalaryData, mark }, user.name, user.role);
-        toast('Изменения выплаты сохранены', 'success');
-      } catch (err) {
-        console.error('Не удалось сохранить изменения выплаты:', err);
-        toast('Не удалось сохранить изменения. Повторите попытку.', 'error');
-      }
+      dbService.updateSalary(editingSalaryData.id, { ...editingSalaryData, mark }, user.name, user.role);
     }
     closeEditModal();
   };
@@ -148,15 +103,6 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     setEditingSalaryId(rec.id || null);
     setEditingSalaryData(rec);
   };
-
-  // Клавиатура модального окна: Escape закрывает, фокус встаёт на первое поле
-  // и возвращается на кнопку-источник при закрытии.
-  useModalKeyboard({
-    isOpen: !!editingSalaryId,
-    onClose: closeEditModal,
-    onConfirm: saveEditModal,
-    initialFocusSelector: '#salary-edit-driver',
-  });
 
   const getYearMonth = (item: SalaryLog): string => {
     if (item.datetime) {
@@ -269,67 +215,55 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     }
   }, [availableDispatchers, selectedDispatcher]);
 
-  // 4. Scoped reactive subscriptions: все три вкладки подписаны параллельно.
-  //    «Текущий месяц» — месяц самого расчёта; «Архив» — выбранный месяц;
-  //    «По диспетчерам» — выбранный логист.
-  const currentYearMonth = useMemo(() => {
-    const d = new Date();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    return `${d.getFullYear()}-${mm}`;
-  }, []);
-
+  // 4. Scoped reactive subscription for active tab
   useEffect(() => {
-    const unsub = onValue(ref(database, `salaryHistory/months/${currentYearMonth}`), (snap) => {
-      const data = snap.val();
-      const list: SalaryLog[] = data
-        ? sortByNewest(Object.keys(data).map((key) => ({ id: key, ...data[key] } as SalaryLog)))
-        : [];
-      setScope('current', { logs: list, loaded: true, error: null });
-    }, (err) => {
-      console.warn(`Failed to subscribe to salaryHistory/months/${currentYearMonth}:`, err);
-      setScope('current', { logs: [], loaded: true, error: 'Не удалось загрузить выплаты текущего месяца. Проверьте соединение и повторите.' });
-    });
-    return () => { unsub(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentYearMonth, journalReloadKey]);
-
-  useEffect(() => {
-    if (!selectedMonth) {
-      setScope('archive', { logs: [], loaded: true, error: null });
+    let dbPath = '';
+    
+    if (activeTab === 'current') {
+      const d = new Date();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const currentYM = `${d.getFullYear()}-${mm}`;
+      dbPath = `salaryHistory/months/${currentYM}`;
+    } else if (activeTab === 'archive') {
+      if (selectedMonth) {
+        dbPath = `salaryHistory/months/${selectedMonth}`;
+      }
+    } else if (activeTab === 'dispatcher') {
+      if (selectedDispatcher) {
+        dbPath = `salaryHistory/byDispatcher/${selectedDispatcher}`;
+      }
+    }
+    
+    if (!dbPath) {
+      setLogs([]);
       return;
     }
-    const unsub = onValue(ref(database, `salaryHistory/months/${selectedMonth}`), (snap) => {
+    
+    const unsub = onValue(ref(database, dbPath), (snap) => {
       const data = snap.val();
-      const list: SalaryLog[] = data
-        ? sortByNewest(Object.keys(data).map((key) => ({ id: key, ...data[key] } as SalaryLog)))
-        : [];
-      setScope('archive', { logs: list, loaded: true, error: null });
+      if (data) {
+        const list: SalaryLog[] = Object.keys(data).map((key) => ({
+          id: key,
+          ...data[key],
+        }));
+        list.sort((a, b) => {
+          const aTime = parseInt(a.id.replace(/\D/g, "")) || 0;
+          const bTime = parseInt(b.id.replace(/\D/g, "")) || 0;
+          return bTime - aTime;
+        });
+        setLogs(list);
+      } else {
+        setLogs([]);
+      }
     }, (err) => {
-      console.warn(`Failed to subscribe to salaryHistory/months/${selectedMonth}:`, err);
-      setScope('archive', { logs: [], loaded: true, error: 'Не удалось загрузить архив выплат. Проверьте соединение и повторите.' });
+      console.warn(`Failed to subscribe to ${dbPath}:`, err);
+      setLogs([]);
     });
-    return () => { unsub(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMonth, journalReloadKey]);
-
-  useEffect(() => {
-    if (!selectedDispatcher) {
-      setScope('dispatcher', { logs: [], loaded: true, error: null });
-      return;
-    }
-    const unsub = onValue(ref(database, `salaryHistory/byDispatcher/${selectedDispatcher}`), (snap) => {
-      const data = snap.val();
-      const list: SalaryLog[] = data
-        ? sortByNewest(Object.keys(data).map((key) => ({ id: key, ...data[key] } as SalaryLog)))
-        : [];
-      setScope('dispatcher', { logs: list, loaded: true, error: null });
-    }, (err) => {
-      console.warn(`Failed to subscribe to salaryHistory/byDispatcher/${selectedDispatcher}:`, err);
-      setScope('dispatcher', { logs: [], loaded: true, error: 'Не удалось загрузить выплаты логиста. Проверьте соединение и повторите.' });
-    });
-    return () => { unsub(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDispatcher, journalReloadKey]);
+    
+    return () => {
+      unsub();
+    };
+  }, [activeTab, selectedMonth, selectedDispatcher]);
 
   // 5. General metadata subscriptions
   useEffect(() => {
@@ -585,20 +519,10 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
         driverId: driverId || undefined
     };
 
-    try {
-      dbService.saveSalary(newLog, user.name, user.role);
-      toast('Выплата зафиксирована — запись добавлена в журнал', 'success');
-      clearForm();
-    } catch (err) {
-      console.error('Не удалось сохранить выплату:', err);
-      toast('Не удалось сохранить выплату. Проверьте соединение и повторите.', 'error');
-    }
+    dbService.saveSalary(newLog, user.name, user.role);
+    clearForm();
   };
 
-
-  const logs = scopeState[activeTab].logs;
-  const logsLoading = !scopeState[activeTab].loaded;
-  const logsError = scopeState[activeTab].error;
 
   const filteredHistory = useMemo(() => {
     return logs.filter(rec => {
@@ -639,96 +563,71 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     <ModuleShell title="Зарплата водителей">
       <div className="flex flex-col gap-6">
 
-        {/* Форма расчёта: шаги 1–3 и фиксация. Enter в любом поле сохраняет расчёт. */}
-        <div
-          className="flex flex-col gap-6"
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter' || e.defaultPrevented) return;
-            const target = e.target as HTMLElement | null;
-            if (target && target.tagName === 'INPUT') {
-              e.preventDefault();
-              void saveToHistory();
-            }
-          }}
-        >
-
-        {/* ===== Шаг 1. Период и исходные данные ===== */}
-        <section className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-5 flex flex-col gap-5">
+        {/* 1. Период и исходные данные */}
+        <section className="flex flex-col gap-4">
           <SectionHeader
             icon={<Calendar className="w-4 h-4" aria-hidden="true" />}
             title="Период и исходные данные"
-            subtitle="Шаг 1: даты рейса, автомобиль, водитель и направление"
+            subtitle="Даты рейса, автомобиль, водитель и направление"
           />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <div className="lg:col-span-2 flex flex-col gap-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <label className={UI.fieldLabel}>Автомобиль</label>
-                  <CouplingPicker
-                    value={carNumber}
-                    onSelect={(rec) => {
-                      if (!rec) {
-                        // Очистка выбора: убираем машину и авто-заполненные из сцепки поля
-                        setCarNumber('');
-                        handleCarNumberChange('');
-                        return;
-                      }
-                      const cNum = (rec.carNumber || rec.vehicleNumbers || '').toUpperCase();
-                      setCarNumber(cNum);
-                      if (rec.driverName) {
-                        setDriverName(rec.driverName);
-                      }
-                      handleCarNumberChange(cNum);
-                    }}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className={UI.fieldLabel} htmlFor="salary-driver-name">ФИО Водителя</label>
-                  <input
-                    id="salary-driver-name"
-                    type="text"
-                    value={driverName}
-                    onChange={e => setDriverName(e.target.value)}
-                    placeholder="—"
-                    className={UI.input}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className={UI.fieldLabel} htmlFor="salary-trip-direction">Направление</label>
-                  <select
-                    id="salary-trip-direction"
-                    value={tripDirection}
-                    onChange={e => setTripDirection(e.target.value)}
-                    className={UI.select}
-                  >
-                    <option value="Турция">Турция</option>
-                    <option value="Китай">Китай</option>
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className={UI.fieldLabel} htmlFor="salary-trip-circles">Круги</label>
-                  <select
-                    id="salary-trip-circles"
-                    value={tripCircles}
-                    onChange={e => setTripCircles(e.target.value)}
-                    className={UI.select}
-                  >
-                    <option value="">—</option>
-                    <option value="2 круга">2 круга</option>
-                    <option value="3 круга">3 круга</option>
-                  </select>
-                </div>
+            <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel}>Автомобиль</label>
+                <CouplingPicker
+                  value={carNumber}
+                  onSelect={(rec) => {
+                    if (!rec) {
+                      // Очистка выбора: убираем машину и авто-заполненные из сцепки поля
+                      setCarNumber('');
+                      handleCarNumberChange('');
+                      return;
+                    }
+                    const cNum = (rec.carNumber || rec.vehicleNumbers || '').toUpperCase();
+                    setCarNumber(cNum);
+                    if (rec.driverName) {
+                      setDriverName(rec.driverName);
+                    }
+                    handleCarNumberChange(cNum);
+                  }}
+                />
               </div>
-              {autofillStatus.message ? (
-                <div className="flex flex-wrap items-center gap-2" role="status" aria-live="polite">
-                  <StatusText color={autofillStatus.type === 'success' ? 'emerald' : autofillStatus.type === 'warning' ? 'amber' : 'grey'}>
-                    {autofillStatus.message}
-                  </StatusText>
-                  {autofillStatus.type === 'multiple' && (autofillStatus.matchedCars || []).slice(0, 6).map((c) => (
-                    <span key={c.id || c.carNumber} className={`${UI.chip} font-mono`}>{c.carNumber || c.vehicleNumbers}</span>
-                  ))}
-                </div>
-              ) : null}
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel} htmlFor="salary-driver-name">ФИО Водителя</label>
+                <input
+                  id="salary-driver-name"
+                  type="text"
+                  value={driverName}
+                  onChange={e => setDriverName(e.target.value)}
+                  placeholder="—"
+                  className={UI.input}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel} htmlFor="salary-trip-direction">Направление</label>
+                <select
+                  id="salary-trip-direction"
+                  value={tripDirection}
+                  onChange={e => setTripDirection(e.target.value)}
+                  className={UI.select}
+                >
+                  <option value="Турция">Турция</option>
+                  <option value="Китай">Китай</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel} htmlFor="salary-trip-circles">Круги</label>
+                <select
+                  id="salary-trip-circles"
+                  value={tripCircles}
+                  onChange={e => setTripCircles(e.target.value)}
+                  className={UI.select}
+                >
+                  <option value="">—</option>
+                  <option value="2 круга">2 круга</option>
+                  <option value="3 круга">3 круга</option>
+                </select>
+              </div>
             </div>
             <div className="lg:col-span-1">
               <CalendarDaysCalculator onDaysCalculated={(days) => setTotalDays(days)} />
@@ -736,12 +635,12 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
           </div>
         </section>
 
-        {/* ===== Шаг 2. Параметры расчёта ===== */}
-        <section className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-5 flex flex-col gap-5">
+        {/* 2. Параметры расчёта */}
+        <section className="flex flex-col gap-4">
           <SectionHeader
             icon={<Calculator className="w-4 h-4" aria-hidden="true" />}
             title="Параметры расчёта"
-            subtitle="Шаг 2: пробег, ставка, дни в рейсе, простой и премия"
+            subtitle="Пробег, ставки, дни и премия"
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="flex flex-col gap-1.5">
@@ -826,170 +725,128 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
             />
         )}
 
-        {/* ===== Шаг 3. Результат расчёта ===== */}
-        <section className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-5 flex flex-col gap-5">
+        {/* 3. Показатели */}
+        <section className="flex flex-col gap-4">
           <SectionHeader
             icon={<TrendingUp className="w-4 h-4" aria-hidden="true" />}
-            title="Результат расчёта"
-            subtitle="Шаг 3: итог к выплате, З/П за сутки и разбивка начислений"
+            title="Показатели"
+            subtitle="Начисления, из которых складывается выплата"
           />
-
-          {/* Крупный блок итогов: сумма к выплате и суточная ставка — «без скролла» на мобильном */}
-          <div className="rounded-2xl border border-[#E5E7EB] bg-[#F8F9FA] p-5">
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] block select-none">
-                  Итого водителю
-                </span>
-                <span
-                  className="mt-1 flex items-baseline gap-1.5 font-mono tabular-nums text-3xl sm:text-4xl font-bold tracking-tight text-[#121316]"
-                  data-testid="salary-total"
-                >
-                  {Math.round(totalSalary).toLocaleString('ru-RU')}
-                  <span className="text-base font-semibold text-[#6B7280]">€</span>
-                </span>
-              </div>
-              <div className="flex flex-col items-start sm:items-end gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7280] select-none">
-                  З/П за сутки
-                </span>
-                <span
-                  className="font-mono tabular-nums text-xl font-bold text-[#121316]"
-                  data-testid="salary-perday"
-                >
-                  {Math.round(salaryPerDay).toLocaleString('ru-RU')}
-                  <span className="text-sm font-semibold text-[#6B7280]"> €</span>
-                </span>
-                <span className={UI.hint}>При {Math.max(totalDays, 1)} дн. в рейсе</span>
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <StatusText color="accent">За километраж</StatusText>
+              <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(kmMoney).toLocaleString('ru-RU')} €</span>
             </div>
-          </div>
-
-          {/* Разбивка начислений строками — как «Статьи расходов» в «Калькуляции» */}
-          <div>
-            <div className={`${UI.caption} mb-2`}>Разбивка начислений</div>
-            <div className="flex flex-col divide-y divide-[#E5E7EB] border border-[#E5E7EB] rounded-2xl overflow-hidden">
-              <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-white">
-                <span className="text-xs text-[#4B5563]">
-                  За километраж
-                  <span className="text-[#9CA3AF]"> · {Math.round(Number(totalKm) || 0).toLocaleString('ru-RU')} км × {ratePerKm} €/км</span>
-                </span>
-                <span className="text-xs font-mono font-semibold text-[#121316] whitespace-nowrap" data-testid="salary-km-money">
-                  {Math.round(kmMoney).toLocaleString('ru-RU')} €
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-white">
-                <span className="text-xs text-[#4B5563]">
-                  Простой
-                  <span className="text-[#9CA3AF]"> · {idleDays} дн. × {currentIdleRate} €/д</span>
-                </span>
-                <span className="text-xs font-mono font-semibold text-[#121316] whitespace-nowrap" data-testid="salary-idle-money">
-                  {Math.round(idleMoney).toLocaleString('ru-RU')} €
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-white">
-                <span className="text-xs text-[#4B5563]">
-                  Суточные
-                  <span className="text-[#9CA3AF]"> · {Math.max(totalDays, 1)} дн. × {currentPerDiem} €/д</span>
-                </span>
-                <span className="text-xs font-mono font-semibold text-[#121316] whitespace-nowrap" data-testid="salary-days-money">
-                  {Math.round(daysMoney).toLocaleString('ru-RU')} €
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-white">
-                <span className="text-xs text-[#4B5563]">Премия</span>
-                <span className="text-xs font-mono font-semibold text-[#121316] whitespace-nowrap" data-testid="salary-bonus-money">
-                  {Math.round(bonus).toLocaleString('ru-RU')} €
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-[#F8F9FA]">
-                <span className="text-xs font-semibold text-[#121316]">Итого к выплате</span>
-                <span className="text-sm font-mono font-bold text-[#121316] whitespace-nowrap">
-                  {Math.round(totalSalary).toLocaleString('ru-RU')} €
-                </span>
-              </div>
+            <div className="flex items-center justify-between gap-3">
+              <StatusText color="grey">Простой + Суточные</StatusText>
+              <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(idleMoney + daysMoney).toLocaleString('ru-RU')} €</span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <StatusText color="grey">Премия</StatusText>
+              <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(bonus).toLocaleString('ru-RU')} €</span>
             </div>
           </div>
         </section>
 
-        {/* ===== Фиксация выплаты ===== */}
-        <section className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-5 flex flex-col gap-5">
+        {/* 4. Итоговая сумма */}
+        <section className="flex flex-col gap-4">
+          <SectionHeader
+            icon={<Wallet className="w-4 h-4" aria-hidden="true" />}
+            title="Итоговая сумма"
+            subtitle="Итого к выплате за текущий расчёт"
+          />
+          <div className="flex flex-wrap items-start gap-x-10 gap-y-4">
+            <div className="flex flex-col gap-1">
+              <span className={UI.caption}>Итого водителю</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl sm:text-4xl font-mono font-semibold tabular-nums text-[#121316]">
+                  {Math.round(totalSalary).toLocaleString('ru-RU')}
+                </span>
+                <span className="text-sm text-[#6B7280]">€</span>
+              </div>
+              <p className="text-[11px] text-[#6B7280]">
+                Складывается из показателей выше: километраж, простой с суточными и премия.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className={UI.caption}>З/П за сутки</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-3xl sm:text-4xl font-mono font-semibold tabular-nums text-[#121316]">
+                  {Math.round(salaryPerDay).toLocaleString('ru-RU')}
+                </span>
+                <span className="text-sm text-[#6B7280]">€</span>
+              </div>
+              <p className="text-[11px] text-[#6B7280]">
+                Выходит за одну сутки при текущем расчёте.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* 5. Фиксация выплаты */}
+        <section className="flex flex-col gap-4">
           <SectionHeader
             icon={<CheckCircle2 className="w-4 h-4" aria-hidden="true" />}
             title="Фиксация выплаты"
             subtitle="Сохранение расчёта в журнал выплат"
           />
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={clearForm} className={UI.buttonGhost}>Очистить</button>
-            <button type="button" onClick={saveToHistory} className={UI.buttonPrimary}>
+            <button onClick={clearForm} className={UI.buttonGhost}>Очистить</button>
+            <button onClick={saveToHistory} className={UI.buttonPrimary}>
               <Wallet className="w-4 h-4" aria-hidden="true" />
               Фиксировать выплату
             </button>
-            <span className={`${UI.hint} ml-1`}>
-              Запись появится в журнале ниже. Enter в любом поле сохраняет расчёт.
-            </span>
+            <span className={`${UI.hint} ml-1`}>Запись появится в журнале выплат ниже.</span>
           </div>
         </section>
 
-        </div>
-
-        {/* ===== Журнал выплат ===== */}
-        <section className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-5 flex flex-col gap-4">
+        {/* 6. Журнал выплат */}
+        <section className="flex flex-col gap-4">
           <SectionHeader
             icon={<History className="w-4 h-4" aria-hidden="true" />}
             title="Журнал выплат"
             subtitle="Поиск по водителю, логисту и транспорту; архив и группировка по диспетчерам"
           />
 
-          <div className={UI.tabsBar}>
-            <nav className={UI.tabsNav} role="tablist" aria-label="Разделы журнала выплат">
-              {JOURNAL_TABS.map((t) => {
-                const isActive = activeTab === t.key;
-                const scope = scopeState[t.key];
-                const count = scope.loaded ? scope.logs.length : undefined;
-                return (
-                  <button
-                    key={t.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    onClick={() => setActiveTab(t.key)}
-                    onKeyDown={(e) => {
-                      // Стрелки / Home / End — как в стандартном списке вкладок.
-                      const keys = JOURNAL_TABS.map((x) => x.key);
-                      const at = keys.indexOf(t.key);
-                      let next = -1;
-                      if (e.key === 'ArrowRight') next = (at + 1) % keys.length;
-                      else if (e.key === 'ArrowLeft') next = (at - 1 + keys.length) % keys.length;
-                      else if (e.key === 'Home') next = 0;
-                      else if (e.key === 'End') next = keys.length - 1;
-                      if (next < 0) return;
-                      e.preventDefault();
-                      setActiveTab(keys[next]);
-                      const nav = e.currentTarget.parentElement;
-                      const buttons = nav ? nav.querySelectorAll<HTMLButtonElement>('[role="tab"]') : null;
-                      buttons?.[next]?.focus();
-                    }}
-                    className={`${UI.tab} min-h-[44px] lg:min-h-0 ${isActive ? UI.tabActive : UI.tabIdle}`}
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+              <FilterPills
+                items={[
+                  { key: 'current', label: 'Текущий месяц' },
+                  { key: 'archive', label: 'Архив месяцев' },
+                  { key: 'dispatcher', label: 'По диспетчерам' },
+                ]}
+                active={activeTab}
+                onChange={(key) => setActiveTab(key)}
+                ariaLabel="Период журнала выплат"
+              />
+              <SearchField
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Поиск по водителю, логисту, транспортному средству..."
+                className="lg:flex-1 lg:max-w-none"
+              />
+              {activeTab === 'dispatcher' && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={UI.fieldLabel}>Логист:</span>
+                  <select
+                    value={selectedDispatcher}
+                    onChange={(e) => setSelectedDispatcher(e.target.value)}
+                    className={`${UI.select} lg:min-w-[200px]`}
                   >
-                    {t.label}
-                    {typeof count === 'number' ? (
-                      <span className={`${UI.tabBadge} ${isActive ? UI.tabBadgeActive : UI.tabBadgeIdle}`}>{count}</span>
-                    ) : null}
-                    {isActive ? <span className={UI.tabUnderline} aria-hidden="true" /> : null}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-
-          <div className="flex flex-col gap-3 pt-1">
-            <SearchField
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Поиск по водителю, логисту, транспортному средству..."
-              className="lg:max-w-xl"
-            />
+                    {availableDispatchers.length === 0 ? (
+                      <option value="">Нет данных</option>
+                    ) : (
+                      availableDispatchers.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+              )}
+            </div>
 
             {activeTab === 'archive' && availableMonths.length > 0 && (
               <FilterPills
@@ -1019,325 +876,182 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
             )}
           </div>
 
-          {logsLoading ? (
-            <div className={UI.loading} role="status">
-              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-              Загрузка выплат…
-            </div>
-          ) : logsError ? (
-            <ErrorRow text={logsError} onRetry={() => setJournalReloadKey((k) => k + 1)} />
-          ) : (
-            <>
-              <div className="flex flex-col gap-3 pt-1">
-                <span className={UI.caption}>
-                  Статистика выплат ({activeTab === 'current' ? 'Текущий месяц' : activeTab === 'archive' ? 'За выбранный месяц' : 'По выбранному логисту'})
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-x-6 gap-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <StatusText color="grey">Выплат всего</StatusText>
-                    <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0" data-testid="salary-stat-count">{logs.length}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <StatusText color="accent">Сумма всех выплат</StatusText>
-                    <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0" data-testid="salary-stat-sum">{Math.round(totalPaid).toLocaleString('ru-RU')} €</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <StatusText color="grey">Средняя выплата</StatusText>
-                    <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0" data-testid="salary-stat-avg">{Math.round(avgPaid).toLocaleString('ru-RU')} €</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <StatusText color="grey">Максимальная</StatusText>
-                    <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0" data-testid="salary-stat-max">{Math.round(maxPaid).toLocaleString('ru-RU')} €</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <StatusText color="grey">Уникальных водителей</StatusText>
-                    <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{uniqueDrivers}</span>
-                  </div>
-                </div>
+          <div className="flex flex-col gap-3 pt-1">
+            <span className={UI.caption}>
+              Статистика выплат ({activeTab === 'current' ? 'Текущий месяц' : activeTab === 'archive' ? 'За выбранный месяц' : 'По выбранному логисту'})
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-x-6 gap-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <StatusText color="grey">Выплат всего</StatusText>
+                <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{logs.length}</span>
               </div>
+              <div className="flex items-center justify-between gap-3">
+                <StatusText color="accent">Сумма всех выплат</StatusText>
+                <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(totalPaid).toLocaleString('ru-RU')} €</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <StatusText color="grey">Средняя выплата</StatusText>
+                <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(avgPaid).toLocaleString('ru-RU')} €</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <StatusText color="grey">Максимальная</StatusText>
+                <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(maxPaid).toLocaleString('ru-RU')} €</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <StatusText color="grey">Уникальных водителей</StatusText>
+                <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{uniqueDrivers}</span>
+              </div>
+            </div>
+          </div>
 
-              <FoundCount count={filteredHistory.length} onReset={searchQuery ? () => setSearchQuery('') : undefined} />
+          <FoundCount count={filteredHistory.length} onReset={searchQuery ? () => setSearchQuery('') : undefined} />
 
-              {filteredHistory.length === 0 ? (
-                <EmptyState
-                  kind={searchQuery ? 'no-results' : 'empty'}
-                  title={searchQuery ? undefined : 'Выплат пока нет — сохраните первый расчёт'}
-                  hint={searchQuery ? undefined : 'Заполните шаги 1–3 и нажмите «Фиксировать выплату» — расчёт появится здесь.'}
-                  query={searchQuery || undefined}
-                />
-              ) : (
-                <>
-                  {/* Таблица — широкий экран (от 900 px) */}
-                  <div className={`${UI.tableWrap} hidden min-[900px]:block`}>
-                    <table className={UI.table}>
-                      <thead>
-                        <tr className={UI.theadRow}>
-                          <th className={`${UI.th} whitespace-nowrap`}>Дата</th>
-                          <th className={UI.th}>Водитель и ТС</th>
-                          <th className={UI.th}>Рейс</th>
-                          <th className={`${UI.th} whitespace-nowrap`}>Пробег и дни</th>
-                          <th className={UI.th}>Начислено</th>
-                          <th className={`${UI.th} text-right whitespace-nowrap`}>Итого</th>
-                          <th className={UI.th}>Комментарий</th>
-                          <th className={`${UI.th} text-right`}>
-                            <span className="sr-only">Действия</span>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredHistory.slice(0, logsLimit).map((rec) => (
-                          <tr key={rec.id} className={UI.tr} data-salary-row={rec.id}>
-                            <td className={UI.td}>
-                              <span className="block text-[11px] font-mono tabular-nums text-[#6B7280]">{rec.datetime || '—'}</span>
-                              <span className="block text-[10px] text-[#9CA3AF] mt-0.5">Логист: {rec.logist || 'Система'}</span>
-                            </td>
-                            <td className={UI.td}>
-                              <span className="block text-xs font-semibold text-[#121316]">{formatDriverShortName(rec.driver)}</span>
-                              <span className={`${UI.chip} inline-block mt-1 font-mono`}>{rec.car}</span>
-                            </td>
-                            <td className={UI.td}>
-                              {(() => {
-                                const mark = rec.mark || '';
-                                const circMatch = mark.match(/\d+\s*круг[а-я]*/i);
-                                const circles = circMatch ? circMatch[0] : '';
-                                const direction = mark.replace(circMatch ? circMatch[0] : '', '').replace(/[,，]/g, ' ').trim();
-                                if (!circles && direction === 'Отлично') {
-                                  return (
-                                    <span className="inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                      {mark}
-                                    </span>
-                                  );
-                                }
-                                if (!direction && !circles) {
-                                  return <span className="text-xs text-[#4B5563] whitespace-nowrap">{mark || '—'}</span>;
-                                }
-                                return (
-                                  <span className="inline-flex items-center gap-1.5 flex-wrap">
-                                    {direction ? <span className="text-xs text-[#4B5563] whitespace-nowrap">{direction}</span> : null}
-                                    {circles ? <span className={UI.chip}>{circles}</span> : null}
-                                  </span>
-                                );
-                              })()}
-                            </td>
-                            <td className={UI.td}>
-                              <span className="block text-xs font-mono tabular-nums text-[#121316] whitespace-nowrap">
-                                {Math.round(rec.km || 0).toLocaleString('ru-RU')} км · {rec.rate || 0} €/км
+          {filteredHistory.length === 0 ? (
+            <EmptyState
+              kind={searchQuery ? 'no-results' : 'empty'}
+              title={searchQuery ? undefined : 'Выплат пока нет'}
+              hint={searchQuery ? undefined : 'Заполните расчёт и нажмите «Фиксировать выплату» — запись появится здесь.'}
+              query={searchQuery || undefined}
+            />
+          ) : (
+            <div className={UI.tableWrap}>
+              <table className={UI.table}>
+                <thead>
+                  <tr className={UI.theadRow}>
+                    <th className={`${UI.th} whitespace-nowrap`}>Дата</th>
+                    <th className={UI.th}>Водитель и ТС</th>
+                    <th className={UI.th}>Рейс</th>
+                    <th className={`${UI.th} whitespace-nowrap`}>Пробег и дни</th>
+                    <th className={UI.th}>Начислено</th>
+                    <th className={`${UI.th} text-right whitespace-nowrap`}>Итого</th>
+                    <th className={UI.th}>Комментарий</th>
+                    <th className={`${UI.th} text-right`}>
+                      <span className="sr-only">Действия</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredHistory.slice(0, logsLimit).map((rec) => (
+                    <tr key={rec.id} className={UI.tr}>
+                      <td className={UI.td}>
+                        <span className="block text-[11px] font-mono tabular-nums text-[#6B7280]">{rec.datetime || '—'}</span>
+                        <span className="block text-[10px] text-[#9CA3AF] mt-0.5">Логист: {rec.logist || 'Система'}</span>
+                      </td>
+                      <td className={UI.td}>
+                        <span className="block text-xs font-semibold text-[#121316]">{formatDriverShortName(rec.driver)}</span>
+                        <span className={`${UI.chip} inline-block mt-1 font-mono`}>{rec.car}</span>
+                      </td>
+                      <td className={UI.td}>
+                        {(() => {
+                          const mark = rec.mark || '';
+                          const circMatch = mark.match(/\d+\s*круг[а-я]*/i);
+                          const circles = circMatch ? circMatch[0] : '';
+                          const direction = mark.replace(circMatch ? circMatch[0] : '', '').replace(/[,，]/g, ' ').trim();
+                          if (!circles && direction === 'Отлично') {
+                            return (
+                              <span className="inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                {mark}
                               </span>
-                              <span className="block text-[11px] text-[#6B7280] mt-0.5 whitespace-nowrap">
-                                В рейсе {rec.totalDays || 0} дн. · Простой {rec.idleDays || 0} дн.
-                              </span>
-                            </td>
-                            <td className={UI.td}>
-                              <span className="flex flex-col gap-0.5">
-                                <span className="text-[11px] text-[#6B7280]">
-                                  З/П за км <span className="font-mono tabular-nums text-[#4B5563]">{Math.round(rec.kmMoney || 0).toLocaleString('ru-RU')} €</span>
-                                </span>
-                                <span className="text-[11px] text-[#6B7280]">
-                                  Суточные <span className="font-mono tabular-nums text-[#4B5563]">{Math.round(rec.daysMoney || 0).toLocaleString('ru-RU')} €</span>
-                                </span>
-                                {(rec.idleMoney || 0) > 0 && (
-                                  <span className="text-[11px] text-[#6B7280]">
-                                    Простой <span className="font-mono tabular-nums text-[#4B5563]">{Math.round(rec.idleMoney || 0).toLocaleString('ru-RU')} €</span>
-                                  </span>
-                                )}
-                                {(rec.bonus || 0) > 0 && (
-                                  <span className="text-[11px] text-[#6B7280]">
-                                    Премия <span className="font-mono tabular-nums text-[#4B5563]">+{Math.round(rec.bonus || 0)} €</span>
-                                  </span>
-                                )}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2.5 align-middle text-right whitespace-nowrap">
-                              <span className="block text-sm font-semibold font-mono tabular-nums text-[#121316]">
-                                {Math.round(rec.totalSalary || 0).toLocaleString('ru-RU')} €
-                              </span>
-                              {(rec.totalDays || 0) > 0 && (
-                                <span className="block text-[10px] text-[#9CA3AF] mt-0.5">
-                                  З/П в день {Math.round((rec.totalSalary || 0) / rec.totalDays).toLocaleString('ru-RU')} €
-                                </span>
-                              )}
-                            </td>
-                            <td className={UI.td}>
-                              {rec.comment ? (
-                                <span className="block text-[11px] text-[#6B7280] max-w-[220px] truncate" title={rec.comment}>{rec.comment}</span>
-                              ) : (
-                                <span className="text-[11px] text-[#9CA3AF]">—</span>
-                              )}
-                            </td>
-                            <td className={UI.td}>
-                              <div className="flex items-center justify-end gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => copyHistoryToForm(rec)}
-                                  title="Дублировать в форму"
-                                  aria-label="Дублировать расчёт в форму"
-                                  className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
-                                >
-                                  <Copy className="w-3.5 h-3.5" aria-hidden="true" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => openEditModal(rec)}
-                                  title="Редактировать"
-                                  aria-label="Редактировать расчёт"
-                                  className="w-8 h-8 flex items-center justify-center rounded-lg text-[#6B7280] hover:text-[var(--accent-ink)] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
-                                >
-                                  <Edit className="w-3.5 h-3.5" aria-hidden="true" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    if (await showConfirm('Удалить эту выплату?')) {
-                                      try {
-                                        dbService.deleteSalary(rec, user.name, user.role);
-                                        toast('Запись удалена из журнала', 'success');
-                                      } catch (err) {
-                                        console.error('Не удалось удалить выплату:', err);
-                                        toast('Не удалось удалить запись. Повторите попытку.', 'error');
-                                      }
-                                    }
-                                  }}
-                                  title="Удалить"
-                                  aria-label="Удалить расчёт"
-                                  className="w-8 h-8 flex items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Карточки — узкий экран (до 900 px): суммы и действия видны без таблицы */}
-                  <div className="min-[900px]:hidden flex flex-col gap-3">
-                    {filteredHistory.slice(0, logsLimit).map((rec) => {
-                      const mark = rec.mark || '';
-                      const circMatch = mark.match(/\d+\s*круг[а-я]*/i);
-                      const circles = circMatch ? circMatch[0] : '';
-                      const direction = mark.replace(circMatch ? circMatch[0] : '', '').replace(/[,，]/g, ' ').trim();
-                      return (
-                        <article
-                          key={rec.id}
-                          data-salary-row={rec.id}
-                          className="bg-white border border-[#E5E7EB] rounded-2xl p-4 flex flex-col gap-3"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="text-sm font-semibold text-[#121316] truncate">{formatDriverShortName(rec.driver)}</div>
-                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                                <span className={`${UI.chip} font-mono`}>{rec.car}</span>
-                                <span className="text-[11px] text-[#6B7280]">
-                                  {rec.datetime || '—'} · Логист: {rec.logist || 'Система'}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <div className="text-base font-semibold font-mono tabular-nums text-[#121316]">
-                                {Math.round(rec.totalSalary || 0).toLocaleString('ru-RU')} €
-                              </div>
-                              {(rec.totalDays || 0) > 0 && (
-                                <div className="text-[10px] text-[#9CA3AF]">
-                                  З/П в день {Math.round((rec.totalSalary || 0) / rec.totalDays).toLocaleString('ru-RU')} €
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#6B7280]">
-                            {(direction || circles) ? (
-                              <span className="inline-flex items-center gap-1.5">
-                                {direction ? <span>{direction}</span> : null}
-                                {circles ? <span className={UI.chip}>{circles}</span> : null}
-                              </span>
-                            ) : null}
-                            <span className="font-mono tabular-nums text-[#4B5563]">
-                              {Math.round(rec.km || 0).toLocaleString('ru-RU')} км · {rec.rate || 0} €/км
+                            );
+                          }
+                          if (!direction && !circles) {
+                            return <span className="text-xs text-[#4B5563] whitespace-nowrap">{mark || '—'}</span>;
+                          }
+                          return (
+                            <span className="inline-flex items-center gap-1.5 flex-wrap">
+                              {direction ? <span className="text-xs text-[#4B5563] whitespace-nowrap">{direction}</span> : null}
+                              {circles ? <span className={UI.chip}>{circles}</span> : null}
                             </span>
-                            <span>В рейсе {rec.totalDays || 0} дн. · Простой {rec.idleDays || 0} дн.</span>
-                          </div>
-
-                          <div className="rounded-xl bg-[#F8F9FA] border border-[#E5E7EB] px-3 py-2 flex flex-col gap-0.5">
+                          );
+                        })()}
+                      </td>
+                      <td className={UI.td}>
+                        <span className="block text-xs font-mono tabular-nums text-[#121316] whitespace-nowrap">
+                          {Math.round(rec.km || 0).toLocaleString('ru-RU')} км · {rec.rate || 0} €/км
+                        </span>
+                        <span className="block text-[11px] text-[#6B7280] mt-0.5 whitespace-nowrap">
+                          В рейсе {rec.totalDays || 0} дн. · Простой {rec.idleDays || 0} дн.
+                        </span>
+                      </td>
+                      <td className={UI.td}>
+                        <span className="flex flex-col gap-0.5">
+                          <span className="text-[11px] text-[#6B7280]">
+                            З/П за км <span className="font-mono tabular-nums text-[#4B5563]">{Math.round(rec.kmMoney || 0).toLocaleString('ru-RU')} €</span>
+                          </span>
+                          <span className="text-[11px] text-[#6B7280]">
+                            Суточные <span className="font-mono tabular-nums text-[#4B5563]">{Math.round(rec.daysMoney || 0).toLocaleString('ru-RU')} €</span>
+                          </span>
+                          {(rec.idleMoney || 0) > 0 && (
                             <span className="text-[11px] text-[#6B7280]">
-                              З/П за км <span className="font-mono tabular-nums text-[#4B5563]">{Math.round(rec.kmMoney || 0).toLocaleString('ru-RU')} €</span>
+                              Простой <span className="font-mono tabular-nums text-[#4B5563]">{Math.round(rec.idleMoney || 0).toLocaleString('ru-RU')} €</span>
                             </span>
+                          )}
+                          {(rec.bonus || 0) > 0 && (
                             <span className="text-[11px] text-[#6B7280]">
-                              Суточные <span className="font-mono tabular-nums text-[#4B5563]">{Math.round(rec.daysMoney || 0).toLocaleString('ru-RU')} €</span>
+                              Премия <span className="font-mono tabular-nums text-[#4B5563]">+{Math.round(rec.bonus || 0)} €</span>
                             </span>
-                            {(rec.idleMoney || 0) > 0 && (
-                              <span className="text-[11px] text-[#6B7280]">
-                                Простой <span className="font-mono tabular-nums text-[#4B5563]">{Math.round(rec.idleMoney || 0).toLocaleString('ru-RU')} €</span>
-                              </span>
-                            )}
-                            {(rec.bonus || 0) > 0 && (
-                              <span className="text-[11px] text-[#6B7280]">
-                                Премия <span className="font-mono tabular-nums text-[#4B5563]">+{Math.round(rec.bonus || 0)} €</span>
-                              </span>
-                            )}
-                          </div>
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 align-middle text-right whitespace-nowrap">
+                        <span className="block text-sm font-semibold font-mono tabular-nums text-[#121316]">
+                          {Math.round(rec.totalSalary || 0).toLocaleString('ru-RU')} €
+                        </span>
+                        {(rec.totalDays || 0) > 0 && (
+                          <span className="block text-[10px] text-[#9CA3AF] mt-0.5">
+                            З/П в день {Math.round((rec.totalSalary || 0) / rec.totalDays).toLocaleString('ru-RU')} €
+                          </span>
+                        )}
+                      </td>
+                      <td className={UI.td}>
+                        {rec.comment ? (
+                          <span className="block text-[11px] text-[#6B7280] max-w-[220px] truncate" title={rec.comment}>{rec.comment}</span>
+                        ) : (
+                          <span className="text-[11px] text-[#9CA3AF]">—</span>
+                        )}
+                      </td>
+                      <td className={UI.td}>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => copyHistoryToForm(rec)}
+                            title="Дублировать в форму"
+                            className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                          >
+                            <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                          <button
+                            onClick={() => openEditModal(rec)}
+                            title="Редактировать"
+                            className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-[#6B7280] hover:text-[var(--accent-ink)] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                          >
+                            <Edit className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                          <button
+                            onClick={async () => { if(await showConfirm('Удалить эту выплату?')) dbService.deleteSalary(rec, user.name, user.role); }}
+                            title="Удалить"
+                            className="w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-                          {rec.comment ? (
-                            <p className="text-[11px] text-[#6B7280]">{rec.comment}</p>
-                          ) : null}
-
-                          <div className="flex items-center gap-2 pt-2 border-t border-[#F3F4F6]">
-                            <button
-                              type="button"
-                              onClick={() => copyHistoryToForm(rec)}
-                              className={`${UI.buttonGhost} flex-1 min-h-[44px]`}
-                            >
-                              <Copy className="w-3.5 h-3.5" aria-hidden="true" />
-                              Дублировать
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openEditModal(rec)}
-                              className={`${UI.buttonGhost} flex-1 min-h-[44px]`}
-                            >
-                              <Edit className="w-3.5 h-3.5" aria-hidden="true" />
-                              Изменить
-                            </button>
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                if (await showConfirm('Удалить эту выплату?')) {
-                                  try {
-                                    dbService.deleteSalary(rec, user.name, user.role);
-                                    toast('Запись удалена из журнала', 'success');
-                                  } catch (err) {
-                                    console.error('Не удалось удалить выплату:', err);
-                                    toast('Не удалось удалить запись. Повторите попытку.', 'error');
-                                  }
-                                }
-                              }}
-                              className={`${UI.buttonDanger} flex-1 min-h-[44px]`}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                              Удалить
-                            </button>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-
-                  {filteredHistory.length > logsLimit && (
-                    <div className="flex justify-center pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setLogsLimit(prev => prev + 10)}
-                        className={UI.buttonGhost}
-                      >
-                        <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
-                        Показать ещё (+10)
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </>
+          {filteredHistory.length > logsLimit && (
+            <div className="flex justify-center pt-1">
+              <button
+                onClick={() => setLogsLimit(prev => prev + 10)}
+                className={UI.buttonGhost}
+              >
+                <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+                Показать ещё (+10)
+              </button>
+            </div>
           )}
         </section>
 
@@ -1351,8 +1065,8 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
             maxWidth="max-w-2xl"
             footer={
               <>
-                <button type="button" onClick={closeEditModal} className={UI.buttonGhost}>Отмена</button>
-                <button type="button" onClick={saveEditModal} className={UI.buttonPrimary}>Сохранить изменения</button>
+                <button onClick={closeEditModal} className={UI.buttonGhost}>Отмена</button>
+                <button onClick={saveEditModal} className={UI.buttonPrimary}>Сохранить изменения</button>
               </>
             }
           >
@@ -1464,9 +1178,20 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
               </div>
               <div className="flex flex-col gap-1.5 sm:col-span-2">
                 <label className={UI.fieldLabel} htmlFor="salary-edit-date">Дата</label>
-                <input
+                {/* Как во всём портале: текст ДД/ММ/ГГГГ, календарь — через скрытое поле */}
+                <div className="relative">
+                  <input
                     id="salary-edit-date"
+                    type="text"
+                    readOnly
+                    value={(editingSalaryData.datetime || '').replace(/\./g, '/')}
+                    placeholder="ДД/ММ/ГГГГ"
+                    onClick={() => (document.getElementById('salary-edit-date-picker') as HTMLInputElement | null)?.showPicker?.()}
+                    className={`${UI.input} cursor-pointer pr-10`}
+                  />
+                  <input
                     type="date"
+                    id="salary-edit-date-picker"
                     value={editingSalaryData.datetime ? (() => {
                         const p = (editingSalaryData.datetime || '').split('.');
                         return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : '';
@@ -1477,7 +1202,19 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                         const ru = parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : v;
                         setEditingSalaryData({...editingSalaryData, datetime: ru});
                     }}
-                    className={UI.input} />
+                    className="absolute inset-0 h-0 w-0 opacity-0 pointer-events-none"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                  />
+                  <button
+                    type="button"
+                    aria-label="Открыть календарь"
+                    onClick={() => (document.getElementById('salary-edit-date-picker') as HTMLInputElement | null)?.showPicker?.()}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                  >
+                    <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                </div>
               </div>
             </div>
           </ModalShell>

@@ -30,31 +30,51 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
         </div>
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-[#121316]">Калькулятор дней</h3>
-          <p className="text-xs text-[#6B7280]">Период рейса — даты начала и конца</p>
+          <p className="text-xs text-[#6B7280]">Период рейса — даты начала и конца, формат ДД/ММ/ГГГГ</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1.5">
-          <label className={UI.fieldLabel} htmlFor="salary-days-start">Дата начала</label>
-          <input
-            id="salary-days-start"
-            type="date"
-            value={startDate}
-            onChange={(e) => { setStartDate(e.target.value); handleDateChange(e.target.value, endDate); }}
-            className={`${UI.input} cursor-pointer`}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className={UI.fieldLabel} htmlFor="salary-days-end">Дата конца</label>
-          <input
-            id="salary-days-end"
-            type="date"
-            value={endDate}
-            onChange={(e) => { setEndDate(e.target.value); handleDateChange(startDate, e.target.value); }}
-            className={`${UI.input} cursor-pointer`}
-          />
-        </div>
+        {([
+          { id: 'salary-days-start', label: 'Дата начала', value: startDate, set: (v: string) => { setStartDate(v); handleDateChange(v, endDate); } },
+          { id: 'salary-days-end', label: 'Дата конца', value: endDate, set: (v: string) => { setEndDate(v); handleDateChange(startDate, v); } },
+        ] as const).map((f) => (
+          <div key={f.id} className="flex flex-col gap-1.5">
+            <label className={UI.fieldLabel} htmlFor={f.id}>{f.label}</label>
+            {/* Как во всём портале: видно и вводится текст ДД/ММ/ГГГГ,
+                календарь открывает скрытое поле type=date. */}
+            <div className="relative">
+              <input
+                id={f.id}
+                type="text"
+                inputMode="numeric"
+                readOnly
+                value={f.value ? f.value.split('-').reverse().join('/') : ''}
+                placeholder="ДД/ММ/ГГГГ"
+                onClick={() => (document.getElementById(`${f.id}-picker`) as HTMLInputElement | null)?.showPicker?.()}
+                className={`${UI.input} cursor-pointer pr-10`}
+                aria-label={f.label}
+              />
+              <input
+                type="date"
+                id={`${f.id}-picker`}
+                value={f.value}
+                onChange={(e) => f.set(e.target.value)}
+                className="absolute inset-0 h-0 w-0 opacity-0 pointer-events-none"
+                tabIndex={-1}
+                aria-hidden="true"
+              />
+              <button
+                type="button"
+                aria-label={`Открыть календарь: ${f.label}`}
+                onClick={() => (document.getElementById(`${f.id}-picker`) as HTMLInputElement | null)?.showPicker?.()}
+                className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+              >
+                <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="mt-auto pt-4 border-t border-[#E5E7EB] flex items-center justify-between gap-3">
