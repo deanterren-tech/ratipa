@@ -731,7 +731,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
           {/* Switcher selector */}
           {permittedToSwitch ? (
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-semibold text-[#9CA3AF] tracking-wider uppercase font-sans">
+              <label className="text-[11px] font-medium text-[#6B7280] font-sans">
                 Выбор Блокнота
               </label>
               <select
@@ -748,7 +748,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
             </div>
           ) : (
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-semibold text-[#9CA3AF] tracking-wider uppercase font-sans">
+              <label className="text-[11px] font-medium text-[#6B7280] font-sans">
                 Ваш Блокнот
               </label>
               <div className="p-2 bg-[#F8F9FA] text-xs font-semibold text-[#121316] rounded-xl border border-[#E5E7EB] tracking-wide font-sans">
@@ -802,7 +802,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
           {/* Status selector for adding */}
           <div className="flex flex-col gap-1 border-t border-[#E5E7EB] pt-2">
-            <span className="text-[10px] font-bold text-[#6B7280] tracking-wider uppercase font-sans">
+            <span className="text-[11px] font-semibold text-[#6B7280] font-sans">
               Статус для добавления авто
             </span>
             <div className="flex bg-[#F3F4F6] p-0.5 rounded-lg text-[10px] font-semibold w-full">
@@ -1772,13 +1772,13 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 <div className="grid grid-cols-1 gap-6">
                   {/* Основные реквизиты */}
  <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] flex flex-col">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-[#6B7280] flex items-center gap-2 mb-5">
+                    <h3 className="text-sm font-semibold text-[#6B7280] flex items-center gap-2 mb-5">
                       <FileText className="w-4 h-4 text-[#9CA3AF]"/>
                       Основные реквизиты
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Автомобиль</label>
+                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Автомобиль</label>
                         <CouplingPicker
                           value={carNumber}
                           onSelect={(rec) => {
@@ -1788,7 +1788,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Направление</label>
+                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Направление</label>
                         <select
                           value={direction}
                           onChange={(e) => handleDirChange(e.target.value)}
@@ -1800,7 +1800,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         </select>
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Диспетчер</label>
+                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Диспетчер</label>
                         <select
                           value={dispatcher}
                           onChange={(e) => setDispatcher(e.target.value)}
@@ -1813,7 +1813,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         </select>
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent-ink)] mb-1.5 block">Дата старта</label>
+                        <label className="text-[11px] font-semibold tracking-normal text-[var(--accent-ink)] mb-1.5 block">Дата старта</label>
                         <input
                           type="date"
                           value={dateStart}
@@ -1822,7 +1822,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Дата финиша</label>
+                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Дата финиша</label>
                         <input
                           type="date"
                           value={dateEnd}
@@ -1838,7 +1838,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 {/* Плечи маршрута */}
                 <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB]">
                   <div className="flex justify-between items-center mb-5">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-[#6B7280] flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-[#6B7280] flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-[#9CA3AF]"/>
                       Плечи маршрута
                     </h3>
@@ -1851,16 +1851,16 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     <table className="w-full w-full flex-wrap border-collapse relative">
                       <thead>
                         <tr>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left w-8">#</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Откуда</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Куда</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Км</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Доезд (км)</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Фрахт €</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Инфо ставка (Доп)</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Паром € (Доп)</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-left">Коэфф.</th>
-                          <th className="pb-2.5 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] text-right"></th>
+                          <th className="pb-2.5 text-[11px] font-semibold tracking-normal text-[#9CA3AF] text-left w-8">#</th>
+                          <th className="pb-2.5 text-[11px] font-semibold tracking-normal text-[#9CA3AF] text-left">Откуда</th>
+                          <th className="pb-2.5 text-[11px] font-semibold tracking-normal text-[#9CA3AF] text-left">Куда</th>
+                          <th className="pb-2.5 text-[11px] font-semibold tracking-normal text-[#9CA3AF] text-left">Км</th>
+                          <th className="pb-2.5 text-[11px] font-semibold tracking-normal text-[#9CA3AF] text-left">Доезд (км)</th>
+                          <th className="pb-2.5 text-[11px] font-semibold tracking-normal text-[#9CA3AF] text-left">Фрахт €</th>
+                          <th className="pb-2.5 text-[11px] font-semibold tracking-normal text-[#9CA3AF] text-left">Инфо ставка (Доп)</th>
+                          <th className="pb-2.5 text-[11px] font-semibold tracking-normal text-[#9CA3AF] text-left">Паром € (Доп)</th>
+                          <th className="pb-2.5 text-[11px] font-semibold tracking-normal text-[#9CA3AF] text-left">Коэфф.</th>
+                          <th className="pb-2.5 text-[11px] font-semibold tracking-normal text-[#9CA3AF] text-right"></th>
                         </tr>
                       </thead>
                       <tbody className="space-y-2">
@@ -2020,7 +2020,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Откуда</span>
+                            <span className="text-[11px] font-medium text-[#6B7280]">Откуда</span>
                             <input
                               autoComplete="off"
                               value={leg.from}
@@ -2031,7 +2031,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                             />
                           </div>
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Куда</span>
+                            <span className="text-[11px] font-medium text-[#6B7280]">Куда</span>
                             <input
                               autoComplete="off"
                               value={leg.to}
@@ -2045,7 +2045,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1.5 relative">
-                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Км</span>
+                            <span className="text-[11px] font-medium text-[#6B7280]">Км</span>
                             <input
                               type="number"
                               value={leg.km || ""}
@@ -2070,7 +2070,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                             </button>
                           </div>
                           <div className="flex flex-col gap-1.5 relative">
-                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Доезд (км)</span>
+                            <span className="text-[11px] font-medium text-[#6B7280]">Доезд (км)</span>
                             <input
                               type="number"
                               value={leg.emptyRun || ""}
@@ -2089,7 +2089,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Фрахт</span>
+                            <span className="text-[11px] font-medium text-[#6B7280]">Фрахт</span>
                             <div className="flex gap-1">
                               <input
                                 type="number"
@@ -2110,7 +2110,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                             </div>
                           </div>
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Инфо ставка</span>
+                            <span className="text-[11px] font-medium text-[#6B7280]">Инфо ставка</span>
                             <div className="flex gap-1">
                               <input
                                 type="number"
@@ -2135,7 +2135,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Паром €</span>
+                            <span className="text-[11px] font-medium text-[#6B7280]">Паром €</span>
                             <input
                               type="number"
                               value={leg.ferry || ""}
@@ -2144,7 +2144,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                             />
                           </div>
                           <div className="flex flex-col gap-1.5">
-                            <span className="text-[10px] uppercase font-bold text-[#9CA3AF]">Коэфф.</span>
+                            <span className="text-[11px] font-medium text-[#6B7280]">Коэфф.</span>
                             <input
                               type="number"
                               step="0.01"
@@ -2165,13 +2165,13 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 {/* Financial Params & Comment */}
                 <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] flex flex-col gap-6">
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-[#6B7280] flex items-center gap-2 mb-5">
+                    <h3 className="text-sm font-semibold text-[#6B7280] flex items-center gap-2 mb-5">
                       <CircleDollarSign className="w-4 h-4 text-[#9CA3AF]"/>
                       Финансовые параметры
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Доп расходы €</label>
+                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Доп расходы €</label>
                         <input
                           type="number"
                           value={extraExpense || ""}
@@ -2180,7 +2180,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Коммент расходов</label>
+                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Коммент расходов</label>
                         <input
                           type="text"
                           value={extraExpenseNote}
@@ -2189,7 +2189,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Факт км</label>
+                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Факт км</label>
                         <input
                           type="number"
                           placeholder="Введите факт км"
@@ -2199,7 +2199,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-2 block">Цвет плашки рейса</label>
+                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-2 block">Цвет плашки рейса</label>
                         <div className="flex flex-wrap gap-2">
                           {[
                             "bg-slate-200",
@@ -2224,7 +2224,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                   </div>
 
                   <div className="border-t border-[#E5E7EB] pt-6">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-[#6B7280] flex items-center gap-2 mb-4">
+                    <h3 className="text-sm font-semibold text-[#6B7280] flex items-center gap-2 mb-4">
                       <MessageSquare className="w-4 h-4 text-[#9CA3AF]"/>
                       Комментарий к рейсу
                     </h3>
@@ -2299,7 +2299,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                           </div>
 
                           <div className="bg-[#F8F9FA] rounded-xl border border-[#E5E7EB] p-2.5">
-                            <div className="text-[10px] font-semibold uppercase tracking-wider text-[#6B7280] mb-2">Маршрут</div>
+                            <div className="text-[11px] font-semibold tracking-normal text-[#6B7280] mb-2">Маршрут</div>
                             {pl.legs && pl.legs.length > 0 ? (
                               <div className="space-y-1.5">
                                 {pl.legs.slice(0, 5).map((leg, idx) => (
@@ -2326,37 +2326,37 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
                           <div className="grid grid-cols-3 gap-2">
                             <div className="bg-[#F8F9FA] p-2 rounded-xl border border-[#E5E7EB] flex flex-col">
-                              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#9CA3AF] mb-0.5">Прибыль</span>
+                              <span className="text-[11px] font-semibold text-[#9CA3AF] mb-0.5">Прибыль</span>
                               <span className={`text-sm font-bold font-mono tabular-nums ${pl.profit < 3000 ? "text-rose-600" : "text-emerald-600"}`}>
                                 {Math.round(pl.profit).toLocaleString("ru-RU")} <span className="text-[10px] font-semibold">€</span>
                               </span>
                             </div>
                             <div className="bg-[#F8F9FA] p-2 rounded-xl border border-[#E5E7EB] flex flex-col">
-                              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#9CA3AF] mb-0.5">В день</span>
+                              <span className="text-[11px] font-semibold text-[#9CA3AF] mb-0.5">В день</span>
                               <span className={`text-sm font-bold font-mono tabular-nums ${profitPerDay < 100 ? "text-rose-600" : "text-[#121316]"}`}>
                                 {profitPerDay.toLocaleString("ru-RU")} <span className="text-[10px] font-semibold">€</span>
                               </span>
                             </div>
                             <div className="bg-[#F8F9FA] p-2 rounded-xl border border-[#E5E7EB] flex flex-col">
-                              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#9CA3AF] mb-0.5">Фрахт</span>
+                              <span className="text-[11px] font-semibold text-[#9CA3AF] mb-0.5">Фрахт</span>
                               <span className="text-sm font-bold text-[#4B5563] font-mono tabular-nums">
                                 {Math.round(pl.totalFreight).toLocaleString("ru-RU")} <span className="text-[10px] font-semibold">€</span>
                               </span>
                             </div>
                             <div className="bg-[#F8F9FA] p-2 rounded-xl border border-[#E5E7EB] flex flex-col">
-                              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#9CA3AF] mb-0.5">Расходы</span>
+                              <span className="text-[11px] font-semibold text-[#9CA3AF] mb-0.5">Расходы</span>
                               <span className="text-sm font-bold text-[#4B5563] font-mono tabular-nums">
                                 {Math.round(pl.totalExpenses).toLocaleString("ru-RU")} <span className="text-[10px] font-semibold">€</span>
                               </span>
                             </div>
                             <div className="bg-[#F8F9FA] p-2 rounded-xl border border-[#E5E7EB] flex flex-col">
-                              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#9CA3AF] mb-0.5">Пробег</span>
+                              <span className="text-[11px] font-semibold text-[#9CA3AF] mb-0.5">Пробег</span>
                               <span className="text-sm font-bold text-[#4B5563] font-mono tabular-nums">
                                 {Math.round(pl.totalKm).toLocaleString("ru-RU")} <span className="text-[10px] font-semibold">км</span>
                               </span>
                             </div>
                             <div className="bg-[#F8F9FA] p-2 rounded-xl border border-[#E5E7EB] flex flex-col">
-                              <span className="text-[10px] uppercase tracking-wider font-semibold text-[#9CA3AF] mb-0.5">Дней в пути</span>
+                              <span className="text-[11px] font-semibold text-[#9CA3AF] mb-0.5">Дней в пути</span>
                               <span className="text-sm font-bold text-[#4B5563] font-mono tabular-nums">{days}</span>
                             </div>
                           </div>
@@ -2409,11 +2409,11 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
                   <div className="grid grid-cols-2 gap-4 border-b border-[#E5E7EB] pb-4">
                     <div>
-                      <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--accent-ink)] mb-1.5 block">Дата старта</label>
+                      <label className="text-[11px] font-semibold tracking-normal text-[var(--accent-ink)] mb-1.5 block">Дата старта</label>
                       <input type="date" value={plDateStart} onChange={(e) => setPlDateStart(e.target.value)} className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors min-h-[44px]" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] mb-1.5 block">Дата финиша</label>
+                      <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Дата финиша</label>
                       <input type="date" value={plDateEnd} onChange={(e) => setPlDateEnd(e.target.value)} className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors min-h-[44px]" />
                     </div>
                   </div>
@@ -2423,14 +2423,14 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     <table className="w-full text-left border-collapse min-w-[600px]">
                       <thead>
                         <tr className="border-b border-[#E5E7EB]">
-                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Откуда</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Куда</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Км</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Доезд (км)</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Фрахт €</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Инфо ставка (Доп)</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Паром € (Доп)</th>
-                          <th className="p-2 text-[10px] uppercase font-semibold text-[#9CA3AF] tracking-wider font-sans">Коэфф.</th>
+                          <th className="p-2 text-[11px] font-medium text-[#6B7280] tracking-wider font-sans">Откуда</th>
+                          <th className="p-2 text-[11px] font-medium text-[#6B7280] tracking-wider font-sans">Куда</th>
+                          <th className="p-2 text-[11px] font-medium text-[#6B7280] tracking-wider font-sans">Км</th>
+                          <th className="p-2 text-[11px] font-medium text-[#6B7280] tracking-wider font-sans">Доезд (км)</th>
+                          <th className="p-2 text-[11px] font-medium text-[#6B7280] tracking-wider font-sans">Фрахт €</th>
+                          <th className="p-2 text-[11px] font-medium text-[#6B7280] tracking-wider font-sans">Инфо ставка (Доп)</th>
+                          <th className="p-2 text-[11px] font-medium text-[#6B7280] tracking-wider font-sans">Паром € (Доп)</th>
+                          <th className="p-2 text-[11px] font-medium text-[#6B7280] tracking-wider font-sans">Коэфф.</th>
                           <th className="p-2 w-20"></th>
                         </tr>
                       </thead>
@@ -2634,27 +2634,27 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1">
-                            <span className="text-[10px] uppercase font-semibold text-[#9CA3AF]">Откуда</span>
+                            <span className="text-[11px] font-medium text-[#6B7280]">Откуда</span>
                             <input type="text" autoComplete="off" value={leg.from} onChange={(e) => { const nl = [...plLegs]; nl[i].from = e.target.value; setPlLegs(nl); }} onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'from', isPl: true, rect}); }} onBlur={() => { checkLegDistance(i, true); }} className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors" />
                           </div>
                           <div className="flex flex-col gap-1">
-                            <span className="text-[10px] uppercase font-semibold text-[#9CA3AF]">Куда</span>
+                            <span className="text-[11px] font-medium text-[#6B7280]">Куда</span>
                             <input type="text" autoComplete="off" value={leg.to} onChange={(e) => { const nl = [...plLegs]; nl[i].to = e.target.value; setPlLegs(nl); }} onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'to', isPl: true, rect}); }} onBlur={() => { checkLegDistance(i, true); }} className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors" />
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1 relative">
-                            <span className="text-[10px] uppercase font-semibold text-[#9CA3AF]">Км</span>
+                            <span className="text-[11px] font-medium text-[#6B7280]">Км</span>
                             <input type="number" value={leg.km || ""} onChange={(e) => { const nl = [...plLegs]; nl[i].km = Number(e.target.value); setPlLegs(nl); }} onBlur={(e) => { const kmVal = Number(e.currentTarget.value); if (leg.from && leg.to && kmVal > 0 && !findDistance(leg.from, leg.to)) { setAddDistFrom(leg.from); setAddDistTo(leg.to); setAddDistKm(kmVal); setShowAddDistModal(true); } }} className="w-full pl-3 pr-12 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium font-mono outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors" />
                             <button onClick={() => openMapRouteModal(i, leg.from, leg.to, true)} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[44px] min-w-[44px] flex items-center justify-center text-[#9CA3AF] hover:text-[var(--accent-ink)] transition-colors"><MapPin className="w-3.5 h-3.5" /></button>
                           </div>
                           <div className="flex flex-col gap-1">
-                            <span className="text-[10px] uppercase font-semibold text-[#9CA3AF]">Доезд (км)</span>
+                            <span className="text-[11px] font-medium text-[#6B7280]">Доезд (км)</span>
                             <input type="number" value={leg.emptyRunKm || ""} onChange={(e) => { const nl = [...plLegs]; nl[i].emptyRunKm = Number(e.target.value); setPlLegs(nl); }} className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium font-mono outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors" />
                           </div>
                         </div>
                         <div className="flex flex-col gap-1">
-                          <span className="text-[10px] uppercase font-semibold text-[#9CA3AF]">Ставка €</span>
+                          <span className="text-[11px] font-medium text-[#6B7280]">Ставка €</span>
                           <input type="number" value={leg.rate || ""} onChange={(e) => { const nl = [...plLegs]; nl[i].rate = Number(e.target.value); setPlLegs(nl); }} className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold font-mono text-[#4B5563] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors" />
                         </div>
                       </div>
@@ -2671,7 +2671,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                 {/* Прибыль общая — green */}
                 <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280]">Прибыль общая</span>
+                  <span className="text-[11px] font-semibold text-[#6B7280]">Прибыль общая</span>
                   <div className="flex items-baseline gap-1">
                     <span className={`text-lg font-bold font-mono tabular-nums ${Math.round(modalTab === "potential" ? calculatePlTotals().profit : profit) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(modalTab === "potential" ? calculatePlTotals().profit : profit).toLocaleString("ru-RU")}</span>
                     <span className="text-sm font-semibold text-[#9CA3AF]">€</span>
@@ -2679,7 +2679,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 </div>
                 {/* Прибыль в день — blue */}
                 <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280]">Прибыль в день</span>
+                  <span className="text-[11px] font-semibold text-[#6B7280]">Прибыль в день</span>
                   <div className="flex items-baseline gap-1">
                     <span className={`text-lg font-bold font-mono tabular-nums ${Math.round(modalTab === "potential" ? (calculatePlTotals().days > 0 ? Math.round(calculatePlTotals().profit / calculatePlTotals().days) : 0) : rawProfitPerDay) < 100 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(rawProfitPerDay).toLocaleString("ru-RU")}</span>
                     <span className="text-sm font-semibold text-[#9CA3AF]">€</span>
@@ -2687,7 +2687,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 </div>
                 {/* Количество дней — orange */}
                 <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280]">Количество дней</span>
+                  <span className="text-[11px] font-semibold text-[#6B7280]">Количество дней</span>
                   <div className="flex items-baseline gap-1">
                     <span className="text-lg font-bold text-[#121316] font-mono tabular-nums">{modalTab === "potential" ? (calculatePlTotals().days > 0 ? calculatePlTotals().days : 1) : (daysPlan || daysFact || 0)}</span>
                     <span className="text-sm font-semibold text-[#9CA3AF]">дн.</span>
@@ -2695,16 +2695,16 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 </div>
                 {/* План км */}
                 <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280]">{factKm && factKm > 0 ? "Километраж" : "План км"}</span>
+                  <span className="text-[11px] font-semibold text-[#6B7280]">{factKm && factKm > 0 ? "Километраж" : "План км"}</span>
                   <div className="flex items-baseline gap-1">
                     <span className="text-lg font-bold text-[#121316] font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalKm : (factKm && factKm > 0 ? factKm : totalKm)).toLocaleString("ru-RU")}</span>
                     <span className="text-sm font-semibold text-[#9CA3AF]">км</span>
-                    {factKm && factKm > 0 && <span className="text-[10px] uppercase tracking-wider text-emerald-600 ml-1.5 font-semibold">Факт</span>}
+                    {factKm && factKm > 0 && <span className="text-[11px] text-emerald-600 ml-1.5 font-semibold">Факт</span>}
                   </div>
                 </div>
                 {/* Фрахт — blue */}
                 <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280]">Фрахт</span>
+                  <span className="text-[11px] font-semibold text-[#6B7280]">Фрахт</span>
                   <div className="flex items-baseline gap-1">
                     <span className="text-lg font-bold text-[#121316] font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalFreight : totalFreight).toLocaleString("ru-RU")}</span>
                     <span className="text-sm font-semibold text-[#9CA3AF]">€</span>
@@ -2712,11 +2712,11 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 </div>
                 {/* Расходы */}
                 <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B7280]">{factKm && factKm > 0 ? "Расходы" : "Расходы (План)"}</span>
+                  <span className="text-[11px] font-semibold text-[#6B7280]">{factKm && factKm > 0 ? "Расходы" : "Расходы (План)"}</span>
                   <div className="flex items-baseline gap-1">
                     <span className="text-lg font-bold text-[#121316] font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalExpenses : totalExpenses).toLocaleString("ru-RU")}</span>
                     <span className="text-sm font-semibold text-[#9CA3AF]">€</span>
-                    {factKm && factKm > 0 && <span className="text-[10px] uppercase tracking-wider text-emerald-600 ml-1.5 font-semibold">Факт</span>}
+                    {factKm && factKm > 0 && <span className="text-[11px] text-emerald-600 ml-1.5 font-semibold">Факт</span>}
                   </div>
                 </div>
               </div>
@@ -2728,7 +2728,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 {isEditing && currentEditingTrip && (
                   <button
                     onClick={() => deleteTrip(editingTripId!, true)}
-                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-3 md:px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-bold uppercase tracking-tight transition-colors flex items-center gap-2 cursor-pointer"
+                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-3 md:px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-bold tracking-tight transition-colors flex items-center gap-2 cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4" /> Удалить
                   </button>
@@ -2742,14 +2742,14 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         pdService.restoreTrip(editingTripId, user.name, user.role);
                         setIsModalOpen(false);
                       }}
-                      className="bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] hover:text-[#121316] px-4 py-2.5 min-h-[44px] rounded-xl font-bold text-sm uppercase tracking-tight transition-colors flex-1 md:flex-none cursor-pointer"
+                      className="bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] hover:text-[#121316] px-4 py-2.5 min-h-[44px] rounded-xl font-bold text-sm tracking-tight transition-colors flex-1 md:flex-none cursor-pointer"
                     >
                       Из архива
                     </button>
                   ) : (
                     <button
                       onClick={() => finishTripToArchive(currentEditingTrip, true)}
-                      className="bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] hover:text-[#121316] px-4 py-2.5 min-h-[44px] rounded-xl font-bold text-sm uppercase tracking-tight transition-colors flex items-center justify-center gap-2 flex-1 md:flex-none cursor-pointer"
+                      className="bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] hover:text-[#121316] px-4 py-2.5 min-h-[44px] rounded-xl font-bold text-sm tracking-tight transition-colors flex items-center justify-center gap-2 flex-1 md:flex-none cursor-pointer"
                     >
                       <Archive className="w-4 h-4 hidden md:block" /> В архив
                     </button>
@@ -2758,7 +2758,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 <button
                   onClick={saveTrip}
                   disabled={isSubmitting}
-                  className={`${isSubmitting ? "bg-[var(--accent)] opacity-50 cursor-not-allowed" : "bg-[var(--accent)] hover:bg-[var(--accent-hover)] cursor-pointer"} text-[var(--accent-on)] px-6 py-2.5 min-h-[44px] rounded-xl font-bold text-sm uppercase tracking-tight transition-colors flex items-center justify-center gap-2 shadow-sm flex-1 md:flex-none`}
+                  className={`${isSubmitting ? "bg-[var(--accent)] opacity-50 cursor-not-allowed" : "bg-[var(--accent)] hover:bg-[var(--accent-hover)] cursor-pointer"} text-[var(--accent-on)] px-6 py-2.5 min-h-[44px] rounded-xl font-bold text-sm tracking-tight transition-colors flex items-center justify-center gap-2 shadow-sm flex-1 md:flex-none`}
                 >
                   <Save className="w-4 h-4 hidden md:block" /> {isSubmitting ? "Сохранение..." : "Сохранить"}
                 </button>
@@ -3009,7 +3009,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
       return (
         <div className={`grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-4 sm:p-5 ${isBottom ? "mt-4" : "mb-2"}`}>
           <div className="flex flex-col">
-            <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-widest mb-1.5">
+            <span className="text-[10px] font-semibold text-[#6B7280] mb-1.5">
               Общая прибыль
             </span>
             <span className={`text-2xl lg:text-3xl font-bold tracking-tight font-sans tabular-nums ${sumProfit >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
@@ -3017,7 +3017,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             </span>
           </div>
           <div className="flex flex-col lg:border-l lg:border-[#E5E7EB] lg:pl-6">
-            <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-widest mb-1.5">
+            <span className="text-[10px] font-semibold text-[#6B7280] mb-1.5">
               Маржинальность
             </span>
             <span className="text-2xl lg:text-3xl font-bold tracking-tight text-[#121316] font-sans tabular-nums">
@@ -3025,7 +3025,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             </span>
           </div>
           <div className="flex flex-col lg:border-l lg:border-[#E5E7EB] lg:pl-6">
-            <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-widest mb-1.5">
+            <span className="text-[10px] font-semibold text-[#6B7280] mb-1.5">
               Прибыль в день
             </span>
             <span className={`text-2xl lg:text-3xl font-bold tracking-tight font-sans tabular-nums ${profitPerDayValue < 100 ? "text-rose-600" : "text-[#121316]"}`}>
@@ -3033,7 +3033,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             </span>
           </div>
           <div className="flex flex-col lg:border-l lg:border-[#E5E7EB] lg:pl-6">
-            <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-widest mb-1.5">
+            <span className="text-[10px] font-semibold text-[#6B7280] mb-1.5">
               Общий пробег
             </span>
             <span className="text-2xl lg:text-3xl font-bold tracking-tight text-[#121316] font-sans tabular-nums">
@@ -3041,7 +3041,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             </span>
           </div>
           <div className="flex flex-col lg:border-l lg:border-[#E5E7EB] lg:pl-6 col-span-2 lg:col-span-1">
-            <span className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-widest mb-1.5">
+            <span className="text-[10px] font-semibold text-[#6B7280] mb-1.5">
               Качество списка
             </span>
             <div className="flex items-baseline gap-2">
@@ -3067,7 +3067,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
         {archived && renderKpiSummary(false)}
 
         {/* Table Headers */}
-        <div className="hidden lg:flex px-6 pb-3 border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase self-start w-full cursor-pointer select-none tracking-normal">
+        <div className="hidden lg:flex px-6 pb-3 border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider self-start w-full cursor-pointer select-none tracking-normal">
           <div
             className="min-w-[200px] hover:text-[#121316] transition-colors flex items-center gap-1"
             onClick={() => handleSort("carNumber")}
@@ -3359,7 +3359,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                   <div className="flex items-center gap-4 text-[10px] text-[#9CA3AF] font-sans">
                     <div className="flex flex-col text-right">
                       <span className="font-semibold text-[#121316]">{log.user}</span>
-                      <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wider font-mono">{log.role}</span>
+                      <span className="text-[10px] text-[#9CA3AF] font-mono">{log.role}</span>
                     </div>
                     <div className="text-right whitespace-nowrap font-mono text-[#6B7280]">
                       {new Date(log.date).toLocaleString("ru-RU", {
@@ -3781,7 +3781,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wider">Город A</label>
+                <label className="text-[10px] font-semibold text-[#6B7280]">Город A</label>
                 <input type="text" value={addDistFrom} onChange={(e) => setAddDistFrom(e.target.value)}
                   className={`${UI.input} mt-1`} />
                 <div className="mt-1">
@@ -3795,7 +3795,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 </div>
               </div>
               <div>
-                <label className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wider">Город B</label>
+                <label className="text-[10px] font-semibold text-[#6B7280]">Город B</label>
                 <input type="text" value={addDistTo} onChange={(e) => setAddDistTo(e.target.value)}
                   className={`${UI.input} mt-1`} />
                 <div className="mt-1">
@@ -3811,14 +3811,14 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             </div>
 
             <div>
-              <label className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wider">Расстояние (км)</label>
+              <label className="text-[10px] font-semibold text-[#6B7280]">Расстояние (км)</label>
               <input type="number" min="1" value={addDistKm || ''} onChange={(e) => setAddDistKm(parseFloat(e.target.value) || 0)}
                 placeholder="0"
                 className={`${UI.input} mt-1`} />
             </div>
 
             <div>
-              <label className="text-[10px] font-semibold text-[#6B7280] uppercase tracking-wider flex items-center gap-1">
+              <label className="text-[10px] font-semibold text-[#6B7280] flex items-center gap-1">
                 <MapPin className="w-3 h-3" aria-hidden="true" /> Погранпереходы (через запятую)
               </label>
               <div className="flex flex-wrap gap-1 mt-1 mb-1.5">
