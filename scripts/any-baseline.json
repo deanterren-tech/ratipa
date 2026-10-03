@@ -1,5 +1,5 @@
 {
-  "total": 147,
+  "total": 139,
   "files": {
     "src/App.tsx": 1,
     "src/components/AllLinksModal.tsx": 2,
@@ -16,7 +16,7 @@
     "src/components/modules/ErrorsBlock.tsx": 1,
     "src/components/modules/PlanDohodModule.tsx": 15,
     "src/components/modules/SalaryModule.tsx": 1,
-    "src/components/modules/UserManagementBlock.tsx": 17,
+    "src/components/modules/UserManagementBlock.tsx": 9,
     "src/components/modules/VehicleDriverDataModule.tsx": 42,
     "src/components/modules/directories/CheckpointDirectoryBlock.tsx": 1,
     "src/components/modules/directories/CurrencyDirectoryBlock.tsx": 1,

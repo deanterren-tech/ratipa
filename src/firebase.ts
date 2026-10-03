@@ -755,6 +755,42 @@ export const dbService = {
       handleFailure("firebase", err, { path: "users_list", userMessage: "Не удалось применить изменения сотрудников" }));
     }
   },
+  /**
+   * Изменение права роли.
+   *
+   * Пишет новое значение роли И снимает индивидуальные переопределения этого
+   * права у сотрудников роли (customPermissions и permissions) — чтобы у них
+   * действовало новое значение роли, а не старое личное. Другие права не
+   * затрагиваются. Оба изменения уходят одним multi-path update: либо
+   * применяется всё, либо ничего — частичного состояния не бывает.
+   * Возвращает false, если запись не удалась (интерфейс не должен врать об успехе).
+   */
+  saveRolePermissionChange: async (
+    roleKey: string,
+    permKey: string,
+    value: string,
+    uids: string[],
+  ): Promise<boolean> => {
+    catalogCache.users = null;
+    if (!useFirebase) return true;
+    const patches: Record<string, string | null> = {
+      [`appSettings/rolePermissions/${roleKey}/${permKey}`]: value,
+    };
+    uids.forEach((uid) => {
+      patches[`users_list/${uid}/customPermissions/${permKey}`] = null;
+      patches[`users_list/${uid}/permissions/${permKey}`] = null;
+    });
+    try {
+      await update(ref(database), patches);
+      return true;
+    } catch (err) {
+      handleFailure('firebase', err, {
+        path: `appSettings/rolePermissions/${roleKey}`,
+        userMessage: 'Не удалось применить изменение права роли — значения остались прежними',
+      });
+      return false;
+    }
+  },
   saveUser: (user: UserProfile) => {
     // SEC: проверка на уровне данных, а не только в интерфейсе — портал не должен
     // остаться без единственной учётной записи разработчика (root_admin).

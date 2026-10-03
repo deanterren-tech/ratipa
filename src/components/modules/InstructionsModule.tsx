@@ -247,28 +247,18 @@ export default function InstructionsModule({ user, settings }: Props) {
     return () => { cancelled = true; };
   }, [isDriveOpen, rawDriveUrl, driveFolderUrl, driveKey]);
 
-  /** Пустая ссылка: предлагаем сразу её задать (право записи) — иначе подсказываем, где искать. */
-  const toggleDrive = async () => {
+  /**
+   * Открытие панели Диска. Ссылку на папку задаёт только администратор
+   * («Администрирование» → «Интеграции» → «Google Диск для модуля инструкций»):
+   * из модуля она не читается на запись и не меняется.
+   */
+  const toggleDrive = () => {
     if (!rawDriveUrl) {
-      if (!canWrite || !settings) {
-        toast('Ссылка на папку Диска не задана: её указывают в «Администрирование» → «Ссылки и интеграции».', 'error');
-        return;
-      }
-      const entered = await showPrompt(
-        'Вставьте ссылку на папку Google Диска с материалами к инструкциям.',
-        '',
-        'Ссылка на Google Диск',
-        { confirmLabel: 'Сохранить ссылку' },
+      toast(
+        'Ссылка на папку Диска не задана. Её указывает администратор: «Администрирование» → «Интеграции» → «Google Диск для модуля инструкций».',
+        'error',
       );
-      const value = (entered || '').trim();
-      if (!value) return;
-      try {
-        await dbService.saveSettings({ ...settings, instructionsDriveUrl: value }, user.name, user.role);
-        toast('Ссылка сохранена', 'success');
-      } catch {
-        toast('Не удалось сохранить ссылку. Попробуйте ещё раз.', 'error');
-        return;
-      }
+      return;
     }
     if (isDriveOpen) { closeDrive(); return; }
     setIsDriveOpen(true);

@@ -17,6 +17,7 @@ import {
   Users,
   Activity,
   AlertCircle,
+  UserCog,
 } from "lucide-react";
 import {useToast} from '../ToastProvider'
 import {useDialog} from '../DialogProvider'
@@ -155,50 +156,91 @@ export default function UserManagementBlock({ user }: Props) {
     return own !== undefined && own === roleValue;
   };
 
+  /** Есть ли у сотрудника личное значение этого права (переопределение). */
+  const hasOwnPerm = (u: UserProfile, permKey: string) => {
+    const custom = (u.customPermissions || {}) as Record<string, string>;
+    const own = (u.permissions || {}) as Record<string, string>;
+    return (custom[permKey] !== undefined && custom[permKey] !== 'inherit')
+      || (own[permKey] !== undefined && own[permKey] !== 'inherit');
+  };
+
+  /** Значение права по роли (без учёта личных переопределений). */
+  const roleValueOf = (roleKey: string, permKey: string) => {
+    const base = settings?.rolePermissions?.[roleKey] || DEFAULT_ROLE_PERMS[roleKey] || DEFAULT_ROLE_PERMS['viewer'];
+    return base[permKey] || 'none';
+  };
+
+  /**
+   * Изменение права роли.
+   *
+   * По требованию заказчика новое значение роли перезаписывает личные значения
+   * этого права у ВСЕХ сотрудников роли (включая заданные индивидуально), чтобы
+   * роль оставалась источником истины. Другие личные права не трогаются: снимаем
+   * переопределение только по изменяемому праву. Запись идёт одним общим
+   * multi-path update — при сбое не применяется ничего, и мы об этом сообщаем.
+   */
   const handleRolePermChange = async (roleKey: string, permKey: string, val: string) => {
-    const rolePerms = { ...(settings?.rolePermissions?.[roleKey] || DEFAULT_ROLE_PERMS[roleKey] || {}) };
-    const previous = rolePerms[permKey];
-    const affected = countByRole(roleKey);
+    const previous = roleValueOf(roleKey, permKey);
+    if (previous === val) return;
+    const roleUsers = users.filter((u) => u.role === roleKey);
+    const withOwn = roleUsers.filter((u) => hasOwnPerm(u, permKey));
     const moduleLabel = MODULES_LIST.find((m) => m.key === permKey)?.label || permKey;
 
     const ok = await showConfirm(
       `Право «${moduleLabel}» для роли ${ROLE_LABELS[roleKey] || roleKey} станет «${PERM_LABELS[val] || val}»`
-      + (previous && previous !== val ? ` (было «${PERM_LABELS[previous] || previous}»)` : '')
-      + `. Действует на ${affected} ${affected === 1 ? 'сотрудника' : 'сотрудников'}, у кого это право не переопределено лично.`,
+      + ` (было «${PERM_LABELS[previous] || previous}»).`
+      + ` Значение получат все сотрудники роли (${roleUsers.length}).`
+      + (withOwn.length
+        ? ` У ${withOwn.length} из них это право задано индивидуально — личное значение будет перезаписано.`
+        : ' Личных переопределений по этому праву нет.')
+      + ' Другие их права не изменятся.',
       'Изменить право роли?',
     );
     if (!ok) return;
 
-    const newRolePermissions = {
-      ...(settings?.rolePermissions || DEFAULT_ROLE_PERMS),
-      [roleKey]: { ...rolePerms, [permKey]: val },
-    };
-
-    if (settings) setSettings({ ...settings, rolePermissions: newRolePermissions });
-    dbService.saveSettings({ ...settings, rolePermissions: newRolePermissions } as any, user.name, user.role);
-    dbService.logAction(user.name, user.role, 'Изменение прав роли', 'Admin', roleKey, `Роль ${roleKey}: ${permKey} → ${val}`);
-
-    // Права роли читаются resolvePermission напрямую из rolePermissions, поэтому
-    // ничего не пишем каждому сотруднику. Наоборот: убираем устаревшие копии,
-    // которые прежняя версия вкладки раскладывала по людям — они перекрывали права
-    // роли и делали её настройку бессмысленной.
-    const updates: Record<string, any> = {};
-    const cleanedNames: string[] = [];
-    setUsers(prev => prev.map(u => {
-      if (u.role !== roleKey || !isInheritedCopy(u, permKey, previous || '')) return u;
-      updates[`users_list/${u.uid}/permissions/${permKey}`] = null;
-      const nextPermissions = { ...(u.permissions || {}) };
-      delete nextPermissions[permKey];
-      cleanedNames.push(u.name);
-      return { ...u, permissions: nextPermissions as any };
-    }));
-    if (Object.keys(updates).length > 0) {
-      dbService.saveUsersBatch(updates);
-      dbService.logAction(user.name, user.role, 'Очистка устаревших копий права', 'Admin', roleKey,
-        `Снято ${Object.keys(updates).length} копий ${permKey} у роли ${roleKey} (${cleanedNames.slice(0, 6).join(', ')})`);
+    const done = await dbService.saveRolePermissionChange(roleKey, permKey, val, roleUsers.map((u) => u.uid));
+    if (!done) {
+      toast('Изменение не применено — значения остались прежними', 'error');
+      return;
     }
 
-    toast('Права роли обновлены', 'success');
+    const newRolePermissions = {
+      ...(settings?.rolePermissions || DEFAULT_ROLE_PERMS),
+      [roleKey]: { ...(settings?.rolePermissions?.[roleKey] || DEFAULT_ROLE_PERMS[roleKey] || {}), [permKey]: val },
+    };
+    if (settings) setSettings({ ...settings, rolePermissions: newRolePermissions });
+
+    setUsers(prev => prev.map((u) => {
+      if (u.role !== roleKey) return u;
+      const custom = { ...(u.customPermissions || {}) };
+      const own = { ...(u.permissions || {}) };
+      delete custom[permKey];
+      delete own[permKey];
+      // permissions — намеренно частичный: снимаем один ключ, остальные сохраняем
+      return { ...u, customPermissions: custom, permissions: own as UserProfile['permissions'] };
+    }));
+
+    dbService.logAction(user.name, user.role, 'Изменение прав роли', 'Admin', roleKey,
+      `Роль ${roleKey}: ${permKey} → ${val}; перезаписаны личные значения у ${withOwn.length} из ${roleUsers.length} сотрудников`);
+    toast(`Право роли обновлено: ${roleUsers.length} ${roleUsers.length === 1 ? 'сотрудник' : 'сотрудников'}`, 'success');
+  };
+
+  /** Вернуть право сотрудника к значению роли (снять личное переопределение). */
+  const handleUserPermReset = async (u: UserProfile, permKey: string) => {
+    const current = users.find((x) => x.uid === u.uid) || u;
+    if (user.role !== 'root_admin' && current.role === 'root_admin') {
+      toast('Права учётной записи разработчика может менять только разработчик', 'error');
+      return;
+    }
+    const custom = { ...(current.customPermissions || {}) };
+    const own = { ...(current.permissions || {}) };
+    delete custom[permKey];
+    delete own[permKey];
+    setUsers(prev => prev.map((x) => (x.uid === u.uid ? { ...x, customPermissions: custom, permissions: own as UserProfile['permissions'] } : x)));
+    dbService.saveUser({ ...current, customPermissions: custom, permissions: own as UserProfile['permissions'] });
+    dbService.logAction(user.name, user.role, 'Возврат права к роли', 'Admin', current.uid,
+      `${current.name}: ${permKey} → как у роли (${roleValueOf(current.role, permKey)})`);
+    toast('Право вернулось к значению роли', 'success');
   };
 
   const handleUserPermChange = (u: UserProfile, permKey: string, val: string) => {
@@ -210,18 +252,22 @@ export default function UserManagementBlock({ user }: Props) {
       toast('Права учётной записи разработчика может менять только разработчик', 'error');
       return;
     }
+    // Личное значение живёт в одном месте — customPermissions (высший приоритет в
+    // resolvePermission). Старую запись в permissions по этому ключу убираем, чтобы
+    // не оставалось второго, «фантомного» источника значения.
     const newCustom = { ...(current.customPermissions || {}), [permKey]: val };
-    
-    // Optimistic UI update: пишем и в permissions (для resolvePermission) и в customPermissions
-    setUsers(prev => prev.map(user => 
-      user.uid === u.uid 
-        ? { ...user, customPermissions: newCustom as any, permissions: { ...(user.permissions || {} as any), [permKey]: val } as any } 
-        : user
+    const newPerms = { ...(current.permissions || {}) };
+    const wasInPerms = newPerms[permKey] !== undefined;
+    delete newPerms[permKey];
+
+    setUsers(prev => prev.map(us =>
+      us.uid === u.uid ? { ...us, customPermissions: newCustom, permissions: newPerms as UserProfile['permissions'] } : us
     ));
-    
-    dbService.saveUser({ ...current, customPermissions: newCustom as any, permissions: { ...(current.permissions || {}), [permKey]: val } as any } as any);
-    
-    dbService.logAction(user.name, user.role, "Изменение прав пользователя", "Admin", current.uid, `Пользователь ${current.name}: ${permKey} → ${val}`);
+    dbService.saveUser({ ...current, customPermissions: newCustom, permissions: newPerms as UserProfile['permissions'] });
+
+    dbService.logAction(user.name, user.role, 'Изменение права сотрудника', 'Admin', current.uid,
+      `${current.name}: ${permKey} → ${val}${wasInPerms ? ' (личное значение перенесено в индивидуальные)' : ''}`);
+    toast('Личное право сотрудника обновлено', 'success');
   };
 
   const rootUsers = users.filter((x) => x.role === 'root_admin');
@@ -578,7 +624,11 @@ export default function UserManagementBlock({ user }: Props) {
                 <h3 className="text-sm font-semibold text-[#121316]">
                   Шаблон роли: {ROLE_LABELS[selectedRole]}
                 </h3>
-                <span className={UI.hint}>Эти базовые права применяются ко всем пользователям с данной ролью.</span>
+                <span className={UI.hint}>
+                  Базовые права роли. Изменение права получают все сотрудники роли, включая тех,
+                  у кого это право было задано лично, — личное значение будет перезаписано.
+                  Остальные их личные права не изменяются.
+                </span>
               </div>
 
               <div className="flex items-center gap-2">
@@ -825,6 +875,8 @@ export default function UserManagementBlock({ user }: Props) {
                 {MODULES_LIST.map((m) => {
                   const currentCustom = selectedUser.customPermissions?.[m.key] || "inherit";
                   const effectivePerm = resolvePermission(selectedUser, m.key, settings?.rolePermissions);
+                  const isOwn = hasOwnPerm(selectedUser, m.key);
+                  const roleValue = roleValueOf(selectedUser.role, m.key);
                   const isExpanded = isModuleExpanded(m.key);
                   const toggleExpand = () => toggleModuleExpand(m.key);
 
@@ -833,6 +885,31 @@ export default function UserManagementBlock({ user }: Props) {
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-medium text-[#121316]">{m.label}</span>
+                          {isOwn ? (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-700"
+                              title="Значение задано лично этому сотруднику и перекрывает роль"
+                            >
+                              <UserCog size={9} aria-hidden="true" /> индивидуально
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full border border-[#E5E7EB] bg-[#F3F4F6] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#6B7280]"
+                              title={`Значение наследуется от роли: ${PERM_LABELS[roleValue] || roleValue}`}
+                            >
+                              <Users size={9} aria-hidden="true" /> от роли
+                            </span>
+                          )}
+                          {isOwn && (
+                            <button
+                              type="button"
+                              onClick={() => handleUserPermReset(selectedUser, m.key)}
+                              disabled={!canEditSelectedUser}
+                              className={`${UI.buttonLink} disabled:opacity-40`}
+                            >
+                              вернуть как у роли
+                            </button>
+                          )}
                           {m.hasSubtabs && (
                             <button type="button" onClick={toggleExpand} className={UI.buttonLink}>
                               {isExpanded ? "Скрыть" : "Настроить"} ({m.subtabs.length})
