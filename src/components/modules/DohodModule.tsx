@@ -1044,6 +1044,18 @@ function MapRouteDialog({
   );
 }
 
+/** Тонкий бейдж карточки журнала — форма UI.chip, но кегль 11px (по правилам портала). */
+const CALC_BADGE =
+  "inline-flex items-center gap-1.5 text-[11px] font-medium text-[#4B5563] bg-[#F3F4F6] border border-[#E5E7EB] px-2 py-0.5 rounded-md whitespace-nowrap";
+
+/** Иконочная кнопка действий карточки журнала: тап-таргет не меньше 44px. */
+const CALC_ACTION =
+  "min-h-[44px] min-w-[44px] inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]";
+
+/** Та же кнопка, но для удаления — розовое наведение. */
+const CALC_ACTION_DANGER =
+  "min-h-[44px] min-w-[44px] inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200";
+
 const CalculationCard = React.memo(({
   calc,
   user,
@@ -1087,51 +1099,79 @@ const CalculationCard = React.memo(({
 
   return (
     <div
-      className={`p-5 bg-white border rounded-2xl shadow-xs hover:shadow-md transition duration-300 flex flex-col group ${
+      data-calc-id={calc.id}
+      className={`p-4 sm:p-5 bg-white border rounded-2xl shadow-xs transition-colors flex flex-col ${
         isSelected
-          ? "border-[var(--accent-60)] ring-2 ring-[var(--accent-30)] bg-[var(--accent-5)]"
-          : "border-[#E5E7EB] hover:border-[#D1D5DB]"
+          ? "ring-2 ring-[var(--accent-ui)]/25 border-[var(--accent-ui)]"
+          : "border-[#E5E7EB] hover:bg-[#F9FAFB] hover:border-[#D1D5DB]"
       }`}
     >
-      <div className="flex items-start justify-between mb-4 pb-3 border-b border-[#E5E7EB] gap-4">
-        {/* Checkbox */}
+      {/* Строка 1–2: выбор, маршрут с датой, направление и логист */}
+      <div className="flex items-start gap-2">
         {onToggleSelect && (
           <button
             type="button"
             onClick={() => onToggleSelect(calc.id)}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl shrink-0 cursor-pointer transition-colors duration-150"
+            aria-pressed={isSelected}
+            aria-label={isSelected ? "Снять выделение" : "Выбрать для печати"}
             title={isSelected ? "Снять выделение" : "Выбрать для печати"}
+            className="-ml-1 -mt-3 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl shrink-0 cursor-pointer transition-colors"
           >
-            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all duration-150 ${
-              isSelected
-                ? "bg-[#121316] border-[#121316] text-white"
-                : "border-[#D1D5DB] hover:border-[var(--accent-ui)] bg-white"
-            }`}>
-              {isSelected && (
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              )}
-            </div>
+            <span
+              className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors duration-150 ${
+                isSelected
+                  ? "bg-[#121316] border-[#121316] text-white"
+                  : "border-[#D1D5DB] hover:border-[#9CA3AF] bg-white"
+              }`}
+            >
+              {isSelected && <Check className="w-3.5 h-3.5" strokeWidth={1.5} />}
+            </span>
           </button>
         )}
-        <div className="flex flex-col gap-1 min-w-0">
-          <div className="text-sm font-bold text-[#121316] uppercase tracking-tight flex items-center gap-1.5 flex-wrap">
-            <span className="text-[var(--accent-ink)] font-mono">&rarr;</span>
-            <span className="truncate">{routeTitle || "Без названия"}</span>
+        <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 min-w-0">
+            <span className="text-sm font-semibold text-[#121316] leading-snug break-words min-w-0">
+              {routeTitle || "Без названия"}
+            </span>
+            <span
+              className="text-[11px] sm:text-xs font-mono tabular-nums text-[#6B7280] shrink-0"
+              title={calc.datetime || undefined}
+            >
+              {formatDateSlash(calc.datetime) || "Без даты"}
+            </span>
           </div>
-          <div className="text-[10px] font-mono text-[#6B7280] uppercase tracking-wider flex items-center gap-2 flex-wrap">
-            <span title={calc.datetime || undefined}>{formatDateSlash(calc.datetime) || "Без даты"}</span>
-            <span className="text-[#D1D5DB]">•</span>
-            <span>Направление: <strong className="text-[#4B5563]">{calc.globalDirection || calc.direction || "Не указано"}</strong></span>
-            <span className="text-[#D1D5DB]">•</span>
-            <span>Логист: <strong className="text-[#4B5563]">{calc.username || calc.logist || "Система"}</strong></span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className={CALC_BADGE} title="Направление">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-ui)] shrink-0" aria-hidden="true" />
+              <span
+                className="truncate max-w-[180px]"
+                title={calc.globalDirection || calc.direction || "Не указано"}
+              >
+                {calc.globalDirection || calc.direction || "Не указано"}
+              </span>
+            </span>
+            <span className={CALC_BADGE} title="Логист / кто внёс">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#9CA3AF] shrink-0" aria-hidden="true" />
+              <span
+                className="truncate max-w-[180px]"
+                title={calc.username || calc.logist || "Система"}
+              >
+                {calc.username || calc.logist || "Система"}
+              </span>
+            </span>
             {calc.additionalExpenses ? (
               <>
-                <span className="text-[#D1D5DB]">•</span>
-                <span>Доп. расходы: <strong className="text-rose-600">{calc.additionalExpenses} €</strong></span>
+                <span className={CALC_BADGE} title="Дополнительные расходы">
+                  <span className="text-[#6B7280]">Доп. расходы:</span>
+                  <span className="font-mono tabular-nums font-semibold text-[#121316]">
+                    {calc.additionalExpenses} €
+                  </span>
+                </span>
                 {Array.isArray(calc.expenseItems) && calc.expenseItems.length > 0 && (
-                  <span className="text-[10px] text-[#9CA3AF] font-normal">
+                  <span
+                    className="text-[11px] text-[#9CA3AF] truncate max-w-[220px]"
+                    title={calc.expenseItems.map((e) => e.label || "—").join(", ")}
+                  >
                     ({calc.expenseItems.map((e) => e.label || "—").join(", ")})
                   </span>
                 )}
@@ -1139,151 +1179,181 @@ const CalculationCard = React.memo(({
             ) : null}
           </div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            title="Печать"
-            aria-label="Печать расчёта"
-            onClick={() => onPrint(calc)}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[#9CA3AF] hover:text-[var(--accent-ink)] hover:bg-[var(--accent-10)] border border-[#E5E7EB] hover:border-[var(--accent-25)] bg-white shadow-xs transition-colors duration-150 cursor-pointer"
-          >
-            <Printer className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            title="Дублировать в форму"
-            aria-label="Копировать расчёт в форму"
-            onClick={() => copyHistoryToForm(calc)}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[#9CA3AF] hover:text-[var(--accent-ink)] hover:bg-[var(--accent-10)] border border-[#E5E7EB] hover:border-[var(--accent-25)] bg-white shadow-xs transition-colors duration-150 cursor-pointer"
-          >
-            <Copy className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            title="Изменить"
-            aria-label="Изменить расчёт"
-            onClick={() => openEditCalcModal(calc)}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[#9CA3AF] hover:text-[var(--accent-ink)] hover:bg-[var(--accent-10)] border border-[#E5E7EB] hover:border-[var(--accent-25)] bg-white shadow-xs transition-colors duration-150 cursor-pointer"
-          >
-            <Edit className="h-4 w-4" />
-          </button>
-          {user.role === "root_admin" && (
-            <button
-              type="button"
-              title="Удалить расчёт"
-              aria-label="Удалить расчёт"
-              onClick={() =>
-                dbService.deleteRouteCalculation(
-                  calc.id,
-                  user.name,
-                  user.role,
-                )
-              }
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 border border-[#E5E7EB] hover:border-rose-200 bg-white shadow-xs transition-colors duration-150 cursor-pointer"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          )}
-        </div>
       </div>
 
-      {/* Ключевые суммы расчёта */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+      {/* Строка 3: финансовые показатели; чистый доход — главный, убыток — rose с пометкой */}
+      <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
         {[
           {
             label: "Чистый доход",
             value: `${Math.round(profitValue).toLocaleString("ru-RU")} €`,
-            cls: profitValue < 0 ? "text-rose-600" : "text-[#121316]",
-            tile: profitValue < 0 ? "border-rose-200 bg-rose-50/60" : "border-[#E5E7EB] bg-[#F8F9FA]",
+            main: true,
+            accent: profitValue >= 0,
+            loss: profitValue < 0,
           },
           {
             label: "Фрахт",
             value: `${Math.round(freightValue).toLocaleString("ru-RU")} €`,
-            cls: "text-[#121316]",
-            tile: "border-[#E5E7EB] bg-[#F8F9FA]",
+            main: false,
+            accent: false,
+            loss: false,
           },
           {
             label: "Расходы",
             value: `${Math.round(expensesValue).toLocaleString("ru-RU")} €`,
-            cls: "text-amber-600",
-            tile: "border-[#E5E7EB] bg-[#F8F9FA]",
+            main: false,
+            accent: false,
+            loss: false,
           },
           {
-            label: "В сутки",
+            label: "Доход в сутки",
             value: `${Math.round(dailyProfitValue).toLocaleString("ru-RU")} €/сут`,
-            cls: dailyProfitValue < 0 ? "text-rose-600" : "text-emerald-600",
-            tile: "border-[#E5E7EB] bg-[#F8F9FA]",
+            main: false,
+            accent: dailyProfitValue >= 0,
+            loss: dailyProfitValue < 0,
           },
           {
             label: "Дней в пути",
             value: `${daysValue} дн`,
-            cls: "text-[#121316]",
-            tile: "border-[#E5E7EB] bg-[#F8F9FA]",
+            main: false,
+            accent: false,
+            loss: false,
           },
           {
             label: "Пробег",
             value: `${Math.round(totalKmValue).toLocaleString("ru-RU")} км`,
-            cls: "text-[#121316]",
-            tile: "border-[#E5E7EB] bg-[#F8F9FA]",
+            main: false,
+            accent: false,
+            loss: false,
           },
         ].map((m) => (
           <div
             key={m.label}
-            className={`p-3 rounded-2xl flex flex-col justify-between min-h-[60px] border ${m.tile}`}
+            className={`min-w-0 rounded-xl border px-3 py-2 flex flex-col gap-0.5 ${
+              m.loss ? "border-rose-200 bg-rose-50/60" : "border-[#E5E7EB] bg-[#F8F9FA]"
+            }`}
           >
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#6B7280] block mb-1">
-              {m.label}
+            <span className="flex items-center justify-between gap-1.5">
+              <span className="text-[11px] text-[#6B7280] truncate">{m.label}</span>
+              {m.loss && m.main && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-rose-600 shrink-0">
+                  <AlertTriangle className="w-3 h-3" strokeWidth={1.5} />
+                  Убыток
+                </span>
+              )}
             </span>
-            <span className={`text-sm font-bold font-mono tracking-tight leading-none ${m.cls}`}>
+            <span
+              className={`font-mono tabular-nums font-semibold tracking-tight whitespace-nowrap ${
+                m.main ? "text-lg" : "text-sm"
+              } ${m.loss ? "text-rose-600" : m.accent ? "text-[var(--accent-ink)]" : "text-[#121316]"}`}
+            >
               {m.value}
             </span>
           </div>
         ))}
       </div>
 
-      {/* Детализация по плечам внутри карточки журнала */}
-      <div className="mt-1 border-t border-[#E5E7EB] pt-3">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] block mb-2.5">
-          Детализация по плечам
-        </span>
-        <div className="space-y-1.5">
+      {/* Строка 4: плечи — компактные строки, данные видны без клика */}
+      <div className="mt-3">
+        <span className="text-[11px] font-medium text-[#9CA3AF] block mb-1.5">Детализация по плечам</span>
+        <div className="flex flex-col gap-1">
           {calc.legs.map((l, i) => (
             <div
               key={i}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-2 px-3 bg-[#F8F9FA] border border-[#E5E7EB] rounded-xl text-xs font-medium text-[#4B5563] hover:border-[#D1D5DB] transition-colors"
+              className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-lg border border-[#E5E7EB] bg-[#F8F9FA] px-2.5 py-1.5"
             >
-              <div className="flex items-center gap-2">
-                <span className="w-4 h-4 rounded-full bg-[#F3F4F6] text-[#6B7280] text-[9px] font-bold flex items-center justify-center font-mono select-none shrink-0">
+              <span className="flex items-center gap-2 min-w-0">
+                <span className="w-5 h-5 shrink-0 rounded-md border border-[#E5E7EB] bg-white text-[11px] font-medium text-[#6B7280] font-mono flex items-center justify-center select-none">
                   {i + 1}
                 </span>
                 <span
-                  className="text-[#121316] uppercase font-extrabold tracking-tight text-xs truncate max-w-[200px]"
+                  className="text-xs font-medium text-[#121316] truncate max-w-[200px] sm:max-w-[320px]"
                   title={`${l.from || "?"} → ${l.to || "?"}`}
                 >
                   {l.from || "?"} &rarr; {l.to || "?"}
                 </span>
-              </div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-mono justify-end text-[#6B7280]">
+              </span>
+              <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 ml-auto text-[11px] font-mono tabular-nums text-[#6B7280]">
                 <span>{Math.round(l.dist || l.distance || 0).toLocaleString("ru-RU")} км</span>
-                {Number(l.coeff || 0) > 0 && (
-                  <span className="text-[#9CA3AF]">Коэф: {l.coeff}</span>
-                )}
+                {Number(l.coeff || 0) > 0 && <span>Коэф: {l.coeff}</span>}
                 {Number(l.freight || 0) > 0 && (
-                  <span className="text-emerald-600 font-bold">{Math.round(l.freight).toLocaleString("ru-RU")} €</span>
+                  <span className="text-[#121316] font-semibold">
+                    {Math.round(l.freight).toLocaleString("ru-RU")} €
+                  </span>
                 )}
                 {Number(l.infoRate || 0) > 0 && (
-                  <span className="text-[var(--accent-ink)]">{Math.round(l.infoRate || 0).toLocaleString("ru-RU")} {l.infoCurrency || "USD"}</span>
+                  <span className="text-[var(--accent-ink)]">
+                    {Math.round(l.infoRate || 0).toLocaleString("ru-RU")} {l.infoCurrency || "USD"}
+                  </span>
                 )}
                 {Number(l.ferryCost || 0) > 0 && (
-                  <span className="text-rose-500">Паром: {Math.round(l.ferryCost).toLocaleString("ru-RU")} €</span>
+                  <span>
+                    Паром:{" "}
+                    <span className="text-[#121316] font-semibold">
+                      {Math.round(l.ferryCost).toLocaleString("ru-RU")} €
+                    </span>
+                  </span>
                 )}
                 {Number(l.additionalExpenses || l.otherExpenses || 0) > 0 && (
-                  <span className="text-rose-500">Доп: {Math.round(l.additionalExpenses || l.otherExpenses || 0).toLocaleString("ru-RU")} €</span>
+                  <span>
+                    Доп:{" "}
+                    <span className="text-[#121316] font-semibold">
+                      {Math.round(l.additionalExpenses || l.otherExpenses || 0).toLocaleString("ru-RU")} €
+                    </span>
+                  </span>
                 )}
-              </div>
+              </span>
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Строка 5: действия */}
+      <div className="mt-3 pt-3 border-t border-[#E5E7EB] flex flex-wrap items-center justify-end gap-1.5">
+        <button
+          type="button"
+          title="Печать"
+          aria-label="Печать расчёта"
+          onClick={() => onPrint(calc)}
+          className={CALC_ACTION}
+        >
+          <Printer className="h-4 w-4" strokeWidth={1.5} />
+        </button>
+        <button
+          type="button"
+          title="Дублировать в форму"
+          aria-label="Копировать расчёт в форму"
+          onClick={() => copyHistoryToForm(calc)}
+          className={CALC_ACTION}
+        >
+          <Copy className="h-4 w-4" strokeWidth={1.5} />
+        </button>
+        <button
+          type="button"
+          title="Изменить"
+          aria-label="Изменить расчёт"
+          onClick={() => openEditCalcModal(calc)}
+          className={CALC_ACTION}
+        >
+          <Edit className="h-4 w-4" strokeWidth={1.5} />
+        </button>
+        {user.role === "root_admin" && (
+          <button
+            type="button"
+            title="Удалить расчёт"
+            aria-label="Удалить расчёт"
+            onClick={() =>
+              dbService.deleteRouteCalculation(
+                calc.id,
+                user.name,
+                user.role,
+              )
+            }
+            className={CALC_ACTION_DANGER}
+          >
+            <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+          </button>
+        )}
       </div>
     </div>
   );
