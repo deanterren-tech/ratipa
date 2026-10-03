@@ -1158,7 +1158,8 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     if (preset) {
       return `${preset.bg} ${preset.darkText}`;
     }
-    return "bg-blue-50 text-[#1e40af]";
+    // Активный таб диспетчера — акцентный цвет портала (было синее bg-blue-50/text-[#1e40af])
+    return "bg-[var(--accent-solid)] text-[var(--accent-on)]";
   };
 
   const handleDirChange = (val: string) => {
