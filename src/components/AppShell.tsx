@@ -1381,8 +1381,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
       {/* === Mobile Floating Nav с крупной активной капсулой === */}
             <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-end justify-center pb-0 safe-bottom pointer-events-none select-none"
-                 style={{paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))'}}>
-              <div className="mx-1.5 bg-white/70 backdrop-blur-[14px] border border-white/30 rounded-[32px] shadow-[0_4px_24px_rgba(0,0,0,0.08)] flex items-stretch justify-around overflow-hidden w-full pointer-events-auto">
+                 style={{paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))'}}>
+              <div className="mx-4 bg-white/70 backdrop-blur-[14px] border border-white/30 rounded-[32px] shadow-[0_4px_24px_rgba(0,0,0,0.08)] flex items-stretch justify-around overflow-hidden w-full pointer-events-auto">
                 {[
                   { key: 'dashboard', label: 'Главная', icon: NavHomeIcon },
                   { key: 'planZagruzok', label: 'Загрузки', icon: NavLoadsIcon },
