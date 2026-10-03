@@ -3196,6 +3196,20 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         {trip.currentMonth}
                       </span>
                     )}
+                    {/* Пометка «кто редактировал и когда» — отдельной строкой под номером авто */}
+                    {(trip as any).updatedBy && (
+                      <div className="w-full min-w-0">
+                        <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-[#F8F9FA] px-2 py-1 text-[11px] text-[#6B7280] max-w-full w-fit">
+                          <PenLine className="w-3 h-3 text-[#9CA3AF] shrink-0" aria-hidden="true" />
+                          <span className="truncate min-w-0 max-w-[160px] font-medium text-[#4B5563]" title={resolvePersonName((trip as any).updatedBy, dispatcherDirectory)}>
+                            {resolvePersonName((trip as any).updatedBy, dispatcherDirectory)}
+                          </span>
+                          {(trip as any).updatedAt && (
+                            <span className="text-[#9CA3AF] font-mono shrink-0">· {(trip as any).updatedAt}</span>
+                          )}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   {/* Действия: клик по ним не открывает форму */}
                   <div className="flex items-center gap-1 shrink-0 xl:absolute xl:right-3 xl:top-1/2 xl:-translate-y-1/2 xl:z-10" onClick={(e) => e.stopPropagation()}>
@@ -3252,17 +3266,6 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     <span className="text-[11px] font-semibold text-[#121316]">Финиш</span>
                     <span className="text-sm sm:text-base font-bold text-[#121316] font-mono tabular-nums whitespace-nowrap">{dateEndFmt}</span>
                   </span>
-                  {(trip as any).updatedBy && (
-                    <span className="col-span-2 xl:col-span-1 inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-[#F8F9FA] px-2 py-1 text-[11px] text-[#6B7280] max-w-full w-fit">
-                      <PenLine className="w-3 h-3 text-[#9CA3AF] shrink-0" aria-hidden="true" />
-                      <span className="truncate min-w-0 max-w-[160px] font-medium text-[#4B5563]" title={resolvePersonName((trip as any).updatedBy, dispatcherDirectory)}>
-                        {resolvePersonName((trip as any).updatedBy, dispatcherDirectory)}
-                      </span>
-                      {(trip as any).updatedAt && (
-                        <span className="text-[#9CA3AF] font-mono shrink-0">· {(trip as any).updatedAt}</span>
-                      )}
-                    </span>
-                  )}
                 </div>
 
                 {/* Блок 3: маршрут — нумерованные точки со стрелками, полные названия переносятся */}
