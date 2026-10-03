@@ -21,7 +21,7 @@ import UpdateTour from './UpdateTour'
 import PortalInstructionsModal from './PortalInstructionsModal'
 import {usePresence} from '../hooks/usePresence'
 import {useChat} from '../hooks/useChat'
-import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Truck, FileText, Files, Clock, Map, Settings, Settings2, ShieldAlert, LogOut, Menu, X, Radio, MessageSquare, Send, Trash2, Sparkles, ChevronDown, ArrowUp, Pencil, Calendar, Bell, BellRing, Check, CheckCheck, AlertTriangle, Info, LineChart, ExternalLink, Wifi, WifiOff, RefreshCw, Home, Sliders, BookOpen, ClipboardList, DollarSign, BookMarked, Grid3x3, MoreHorizontal } from 'lucide-react';
+import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Truck, FileText, Files, Clock, Map, Settings, Settings2, ShieldAlert, LogOut, Menu, X, Radio, MessageSquare, Send, Trash2, Sparkles, ChevronDown, ArrowUp, Pencil, Calendar, Bell, BellRing, Check, CheckCheck, AlertTriangle, Info, LineChart, ExternalLink, Wifi, WifiOff, RefreshCw, LoaderCircle, Home, Sliders, BookOpen, ClipboardList, CircleDollarSign, BookMarked, Grid3x3, MoreHorizontal } from 'lucide-react';
 
 // Import newly created business modules
 const DashboardModule = lazy(() => import('./modules/DashboardModule'));
@@ -475,6 +475,14 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [isMoreOpen]);
 
+  // Escape закрывает панель конвертера — то же правило, что у остальных меню шапки
+  useEffect(() => {
+    if (!isConverterOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsConverterOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isConverterOpen]);
+
   /**
    * Положение окна конвертера: раскрывается СЛЕВА от своей кнопки в топ-баре.
    * Кнопок две (для узких и для широких экранов), поэтому берём ту, что видна,
@@ -856,7 +864,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 <header className="relative bg-white text-[#121316] border-b border-[#E5E7EB] h-14 md:h-[3.75rem] flex items-center justify-between px-3 sm:px-5 lg:px-6 shrink-0 sticky top-0 z-50 select-none gap-2 sm:gap-3">
         
         {/* На узких экранах: конвертер валют и календарь рядом */}
-        <div className="md:hidden flex items-center gap-2 shrink-0">
+        <div className="md:hidden flex items-center gap-3 shrink-0">
           <div className="relative font-sans" ref={converterRef}>
             <button
               type="button"
@@ -864,14 +872,16 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
               aria-haspopup="dialog"
               aria-expanded={isConverterOpen}
               aria-label="Конвертер валют"
-              className={`relative h-8 w-8 shrink-0 rounded-lg border transition-colors cursor-pointer flex items-center justify-center select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] active:scale-[0.98] ${
+              className={`relative h-8 w-8 shrink-0 rounded-lg border transition-colors cursor-pointer flex items-center justify-center select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] active:scale-[0.98] after:absolute after:content-[''] after:inset-[-7px] ${
                 isConverterOpen
                   ? 'text-[var(--accent-ink)] bg-[var(--accent-10)] hover:bg-[var(--accent-15)] border-[var(--accent-25)]'
-                  : 'bg-white text-[#6B7280] border-[#E5E7EB] hover:bg-[#F3F4F6] hover:text-[#121316] hover:border-[#D1D5DB]'
+                  : 'text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#121316] border-transparent'
               }`}
-              title="Конвертер валют"
+              title={isRatesLoading ? 'Конвертер валют — обновление курсов' : 'Конвертер валют'}
             >
-              <DollarSign size={15} strokeWidth={1.5} aria-hidden="true" />
+              {isRatesLoading
+                ? <LoaderCircle size={15} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
+                : <CircleDollarSign size={15} strokeWidth={1.5} aria-hidden="true" />}
             </button>
           </div>
           <TopBarCalendar />
@@ -1260,8 +1270,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             )}
           </div>
 
-          {/* Конвертер валют и календарь (широкие экраны) — одна пара, общий шаг 8 px */}
-          <div className="hidden md:flex items-center gap-2 shrink-0">
+          {/* Конвертер валют и календарь (широкие экраны) — одна пара, общий шаг 12 px
+              (расширенные до 44 px зоны нажатия соседних кнопок не перекрываются) */}
+          <div className="hidden md:flex items-center gap-3 shrink-0">
             <div className="relative font-sans" ref={converterDesktopRef}>
               <button
                 type="button"
@@ -1269,14 +1280,16 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                 aria-haspopup="dialog"
                 aria-expanded={isConverterOpen}
                 aria-label="Конвертер валют"
-                className={`relative h-8 w-8 shrink-0 rounded-lg border transition-colors cursor-pointer flex items-center justify-center select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] active:scale-[0.98] ${
+                className={`relative h-8 w-8 shrink-0 rounded-lg border transition-colors cursor-pointer flex items-center justify-center select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] active:scale-[0.98] after:absolute after:content-[''] after:inset-[-7px] ${
                   isConverterOpen
                     ? 'text-[var(--accent-ink)] bg-[var(--accent-10)] hover:bg-[var(--accent-15)] border-[var(--accent-25)]'
-                    : 'bg-white text-[#6B7280] border-[#E5E7EB] hover:bg-[#F3F4F6] hover:text-[#121316] hover:border-[#D1D5DB]'
+                    : 'text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#121316] border-transparent'
                 }`}
-                title="Конвертер валют"
+                title={isRatesLoading ? 'Конвертер валют — обновление курсов' : 'Конвертер валют'}
               >
-                <DollarSign size={15} strokeWidth={1.5} aria-hidden="true" />
+                {isRatesLoading
+                  ? <LoaderCircle size={15} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
+                  : <CircleDollarSign size={15} strokeWidth={1.5} aria-hidden="true" />}
               </button>
             </div>
             <TopBarCalendar />
@@ -1435,7 +1448,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                   {/* Заголовок: знак валюты, название, источник курса и действия */}
                   <div className="flex items-center gap-3 px-4 py-4 border-b border-[#E5E7EB] select-none">
                     <span className="w-9 h-9 rounded-xl bg-[var(--accent-8)] border border-[var(--accent-20)] text-[var(--accent-ink)] flex items-center justify-center shrink-0">
-                      <DollarSign size={16} strokeWidth={1.5} aria-hidden="true" />
+                      <CircleDollarSign size={16} strokeWidth={1.5} aria-hidden="true" />
                     </span>
                     <div className="min-w-0 flex-1">
                       <h3 className="text-sm font-semibold text-[#121316] tracking-tight">Конвертер валют</h3>

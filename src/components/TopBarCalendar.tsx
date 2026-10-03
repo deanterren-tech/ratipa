@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { CalendarDays, ChevronDown, ChevronUp } from 'lucide-react';
 
 /**
  * Компактный календарь в топ-баре: просмотр и выбор даты.
@@ -297,14 +297,20 @@ export default function TopBarCalendar({ today }: TopBarCalendarProps) {
         aria-expanded={isOpen}
         aria-label={`Календарь, сегодня ${todayLabel} ${todayDate.getFullYear()}`}
         title={`Календарь — сегодня ${todayLabel}`}
-        className={`relative h-8 shrink-0 px-2.5 rounded-lg border transition-colors cursor-pointer flex items-center justify-center whitespace-nowrap text-[11px] font-semibold tabular-nums select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] active:scale-[0.98] ${
+        /* Одна стилистика с соседями по шапке (пункты меню, «Ещё», меню
+           пользователя): высота 8, rounded-lg, тихая рамка-transparent,
+           наведение — плашка #F3F4F6, при открытой панели — акцентная.
+           after:inset-[-7px] (7 px от padding-box = 6 px от рамки) расширяет
+           зону нажатия до 44 px без изменения самого размера кнопки. */
+        className={`relative h-8 shrink-0 px-2.5 rounded-lg border transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap text-[11px] tabular-nums select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] active:scale-[0.98] after:absolute after:content-[''] after:inset-[-7px] ${
           isOpen
-            ? 'text-[var(--accent-ink)] bg-[var(--accent-10)] hover:bg-[var(--accent-15)] border-[var(--accent-25)]'
-            : 'bg-white text-[#6B7280] border-[#E5E7EB] hover:bg-[#F3F4F6] hover:text-[#121316] hover:border-[#D1D5DB]'
+            ? 'text-[var(--accent-ink)] bg-[var(--accent-10)] hover:bg-[var(--accent-15)] border-[var(--accent-25)] font-semibold'
+            : 'text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#121316] border-transparent font-medium'
         }`}
       >
-        {/* Текущая дата: число и сокращённый месяц. Всегда «сегодня» —
-            выбор в календаре на надпись не влияет. */}
+        {/* Значок календаря и сегодняшняя дата. Надпись всегда «сегодня» —
+            выбор в календаре на неё не влияет. */}
+        <CalendarDays size={13} strokeWidth={1.5} className={`shrink-0 ${isOpen ? '' : 'text-[#9CA3AF]'}`} aria-hidden="true" />
         {todayLabel}
       </button>
 
