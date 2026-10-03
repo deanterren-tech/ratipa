@@ -1151,14 +1151,9 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
   const getDispatcherActiveTabStyle = (d: string) => {
     if (activeDispatcherTab !== d) return UI.filterPillIdle;
-    if (d === "All" || d === "Все диспетчеры") return UI.filterPillActive;
-
-    const colorKey = dispatchersColors[d];
-    const preset = DISPATCHER_COLORS_PRESETS.find((p) => p.key === colorKey);
-    if (preset) {
-      return `${preset.bg} ${preset.darkText}`;
-    }
-    // Активный таб диспетчера — акцентный цвет портала (было синее bg-blue-50/text-[#1e40af])
+    // Активный таб — единый акцентный цвет портала, независимо от диспетчера.
+    // Личный цвет диспетчера (DISPATCHER_COLORS_PRESETS) в табе не применяется:
+    // раньше активный таб мог быть синим (пресет «Синий» / синий фолбэк).
     return "bg-[var(--accent-solid)] text-[var(--accent-on)]";
   };
 
