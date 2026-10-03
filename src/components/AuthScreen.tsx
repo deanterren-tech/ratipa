@@ -17,8 +17,8 @@ import {
  * Экран входа Ratipa (двухколоночная композиция по референсу-ориентиру).
  *
  * Левая зона — фирменная: на тёмном фоне (#171820 и его вариации) сдержанный
- * градиент на акценте темы (var(--accent*)), знак R-logo-2.svg, заголовок
- * «Контур управления перевозками» и три спокойных преимущества.
+ * градиент на акценте темы (var(--accent*)), логотип portal.svg (как в топбаре), заголовок
+ * «Портал управления перевозками» и три спокойных преимущества.
  * Правая зона — светлая форма входа в стиле «Учёта дозволов»: высокие поля
  * с фокус-кольцом по акценту, акцентная кнопка, ошибка в rose-стилистике.
  *
@@ -151,25 +151,21 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
               }}
             />
 
-            {/* Знак Ratipa: на тёмном фоне читается благодаря инверсии */}
-            <div className="relative flex items-center gap-3">
+            {/* Логотип — тот же, что в топбаре портала (portal.svg);
+                на тёмном фоне фирменной зоны читается благодаря инверсии. */}
+            <div className="relative flex items-center">
               <img
-                src="/R-logo-2.svg"
+                src="/portal.svg"
                 alt="Ratipa Portal"
-                width={748}
-                height={754}
                 draggable={false}
                 className="h-8 lg:h-9 w-auto shrink-0 brightness-0 invert select-none"
               />
-              <span className="text-[15px] font-bold tracking-tight text-white select-none">
-                Ratipa Portal
-              </span>
             </div>
 
             {/* Заголовок, подзаголовок и преимущества */}
             <div className="relative mt-7 flex flex-1 flex-col justify-center lg:mt-10">
               <h1 className="max-w-lg text-2xl font-bold leading-tight tracking-tight text-white sm:text-3xl lg:text-[32px] select-none">
-                Контур управления перевозками
+                Портал управления перевозками
               </h1>
               <p className="mt-2.5 hidden max-w-md text-sm leading-relaxed text-white/70 sm:block lg:mt-3 select-none">
                 Планирование, расчёты и контроль работы автопарка в одном рабочем пространстве
@@ -188,9 +184,6 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
               </ul>
             </div>
 
-            <p className="relative hidden text-[11px] font-medium tracking-wide text-white/50 lg:block select-none">
-              Операционный терминал Ratipa
-            </p>
           </section>
 
           {/* ПРАВАЯ ЧАСТЬ — светлая зона входа */}
