@@ -1150,17 +1150,15 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
   const [plDateEnd, setPlDateEnd] = useState("");
 
   const getDispatcherActiveTabStyle = (d: string) => {
-    if (activeDispatcherTab !== d)
-      return "bg-white border-[#E5E7EB] text-[#4B5563] hover:bg-[#F3F4F6] hover:text-[#121316]";
-    if (d === "All" || d === "Все диспетчеры")
-      return "bg-[#121316] border-[#121316] text-white font-semibold";
+    if (activeDispatcherTab !== d) return UI.filterPillIdle;
+    if (d === "All" || d === "Все диспетчеры") return UI.filterPillActive;
 
     const colorKey = dispatchersColors[d];
     const preset = DISPATCHER_COLORS_PRESETS.find((p) => p.key === colorKey);
     if (preset) {
-      return `${preset.bg} ${preset.darkText} border-[#E5E7EB]`;
+      return `${preset.bg} ${preset.darkText}`;
     }
-    return "bg-blue-50 text-[#1e40af] border-[#E5E7EB]";
+    return "bg-blue-50 text-[#1e40af]";
   };
 
   const handleDirChange = (val: string) => {
@@ -1694,7 +1692,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     const profitPerDayPlan = Math.round(rawProfitPerDayPlan);
 
     return (
- <div data-scroll-lock="modal" className="fixed inset-0 z-[100] flex items-start md:items-center justify-center bg-black/40 backdrop-blur-[2px] animate-fade-in overflow-y-auto overscroll-contain">
+ <div data-scroll-lock="modal" data-mobile-fullscreen className="fixed inset-0 z-[100] flex items-start md:items-center justify-center bg-black/40 backdrop-blur-[2px] animate-fade-in overflow-y-auto overscroll-contain">
  <div className="bg-white w-full md:max-w-[1400px] mx-0 md:mx-4 md:border md:border-[#E5E7EB] shadow-[0_25px_60px_rgba(0,0,0,0.12)] rounded-2xl flex flex-col relative min-h-[100dvh] md:min-h-0 md:max-h-[calc(100vh-2rem)] overflow-hidden">
           
           {/* Header */}
@@ -1771,14 +1769,14 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
               <>
                 <div className="grid grid-cols-1 gap-6">
                   {/* Основные реквизиты */}
- <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] flex flex-col">
+ <div className="flex flex-col pb-4 border-b border-[#E5E7EB]">
                     <h3 className="text-sm font-semibold text-[#6B7280] flex items-center gap-2 mb-5">
                       <FileText className="w-4 h-4 text-[#9CA3AF]"/>
                       Основные реквизиты
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                       <div>
-                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Автомобиль</label>
+                        <label className="text-[11px] font-medium text-[#6B7280] mb-1.5 block">Автомобиль</label>
                         <CouplingPicker
                           value={carNumber}
                           onSelect={(rec) => {
@@ -1788,7 +1786,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Направление</label>
+                        <label className="text-[11px] font-medium text-[#6B7280] mb-1.5 block">Направление</label>
                         <select
                           value={direction}
                           onChange={(e) => handleDirChange(e.target.value)}
@@ -1800,7 +1798,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         </select>
                       </div>
                       <div>
-                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Диспетчер</label>
+                        <label className="text-[11px] font-medium text-[#6B7280] mb-1.5 block">Диспетчер</label>
                         <select
                           value={dispatcher}
                           onChange={(e) => setDispatcher(e.target.value)}
@@ -1813,7 +1811,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         </select>
                       </div>
                       <div>
-                        <label className="text-[11px] font-semibold tracking-normal text-[var(--accent-ink)] mb-1.5 block">Дата старта</label>
+                        <label className="text-[11px] font-medium text-[var(--accent-ink)] mb-1.5 block">Дата старта</label>
                         <input
                           type="date"
                           value={dateStart}
@@ -1822,7 +1820,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Дата финиша</label>
+                        <label className="text-[11px] font-medium text-[#6B7280] mb-1.5 block">Дата финиша</label>
                         <input
                           type="date"
                           value={dateEnd}
@@ -1836,7 +1834,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 </div>
 
                 {/* Плечи маршрута */}
-                <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB]">
+                <div className="flex flex-col pb-4 border-b border-[#E5E7EB]">
                   <div className="flex justify-between items-center mb-5">
                     <h3 className="text-sm font-semibold text-[#6B7280] flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-[#9CA3AF]"/>
@@ -2163,7 +2161,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 </div>
 
                 {/* Financial Params & Comment */}
-                <div className="bg-white rounded-2xl p-6 border border-[#E5E7EB] flex flex-col gap-6">
+                <div className="flex flex-col gap-6 pb-4 border-b border-[#E5E7EB] last:border-0">
                   <div>
                     <h3 className="text-sm font-semibold text-[#6B7280] flex items-center gap-2 mb-5">
                       <CircleDollarSign className="w-4 h-4 text-[#9CA3AF]"/>
@@ -2171,7 +2169,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                       <div>
-                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Доп расходы €</label>
+                        <label className="text-[11px] font-medium text-[#6B7280] mb-1.5 block">Доп расходы €</label>
                         <input
                           type="number"
                           value={extraExpense || ""}
@@ -2180,7 +2178,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Коммент расходов</label>
+                        <label className="text-[11px] font-medium text-[#6B7280] mb-1.5 block">Коммент расходов</label>
                         <input
                           type="text"
                           value={extraExpenseNote}
@@ -2189,7 +2187,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Факт км</label>
+                        <label className="text-[11px] font-medium text-[#6B7280] mb-1.5 block">Факт км</label>
                         <input
                           type="number"
                           placeholder="Введите факт км"
@@ -2199,7 +2197,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         />
                       </div>
                       <div>
-                        <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-2 block">Цвет плашки рейса</label>
+                        <label className="text-[11px] font-medium text-[#6B7280] mb-2 block">Цвет плашки рейса</label>
                         <div className="flex flex-wrap gap-2">
                           {[
                             "bg-slate-200",
@@ -2244,7 +2242,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
               <div className="flex flex-col gap-6">
                 {/* Left side: List of saved Potential Loads */}
-                <div className="bg-white rounded-2xl p-5 border border-[#E5E7EB] flex flex-col gap-4">
+                <div className="flex flex-col gap-4 pb-4 border-b border-[#E5E7EB]">
                   <SectionHeader
                     icon={<Lightbulb className="w-4 h-4" aria-hidden="true" />}
                     tone="accent"
@@ -2390,7 +2388,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 </div>
 
                 {/* Right side: Editor */}
-                <div className="bg-white rounded-2xl p-5 border border-[#E5E7EB] flex flex-col gap-5">
+                <div className="flex flex-col gap-5 pb-4 border-b border-[#E5E7EB] last:border-0">
                   <div className="flex items-center gap-4 border-b border-[#E5E7EB] pb-4">
                     <input
                       type="text"
@@ -2409,11 +2407,11 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
                   <div className="grid grid-cols-2 gap-4 border-b border-[#E5E7EB] pb-4">
                     <div>
-                      <label className="text-[11px] font-semibold tracking-normal text-[var(--accent-ink)] mb-1.5 block">Дата старта</label>
+                      <label className="text-[11px] font-medium text-[var(--accent-ink)] mb-1.5 block">Дата старта</label>
                       <input type="date" value={plDateStart} onChange={(e) => setPlDateStart(e.target.value)} className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors min-h-[44px]" />
                     </div>
                     <div>
-                      <label className="text-[11px] font-semibold tracking-normal text-[#9CA3AF] mb-1.5 block">Дата финиша</label>
+                      <label className="text-[11px] font-medium text-[#6B7280] mb-1.5 block">Дата финиша</label>
                       <input type="date" value={plDateEnd} onChange={(e) => setPlDateEnd(e.target.value)} className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors min-h-[44px]" />
                     </div>
                   </div>
@@ -2668,54 +2666,54 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
           <div className="shrink-0 bg-white border-t border-[#E5E7EB] z-20 md:sticky md:bottom-0">
             {/* Light stats block — single layer, app style */}
             <div className="px-4 sm:px-6 lg:px-8 py-4 bg-[#F8F9FA]">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4">
                 {/* Прибыль общая — green */}
-                <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
-                  <span className="text-[11px] font-semibold text-[#6B7280]">Прибыль общая</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">Прибыль общая</span>
                   <div className="flex items-baseline gap-1">
-                    <span className={`text-lg font-bold font-mono tabular-nums ${Math.round(modalTab === "potential" ? calculatePlTotals().profit : profit) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(modalTab === "potential" ? calculatePlTotals().profit : profit).toLocaleString("ru-RU")}</span>
-                    <span className="text-sm font-semibold text-[#9CA3AF]">€</span>
+                    <span className={`text-lg font-semibold font-mono tabular-nums ${Math.round(modalTab === "potential" ? calculatePlTotals().profit : profit) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(modalTab === "potential" ? calculatePlTotals().profit : profit).toLocaleString("ru-RU")}</span>
+                    <span className="text-sm font-medium text-[#6B7280]">€</span>
                   </div>
                 </div>
                 {/* Прибыль в день — blue */}
-                <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
-                  <span className="text-[11px] font-semibold text-[#6B7280]">Прибыль в день</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">Прибыль в день</span>
                   <div className="flex items-baseline gap-1">
-                    <span className={`text-lg font-bold font-mono tabular-nums ${Math.round(modalTab === "potential" ? (calculatePlTotals().days > 0 ? Math.round(calculatePlTotals().profit / calculatePlTotals().days) : 0) : rawProfitPerDay) < 100 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(rawProfitPerDay).toLocaleString("ru-RU")}</span>
-                    <span className="text-sm font-semibold text-[#9CA3AF]">€</span>
+                    <span className={`text-lg font-semibold font-mono tabular-nums ${Math.round(modalTab === "potential" ? (calculatePlTotals().days > 0 ? Math.round(calculatePlTotals().profit / calculatePlTotals().days) : 0) : rawProfitPerDay) < 100 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(rawProfitPerDay).toLocaleString("ru-RU")}</span>
+                    <span className="text-sm font-medium text-[#6B7280]">€</span>
                   </div>
                 </div>
                 {/* Количество дней — orange */}
-                <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
-                  <span className="text-[11px] font-semibold text-[#6B7280]">Количество дней</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">Количество дней</span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-[#121316] font-mono tabular-nums">{modalTab === "potential" ? (calculatePlTotals().days > 0 ? calculatePlTotals().days : 1) : (daysPlan || daysFact || 0)}</span>
-                    <span className="text-sm font-semibold text-[#9CA3AF]">дн.</span>
+                    <span className="text-lg font-semibold text-[#121316] font-mono tabular-nums">{modalTab === "potential" ? (calculatePlTotals().days > 0 ? calculatePlTotals().days : 1) : (daysPlan || daysFact || 0)}</span>
+                    <span className="text-sm font-medium text-[#6B7280]">дн.</span>
                   </div>
                 </div>
                 {/* План км */}
-                <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
-                  <span className="text-[11px] font-semibold text-[#6B7280]">{factKm && factKm > 0 ? "Километраж" : "План км"}</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">{factKm && factKm > 0 ? "Километраж" : "План км"}</span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-[#121316] font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalKm : (factKm && factKm > 0 ? factKm : totalKm)).toLocaleString("ru-RU")}</span>
-                    <span className="text-sm font-semibold text-[#9CA3AF]">км</span>
+                    <span className="text-lg font-semibold text-[#121316] font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalKm : (factKm && factKm > 0 ? factKm : totalKm)).toLocaleString("ru-RU")}</span>
+                    <span className="text-sm font-medium text-[#6B7280]">км</span>
                     {factKm && factKm > 0 && <span className="text-[11px] text-emerald-600 ml-1.5 font-semibold">Факт</span>}
                   </div>
                 </div>
                 {/* Фрахт — blue */}
-                <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
-                  <span className="text-[11px] font-semibold text-[#6B7280]">Фрахт</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">Фрахт</span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-[#121316] font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalFreight : totalFreight).toLocaleString("ru-RU")}</span>
-                    <span className="text-sm font-semibold text-[#9CA3AF]">€</span>
+                    <span className="text-lg font-semibold text-[#121316] font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalFreight : totalFreight).toLocaleString("ru-RU")}</span>
+                    <span className="text-sm font-medium text-[#6B7280]">€</span>
                   </div>
                 </div>
                 {/* Расходы */}
-                <div className="bg-white rounded-2xl border border-[#E5E7EB] px-4 py-3 flex flex-col gap-0.5">
-                  <span className="text-[11px] font-semibold text-[#6B7280]">{factKm && factKm > 0 ? "Расходы" : "Расходы (План)"}</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">{factKm && factKm > 0 ? "Расходы" : "Расходы (План)"}</span>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-lg font-bold text-[#121316] font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalExpenses : totalExpenses).toLocaleString("ru-RU")}</span>
-                    <span className="text-sm font-semibold text-[#9CA3AF]">€</span>
+                    <span className="text-lg font-semibold text-[#121316] font-mono tabular-nums">{Math.round(modalTab === "potential" ? calculatePlTotals().totalExpenses : totalExpenses).toLocaleString("ru-RU")}</span>
+                    <span className="text-sm font-medium text-[#6B7280]">€</span>
                     {factKm && factKm > 0 && <span className="text-[11px] text-emerald-600 ml-1.5 font-semibold">Факт</span>}
                   </div>
                 </div>
@@ -3007,48 +3005,48 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
     const renderKpiSummary = (isBottom: boolean) => {
       return (
-        <div className={`grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-4 sm:p-5 ${isBottom ? "mt-4" : "mb-2"}`}>
+        <div className={`grid grid-cols-2 lg:grid-cols-5 gap-x-8 gap-y-4 ${isBottom ? "pt-5 border-t border-[#E5E7EB]" : "py-4"}`}>
           <div className="flex flex-col">
-            <span className="text-[10px] font-semibold text-[#6B7280] mb-1.5">
+            <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none mb-1">
               Общая прибыль
             </span>
-            <span className={`text-2xl lg:text-3xl font-bold tracking-tight font-sans tabular-nums ${sumProfit >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-              {Math.round(sumProfit).toLocaleString("ru-RU")} <span className="text-sm font-medium text-[#9CA3AF]">€</span>
+            <span className={`text-2xl font-semibold font-mono tabular-nums tracking-tight ${sumProfit >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+              {Math.round(sumProfit).toLocaleString("ru-RU")} <span className="text-sm font-medium text-[#6B7280]">€</span>
             </span>
           </div>
           <div className="flex flex-col lg:border-l lg:border-[#E5E7EB] lg:pl-6">
-            <span className="text-[10px] font-semibold text-[#6B7280] mb-1.5">
+            <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none mb-1">
               Маржинальность
             </span>
-            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-[#121316] font-sans tabular-nums">
+            <span className="text-2xl font-semibold font-mono tabular-nums tracking-tight text-[#121316]">
               {marginRate}%
             </span>
           </div>
           <div className="flex flex-col lg:border-l lg:border-[#E5E7EB] lg:pl-6">
-            <span className="text-[10px] font-semibold text-[#6B7280] mb-1.5">
+            <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none mb-1">
               Прибыль в день
             </span>
-            <span className={`text-2xl lg:text-3xl font-bold tracking-tight font-sans tabular-nums ${profitPerDayValue < 100 ? "text-rose-600" : "text-[#121316]"}`}>
-              {profitPerDayValue.toLocaleString("ru-RU")} <span className="text-sm font-medium text-[#9CA3AF]">€</span>
+            <span className={`text-2xl font-semibold font-mono tabular-nums tracking-tight ${profitPerDayValue < 100 ? "text-rose-600" : "text-[#121316]"}`}>
+              {profitPerDayValue.toLocaleString("ru-RU")} <span className="text-sm font-medium text-[#6B7280]">€</span>
             </span>
           </div>
           <div className="flex flex-col lg:border-l lg:border-[#E5E7EB] lg:pl-6">
-            <span className="text-[10px] font-semibold text-[#6B7280] mb-1.5">
+            <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none mb-1">
               Общий пробег
             </span>
-            <span className="text-2xl lg:text-3xl font-bold tracking-tight text-[#121316] font-sans tabular-nums">
-              {Math.round(sumKm).toLocaleString("ru-RU")} <span className="text-xs font-medium text-[#9CA3AF]">км</span>
+            <span className="text-2xl font-semibold font-mono tabular-nums tracking-tight text-[#121316]">
+              {Math.round(sumKm).toLocaleString("ru-RU")} <span className="text-sm font-medium text-[#6B7280]">км</span>
             </span>
           </div>
           <div className="flex flex-col lg:border-l lg:border-[#E5E7EB] lg:pl-6 col-span-2 lg:col-span-1">
-            <span className="text-[10px] font-semibold text-[#6B7280] mb-1.5">
+            <span className="text-[11px] font-semibold text-[#6B7280] tracking-wider uppercase select-none mb-1">
               Качество списка
             </span>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl lg:text-3xl font-bold tracking-tight text-[#121316] font-sans tabular-nums">
+              <span className="text-2xl font-semibold font-mono tabular-nums tracking-tight text-[#121316]">
                 {listQuality}%
               </span>
-              <span className="text-xs font-semibold text-emerald-600 font-sans">
+              <span className="text-xs font-semibold text-emerald-600">
                 +{profitableCount} в плюс
               </span>
             </div>
@@ -3067,7 +3065,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
         {archived && renderKpiSummary(false)}
 
         {/* Table Headers */}
-        <div className="hidden lg:flex px-6 pb-3 border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider self-start w-full cursor-pointer select-none tracking-normal">
+        <div className="hidden xl:flex px-4 pb-3 border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider self-start w-full cursor-pointer select-none">
           <div
             className="min-w-[200px] hover:text-[#121316] transition-colors flex items-center gap-1"
             onClick={() => handleSort("carNumber")}
@@ -3117,7 +3115,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
         </div>
 
         {/* Pure Map List instead of Virtuoso (solves ResizeObserver infinite loops under CSS zoom) */}
-        <div className="flex flex-col gap-3 w-full">
+        <div className="flex flex-col gap-3 w-full lg:gap-0 lg:divide-y lg:divide-[#F3F4F6]">
           {list.map((trip) => {
             const firstLeg = trip.legs?.[0];
             const lastLeg = trip.legs?.[trip.legs.length - 1];
@@ -3157,7 +3155,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 key={trip.id}
                 data-trip-id={trip.id}
                 onClick={() => loadTripToForm(trip)}
-                className={`car-strip-item bg-white rounded-2xl p-4 border shadow-xs transition-colors duration-150 group relative hover:border-[#D1D5DB] hover:bg-[#F9FAFB] flex flex-col gap-3.5 cursor-pointer w-full ${isHighlighted ? "border-amber-400 ring-2 ring-amber-400/20" : "border-[#E5E7EB]"}`}
+                className={`car-strip-item bg-white rounded-2xl p-4 border transition-colors duration-150 group relative hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:shadow-sm lg:bg-transparent lg:rounded-none lg:border-0 lg:px-4 lg:py-4 lg:hover:shadow-none flex flex-col gap-3.5 cursor-pointer w-full ${isHighlighted ? "border-amber-400 ring-2 ring-amber-400/20" : "border-[#E5E7EB]"}`}
                 draggable={true}
                 onDragStart={(e) => {
                   e.dataTransfer.setData("tripId", trip.id);
@@ -3249,7 +3247,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 </div>
 
                 {/* Блок 3: маршрут — пункты переносятся, важные названия не обрезаются */}
-                <div className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] p-3">
+                <div className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] p-3 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0">
                   <div className="flex items-center gap-1.5 mb-2 min-w-0">
                     <MapPin className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" aria-hidden="true" />
                     <span className="text-xs font-semibold tracking-tight text-[#121316] break-words">{routeTitle}</span>
@@ -3486,9 +3484,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
           </>
         }
       >
-        <div className="flex flex-col gap-5">
-          <span className={UI.caption}>Модуль План Firebase</span>
-
+        <div className="flex flex-col">
           {/* Отбор рейсов (вкладка «Активные») */}
           <div className={activeTab === "active" ? "flex flex-col gap-3" : "hidden"}>
             {activeDispatchers.length > 0 && (
@@ -3514,7 +3510,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         }}
                         onClick={() => setActiveDispatcherTab(d)}
                         aria-pressed={activeDispatcherTab === d}
-                        className={`${UI.filterPill} border flex items-center gap-1 truncate max-w-[160px] ${getDispatcherActiveTabStyle(d)}`}
+                        className={`${UI.filterPill} flex items-center gap-1 truncate max-w-[160px] ${getDispatcherActiveTabStyle(d)}`}
                       >
                         {d === "All" || d === "Все диспетчеры" ? "Все диспетчеры" : formatToTitleCase(d)}
                       </button>
@@ -3533,10 +3529,10 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                           type="button"
                           onClick={() => setActiveDirectionTab(dir)}
                           aria-pressed={activeDirectionTab === dir}
-                          className={`${UI.filterPill} border truncate max-w-[160px] ${
+                          className={`${UI.filterPill} truncate max-w-[160px] ${
                             activeDirectionTab === dir
-                              ? "bg-[#121316] text-white border-[#121316]"
-                              : "bg-white text-[#4B5563] border-[#E5E7EB] hover:bg-[#F3F4F6] hover:text-[#121316]"
+                              ? UI.filterPillActive
+                              : UI.filterPillIdle
                           }`}
                         >
                           {dir === "All" ? "Все направления" : dir}
@@ -3577,10 +3573,10 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                       }
                     }}
                     aria-pressed={archiveMonth === month}
-                    className={`${UI.filterPill} border whitespace-nowrap min-w-max flex items-center gap-1.5 ${
+                    className={`${UI.filterPill} whitespace-nowrap min-w-max flex items-center gap-1.5 ${
                       archiveMonth === month
-                        ? "bg-[#121316] text-white border-[#121316]"
-                        : "bg-white text-[#4B5563] border-[#E5E7EB] hover:bg-[#F3F4F6] hover:text-[#121316]"
+                        ? UI.filterPillActive
+                        : UI.filterPillIdle
                     }`}
                   >
                     <Calendar className="w-3 h-3" aria-hidden="true" />
@@ -3592,7 +3588,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
           </div>
 
           {/* Список рейсов: поиск, масштаб, результаты */}
-          <div className="flex flex-col gap-4">
+          <div className={`flex flex-col gap-4 ${activeTab === "history" ? "" : "mt-5 pt-5 border-t border-[#E5E7EB]"}`}>
             {(activeTab === "active" || activeTab === "archive") && (
               <SectionHeader
                 icon={activeTab === "archive"
@@ -3606,7 +3602,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             )}
 
             {(activeTab === "active" || activeTab === "archive") && (
-              <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+              <div className="flex flex-col lg:flex-row lg:items-center gap-3 pb-3 border-b border-[#E5E7EB]">
                 <SearchField
                   value={searchCarQuery}
                   onChange={setSearchCarQuery}
