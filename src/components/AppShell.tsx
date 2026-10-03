@@ -1,5 +1,5 @@
-import React, {useState, useEffect, useMemo, useRef, Suspense, lazy} from 'react'
-import { UserProfile, AppSettings } from '../types'
+import React, {useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, Suspense, lazy} from 'react'
+import { UserProfile, AppSettings, MenuStructureGroup } from '../types'
 import UserAvatar from './UserAvatar'
 import TopBarCalendar from './TopBarCalendar'
 import { getUserFullName } from '../utils/userName'
@@ -21,7 +21,7 @@ import UpdateTour from './UpdateTour'
 import PortalInstructionsModal from './PortalInstructionsModal'
 import {usePresence} from '../hooks/usePresence'
 import {useChat} from '../hooks/useChat'
-import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Truck, FileText, Files, Clock, Map, Settings, Settings2, ShieldAlert, LogOut, Menu, X, Radio, MessageSquare, Send, Trash2, Sparkles, ChevronDown, ArrowUp, Pencil, Calendar, Bell, BellRing, Check, CheckCheck, AlertTriangle, Info, LineChart, ExternalLink, Wifi, WifiOff, RefreshCw, Home, Sliders, BookOpen, ClipboardList, DollarSign, BookMarked, Grid3x3 } from 'lucide-react';
+import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Truck, FileText, Files, Clock, Map, Settings, Settings2, ShieldAlert, LogOut, Menu, X, Radio, MessageSquare, Send, Trash2, Sparkles, ChevronDown, ArrowUp, Pencil, Calendar, Bell, BellRing, Check, CheckCheck, AlertTriangle, Info, LineChart, ExternalLink, Wifi, WifiOff, RefreshCw, Home, Sliders, BookOpen, ClipboardList, DollarSign, BookMarked, Grid3x3, MoreHorizontal } from 'lucide-react';
 
 // Import newly created business modules
 const DashboardModule = lazy(() => import('./modules/DashboardModule'));
@@ -59,6 +59,34 @@ const groupIconMap: Record<string, React.ComponentType<any>> = {
   g_appSettings: Settings2,
   g_admin: ShieldAlert,
 };
+
+/**
+ * Пункт адаптивной панели топбара: раздел-группа (выпадающий), одиночный
+ * раздел или внешняя ссылка. Пункты, не помещающиеся в панель, уезжают
+ * в компактное меню «Ещё» — ничего не теряется и не переименовывается.
+ */
+type TopbarNavItem =
+  | { kind: 'group'; id: string; label: string; group: MenuStructureGroup; subtabs: string[] }
+  | { kind: 'single'; id: string; label: string; moduleKey: string }
+  | { kind: 'link'; id: string; label: string; url: string };
+
+/** Запас в px при подгонке пунктов панели — страховка от округлений замера. */
+const NAVBAR_FIT_SAFETY = 4;
+
+/**
+ * Сколько самых важных внешних ссылок максимум остаётся в панели (2–4 по
+ * условию; держим до трёх — по порядку из настроек, который админ задаёт
+ * перетаскиванием). Остальные ссылки уезжают в «Ещё»: меню осмысленно на
+ * любой ширине, и панель не переполнится, если ссылок станет больше.
+ */
+const TOPBAR_MAX_PANEL_LINKS = 3;
+
+/**
+ * Классы «уехавшего» в меню пункта: вне потока, невидимый, некликабельный.
+ * Позиционные классы (relative) НЕ должны стоять на скрытых пунктах: иначе
+ * в CSS-каскаде они переопределяют absolute и пункт остаётся в раскладке.
+ */
+const NAVBAR_HIDDEN_CLS = 'absolute left-0 top-0 invisible pointer-events-none';
 
 interface AppShellProps {
   user: UserProfile;
@@ -148,8 +176,28 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const [isContextTarget, setIsContextTarget] = useState<string | null>(null);
   // Ссылки на конвертер и панели для закрытия по клику вне (хаб «Ещё» — страница, ему не нужно).
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  /** Компактное меню «Ещё»: пункты панели, не поместившиеся на текущей ширине. */
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
   const lastOpenedRef = useRef<number>(0);
   const closeTimeoutRef = useRef<any>(null);
+
+  /**
+   * Адаптивная панель: при сужении экрана первыми в «Ещё» уезжают внешние
+   * ссылки (менее приоритетные — в конце списка из настроек), затем разделы
+   * с конца; ссылок в панели стараемся держать не меньше двух. Ширины
+   * замеряются по живым элементам: скрытые пункты остаются в DOM, но вне
+   * потока, поэтому подгонка не зависит от предположений о вёрстке.
+   */
+  const moreWrapRef = useRef<HTMLDivElement | null>(null);
+  const moreButtonRef = useRef<HTMLButtonElement | null>(null);
+  /** Контейнер «логотип + навигация», логотип и сама панель — для расчёта свободной ширины. */
+  const navMiddleRef = useRef<HTMLDivElement | null>(null);
+  const navBrandRef = useRef<HTMLDivElement | null>(null);
+  const navRef = useRef<HTMLElement | null>(null);
+  /** Живые элементы пунктов панели по id: по ним замеряется натуральная ширина. */
+  const navItemEls = useRef<Map<string, HTMLElement | null>>(new globalThis.Map());
+  /** Сколько разделов и ссылок помещается в панель (null — до первого замера). */
+  const [panelFit, setPanelFit] = useState<{ sections: number; links: number } | null>(null);
 
   const handleMouseEnterGroup = (groupId: string) => {
     if (closeTimeoutRef.current) {
@@ -328,6 +376,43 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const mainScrollRef = useRef<HTMLDivElement>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
+  /**
+   * Нижний отступ скроллируемой области на телефоне: считаем от фактической
+   * высоты нижней навигации (в неё уже входит safe-area — нижний padding самой
+   * полосы), плюс небольшой зазор. Так футеры и кнопки действий разделов не
+   * оказываются под полосой ни на одном экране и не зависят от магических
+   * констант: если полоса станет выше (или добавится safe-area), отступ
+   * пересчитается сам. На десктопе (≥768px) ничего не меняется — отступ 0.
+   */
+  const mobileNavRef = useRef<HTMLElement | null>(null);
+  const [mobileNavPad, setMobileNavPad] = useState<number>(0);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  useLayoutEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const syncMq = () => setIsMobileViewport(mq.matches);
+    syncMq();
+    mq.addEventListener('change', syncMq);
+    return () => mq.removeEventListener('change', syncMq);
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = mobileNavRef.current;
+    if (!el) return;
+    const measure = () => {
+      const h = el.getBoundingClientRect().height;
+      setMobileNavPad(h > 0 ? Math.ceil(h + 12) : 0);
+    };
+    measure();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+
   useEffect(() => {
     const el = mainScrollRef.current;
     if (!el) return;
@@ -382,6 +467,14 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [isUserMenuOpen]);
 
+  // Escape закрывает компактное меню «Ещё»
+  useEffect(() => {
+    if (!isMoreOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsMoreOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isMoreOpen]);
+
   /**
    * Положение окна конвертера: раскрывается СЛЕВА от своей кнопки в топ-баре.
    * Кнопок две (для узких и для широких экранов), поэтому берём ту, что видна,
@@ -426,6 +519,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       }
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setIsUserMenuOpen(false);
+      }
+      if (moreWrapRef.current && !moreWrapRef.current.contains(event.target as Node)) {
+        setIsMoreOpen(false);
       }
       const isConverterClick = 
         (converterRef.current && converterRef.current.contains(event.target as Node)) ||
@@ -568,6 +664,133 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menuGroups, allowedModules]);
 
+  /**
+   * Полный состав панели: разделы в порядке menuStructure (тот же источник,
+   * что у мобильного хаба «Ещё»), затем внешние ссылки из настроек. Один и
+   * тот же список рендерится и в панели, и в меню «Ещё» — при сужении экрана
+   * пункты лишь переезжают между ними; подписи, ключи и адреса не меняются.
+   */
+  const topbarItems = useMemo<TopbarNavItem[]>(() => {
+    const items: TopbarNavItem[] = [];
+    menuGroups.filter(isGroupVisible).forEach((group: MenuStructureGroup) => {
+      if (group.isDropdown) {
+        const subtabs = getAllowedSubtabs(group);
+        if (subtabs.length > 0) items.push({ kind: 'group', id: group.id, label: group.label, group, subtabs });
+      } else if (group.singleModuleKey && allowedModules.some((m) => m.key === group.singleModuleKey)) {
+        // Подпись — как у одиночного пункта панели: индивидуальное имя, если задано, иначе имя группы.
+        const displayLabel = (group.customLabels && group.customLabels[group.singleModuleKey]) || group.label;
+        items.push({ kind: 'single', id: group.id, label: displayLabel, moduleKey: group.singleModuleKey });
+      }
+    });
+    (settings?.externalTabs || []).filter((tab) => tab && tab.url).forEach((tab) => {
+      items.push({ kind: 'link', id: tab.id, label: tab.title, url: tab.url });
+    });
+    return items;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuGroups, allowedModules, settings?.externalTabs]);
+
+  const topbarSectionItems = useMemo(() => topbarItems.filter((it) => it.kind !== 'link'), [topbarItems]);
+  const topbarLinkItems = useMemo(() => topbarItems.filter((it) => it.kind === 'link'), [topbarItems]);
+
+  /** Сколько пунктов панели реально показываем (до первого замера — по максимуму). */
+  const panelSectionCount = panelFit ? Math.min(panelFit.sections, topbarSectionItems.length) : topbarSectionItems.length;
+  const panelLinkCount = panelFit
+    ? Math.min(panelFit.links, topbarLinkItems.length)
+    : Math.min(topbarLinkItems.length, TOPBAR_MAX_PANEL_LINKS);
+
+  const panelSectionIds = useMemo(
+    () => new Set(topbarSectionItems.slice(0, panelSectionCount).map((it) => it.id)),
+    [topbarSectionItems, panelSectionCount]
+  );
+  const panelLinkIds = useMemo(
+    () => new Set(topbarLinkItems.slice(0, panelLinkCount).map((it) => it.id)),
+    [topbarLinkItems, panelLinkCount]
+  );
+
+  const hiddenSectionItems = topbarSectionItems.slice(panelSectionCount);
+  const hiddenLinkItems = topbarLinkItems.slice(panelLinkCount);
+  const hiddenTopbarCount = hiddenSectionItems.length + hiddenLinkItems.length;
+  /** «Ещё» подсвечивается, когда активный раздел уехал в меню. */
+  const isMoreActive = hiddenSectionItems.some((it) =>
+    it.kind === 'group' ? it.subtabs.includes(activeModule) : it.kind === 'single' ? it.moduleKey === activeModule : false
+  );
+
+  /**
+   * Подгонка панели под ширину: считаем свободное место (по контейнеру
+   * «логотип + навигация» минус логотип) и раскладываем пункты в порядке
+   * приоритета. Первыми «уступают» внешние ссылки — с конца списка (менее
+   * важные), затем разделы с конца; кнопка «Ещё» учитывается как пункт.
+   * Запас NAVBAR_FIT_SAFETY страхует от округлений и субпиксельной ширины.
+   */
+  const measureTopbarFit = useCallback(() => {
+    const middle = navMiddleRef.current;
+    const brand = navBrandRef.current;
+    const nav = navRef.current;
+    const moreBtn = moreButtonRef.current;
+    if (!middle || !brand || !nav || !moreBtn) return;
+    // Панель скрыта (мобильная версия) — раскладку не трогаем.
+    if (nav.clientWidth < 120) return;
+    const middleGap = parseFloat(getComputedStyle(middle).columnGap || '0') || 0;
+    const navGap = parseFloat(getComputedStyle(nav).columnGap || '0') || 0;
+    const widthOf = (el: HTMLElement | null | undefined) => (el ? el.getBoundingClientRect().width : 0);
+    const avail = middle.clientWidth - widthOf(brand) - middleGap - NAVBAR_FIT_SAFETY;
+    const moreW = widthOf(moreBtn);
+    const S = topbarSectionItems.length;
+    const L = topbarLinkItems.length;
+    const maxLinks = Math.min(L, TOPBAR_MAX_PANEL_LINKS);
+    const sumW = (arr: TopbarNavItem[], n: number) =>
+      arr.slice(0, n).reduce((acc, it) => acc + widthOf(navItemEls.current.get(it.id)), 0);
+    const fits = (k: number, n: number) => {
+      const inPanel = k + n;
+      const withButton = inPanel < S + L; // что-то осталось в «Ещё» — кнопка видима
+      const children = inPanel + (withButton ? 1 : 0);
+      const need = sumW(topbarSectionItems, k) + sumW(topbarLinkItems, n)
+        + (withButton ? moreW : 0) + Math.max(0, children - 1) * navGap;
+      return need <= avail;
+    };
+    // Порядок кандидатов = порядок уступок: ссылки максимум→2, затем разделы
+    // с конца (ссылок держим 2), затем остаток ссылок и, в крайнем случае,
+    // пустая панель с одной кнопкой.
+    const linkFloor = Math.min(2, maxLinks);
+    const candidates: Array<[number, number]> = [];
+    for (let n = maxLinks; n >= linkFloor; n--) candidates.push([S, n]);
+    for (let k = S - 1; k >= 1; k--) candidates.push([k, linkFloor]);
+    for (let n = linkFloor - 1; n >= 0; n--) for (let k = S; k >= 1; k--) candidates.push([k, n]);
+    candidates.push([0, Math.min(2, L)], [0, Math.min(1, L)], [0, 0]);
+    let chosen: [number, number] = [0, 0];
+    for (const [k, n] of candidates) {
+      if (k <= S && n <= maxLinks && fits(k, n)) { chosen = [k, n]; break; }
+    }
+    setPanelFit((prev) => (prev && prev.sections === chosen[0] && prev.links === chosen[1] ? prev : { sections: chosen[0], links: chosen[1] }));
+    // Если после пересчёта «Ещё» опустело (всё поместилось) — закрываем меню.
+    if (chosen[0] + chosen[1] >= S + L) setIsMoreOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topbarSectionItems, topbarLinkItems, activeModule]);
+
+  // Замер после каждого изменения состава/навигации и при изменении размеров окна.
+  useLayoutEffect(() => {
+    measureTopbarFit();
+    const onResize = () => measureTopbarFit();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [measureTopbarFit]);
+
+  // Веб-шрифты приезжают позже старта и меняют ширины подписей — пересчитываем после загрузки.
+  useLayoutEffect(() => {
+    let cancelled = false;
+    document.fonts?.ready?.then(() => { if (!cancelled) measureTopbarFit(); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [measureTopbarFit]);
+
+  // Контейнер «логотип + навигация» может менять ширину и без события ресайза окна.
+  useLayoutEffect(() => {
+    const middle = navMiddleRef.current;
+    if (!middle || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => measureTopbarFit());
+    ro.observe(middle);
+    return () => ro.disconnect();
+  }, [measureTopbarFit]);
+
   const handleNavigate = (moduleKey: string) => {
     window.location.hash = moduleKey;
     setActiveModule(moduleKey);
@@ -671,9 +894,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 sm:gap-5 flex-1 min-w-0">
+        <div ref={navMiddleRef} className="flex items-center gap-3 sm:gap-5 flex-1 min-w-0">
           {/* Left Brand Area */}
-          <div className="flex items-center shrink-0 flex-1 md:flex-none justify-center md:justify-start">
+          <div ref={navBrandRef} className="flex items-center shrink-0 flex-1 md:flex-none justify-center md:justify-start">
             
             <div className="hidden md:flex items-center gap-2.5 cursor-pointer group rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]" tabIndex={0} role="button"
                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleNavigate(user.role === 'mechanic' ? 'baza' : 'dashboard'); } }}
@@ -699,30 +922,43 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             </div>
           </div>
 
-          {/* Navigation Menu */}
-          <nav className="hidden md:flex items-center gap-0.5 overflow-x-auto lg:overflow-visible whitespace-nowrap scrollbar-none max-w-[50vw] sm:max-w-[70vw] lg:max-w-none flex-nowrap shrink relative" aria-label="Разделы портала">
-          {menuGroups.filter(isGroupVisible).map((group) => {
-            const GroupIcon = groupIconMap[group.id] || Calendar;
-            if (group.isDropdown) {
-              const allowedSubtabs = getAllowedSubtabs(group);
-              const isChildActive = allowedSubtabs.includes(activeModule);
-              const isOpen = openDropdownId === group.id;
+          {/* Navigation Menu: не поместившиеся пункты уезжают в компактное меню «Ещё» */}
+          <nav ref={navRef} className="hidden md:flex items-center gap-0.5 whitespace-nowrap flex-nowrap relative min-w-0" aria-label="Разделы портала">
+          {topbarItems.map((item) => {
+            // Пункт в панели или в «Ещё»: скрытые остаются в DOM вне потока,
+            // чтобы у них всегда можно было замерить натуральную ширину.
+            const inPanel = item.kind === 'link' ? panelLinkIds.has(item.id) : panelSectionIds.has(item.id);
+            const itemRef = (el: HTMLElement | null) => { navItemEls.current.set(item.id, el); };
+            // Скрытый пункт обязан выйти из потока (иначе он распирает панель).
+            // «relative» добавляем только видимым: иначе absolute проиграл бы ему
+            // по порядку классов в CSS и скрытый пункт остался бы в раскладке.
+            if (item.kind === 'group') {
+              const GroupIcon = groupIconMap[item.id] || Calendar;
+              const isChildActive = item.subtabs.includes(activeModule);
+              const isOpen = openDropdownId === item.id && inPanel;
               
               return (
                 <div
-                  key={group.id}
-                  className="relative inline-block"
-                  onMouseEnter={() => handleMouseEnterGroup(group.id)}
+                  key={item.id}
+                  ref={itemRef}
+                  data-nav-item={item.id}
+                  data-nav-kind="group"
+                  data-nav-hidden={inPanel ? undefined : 'true'}
+                  aria-hidden={inPanel ? undefined : true}
+                  className={`inline-block shrink-0 ${inPanel ? 'relative' : NAVBAR_HIDDEN_CLS}`}
+                  onMouseEnter={() => { if (inPanel) handleMouseEnterGroup(item.id); }}
                   onMouseLeave={handleMouseLeaveGroup}
                 >
                   <button
+                    type="button"
+                    tabIndex={inPanel ? undefined : -1}
                     onClick={(e) => {
                       e.stopPropagation();
                       const now = Date.now();
                       if (now - lastOpenedRef.current < 300) {
                         return;
                       }
-                      setOpenDropdownId(isOpen ? null : group.id);
+                      setOpenDropdownId(isOpen ? null : item.id);
                     }}
                     className={`h-8 px-3 rounded-lg text-[11px] tracking-tight flex items-center gap-1.5 cursor-pointer shrink-0 select-none border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
                       isChildActive
@@ -731,15 +967,15 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                     }`}
                   >
                     <GroupIcon className={`h-3 w-3 ${isChildActive ? 'text-[var(--accent-ink)]' : 'text-[#9CA3AF]'}`} />
-                    <span>{group.label}</span>
+                    <span>{item.label}</span>
                     <ChevronDown className={`h-3 w-3 ${isChildActive ? 'text-[var(--accent-ink)]' : 'text-[#9CA3AF]'} transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                   </button>
                   
                   {isOpen && (
                     <div className="absolute left-0 top-full pt-1.5 min-w-[200px] z-50">
                       <div className="bg-white border border-[#E5E7EB] rounded-xl shadow-[0_8px_24px_rgba(15,23,42,0.12)] py-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
-                        {allowedSubtabs.map((subKey) => {
-                          const subLabel = getSubtabLabel(group, subKey);
+                        {item.subtabs.map((subKey) => {
+                          const subLabel = getSubtabLabel(item.group, subKey);
                           const isActive = activeModule === subKey;
                           const foundSub = allModules.find(m => m.key === subKey);
                           const SubIcon = foundSub?.icon || Calendar;
@@ -770,49 +1006,202 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                   )}
                 </div>
               );
-            } else {
-              const itemKey = group.singleModuleKey!;
-              const foundModule = allModules.find(m => m.key === itemKey);
+            } else if (item.kind === 'single') {
+              const foundModule = allModules.find(m => m.key === item.moduleKey);
               if (!foundModule) return null;
-              const isActive = activeModule === itemKey;
-              const displayLabel = group.customLabels && group.customLabels[itemKey] ? group.customLabels[itemKey] : group.label;
+              const isActive = activeModule === item.moduleKey;
               const ItemIcon = foundModule.icon || Calendar;
               
               return (
                 <a
-                  key={group.id}
-                  href={`#${itemKey}`}
+                  key={item.id}
+                  ref={itemRef}
+                  data-nav-item={item.id}
+                  data-nav-kind="single"
+                  data-nav-hidden={inPanel ? undefined : 'true'}
+                  aria-hidden={inPanel ? undefined : true}
+                  tabIndex={inPanel ? undefined : -1}
+                  href={`#${item.moduleKey}`}
                   onClick={(e) => {
                     if (!e.metaKey && !e.ctrlKey) {
                       e.preventDefault();
-                      handleNavigate(itemKey);
+                      handleNavigate(item.moduleKey);
                     }
                   }}
-                  className={`h-8 px-3 rounded-lg text-[11px] tracking-tight flex items-center gap-1.5 relative cursor-pointer shrink-0 border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
+                  className={`h-8 px-3 rounded-lg text-[11px] tracking-tight flex items-center gap-1.5 cursor-pointer shrink-0 border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
                     isActive
                       ? 'text-[var(--accent-ink)] bg-[var(--accent-10)] border-[var(--accent-25)] font-semibold'
                       : 'text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] border-transparent font-medium'
-                  }`}
+                  } ${inPanel ? 'relative' : NAVBAR_HIDDEN_CLS}`}
                 >
                   <ItemIcon className={`h-3 w-3 ${isActive ? 'text-[var(--accent-ink)]' : 'text-[#9CA3AF]'}`} />
-                  <span>{displayLabel}</span>
+                  <span>{item.label}</span>
                 </a>
               );
             }
+            return (
+              <a
+                key={item.id}
+                ref={itemRef}
+                data-nav-item={item.id}
+                data-nav-kind="link"
+                data-nav-hidden={inPanel ? undefined : 'true'}
+                aria-hidden={inPanel ? undefined : true}
+                tabIndex={inPanel ? undefined : -1}
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`h-8 px-3 rounded-lg text-[11px] tracking-tight font-medium text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] flex items-center gap-1.5 border border-transparent transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${inPanel ? '' : NAVBAR_HIDDEN_CLS}`}
+              >
+                <ExternalLink className="h-3 w-3 text-[#9CA3AF]" />
+                <span>{item.label}</span>
+              </a>
+            );
           })}
-          
-          {settings?.externalTabs?.map((extTab) => (
-            <a
-              key={extTab.id}
-              href={extTab.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="h-8 px-3 rounded-lg text-[11px] tracking-tight font-medium text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] flex items-center gap-1.5 border border-transparent transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+
+          {/* «Ещё» у правого края: выпадающее меню с пунктами, не поместившимися в панель */}
+          <div
+            ref={moreWrapRef}
+            data-nav-kind="more"
+            className={`shrink-0 ${hiddenTopbarCount === 0 ? NAVBAR_HIDDEN_CLS : 'relative'}`}
+            aria-hidden={hiddenTopbarCount === 0 ? true : undefined}
+          >
+            <button
+              ref={moreButtonRef}
+              data-topbar-more-button
+              type="button"
+              tabIndex={hiddenTopbarCount === 0 ? -1 : undefined}
+              aria-haspopup="menu"
+              aria-expanded={isMoreOpen}
+              aria-controls="topbar-more-menu"
+              aria-label="Ещё — разделы и ссылки, не поместившиеся в панель"
+              title="Ещё"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsMoreOpen((v) => !v);
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.stopPropagation(); }}
+              className={`h-8 px-3 rounded-lg text-[11px] tracking-tight flex items-center gap-1.5 cursor-pointer shrink-0 select-none border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
+                isMoreActive || isMoreOpen
+                  ? 'text-[var(--accent-ink)] bg-[var(--accent-10)] border-[var(--accent-25)] font-semibold'
+                  : 'text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] border-transparent font-medium'
+              }`}
             >
-              <ExternalLink className="h-3 w-3 text-[#9CA3AF]" />
-              <span>{extTab.title}</span>
-            </a>
-          ))}
+              <MoreHorizontal className={`h-3 w-3 ${isMoreActive || isMoreOpen ? 'text-[var(--accent-ink)]' : 'text-[#9CA3AF]'}`} aria-hidden="true" />
+              <span>Ещё</span>
+              <ChevronDown className={`h-3 w-3 ${isMoreActive || isMoreOpen ? 'text-[var(--accent-ink)]' : 'text-[#9CA3AF]'} transition-transform duration-200 ${isMoreOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+            </button>
+
+            {isMoreOpen && hiddenTopbarCount > 0 && (
+              <div
+                id="topbar-more-menu"
+                data-topbar-more-panel
+                role="menu"
+                aria-label="Ещё"
+                className="absolute right-0 top-full pt-1.5 w-[272px] max-w-[calc(100vw-1rem)] z-[1200]"
+              >
+                <div className="bg-white border border-[#E5E7EB] rounded-xl shadow-[0_8px_24px_rgba(15,23,42,0.12)] py-1.5 max-h-[calc(100vh-6rem)] overflow-y-auto custom-scrollbar">
+                  {hiddenSectionItems.map((section) => {
+                    if (section.kind === 'group') {
+                      return (
+                        <div key={section.id} data-section-label={section.label}>
+                          <div className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] select-none">
+                            {section.label}
+                          </div>
+                          {section.subtabs.map((subKey) => {
+                            const foundSub = allModules.find((m) => m.key === subKey);
+                            const SubIcon = foundSub?.icon || Calendar;
+                            const subLabel = getSubtabLabel(section.group, subKey);
+                            const isActive = activeModule === subKey;
+                            return (
+                              <a
+                                key={subKey}
+                                href={`#${subKey}`}
+                                role="menuitem"
+                                data-more-item
+                                data-item-kind="subtab"
+                                onKeyDown={(e) => { if (e.key === 'Enter') e.stopPropagation(); }}
+                                onClick={(e) => {
+                                  if (!e.metaKey && !e.ctrlKey) {
+                                    e.preventDefault();
+                                    handleNavigate(subKey);
+                                  }
+                                  setIsMoreOpen(false);
+                                }}
+                                className={`flex items-center gap-2.5 min-h-[44px] px-3 mx-1.5 text-xs tracking-tight leading-snug rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
+                                  isActive
+                                    ? 'bg-[var(--accent-10)] text-[var(--accent-ink)] font-semibold'
+                                    : 'text-[#4B5563] hover:bg-[#F3F4F6] hover:text-[#121316] font-medium'
+                                }`}
+                              >
+                                <SubIcon className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-[var(--accent-ink)]' : 'text-[#9CA3AF]'}`} aria-hidden="true" />
+                                <span className="flex-1">{subLabel}</span>
+                                {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent-ink)]" aria-hidden="true" />}
+                              </a>
+                            );
+                          })}
+                        </div>
+                      );
+                    }
+                    const foundModule = allModules.find((m) => m.key === section.moduleKey);
+                    const ItemIcon = foundModule?.icon || Calendar;
+                    const isActive = activeModule === section.moduleKey;
+                    return (
+                      <a
+                        key={section.id}
+                        href={`#${section.moduleKey}`}
+                        role="menuitem"
+                        data-more-item
+                        data-item-kind="module"
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.stopPropagation(); }}
+                        onClick={(e) => {
+                          if (!e.metaKey && !e.ctrlKey) {
+                            e.preventDefault();
+                            handleNavigate(section.moduleKey);
+                          }
+                          setIsMoreOpen(false);
+                        }}
+                        className={`flex items-center gap-2.5 min-h-[44px] px-3 mx-1.5 text-xs tracking-tight leading-snug rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] ${
+                          isActive
+                            ? 'bg-[var(--accent-10)] text-[var(--accent-ink)] font-semibold'
+                            : 'text-[#4B5563] hover:bg-[#F3F4F6] hover:text-[#121316] font-medium'
+                        }`}
+                      >
+                        <ItemIcon className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-[var(--accent-ink)]' : 'text-[#9CA3AF]'}`} aria-hidden="true" />
+                        <span className="flex-1">{section.label}</span>
+                        {isActive && <Check className="h-3.5 w-3.5 shrink-0 text-[var(--accent-ink)]" aria-hidden="true" />}
+                      </a>
+                    );
+                  })}
+
+                  {hiddenLinkItems.length > 0 && (
+                    <div data-section-label="Внешние ссылки">
+                      <div className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] select-none">
+                        Внешние ссылки
+                      </div>
+                      {hiddenLinkItems.map((link) => (
+                        <a
+                          key={link.id}
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          role="menuitem"
+                          data-more-item
+                          data-item-kind="external"
+                          onKeyDown={(e) => { if (e.key === 'Enter') e.stopPropagation(); }}
+                          onClick={() => setIsMoreOpen(false)}
+                          className="flex items-center gap-2.5 min-h-[44px] px-3 mx-1.5 text-xs tracking-tight leading-snug rounded-lg transition-colors text-[#4B5563] hover:bg-[#F3F4F6] hover:text-[#121316] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5 shrink-0 text-[#9CA3AF]" aria-hidden="true" />
+                          <span className="flex-1">{link.label}</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </nav>
         </div>
 
@@ -1252,6 +1641,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         {/* Dynamic active viewport card frame */}
         <main 
           ref={mainScrollRef} 
+          style={isMobileViewport && activeModule !== 'dashboard' && mobileNavPad > 0
+            ? { paddingBottom: `${mobileNavPad}px` }
+            : undefined}
           className={`flex-1 w-full max-w-full relative pb-52 md:pb-0 ${
                       activeModule === 'dashboard' 
                         ? 'p-0 bg-[#F9FAFB] overflow-hidden' 
@@ -1380,7 +1772,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       )}
 
       {/* === Mobile Floating Nav с крупной активной капсулой === */}
-            <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-end justify-center pb-0 safe-bottom pointer-events-none select-none"
+            <nav ref={mobileNavRef} className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-end justify-center pb-0 safe-bottom pointer-events-none select-none"
                  style={{paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))'}}>
               <div className="mx-4 bg-white/70 backdrop-blur-[14px] border border-white/30 rounded-[32px] shadow-[0_4px_24px_rgba(0,0,0,0.08)] flex items-stretch justify-around overflow-hidden w-full pointer-events-auto">
                 {[
