@@ -3273,32 +3273,22 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     <div className="flex flex-col gap-1 pl-1.5 ml-2 border-l border-[#E5E7EB]">
                       {trip.legs.map((leg, i) => {
                         const isActive = trip.activeLegIndex === i;
-                        const isFirst = i === 0;
-                        const isLast = i === trip.legs.length - 1;
                         return (
                           <div
                             key={i}
                             className={`flex items-start gap-2 text-xs py-1 pr-1.5 -ml-[17px] rounded-lg ${isActive ? "bg-[#F3F4F6]" : ""}`}
                           >
-                            {/* Номер шага — порядок следования читается сразу.
-                                Первая точка — старт (акцентная), последняя — финиш (тёмная);
-                                они же подписаны, чтобы направление читалось с первого взгляда. */}
+                            {/* Номер шага — порядок следования читается сразу */}
                             <span
                               aria-hidden="true"
-                              className={`w-5 h-5 rounded-full border text-[10px] font-mono font-semibold flex items-center justify-center shrink-0 tabular-nums ${isFirst ? "bg-[var(--accent-ink)] border-[var(--accent-ink)] text-white" : isLast || isActive ? "bg-[#121316] border-[#121316] text-white" : "bg-white border-[#D1D5DB] text-[#6B7280]"}`}
+                              className={`w-5 h-5 rounded-full border text-[10px] font-mono font-semibold flex items-center justify-center shrink-0 tabular-nums ${isActive ? "bg-[#121316] border-[#121316] text-white" : "bg-white border-[#D1D5DB] text-[#6B7280]"}`}
                             >
                               {i + 1}
                             </span>
                             <span className="min-w-0 break-words leading-snug pt-0.5">
-                              {isFirst && (
-                                <span className="text-[10px] font-semibold text-[var(--accent-ink)] mr-1.5">Старт</span>
-                              )}
-                              <span className={`font-semibold ${isFirst || isLast || isActive ? "text-[#121316]" : "text-[#4B5563]"}`}>{leg.from || "?"}</span>
+                              <span className={`font-semibold ${isActive ? "text-[#121316]" : "text-[#4B5563]"}`}>{leg.from || "?"}</span>
                               <span className="text-[var(--accent-ink)] font-semibold mx-1.5" aria-hidden="true">→</span>
-                              <span className={`font-semibold ${isFirst || isLast || isActive ? "text-[#121316]" : "text-[#4B5563]"}`}>{leg.to || "?"}</span>
-                              {isLast && (
-                                <span className="text-[10px] font-semibold text-[#121316] ml-1.5">Финиш</span>
-                              )}
+                              <span className={`font-semibold ${isActive ? "text-[#121316]" : "text-[#4B5563]"}`}>{leg.to || "?"}</span>
                             </span>
                           </div>
                         );
