@@ -18,8 +18,71 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="RATIPA" />
     <title>Ratipa CRM & ERP</title>
+    <style>
+      /* Мобильный экран загрузки: показывается сразу при открытии приложения,
+         ещё до старта React — пустого белого экрана не видно. На десктопе
+         скрыт (десктопный интерфейс не меняется). Разметка и тайминги
+         совпадают с React-заставкой (SplashScreen.tsx), поэтому переход
+         между статичной и React-заставкой незаметен. */
+      #boot-splash { display: none; }
+      @media (max-width: 767px) {
+        #boot-splash {
+          position: fixed; inset: 0; z-index: 10000;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          gap: 24px; padding: 0 24px; background: #fff;
+          font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+          user-select: none; -webkit-user-select: none;
+        }
+        #boot-splash .boot-logo { display: flex; flex-direction: column; align-items: center; animation: bootEnter 420ms ease-out both; }
+        #boot-splash .boot-logo img { height: 44px; width: auto; animation: bootSpin 4s linear infinite; }
+        #boot-splash .boot-label { margin: 0; font-size: 12px; line-height: 1.4; font-weight: 500; color: #6B7280; letter-spacing: 0.025em; }
+        #boot-splash .boot-bar { width: 160px; height: 2px; border-radius: 999px; background: #E5E7EB; overflow: hidden; }
+        #boot-splash .boot-bar > span { display: block; height: 100%; width: 33%; border-radius: 999px; background: #171820; animation: bootBar 1250ms ease-in-out infinite; }
+        #boot-splash .boot-error { display: none; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+        #boot-splash .boot-error p { margin: 0; font-size: 12px; line-height: 1.5; color: #6B7280; }
+        #boot-splash .boot-error .boot-error-title { font-size: 13px; font-weight: 600; color: #121316; }
+        #boot-splash .boot-retry { display: inline-flex; align-items: center; height: 36px; padding: 0 16px; border: 0; border-radius: 10px; background: #171820; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+        #boot-splash.is-timeout .boot-bar { display: none; }
+        #boot-splash.is-timeout .boot-error { display: flex; }
+        @keyframes bootEnter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes bootSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes bootBar { 0% { transform: translateX(-110%); } 100% { transform: translateX(360%); } }
+      }
+      @media (max-width: 767px) and (prefers-reduced-motion: reduce) {
+        #boot-splash .boot-logo { animation: none; }
+        #boot-splash .boot-logo img { animation: none; }
+        #boot-splash .boot-bar > span { animation: none; width: 100%; opacity: 0.35; }
+      }
+    </style>
   </head>
   <body>
+    <!-- Статичная заставка (только мобильные): React убирает её при старте,
+         дальше эстафету держит SplashScreen. Страховка: если приложение так и
+         не стартовало (сеть/скрипт), через 15 с показываются сообщение и
+         кнопка «Повторить» — бесконечной заставки не остаётся. -->
+    <div id="boot-splash">
+      <div class="boot-logo">
+        <img src="/R-logo-2.svg" alt="" width="748" height="754" draggable="false" />
+      </div>
+      <p class="boot-label">Загрузка Ratipa Portal</p>
+      <div class="boot-bar" aria-hidden="true"><span></span></div>
+      <div class="boot-error" role="alert">
+        <p class="boot-error-title">Не удалось загрузить приложение</p>
+        <p>Проверьте соединение и повторите попытку.</p>
+        <button type="button" class="boot-retry" id="boot-splash-retry">Повторить</button>
+      </div>
+    </div>
+    <script>
+      (function () {
+        var btn = document.getElementById('boot-splash-retry');
+        if (btn) btn.addEventListener('click', function () { window.location.reload(); });
+        window.__ratipaBootTimer = window.setTimeout(function () {
+          var el = document.getElementById('boot-splash');
+          if (!el) return; // React уже стартовал и убрал статичную заставку
+          el.classList.add('is-timeout');
+        }, 15000);
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

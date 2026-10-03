@@ -5,16 +5,27 @@
  * вращением (см. .splash-spin в index.css). При prefers-reduced-motion знак
  * статичный, индикатор загрузки остаётся.
  *
- * Показывается ТОЛЬКО во время реальной инициализации приложения (восстановление
- * сессии). Для локальных загрузок внутри разделов используется компактный
- * индикатор (PageLoading), а не полноэкранная заставка.
+ * Показывается ТОЛЬКО во время реальной инициализации приложения. На мобильных
+ * держится до готовности стартового раздела данных (см. App.tsx) — после неё
+ * пользователь сразу попадает в контент. Для локальных загрузок внутри разделов
+ * используется компактный индикатор (PageLoading), а не полноэкранная заставка.
  *
  * Логотипы — локальные бренд-ресурсы проекта: /portal.svg (полный) и
  * /R-logo-2.svg (знак). Форма, пропорции и фирменные цвета SVG не изменяются.
  * Анимация — только CSS, без библиотек. Процента загрузки не показываем:
  * приложение его не сообщает, поэтому индикатор нейтральный.
+ *
+ * slow/onRetry — страховка длительной загрузки: понятное сообщение и «Повторить».
  */
-export default function SplashScreen({ isLeaving = false }: { isLeaving?: boolean }) {
+export default function SplashScreen({
+  isLeaving = false,
+  slow = false,
+  onRetry,
+}: {
+  isLeaving?: boolean;
+  slow?: boolean;
+  onRetry?: () => void;
+}) {
   return (
     <div
       role="status"
@@ -47,6 +58,24 @@ export default function SplashScreen({ isLeaving = false }: { isLeaving?: boolea
         <div className="w-40 h-0.5 rounded-full bg-gray-200 overflow-hidden" aria-hidden="true">
           <div className="h-full w-1/3 rounded-full bg-[#171820] splash-bar" />
         </div>
+
+        {/* Длительная загрузка: понятное сообщение и повтор попытки */}
+        {slow && (
+          <div className="flex flex-col items-center gap-3 px-6 text-center max-w-xs" role="alert">
+            <p className="text-xs text-[#6B7280] leading-relaxed">
+              Загрузка занимает больше времени, чем обычно.
+            </p>
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg text-xs font-medium text-[var(--accent-on)] bg-[var(--accent-solid)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+              >
+                Повторить
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

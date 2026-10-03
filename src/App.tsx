@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { UserProfile } from './types';
 import { applyAccentTheme } from './theme/accent';
 import AuthScreen from './components/AuthScreen';
-import AppShell from './components/AppShell';
+import AppShell, { resolveDefaultModule } from './components/AppShell';
 import SplashScreen from './components/SplashScreen';
 import ModalScrollGuard from './components/ModalScrollGuard';
 import { dbService } from './api';
+import { getModuleLoadState, subscribeModuleLoad } from './db/moduleReadiness';
 import { MotionConfig } from 'motion/react';
 
 import { DialogProvider } from './components/DialogProvider';
@@ -13,12 +14,62 @@ import { ToastProvider } from './components/ToastProvider';
 
 const SESSION_VERSION_KEY = 'ratipa_session_version';
 
+declare global {
+  interface Window {
+    /** Таймер страховки статичной заставки (объявлен в index.html). */
+    __ratipaBootTimer?: number;
+  }
+}
+
+/** Мобильный экран загрузки: после этой паузы показываем «долгую загрузку» и «Повторить». */
+const BOOT_SLOW_MS = 10000;
+
 export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isSessionRestoring, setIsSessionRestoring] = useState(true);
   // Заставка: видна, пока идёт восстановление сессии, и ещё 300 мс на плавное исчезновение
   const [isSplashLeaving, setIsSplashLeaving] = useState(false);
   const [isSplashVisible, setIsSplashVisible] = useState(true);
+
+  // ── Мобильный экран загрузки ─────────────────────────────────────────────
+  // На мобильных держим заставку до готовности СТАРТОВОГО раздела данных
+  // (ready/error), чтобы после неё сразу открывался контент, а не второй
+  // индикатор загрузки. На десктопе поведение не меняется (как раньше:
+  // заставка уходит после восстановления сессии).
+  const isMobileBoot = typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
+  const [firstModuleSettled, setFirstModuleSettled] = useState(false);
+  const [bootSlow, setBootSlow] = useState(false);
+
+  // Статичная разметка из index.html: с момента старта React её роль берёт на
+  // себя SplashScreen, поэтому статичную заставку и её страховочный таймер убираем.
+  useEffect(() => {
+    document.getElementById('boot-splash')?.remove();
+    const t = window.__ratipaBootTimer;
+    if (t) {
+      window.clearTimeout(t);
+      window.__ratipaBootTimer = 0;
+    }
+  }, []);
+
+  // Ожидание стартового раздела: ready приходит после первого ответа базы,
+  // error — когда данных нет (тогда заставку тоже снимаем — под ней уже
+  // отрисован экран ошибки раздела с кнопкой «Повторить»).
+  useEffect(() => {
+    if (!isMobileBoot || !user || firstModuleSettled) return;
+    const moduleKey = resolveDefaultModule(user);
+    const check = () => {
+      if (getModuleLoadState(moduleKey).phase !== 'loading') setFirstModuleSettled(true);
+    };
+    const unsub = subscribeModuleLoad(check);
+    check(); // готовность могла наступить между маунтом AppShell и подпиской
+    const slowTimer = window.setTimeout(() => setBootSlow(true), BOOT_SLOW_MS);
+    return () => {
+      unsub();
+      window.clearTimeout(slowTimer);
+    };
+  // user?.uid: профиль обновляется живьём, повторная подписка не нужна
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobileBoot, user?.uid, firstModuleSettled]);
 
   // Глобальный блокировщик скролла body при открытии модальных окон
   useEffect(() => {
@@ -104,13 +155,16 @@ export default function App() {
     setIsSessionRestoring(false);
   }, []);
 
-  // Плавное исчезновение заставки после реальной готовности приложения
+  // Плавное исчезновение заставки после реальной готовности приложения.
+  // Мобильные: ждём готовности стартового раздела (ready/error). Десктоп: как раньше —
+  // заставка уходит сразу после восстановления сессии.
+  const bootReady = !isSessionRestoring && (!isMobileBoot || !user || firstModuleSettled);
   useEffect(() => {
-    if (isSessionRestoring) return;
+    if (!bootReady) return;
     setIsSplashLeaving(true);
     const t = setTimeout(() => setIsSplashVisible(false), 300);
     return () => clearTimeout(t);
-  }, [isSessionRestoring]);
+  }, [bootReady]);
 
   const handleLoginSuccess = (profile: UserProfile) => {
     const prof = ensurePermissions(profile);
@@ -187,7 +241,13 @@ export default function App() {
 
       {/* Заставка лежит ПОВЕРХ уже отрисованного приложения и уходит плавно,
           поэтому анимация не задерживает ни один реальный шаг загрузки. */}
-      {isSplashVisible && <SplashScreen isLeaving={isSplashLeaving} />}
+      {isSplashVisible && (
+        <SplashScreen
+          isLeaving={isSplashLeaving}
+          slow={isMobileBoot && bootSlow && !firstModuleSettled}
+          onRetry={isMobileBoot ? () => window.location.reload() : undefined}
+        />
+      )}
     </MotionConfig>
   );
 }

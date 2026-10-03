@@ -3,6 +3,8 @@ import { UserProfile, AppSettings } from '../types'
 import UserAvatar from './UserAvatar'
 import TopBarCalendar from './TopBarCalendar'
 import { getUserFullName } from '../utils/userName'
+import { NavHomeIcon, NavLoadsIcon, NavCompassIcon, NavExitIcon, NavGridIcon } from './common/NavIcons';
+import MobileMoreHub from './MobileMoreHub';
 import { currencySymbol, currencyName } from '../utils/currencyMeta'
 import { APP_VERSION, APP_VERSION_LABEL } from '../version'
 import {dbService, useFirebase} from '../api'
@@ -63,21 +65,28 @@ interface AppShellProps {
   onLogout: () => void;
 }
 
+/**
+ * Стартовый раздел пользователя — ОДНА логика для AppShell и мобильного экрана
+ * загрузки (App.tsx ждёт готовности именно этого раздела перед снятием заставки).
+ * Приоритет: hash → последний открытый раздел → ролевой дефолт.
+ */
+export function resolveDefaultModule(user?: { role?: string } | null): string {
+  const hash = window.location.hash.replace('#', '');
+  if (hash) {
+    // Модуль — первый сегмент: #dozvola/map → модуль «dozvola», вкладка «map»
+    return hash.split('/')[0].split('?')[0];
+  }
+  const saved = localStorage.getItem('ratipa_last_module');
+  if (saved && saved !== 'undefined') {
+    return saved;
+  }
+  return user && user.role === 'mechanic' ? 'baza' : 'dashboard';
+}
+
 export default function AppShell({ user, onLogout }: AppShellProps) {
   useKeyboardShortcuts();
 
-  const getDefaultModule = () => {
-    const hash = window.location.hash.replace('#', '');
-    if (hash) {
-      // Модуль — первый сегмент: #dozvola/map → модуль «dozvola», вкладка «map»
-      return hash.split('/')[0].split('?')[0];
-    }
-    const saved = localStorage.getItem('ratipa_last_module');
-    if (saved && saved !== 'undefined') {
-      return saved;
-    }
-    return user && user.role === 'mechanic' ? 'baza' : 'dashboard';
-  };
+  const getDefaultModule = () => resolveDefaultModule(user);
 
   const [activeModule, setActiveModule] = useState<string>(getDefaultModule());
   const [loadedModules, setLoadedModules] = useState<string[]>([getDefaultModule()]);
@@ -137,7 +146,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
   const [isContextTarget, setIsContextTarget] = useState<string | null>(null);
-  const mobileMenuRef = useRef<HTMLDivElement>(null);
+  // Ссылки на конвертер и панели для закрытия по клику вне (хаб «Ещё» — страница, ему не нужно).
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const lastOpenedRef = useRef<number>(0);
   const closeTimeoutRef = useRef<any>(null);
@@ -425,9 +434,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       if (!isConverterClick) {
         setIsConverterOpen(false);
       }
-      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
-        setIsMobileMenuOpen(false);
-      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
@@ -547,6 +553,21 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     }
   };
 
+  // Пункты мобильного хаба «Ещё» — ТОТ ЖЕ источник, что у топбара ПК
+  // (settings.menuStructure → фолбэк в menuGroups), с теми же подписями,
+  // порядком и фильтрацией по правам. Хаб = визуальный слой топбара.
+  const hubGroups = useMemo(() => {
+    return menuGroups
+      .filter((g: any) => g.isDropdown && Array.isArray(g.subtabKeys) && g.subtabKeys.length > 0)
+      .map((g: any) => ({
+        id: g.id,
+        label: g.label,
+        items: getAllowedSubtabs(g).map((k: string) => ({ key: k, label: getSubtabLabel(g, k) })),
+      }))
+      .filter((g: any) => g.items.length > 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuGroups, allowedModules]);
+
   const handleNavigate = (moduleKey: string) => {
     window.location.hash = moduleKey;
     setActiveModule(moduleKey);
@@ -601,7 +622,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const activeModuleMeta = allModules.find(m => m.key === activeModule);
 
   return (
-    <div className={`min-h-screen ${activeModule === "admin" ? "bg-transparent" : "bg-slate-50"} flex flex-col font-sans transition-all duration-300`}>
+    <div className={`min-h-screen ${activeModule === "admin" ? "bg-transparent" : "bg-slate-50"} flex flex-col font-sans transition-colors duration-300`}>
       {!useFirebase && (
         <div className="bg-amber-500 text-white text-[11px] font-bold text-center py-1 px-3">
           ⚠ Офлайн-режим: данные сохраняются только локально на этом устройстве и не синхронизируются с сервером.
@@ -1363,14 +1384,16 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                  style={{paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))'}}>
               <div className="mx-1.5 bg-white/70 backdrop-blur-[14px] border border-white/30 rounded-[32px] shadow-[0_4px_24px_rgba(0,0,0,0.08)] flex items-stretch justify-around overflow-hidden w-full pointer-events-auto">
                 {[
-                  { key: 'dashboard', label: 'Главная', icon: LayoutDashboard },
-                  { key: 'planZagruzok', label: 'Загрузки', icon: FileSpreadsheet },
-                  { key: 'disposition', label: 'Карта', icon: Map },
-                  { key: 'baza', label: 'Выезд', icon: Truck },
-                  { key: '__menu', label: 'Ещё', icon: Grid3x3, isMenu: true },
+                  { key: 'dashboard', label: 'Главная', icon: NavHomeIcon },
+                  { key: 'planZagruzok', label: 'Загрузки', icon: NavLoadsIcon },
+                  { key: 'disposition', label: 'Карта', icon: NavCompassIcon },
+                  { key: 'baza', label: 'Выезд', icon: NavExitIcon },
+                  { key: '__menu', label: 'Ещё', icon: NavGridIcon, isMenu: true },
                 ].map((item) => {
                   const Icon = item.icon;
-                  const active = item.isMenu ? isMobileMenuOpen : activeModule === item.key;
+                  // Пока открыт хаб «Ещё», пункты-модули не считаются активными —
+                  // иначе активными выглядели бы сразу два пункта.
+                  const active = item.isMenu ? isMobileMenuOpen : (!isMobileMenuOpen && activeModule === item.key);
                   return (
                     <button
                       key={item.key}
@@ -1389,14 +1412,14 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                           setIsContextMenuOpen(true);
                         }
                       }}
-                      className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 min-h-[60px] transition-all duration-200 relative outline-none ${
+                      className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 min-h-[60px] transition-all duration-200 relative outline-none ${
                         active
-                          ? 'text-white bg-[#3765F6] mx-1 my-2 rounded-2xl shadow-md'
+                          ? 'text-white bg-gradient-to-b from-[#17233A] to-[#0D1729] mx-1 my-2 rounded-full border border-[#8CA0BC]/60 border-t-[#C9DCF2]/70 border-b-[#C2D4EA]/65 shadow-[inset_0_0_26px_rgba(150,180,230,0.16),inset_0_-10px_24px_rgba(150,180,230,0.14),inset_0_1px_0_rgba(255,255,255,0.12),0_6px_16px_rgba(15,26,46,0.32)]'
                           : 'text-[#6B7280] hover:text-[#4B5563] bg-transparent'
                       }`}
                     >
-                      <Icon className={`h-5 w-5 ${active ? 'stroke-[2.5] fill-white' : 'stroke-[1.5] fill-none text-[#6B7280]'}`} />
-                      <span className={`text-[9px] leading-tight text-center ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+                      <Icon className={`h-[22px] w-[22px] ${active ? 'drop-shadow-[0_0_6px_rgba(255,255,255,0.55)]' : ''}`} />
+                      <span className={`text-[9px] leading-tight text-center ${active ? 'font-semibold text-[#D2DDEA]' : 'font-medium'}`}>{item.label}</span>
                     </button>
                   );
                 })}
@@ -1434,124 +1457,16 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         </div>
       )}
 
-      {/* === Mobile Все инструменты — grouped list === */}
-            {isMobileMenuOpen && (
-              <div data-scroll-lock="modal" className="md:hidden fixed inset-0 z-40 bg-black/20 backdrop-blur-[3px] motion-safe"
-                   onClick={() => setIsMobileMenuOpen(false)}>
-                <div ref={mobileMenuRef}
-                     className="flex items-end justify-center px-3 pb-2 min-h-full"
-                     onClick={(e) => e.stopPropagation()}>
-                  <motion.div
-                    initial={{ y: 40, opacity: 0, scale: 0.96 }}
-                    animate={{ y: 0, opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                    className="w-full bg-white border border-slate-200/40 shadow-[0_8px_30px_rgba(0,0,0,0.08)] rounded-2xl flex flex-col max-h-[80vh]"
-                    onMouseDown={(e) => e.stopPropagation()}
-                  >
-                    {/* Header — всегда видим */}
-                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 shrink-0">
-                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                        <Grid3x3 className="w-4 h-4" /> Все инструменты
-                      </span>
-                      <button onClick={() => setIsMobileMenuOpen(false)}
-                              className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer rounded-xl">
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-
-                    {/* Content — scrollable */}
-                    <div className="overflow-y-auto flex-1 px-4 py-3 custom-scrollbar space-y-3"
-                         style={{ WebkitOverflowScrolling: 'touch' }}>
-                      {(() => {
-                        const menuGroups = [
-                          { id: 'g_ops', label: 'Текущее', icon: Map,
-                            items: ['disposition', 'baza', 'documents', 'vehicleDriverData', 'dozvola', 'instructions'] },
-                          { id: 'g_planning', label: 'Планирование', icon: Calendar,
-                            items: ['planZagruzok', 'planDohod', 'currentPlanning', 'dohod'] },
-                          { id: 'g_report', label: 'Отчетность', icon: Wallet,
-                            items: ['salary', 'bookIssue', 'tabel', 'mdpJournal'] },
-                          { id: 'g_settings', label: 'Настройки', icon: Settings2,
-                            items: ['settings', 'appSettings', 'admin', 'agentAudit'] },
-                        ];
-
-                        const visibleGroups = menuGroups
-                          .map((g) => ({ ...g, allowedItems: g.items.filter((k) => allowedModules.some((m: any) => m.key === k)) }))
-                          .filter((g) => g.allowedItems.length > 0);
-
-                        return visibleGroups.map((group) => {
-                          // Иконка группы — из локального списка выше (компонент lucide),
-                          // каст не нужен: типы выводятся из литерала menuGroups.
-                          const GroupIcon = group.icon;
-                          return (
-                            <div key={group.id}>
-                              {/* Заголовок группы */}
-                              <div className="flex items-center gap-2 px-2 py-1.5 mb-1.5">
-                                <GroupIcon className="w-3.5 h-3.5 text-slate-400" />
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{group.label}</span>
-                              </div>
-
-                              {/* Пункты группы */}
-                              <div className="bg-slate-50/40 rounded-xl overflow-hidden divide-y divide-slate-100/60 border border-slate-200/20">
-                                {group.allowedItems.map((key) => {
-                                  const mod = allModules.find((m) => m.key === key);
-                                  if (!mod) return null;
-                                  const Icon = mod.icon || Calendar;
-                                  const isActive = activeModule === key;
-                                  return (
-                                    <button
-                                      key={key}
-                                      onClick={() => { setIsMobileMenuOpen(false); handleNavigate(key); }}
-                                      onContextMenu={(e) => {
-                                        e.preventDefault();
-                                        setIsContextTarget(key);
-                                        setIsContextMenuOpen(true);
-                                        setIsMobileMenuOpen(false);
-                                      }}
-                                      className={`w-full flex items-center gap-3 px-3 py-2.5 min-h-[44px] text-left transition-all duration-100 cursor-pointer ${
-                                        isActive
-                                          ? 'bg-[#3765F6]/10 text-slate-900 font-semibold'
-                                          : 'bg-transparent text-slate-700 hover:bg-slate-100/60 font-medium'
-                                      }`}
-                                    >
-                                      <Icon className={`h-5 w-5 ${isActive ? 'stroke-[2] fill-[#3765F6]' : 'stroke-[1.2] fill-none text-slate-500'}`} />
-                                      <span className="flex-1 text-xs">{mod.label}</span>
-                                      {isActive && (
-                                        <span className="w-1.5 h-1.5 rounded-full bg-[#3765F6] shrink-0" />
-                                      )}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        });
-                      })()}
-
-                      {/* Нижние кнопки: Обновить + Учётная запись */}
-                      <div className="flex flex-wrap gap-2.5 pt-3 border-t border-slate-100">
-                        <button
-                          onClick={() => window.location.reload()}
-                          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-100/50 hover:bg-slate-200/40 transition-colors text-slate-600 font-medium text-xs min-h-[44px] cursor-pointer"
-                        >
-                          <RefreshCw className="h-4 w-4" /> Обновить
-                        </button>
-                        <button
-                          onClick={() => { setIsMobileMenuOpen(false); setIsAccountOpen(true); }}
-                          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-100/50 hover:bg-slate-200/40 transition-colors text-slate-600 font-medium text-xs min-h-[44px] cursor-pointer"
-                        >
-                          <Settings className="h-4 w-4" /> Учётная запись
-                        </button>
-                      </div>
-
-                      {/* Версия */}
-                      <div className="text-center py-0.5">
-                        <span className="text-[10px] font-medium text-slate-400 tabular-nums">{APP_VERSION_LABEL}</span>
-                      </div>
-                    </div>
-                  </motion.div>
-                </div>
-              </div>
-            )}
+      {/* === Mobile «Ещё» — полноэкранный хаб разделов === */}
+      {isMobileMenuOpen && (
+        <MobileMoreHub
+          user={user}
+          groups={hubGroups}
+          onNavigate={(key) => { setIsMobileMenuOpen(false); handleNavigate(key); }}
+          onOpenAccount={() => { setIsMobileMenuOpen(false); setIsAccountOpen(true); }}
+          onClose={() => setIsMobileMenuOpen(false)}
+        />
+      )}
 
       <CommandCenter 
         user={user} 

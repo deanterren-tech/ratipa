@@ -79,12 +79,23 @@ body {
   overscroll-behavior-y: auto;
 }
 
-/* Global resilient layout overrides to prevent responsive horizontal blowouts */
-html, body {
+/* Global resilient layout overrides to prevent responsive horizontal blowouts.
+   ВАЖНО (проверено экспериментально): overflow-x: hidden висит ТОЛЬКО на html.
+   Если задать его ещё и на body, body становится собственным скролл-контейнером:
+   position: sticky у топ-бара цепляется за body (который сам не прокручивается)
+   и шапка уезжает вместе с контентом при прокрутке. На html такого нет — html и
+   есть скроллер окна, поэтому шапка корректно закрепляется сверху.
+   Глобальный scroll-behavior: smooth убран: он анимировал служебные прокрутки
+   и мешал нативному восстановлению позиции; плавность задаётся в самих вызовах
+   scrollTo/scrollIntoView (behavior: 'smooth'). */
+html {
   max-width: 100vw;
   overflow-x: hidden;
   position: relative;
-  scroll-behavior: smooth;
+}
+body {
+  max-width: 100vw;
+  position: relative;
   text-rendering: optimizeLegibility;
 }
 

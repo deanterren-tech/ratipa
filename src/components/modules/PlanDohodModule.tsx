@@ -35,7 +35,7 @@ import {
   SlidersHorizontal,
   Truck,
   Lightbulb,
-  CircleDollarSign, MessageSquare, FileText, Pencil} from "lucide-react";
+  CircleDollarSign, MessageSquare, FileText, Pencil, PenLine} from "lucide-react";
 import MapRouteModal from "../MapRouteModal";
 import { UI } from "../../ui/kit";
 import { ModuleShell, SectionHeader, SearchField, FoundCount, EmptyState, ModalShell } from "../../ui/components";
@@ -1724,7 +1724,8 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
               {(currentEditingTrip as any)?.updatedBy && (
                 <div className="flex items-center gap-1.5 mt-2">
                   <span className="inline-flex items-center gap-1 bg-[#F3F4F6] border border-[#E5E7EB] px-2.5 py-1 rounded-lg font-semibold text-[#4B5563] shadow-sm text-[11px]">
-                    ✎ {resolvePersonName((currentEditingTrip as any).updatedBy, dispatcherDirectory)}
+                    <PenLine className="w-3 h-3 text-[#9CA3AF] shrink-0" aria-hidden="true" />
+                    {resolvePersonName((currentEditingTrip as any).updatedBy, dispatcherDirectory)}
                     {(currentEditingTrip as any).updatedAt && (
                       <span className="font-medium text-[#9CA3AF] font-mono">
                         · {(currentEditingTrip as any).updatedAt}
@@ -3122,36 +3123,41 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             const lastLeg = trip.legs?.[trip.legs.length - 1];
             const routeTitle =
               firstLeg?.from && lastLeg?.to
-                ? `${firstLeg.from} ➔ ${lastLeg.to}`
+                ? `${firstLeg.from} → ${lastLeg.to}`
                 : "Плечи маршрута";
+            // Короткие даты «дд/мм» — та же форма, что была в карточке до редизайна
+            const fmtShortDate = (value?: string) =>
+              value
+                ? new Date(value).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" }).replace(/\./g, "/")
+                : "—";
+            const dateStartFmt = fmtShortDate(trip.dateStart);
+            const dateEndFmt = fmtShortDate(trip.dateEnd);
 
             const isHighlighted =
               trip.carNumber &&
               highlightedCar === trip.carNumber.trim().toUpperCase();
 
-            // Set up clean direction badge colors
-            const getDirectionBadgeClass = (dir: string) => {
+            // Цвет точки направления (те же цвета, что были у бейджа)
+            const getDirectionDotClass = (dir: string) => {
               const d = (dir || "").toLowerCase();
-              if (d.includes("китай")) return "bg-amber-50 text-amber-700 border-amber-200/40";
-              if (d.includes("турция")) return "bg-blue-50 text-blue-700 border-blue-200/40";
-              return "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]";
+              if (d.includes("китай")) return "bg-amber-400";
+              if (d.includes("турция")) return "bg-blue-400";
+              return "bg-[#9CA3AF]";
             };
 
-            // Set up clean dispatcher badges
-            // Диспетчер: имя из записи, иначе — по автору, с полным именем из учётной записи
+            // Диспетчер: имя из записи, иначе — по автору, с полным именем из учётной записи.
+            // Точка у имени окрашена цветом диспетчера из пресетов (аккуратная подача вместо бейджа).
             const dispatcherName = trip.dispatcher || resolvePersonName(trip.logist, dispatcherDirectory) || "—";
             const colorKey = dispatchersColors[dispatcherName];
             const preset = DISPATCHER_COLORS_PRESETS.find((p) => p.key === colorKey);
-            const dispBadgeStyle = preset
-              ? `${preset.bg} ${preset.darkText} border-[#E5E7EB]`
-              : "bg-[#F3F4F6] text-[#6B7280] border-[#E5E7EB]";
+            const dispDotColor = preset?.colorCode || "#9CA3AF";
 
             return (
               <div
                 key={trip.id}
                 data-trip-id={trip.id}
                 onClick={() => loadTripToForm(trip)}
-                className={`car-strip-item bg-white rounded-2xl p-3.5 sm:p-4 border transition-colors duration-150 group relative hover:border-[#D1D5DB] hover:bg-[#F9FAFB] flex flex-col xl:flex-row gap-4 xl:gap-5 items-stretch xl:items-center cursor-pointer w-full ${isHighlighted ? "border-amber-400 ring-2 ring-amber-400/20" : "border-[#E5E7EB]"}`}
+                className={`car-strip-item bg-white rounded-2xl p-4 border shadow-xs transition-colors duration-150 group relative hover:border-[#D1D5DB] hover:bg-[#F9FAFB] flex flex-col gap-3.5 cursor-pointer w-full ${isHighlighted ? "border-amber-400 ring-2 ring-amber-400/20" : "border-[#E5E7EB]"}`}
                 draggable={true}
                 onDragStart={(e) => {
                   e.dataTransfer.setData("tripId", trip.id);
@@ -3165,203 +3171,140 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                   e.stopPropagation();
                 }}
               >
-                {/* Desktop: horizontal layout (lg+) */}
-                <div className="hidden lg:flex items-stretch gap-4 w-full">
-                  {/* Block 1: Plate + Dispatcher + Dates + Actions */}
-                  <div className="flex flex-col gap-2 min-w-[200px] shrink-0 justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-base font-bold text-[#121316] tracking-tight font-sans">
-                          {trip.carNumber}
-                        </span>
-                        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${getDirectionBadgeClass(trip.direction || "")}`}>
-                          {trip.direction || "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs text-[#6B7280] mt-1">
-                        <span className="text-[11px] text-[#9CA3AF]">Диспетчер:</span>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${dispBadgeStyle}`}>
-                          {formatToTitleCase(dispatcherName)}
-                        </span>
-                      </div>
-                      {/* Dates inline under dispatcher */}
-                      <div className="flex items-center gap-3 mt-2 text-xs text-[#6B7280] font-sans">
-                        <span className="text-[#9CA3AF] text-[10px] font-medium uppercase tracking-wider">Старт</span>
-                        <span className="text-[#121316] font-semibold font-mono">
-                          {trip.dateStart ? new Date(trip.dateStart).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}
-                        </span>
-                        <span className="text-[#9CA3AF] text-[10px] font-medium uppercase tracking-wider">Финиш</span>
-                        <span className="text-[#121316] font-semibold font-mono">
-                          {trip.dateEnd ? new Date(trip.dateEnd).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}
-                        </span>
-                      </div>
-                      {/* Metadata: кто обновил */}
-                      <div className="flex items-center gap-1.5 mt-2">
-                        {(trip as any).updatedBy && (
-                          <span className="inline-flex items-center gap-1 bg-[#F3F4F6] border border-[#E5E7EB] px-2 py-0.5 rounded-lg font-semibold text-[#4B5563] shadow-sm text-[10px]">
-                            ✎ {resolvePersonName((trip as any).updatedBy, dispatcherDirectory)}
-                            {(trip as any).updatedAt && (
-                              <span className="font-medium text-[#9CA3AF] font-mono">
-                                · {(trip as any).updatedAt}
-                              </span>
-                            )}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <button onClick={() => loadTripToForm(trip)} className="p-1.5 text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] rounded-md transition-colors cursor-pointer" title="Редактировать">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      {!archived ? (
-                        <button onClick={(e) => { e.stopPropagation(); finishTripToArchive(trip); }} className="p-1.5 text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] rounded-md transition-colors cursor-pointer" title="В архив">
-                          <Archive className="w-3.5 h-3.5" />
-                        </button>
-                      ) : user.role === "root_admin" ? (
-                        <button onClick={(e) => { e.stopPropagation(); deleteTrip(trip.id); }} className="p-1.5 text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer" title="Удалить">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {/* Block 3: Itinerary */}
-                  <div className="flex-1 bg-[#F8F9FA] rounded-xl p-3 border border-[#E5E7EB] min-w-[220px]">
-                    <div className="text-xs font-semibold text-[#121316] mb-2 flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-[#9CA3AF]" />
-                      <span className="tracking-tight text-[#121316] font-semibold">{routeTitle}</span>
-                    </div>
-                    {trip.legs && trip.legs.length > 0 ? (
-                      <div className="flex flex-col gap-1.5 pl-1 border-l-2 border-[#E5E7EB] ml-1.5">
-                        {trip.legs.map((leg, i) => {
-                          const isActive = trip.activeLegIndex === i;
-                          return (
-                            <div key={i} className={`flex items-center gap-2 text-xs p-1 -ml-2 rounded-md ${isActive ? "bg-[#F3F4F6] text-[#121316] font-medium" : "text-[#6B7280]"}`}>
-                              <div className={`w-2 h-2 rounded-full border flex-shrink-0 -ml-[10px] ${isActive ? "bg-[#121316] border-white shadow-xs scale-110" : "bg-[#D1D5DB] border-white"}`} />
-                              <span className="truncate">{leg.from || "?"} ➔ {leg.to || "?"}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="text-[10px] text-[#9CA3AF] italic">Маршрут не задан</div>
-                    )}
-                  </div>
-
-                  {/* Block 4: Metrics — grid on mobile, flex row on xl */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:flex xl:items-center xl:gap-6 gap-3 w-full xl:w-[500px] xl:pl-6 justify-between xl:justify-end border-t xl:border-t-0 border-[#E5E7EB] pt-3 xl:pt-0 shrink-0">
-                    <div className="flex flex-col xl:text-right min-w-0">
-                      <span className="text-[10px] xl:text-[11px] font-medium text-[#9CA3AF] leading-tight">Км</span>
-                      <span className="text-xs xl:text-sm font-semibold text-[#4B5563] font-mono tabular-nums whitespace-nowrap">{Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU")}</span>
-                    </div>
-                    <div className="flex flex-col xl:text-right min-w-0">
-                      <span className="text-[10px] xl:text-[11px] font-medium text-[#9CA3AF] leading-tight">Фрахт</span>
-                      <span className="text-xs xl:text-sm font-semibold text-[#4B5563] font-mono tabular-nums whitespace-nowrap">{Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}</span>
-                    </div>
-                    <div className="flex flex-col xl:text-right min-w-0">
-                      <span className="text-[10px] xl:text-[11px] font-medium text-[#9CA3AF] leading-tight">Расходы</span>
-                      <span className="text-xs xl:text-sm font-semibold text-rose-600/90 font-mono tabular-nums whitespace-nowrap">{Math.round(trip.totalExpenses !== undefined ? trip.totalExpenses : (trip.totalFreight - (trip.profit || 0))).toLocaleString("ru-RU")}</span>
-                    </div>
-                    <div className="flex flex-col xl:text-right min-w-0">
-                      <span className="text-[10px] xl:text-[11px] font-medium text-[#9CA3AF] leading-tight">Прибыль</span>
-                      <span className={`text-sm xl:text-base font-bold font-mono tabular-nums whitespace-nowrap ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>
-                        {Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}
-                      </span>
-                    </div>
-                    <div className="flex flex-col xl:text-right min-w-0">
-                      <span className="text-[10px] xl:text-[11px] font-medium text-[#9CA3AF] leading-tight">Дни</span>
-                      <span className="text-xs xl:text-sm font-semibold font-mono text-[#6B7280] tabular-nums whitespace-nowrap">{trip.days || "—"}</span>
-                    </div>
-                    <div className="flex flex-col xl:text-right min-w-0">
-                      <span className="text-[10px] xl:text-[11px] font-medium text-[#9CA3AF] leading-tight">В день</span>
-                      <span className={`text-xs xl:text-sm font-semibold font-mono tabular-nums whitespace-nowrap ${Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)) < 100 ? "text-rose-600" : "text-emerald-600"}`}>
-                        {Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)).toLocaleString("ru-RU")}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Mobile: current compact layout (<lg) */}
-                <div className="flex lg:hidden flex-col gap-2 w-full">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-base font-bold text-[#121316] tracking-tight font-sans truncate">
-                        {trip.carNumber}
-                      </span>
-                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border shrink-0 ${getDirectionBadgeClass(trip.direction || "")}`}>
-                        {trip.direction || "—"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className={`text-sm font-bold font-mono tabular-nums ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>
-                        {Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}€
-                      </span>
-                      <button onClick={() => loadTripToForm(trip)} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#6B7280] hover:text-[#121316] transition-colors cursor-pointer shrink-0" title="Редактировать">
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      {!archived ? (
-                        <button onClick={(e) => { e.stopPropagation(); finishTripToArchive(trip); }} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-[#F3F4F6] hover:bg-[#E5E7EB] text-[#6B7280] hover:text-[#121316] transition-colors cursor-pointer shrink-0" title="В архив">
-                          <Archive className="w-4 h-4" />
-                        </button>
-                      ) : user.role === "root_admin" ? (
-                        <button onClick={(e) => { e.stopPropagation(); deleteTrip(trip.id); }} className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-500 hover:text-rose-700 transition-colors cursor-pointer shrink-0" title="Удалить">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                  
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#6B7280]">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border shrink-0 ${dispBadgeStyle}`}>
-                      {formatToTitleCase(dispatcherName)}
+                {/* Блок 1: автомобиль и направление — сверху и крупно */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 min-w-0">
+                    <span className="text-lg font-bold tracking-tight text-[#121316] break-words">{trip.carNumber}</span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E7EB] bg-[#F8F9FA] px-2.5 py-1 text-[11px] font-medium text-[#4B5563]">
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getDirectionDotClass(trip.direction || "")}`} aria-hidden="true" />
+                      {trip.direction || "—"}
                     </span>
-                    <span className="text-[#D1D5DB] hidden sm:inline">·</span>
-                    <span className="truncate text-[#6B7280] font-medium hidden sm:inline">{routeTitle}</span>
-                    <span className="text-[#D1D5DB] hidden sm:inline">·</span>
-                    <span className="text-[#9CA3AF] font-mono shrink-0">
-                      {trip.dateStart ? new Date(trip.dateStart).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}—{trip.dateEnd ? new Date(trip.dateEnd).toLocaleDateString("ru-RU", {day:"2-digit",month:"2-digit"}).replace(/\./g, '/') : "—"}
-                    </span>
-                    {trip.currentMonth && archived && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium bg-[#F3F4F6] text-[#4B5563] border border-[#E5E7EB] shrink-0">
+                    {archived && trip.currentMonth && (
+                      <span className="inline-flex items-center rounded-full border border-[#E5E7EB] bg-[#F3F4F6] px-2.5 py-1 text-[11px] font-medium text-[#4B5563]">
                         {trip.currentMonth}
                       </span>
                     )}
-                    {(trip as any).updatedBy && (
-                      <span className="inline-flex items-center gap-1 bg-[#F3F4F6] border border-[#E5E7EB] px-1.5 py-0.5 rounded-lg font-semibold text-[#6B7280] shadow-sm text-[10px] ml-auto">
-                        ✎ {(trip as any).updatedBy}
-                        {(trip as any).updatedAt && (
-                          <span className="font-medium text-[#9CA3AF] font-mono">· {(trip as any).updatedAt}</span>
-                        )}
-                      </span>
-                    )}
+                  </div>
+                  {/* Действия: клик по ним не открывает форму */}
+                  <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => loadTripToForm(trip)}
+                      className={`${UI.buttonIcon} w-11 h-11 shrink-0`}
+                      title="Редактировать"
+                      aria-label="Редактировать"
+                    >
+                      <Pencil className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                    {!archived ? (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); finishTripToArchive(trip); }}
+                        className={`${UI.buttonIcon} w-11 h-11 shrink-0`}
+                        title="В архив"
+                        aria-label="В архив"
+                      >
+                        <Archive className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                    ) : user.role === "root_admin" ? (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); deleteTrip(trip.id); }}
+                        className="inline-flex items-center justify-center w-11 h-11 shrink-0 rounded-lg text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200"
+                        title="Удалить"
+                        aria-label="Удалить"
+                      >
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                    ) : null}
                   </div>
                 </div>
 
-                {/* Metrics Grid for BOTH — shown below mobile block, hidden on desktop */}
-                <div className="grid grid-cols-3 gap-2 w-full lg:hidden">
-                  <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
-                    <span className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-wider">Км</span>
-                    <span className="text-xs font-semibold text-[#4B5563] font-mono tabular-nums">{Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU")}</span>
+                {/* Блок 2: диспетчер и даты старт/финиш */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                  <span className="inline-flex items-center gap-1.5 min-w-0">
+                    <span className="text-[11px] text-[#9CA3AF]">Диспетчер</span>
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: dispDotColor }} aria-hidden="true" />
+                    <span className="text-xs font-medium text-[#121316] break-words">{formatToTitleCase(dispatcherName)}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="text-[11px] text-[#9CA3AF]">Старт</span>
+                    <span className="text-xs font-semibold text-[#121316] font-mono tabular-nums">{dateStartFmt}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="text-[11px] text-[#9CA3AF]">Финиш</span>
+                    <span className="text-xs font-semibold text-[#121316] font-mono tabular-nums">{dateEndFmt}</span>
+                  </span>
+                  {(trip as any).updatedBy && (
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-[#F8F9FA] px-2 py-1 text-[11px] text-[#6B7280] max-w-full">
+                      <PenLine className="w-3 h-3 text-[#9CA3AF] shrink-0" aria-hidden="true" />
+                      <span className="truncate min-w-0 max-w-[160px] font-medium text-[#4B5563]" title={resolvePersonName((trip as any).updatedBy, dispatcherDirectory)}>
+                        {resolvePersonName((trip as any).updatedBy, dispatcherDirectory)}
+                      </span>
+                      {(trip as any).updatedAt && (
+                        <span className="text-[#9CA3AF] font-mono shrink-0">· {(trip as any).updatedAt}</span>
+                      )}
+                    </span>
+                  )}
+                </div>
+
+                {/* Блок 3: маршрут — пункты переносятся, важные названия не обрезаются */}
+                <div className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] p-3">
+                  <div className="flex items-center gap-1.5 mb-2 min-w-0">
+                    <MapPin className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" aria-hidden="true" />
+                    <span className="text-xs font-semibold tracking-tight text-[#121316] break-words">{routeTitle}</span>
                   </div>
-                  <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
-                    <span className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-wider">Фрахт</span>
-                    <span className="text-xs font-semibold text-[#4B5563] font-mono tabular-nums">{Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}</span>
+                  {trip.legs && trip.legs.length > 0 ? (
+                    <div className="flex flex-col gap-1.5 pl-1 ml-1.5 border-l-2 border-[#E5E7EB]">
+                      {trip.legs.map((leg, i) => {
+                        const isActive = trip.activeLegIndex === i;
+                        return (
+                          <div
+                            key={i}
+                            className={`flex items-start gap-2 text-xs p-1 -ml-2 rounded-md ${isActive ? "bg-[#F3F4F6] text-[#121316] font-medium" : "text-[#6B7280]"}`}
+                          >
+                            <div className={`w-2 h-2 mt-0.5 rounded-full border flex-shrink-0 -ml-[10px] ${isActive ? "bg-[#121316] border-white shadow-xs scale-110" : "bg-[#D1D5DB] border-white"}`} />
+                            <span className="min-w-0 break-words leading-snug">
+                              {leg.from || "?"} <span className="text-[#D1D5DB]">→</span> {leg.to || "?"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-[#9CA3AF] italic">Маршрут не задан</div>
+                  )}
+                </div>
+
+                {/* Блок 4: показатели — главное в карточке */}
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-x-4 gap-y-3 border-t border-[#E5E7EB] pt-3 w-full">
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[11px] text-[#6B7280] leading-tight">Км</span>
+                    <span className="text-sm font-semibold text-[#4B5563] font-mono tabular-nums whitespace-nowrap">{Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU")}</span>
                   </div>
-                  <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
-                    <span className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-wider">Расходы</span>
-                    <span className="text-xs font-semibold text-rose-600/90 font-mono tabular-nums">{Math.round(trip.totalExpenses !== undefined ? trip.totalExpenses : (trip.totalFreight - (trip.profit || 0))).toLocaleString("ru-RU")}</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[11px] text-[#6B7280] leading-tight">Фрахт</span>
+                    <span className="text-sm font-semibold text-[#4B5563] font-mono tabular-nums whitespace-nowrap">{Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}</span>
                   </div>
-                  <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
-                    <span className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-wider">Прибыль</span>
-                    <span className={`text-xs font-bold font-mono tabular-nums ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 3000 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[11px] text-[#6B7280] leading-tight">Расходы</span>
+                    <span className="text-sm font-semibold text-rose-600/90 font-mono tabular-nums whitespace-nowrap">{Math.round(trip.totalExpenses !== undefined ? trip.totalExpenses : (trip.totalFreight - (trip.profit || 0))).toLocaleString("ru-RU")}</span>
                   </div>
-                  <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
-                    <span className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-wider">Дни</span>
-                    <span className="text-xs font-semibold font-mono text-[#6B7280] tabular-nums">{trip.days || "—"}</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[11px] text-[#6B7280] leading-tight">Прибыль</span>
+                    <span className={`text-base font-bold font-mono tabular-nums whitespace-nowrap ${(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) < 0 ? "text-rose-600" : "text-[var(--accent-ink)]"}`}>
+                      {Math.round(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)).toLocaleString("ru-RU")}
+                    </span>
                   </div>
-                  <div className="flex flex-col bg-[#F8F9FA] rounded-lg px-2.5 py-1.5">
-                    <span className="text-[10px] font-medium text-[#9CA3AF] uppercase tracking-wider">В день</span>
-                    <span className={`text-xs font-semibold font-mono tabular-nums ${Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)) < 100 ? "text-rose-600" : "text-emerald-600"}`}>{Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)).toLocaleString("ru-RU")}</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[11px] text-[#6B7280] leading-tight">Дни</span>
+                    <span className="text-sm font-semibold text-[#6B7280] font-mono tabular-nums whitespace-nowrap">{trip.days || "—"}</span>
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-[11px] text-[#6B7280] leading-tight">В день</span>
+                    <span className={`text-sm font-semibold font-mono tabular-nums whitespace-nowrap ${Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)) < 0 ? "text-rose-600" : "text-[var(--accent-ink)]"}`}>
+                      {Math.round((trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) / (trip.days || 1)).toLocaleString("ru-RU")}
+                    </span>
                   </div>
                 </div>
               </div>
