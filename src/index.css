@@ -5,7 +5,7 @@
    Переопределяются applyAccentTheme() по выбору пользователя — src/theme/accent.ts. */
 :root {
 --accent: #FF8040;
-  --accent-ink: #B75C2E;
+  --accent-ink: #FF8040;
   --accent-vivid: #D46A35;
   --accent-ui: #D46A35;
   --accent-solid: #FF8040;

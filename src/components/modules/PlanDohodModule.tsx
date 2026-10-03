@@ -3143,7 +3143,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             const profitValue = Number(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) || 0;
             const daysValue = Number(trip.days) || 0;
             const perDayValue = Math.round(profitValue / (daysValue || 1));
-            const ACCENT_VALUE_CLS = "text-[var(--accent-ui)]";
+            const ACCENT_VALUE_CLS = "text-[var(--accent-ink)]";
 
             const isHighlighted =
               trip.carNumber &&

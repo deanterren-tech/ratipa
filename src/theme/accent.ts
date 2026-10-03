@@ -159,9 +159,17 @@ function brightestPassing(hex: string, background: string, target: number): stri
   return best;
 }
 
-/** Тот же оттенок, но читаемый на светлом фоне (для текста и ссылок). */
-export function inkFor(hex: string, background = '#FFFFFF'): string {
-  return brightestPassing(hex, background, TEXT_TARGET);
+/**
+ * Цвет акцентного текста и иконок.
+ *
+ * Решение владельца (Сергей): акцентный текст должен совпадать с оранжевым
+ * кнопок (#FF8040) — «везде этот оранжевый». Поэтому ink = сам акцентный цвет,
+ * без затемнения: брендовое единство важнее нормы 4.5:1 на светлом фоне.
+ * Функция brightestPassing оставлена в файле — если потребуется вернуть
+ * контрастную норму, достаточно снова вызвать её здесь.
+ */
+export function inkFor(hex: string, _background = '#FFFFFF'): string {
+  return hex.toUpperCase();
 }
 
 /**
