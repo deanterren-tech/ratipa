@@ -234,13 +234,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         setIsNbMinimized(false);
         localStorage.setItem("ratipa_notebook_minimized", "false");
         setNbCoords((prevCoords) => {
-          const w = window.innerWidth;
-          const h = window.innerHeight;
-          let newX = prevCoords.x;
-          let newY = prevCoords.y;
-          if (newX > w - 100 || newX < 0) newX = w - 425 > 0 ? w - 425 : 10;
-          if (newY > h - 100 || newY < 0) newY = 140;
-          const updated = { ...prevCoords, x: newX, y: newY };
+          const updated = clampNbToViewport(prevCoords);
           localStorage.setItem(
             "ratipa_notebook_coords",
             JSON.stringify(updated),
@@ -250,6 +244,23 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       }
       return newVal;
     });
+  };
+
+  /** Держит панель блокнота целиком в пределах экрана (мин. 280×300, без выхода за края). */
+  const clampNbToViewport = (c: {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }) => {
+    if (typeof window === "undefined") return c;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const w = Math.min(c.w, Math.max(280, vw - 20));
+    const h = Math.min(c.h, Math.max(300, vh - 20));
+    const x = Math.min(Math.max(10, c.x), Math.max(10, vw - w - 10));
+    const y = Math.min(Math.max(10, c.y), Math.max(10, vh - h - 10));
+    return { x, y, w, h };
   };
 
   const [nbCoords, setNbCoords] = useState<{
@@ -269,15 +280,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.w > 0 && parsed.h > 0) {
-          if (typeof window !== "undefined") {
-            const w = window.innerWidth;
-            const h = window.innerHeight;
-            if (parsed.x > w - 50 || parsed.x < -100)
-              parsed.x = defaultCoords.x > 0 ? defaultCoords.x : 10;
-            if (parsed.y > h - 50 || parsed.y < -100)
-              parsed.y = defaultCoords.y;
-          }
-          return parsed;
+          return clampNbToViewport(parsed);
         }
       }
     } catch (e) {}
@@ -325,17 +328,13 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   useEffect(() => {
     if (!nbDragging) return;
     const handleMouseMove = (e: MouseEvent) => {
-      const newX = Math.max(
-        10,
-        Math.min(window.innerWidth - 100, e.clientX - nbDragOffset.x),
+      setNbCoords((prev) =>
+        clampNbToViewport({
+          ...prev,
+          x: e.clientX - nbDragOffset.x,
+          y: e.clientY - nbDragOffset.y,
+        }),
       );
-      const newY = Math.max(
-        10,
-        Math.min(window.innerHeight - 100, e.clientY - nbDragOffset.y),
-      );
-      setNbCoords((prev) => {
-        return { ...prev, x: newX, y: newY };
-      });
     };
     const handleMouseUp = () => {
       setNbDragging(false);
@@ -360,24 +359,44 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       const deltaX = e.clientX - nbResizeStartSize.mouseX;
       const deltaY = e.clientY - nbResizeStartSize.mouseY;
 
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
       let newW = nbResizeStartSize.w;
       let newH = nbResizeStartSize.h;
       let newX = nbResizeStartSize.x;
       let newY = nbResizeStartSize.y;
 
       if (nbResizing.includes("e")) {
-        newW = Math.max(280, nbResizeStartSize.w + deltaX);
+        newW = Math.min(
+          Math.max(280, nbResizeStartSize.w + deltaX),
+          Math.max(280, vw - nbResizeStartSize.x - 10),
+        );
       }
       if (nbResizing.includes("s")) {
-        newH = Math.max(300, nbResizeStartSize.h + deltaY);
+        newH = Math.min(
+          Math.max(300, nbResizeStartSize.h + deltaY),
+          Math.max(300, vh - nbResizeStartSize.y - 10),
+        );
       }
       if (nbResizing.includes("w")) {
-        newW = Math.max(280, nbResizeStartSize.w - deltaX);
-        if (newW > 280) newX = nbResizeStartSize.x + deltaX;
+        newW = Math.max(
+          280,
+          Math.min(
+            nbResizeStartSize.w - deltaX,
+            nbResizeStartSize.x + nbResizeStartSize.w - 10,
+          ),
+        );
+        newX = nbResizeStartSize.x + nbResizeStartSize.w - newW;
       }
       if (nbResizing.includes("n")) {
-        newH = Math.max(300, nbResizeStartSize.h - deltaY);
-        if (newH > 300) newY = nbResizeStartSize.y + deltaY;
+        newH = Math.max(
+          300,
+          Math.min(
+            nbResizeStartSize.h - deltaY,
+            nbResizeStartSize.y + nbResizeStartSize.h - 10,
+          ),
+        );
+        newY = nbResizeStartSize.y + nbResizeStartSize.h - newH;
       }
 
       setNbCoords((prev) => {
@@ -400,6 +419,24 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
       window.removeEventListener("mouseup", handleMouseUp);
     };
   }, [nbResizing, nbResizeStartSize]);
+
+  // При изменении размеров окна — вернуть блокнот в пределы экрана
+  useEffect(() => {
+    const handleWindowResize = () => {
+      setNbCoords((prev) => {
+        const updated = clampNbToViewport(prev);
+        try {
+          localStorage.setItem(
+            "ratipa_notebook_coords",
+            JSON.stringify(updated),
+          );
+        } catch (err) {}
+        return updated;
+      });
+    };
+    window.addEventListener("resize", handleWindowResize);
+    return () => window.removeEventListener("resize", handleWindowResize);
+  }, []);
 
   /** Справочник диспетчеров: идентификатор учётной записи ↔ имя */
   const dispatcherDirectory = useMemo(() => buildDispatcherDirectory(dispatcherRefs), [dispatcherRefs]);
@@ -565,8 +602,12 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const handleAddCarToNotebook = () => {
     const car = notebookCarInput.trim().toUpperCase();
     if (!car) return;
-    pdService.saveNotebookNote(selectedNotebookUser, car, "");
-    pdService.saveNotebookStatus(selectedNotebookUser, car, addCarStatus);
+    // Повторное добавление уже существующего авто не должно затирать его заметку и статус —
+    // запись создаём только для нового номера.
+    if (notebookNotes[car] === undefined) {
+      pdService.saveNotebookNote(selectedNotebookUser, car, "");
+      pdService.saveNotebookStatus(selectedNotebookUser, car, addCarStatus);
+    }
     if (!notebookOrder.includes(car)) {
       const newOrder = [...notebookOrder, car];
       pdService.saveNotebookOrder(selectedNotebookUser, newOrder);
@@ -856,7 +897,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
               className="flex-1 px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] text-[#121316] rounded-xl text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors placeholder:text-[#9CA3AF] uppercase"
             />
             <datalist id="notebook-vehicles-list">
-              {savedCars.map((car) => (
+              {Array.from(new Set(savedCars)).map((car) => (
                 <option key={car} value={car} />
               ))}
             </datalist>
@@ -870,7 +911,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
           </div>
 
           {/* Cars list */}
-          <div className="space-y-2.5 overflow-y-auto pr-1 custom-scrollbar max-h-[calc(100%-250px)] flex-1">
+          <div className="space-y-2.5 overflow-y-auto pr-1 custom-scrollbar max-h-[calc(100%-250px)] min-h-[64px] flex-1">
             {cars.map((car) => {
               const valText = notebookNotes[car] || "";
               const isHighlighted = highlightedCar === car;
