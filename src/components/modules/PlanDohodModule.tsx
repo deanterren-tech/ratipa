@@ -3239,13 +3239,16 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                       <span className="text-xs font-medium text-[#121316] break-words">{formatToTitleCase(dispatcherName)}</span>
                     </span>
                   </span>
+                  {/* Даты рейса — старт и финиш читаются с первого взгляда:
+                      подписи окрашены в тон меток маршрута (старт — акцент, финиш — тёмный),
+                      значения подняты до размеров метрик карточки. */}
                   <span className="flex flex-col gap-0.5">
-                    <span className={UI.caption}>Старт</span>
-                    <span className="text-xs font-semibold text-[#121316] font-mono tabular-nums whitespace-nowrap">{dateStartFmt}</span>
+                    <span className="text-[11px] font-semibold text-[var(--accent-ink)]">Старт</span>
+                    <span className="text-sm sm:text-base font-bold text-[#121316] font-mono tabular-nums whitespace-nowrap">{dateStartFmt}</span>
                   </span>
                   <span className="flex flex-col gap-0.5">
-                    <span className={UI.caption}>Финиш</span>
-                    <span className="text-xs font-semibold text-[#121316] font-mono tabular-nums whitespace-nowrap">{dateEndFmt}</span>
+                    <span className="text-[11px] font-semibold text-[#121316]">Финиш</span>
+                    <span className="text-sm sm:text-base font-bold text-[#121316] font-mono tabular-nums whitespace-nowrap">{dateEndFmt}</span>
                   </span>
                   {(trip as any).updatedBy && (
                     <span className="col-span-2 xl:col-span-1 inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-[#F8F9FA] px-2 py-1 text-[11px] text-[#6B7280] max-w-full w-fit">
