@@ -141,7 +141,7 @@ export const UI = {
   /* ---------- Модальные окна (единый язык) ---------- */
   modalBackdrop: 'fixed inset-0 z-[5000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6',
   modalSurface:
-    'relative z-10 w-full max-w-lg bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] flex flex-col max-h-[90vh] overflow-hidden',
+    'relative z-10 w-full bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] flex flex-col max-h-[90vh] overflow-hidden',
   modalHeader: 'flex items-start justify-between gap-3 px-6 py-4 border-b border-[#E5E7EB] shrink-0',
   modalIconTile: 'p-2 bg-[#F3F4F6] text-[#A55329] rounded-lg shrink-0',
   modalTitle: 'text-sm font-semibold text-[#121316]',
