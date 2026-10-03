@@ -56,13 +56,11 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
 
   return (
     <div className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs p-5 flex flex-col gap-4 h-full">
-      <div className="flex items-center gap-2.5 pb-3 border-b border-[#E5E7EB]">
-        <div className="p-2 bg-[#F3F4F6] text-[var(--accent-ink)] rounded-lg shrink-0">
-          <Calendar className="w-4 h-4" aria-hidden="true" />
-        </div>
+      <div className="flex items-center gap-2 pb-3 border-b border-[#E5E7EB]">
+        <Calendar className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" aria-hidden="true" />
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-[#121316]">Калькулятор дней</h3>
-          <p className="text-xs text-[#6B7280]">Период рейса — даты начала и конца, формат ДД/ММ/ГГГГ</p>
+          <p className="text-[11px] text-[#6B7280] leading-relaxed">Даты начала и конца рейса, формат ДД/ММ/ГГГГ</p>
         </div>
       </div>
 
@@ -118,15 +116,14 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
       )}
 
       <div className="mt-auto pt-4 border-t border-[#E5E7EB] flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-3">
-          <span className={UI.caption}>Всего дней в рейсе</span>
-          <span className="text-2xl font-mono font-semibold tabular-nums text-[#121316]">{totalDays}</span>
+        <span className="text-xs text-[#6B7280]">Всего дней в рейсе</span>
+        <div className="flex items-baseline gap-2">
+          <span className="text-3xl font-semibold tabular-nums text-[#121316] leading-none">{totalDays}</span>
+          <span className="text-sm text-[#6B7280]">{daysWord(totalDays)}</span>
         </div>
         <div className="flex items-center justify-between gap-2 min-h-[32px]">
           <span className="text-[11px] text-[#6B7280]">
-            {startDate && endDate
-              ? `${ruDate(startDate)} — ${ruDate(endDate)} · ${totalDays} ${daysWord(totalDays)}`
-              : 'Даты не выбраны'}
+            {startDate && endDate ? `${ruDate(startDate)} — ${ruDate(endDate)}` : 'Даты не выбраны'}
           </span>
           {(startDate || endDate) && (
             <button
