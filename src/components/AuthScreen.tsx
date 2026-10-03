@@ -1,21 +1,42 @@
 import React, {useState, useEffect, useRef} from 'react'
 import {UserProfile} from '../types'
 import {dbService} from '../api'
-import { 
-  Truck, 
-  Eye, 
-  EyeOff, 
-  TrendingUp, 
-  Calendar, 
-  Calculator, 
-  Files, 
-  Database 
+import {
+  Route,
+  Truck,
+  TrendingUp,
+  ChevronDown,
+  Eye,
+  EyeOff,
+  LogIn,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
-import {motion} from 'motion/react'
+
+/**
+ * Экран входа Ratipa (двухколоночная композиция по референсу-ориентиру).
+ *
+ * Левая зона — фирменная: на тёмном фоне (#171820 и его вариации) сдержанный
+ * градиент на акценте темы (var(--accent*)), знак R-logo-2.svg, заголовок
+ * «Контур управления перевозками» и три спокойных преимущества.
+ * Правая зона — светлая форма входа в стиле «Учёта дозволов»: высокие поля
+ * с фокус-кольцом по акценту, акцентная кнопка, ошибка в rose-стилистике.
+ *
+ * Бизнес-логика не менялась: загрузка пользователей из dbService.getUsers,
+ * проверка пароля (профиль или мастер-пароль из VITE_ADMIN_MASTER_PASSWORD),
+ * восстановление доступа, onLoginSuccess и запись в журнал действий.
+ */
 
 interface AuthScreenProps {
   onLoginSuccess: (user: UserProfile) => void;
 }
+
+/** Преимущества фирменной зоны — иконки из lucide-react, уже применяемые в проекте. */
+const FEATURES = [
+  {Icon: Route, label: "Планирование рейсов"},
+  {Icon: Truck, label: "Контроль выезда"},
+  {Icon: TrendingUp, label: "Доходность перевозок"},
+];
 
 export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
   const [username, setUsernameState] = useState("");
@@ -24,7 +45,6 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const usernameRef = useRef("");
 
@@ -105,193 +125,188 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
   };
 
   return (
-    <div className="min-h-screen relative flex flex-col items-center justify-center p-4 sm:p-6 select-none overflow-hidden font-sans bg-slate-50">
-      {/* 1. Base technical overlay grid */}
-      <div className="absolute inset-0 tech-grid opacity-[0.08] pointer-events-none z-0" />
+    <div className="min-h-dvh w-full relative flex items-center justify-center overflow-hidden bg-[#171820] px-4 py-6 sm:px-6 lg:py-10 font-sans">
+      {/* Фон приложения: вариации #171820 и мягкие акцентные подсветки */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'linear-gradient(180deg, #1A1B25 0%, #171820 48%, #141519 100%), radial-gradient(46rem 32rem at 6% -8%, var(--accent-20), transparent 62%), radial-gradient(40rem 30rem at 104% 108%, var(--accent-10), transparent 60%)',
+        }}
+      />
 
-      {/* 2. Cursor-reactive ambient glow layers with slow drift */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none select-none z-0">
-        <motion.div
-          className="absolute -top-32 -left-32 w-[650px] h-[650px] rounded-full bg-slate-900/14 blur-[130px] md:blur-[170px]"
-          animate={prefersReducedMotion ? undefined : {
-            x: [0, 20, -10, 0],
-            y: [0, -15, 15, 0],
-          }}
-          transition={prefersReducedMotion ? undefined : {
-            duration: 25,
-            repeat: Infinity,
-            ease: "easeInOut"
-          }}
-        />
-        <motion.div
-          className="absolute -bottom-32 right-[10%] w-[700px] h-[550px] rounded-full bg-emerald-500/10 blur-[130px] md:blur-[170px]"
-          animate={prefersReducedMotion ? undefined : {
-            x: [0, -20, 20, 0],
-            y: [0, 15, -15, 0],
-          }}
-          transition={prefersReducedMotion ? undefined : {
-            duration: 30,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: 2
-          }}
-        />
-      </div>
+      <div className="relative z-10 w-full max-w-6xl">
+        {/* Единый контейнер экрана входа: слева фирменная зона (~58%), справа форма (~42%) */}
+        <div className="grid overflow-hidden rounded-3xl border border-white/10 bg-[#1A1B23] shadow-[0_40px_120px_-40px_rgba(0,0,0,0.8)] lg:grid-cols-[1.4fr_1fr]">
 
-      {/* 3. Ambient Floating Pills/Cards in the background to resemble a true system portal */}
-      {[
-        { label: "План дохода", icon: TrendingUp, color: "text-slate-900", top: "15%", left: "10%", x: [0, 15, 0], y: [0, 15, 0], delay: 0, duration: 16 },
-        { label: "Текущее планирование", icon: Calendar, color: "text-rose-500", top: "52%", left: "6%", x: [0, -10, 0], y: [0, 20, 0], delay: 1, duration: 18 },
-        { label: "Учет выезда", icon: Truck, color: "text-emerald-500", top: "80%", left: "12%", x: [0, 20, 0], y: [0, -15, 0], delay: 2, duration: 15 },
-        { label: "Калькуляция", icon: Calculator, color: "text-slate-500", top: "18%", right: "10%", x: [0, -20, 0], y: [0, 15, 0], delay: 0.5, duration: 17 },
-        { label: "Документы", icon: Files, color: "text-purple-500", top: "50%", right: "6%", x: [0, 15, 0], y: [0, -15, 0], delay: 1.5, duration: 19 },
-        { label: "База данных", icon: Database, color: "text-cyan-500", top: "78%", right: "12%", x: [0, -15, 0], y: [0, 15, 0], delay: 2.5, duration: 14 }
-      ].map((pill, idx) => {
-        const IconComp = pill.icon;
-        return (
-          <motion.div
-            key={idx}
-            style={{
-              position: "absolute",
-              top: pill.top,
-              ...(pill.left ? { left: pill.left } : { right: pill.right })
-            }}
- className="hidden md:flex items-center gap-2 px-3.5 py-2 bg-white border border-slate-200/40 rounded-full text-[11px] font-bold text-slate-500/80 shadow-sm opacity-50 pointer-events-none select-none"
-            animate={prefersReducedMotion ? undefined : {
-              x: pill.x,
-              y: pill.y
-            }}
-            transition={prefersReducedMotion ? undefined : {
-              duration: pill.duration,
-              repeat: Infinity,
-              ease: "easeInOut",
-              delay: pill.delay
-            }}
-          >
-            <IconComp size={12.5} className={`${pill.color} opacity-80`} />
-            <span>{pill.label}</span>
-          </motion.div>
-        );
-      })}
+          {/* ЛЕВАЯ ЧАСТЬ — фирменная зона Ratipa */}
+          <section className="relative flex flex-col overflow-hidden px-6 pt-7 pb-7 sm:px-10 sm:pt-9 lg:px-12 lg:py-12">
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background:
+                  'linear-gradient(152deg, #20212C 0%, #1A1B23 46%, #16171E 100%), radial-gradient(36rem 26rem at 10% -6%, var(--accent-25), transparent 60%), radial-gradient(28rem 22rem at 98% 106%, var(--accent-15), transparent 62%)',
+              }}
+            />
 
-      {/* 4. Glassmorphic Portal Container */}
-      <div className="w-full max-w-sm relative z-10 flex flex-col gap-4">
-        
-        {/* Central Frosted Glass Card */}
- <div className="bg-white rounded-2xl p-8 border border-slate-200/50 shadow-sm flex flex-col">
-          
-          {/* Brand/Logo Area */}
-          <div className="flex flex-col items-center justify-center text-center mb-6 select-none">
-            <div className="w-12 h-12 rounded-2xl bg-slate-900/10 border border-slate-900/20 flex items-center justify-center text-slate-900 mb-3 shadow-2xs">
-              <Truck className="h-6 w-6 shrink-0" />
-            </div>
-            <img
-                src="/portal.svg"
+            {/* Знак Ratipa: на тёмном фоне читается благодаря инверсии */}
+            <div className="relative flex items-center gap-3">
+              <img
+                src="/R-logo-2.svg"
                 alt="Ratipa Portal"
-                width={1261}
-                height={385}
-                className="h-7 sm:h-8 w-auto select-none"
+                width={748}
+                height={754}
                 draggable={false}
+                className="h-8 lg:h-9 w-auto shrink-0 brightness-0 invert select-none"
               />
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2 font-mono">
-              Контур управления перевозками
-            </p>
-          </div>
+              <span className="text-[15px] font-bold tracking-tight text-white select-none">
+                Ratipa Portal
+              </span>
+            </div>
 
-          {/* Login Form */}
-          <form className="space-y-4" onSubmit={handleStandardLogin}>
-            <div>
-              <label
-                htmlFor="username"
-                className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5"
-              >
-                Выберите пользователя
-              </label>
-              <select
-                id="username"
-                name="username"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="block w-full px-4 py-3 rounded-xl border border-slate-200/50 bg-white/45 shadow-2xs focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 focus:outline-none text-xs font-semibold text-slate-800 transition duration-200 cursor-pointer focus:bg-white"
-              >
-                <option value="">-- Выберите пользователя --</option>
-                {users.map((u) => (
-                  <option key={u.uid} value={u.name}>
-                    {u.name}
-                  </option>
+            {/* Заголовок, подзаголовок и преимущества */}
+            <div className="relative mt-7 flex flex-1 flex-col justify-center lg:mt-10">
+              <h1 className="max-w-lg text-2xl font-bold leading-tight tracking-tight text-white sm:text-3xl lg:text-[32px] select-none">
+                Контур управления перевозками
+              </h1>
+              <p className="mt-2.5 hidden max-w-md text-sm leading-relaxed text-white/70 sm:block lg:mt-3 select-none">
+                Планирование, расчёты и контроль работы автопарка в одном рабочем пространстве
+              </p>
+
+              <ul className="mt-8 hidden list-none flex-col gap-2.5 p-0 lg:flex">
+                {FEATURES.map(({Icon, label}) => (
+                  <li
+                    key={label}
+                    className="flex w-full max-w-md items-center gap-3 rounded-xl bg-white/10 px-4 py-2.5 select-none"
+                  >
+                    <Icon className="h-4 w-4 shrink-0 text-[var(--accent)]" aria-hidden="true" />
+                    <span className="text-[13px] font-medium text-white/90">{label}</span>
+                  </li>
                 ))}
-              </select>
+              </ul>
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label
-                  htmlFor="password"
-                  className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider"
-                >
-                  Пароль доступа
-                </label>
+            <p className="relative hidden text-[11px] font-medium tracking-wide text-white/50 lg:block select-none">
+              Операционный терминал Ratipa
+            </p>
+          </section>
+
+          {/* ПРАВАЯ ЧАСТЬ — светлая зона входа */}
+          <section className="flex flex-col justify-center bg-white px-6 py-8 sm:px-10 sm:py-10 lg:px-11 lg:py-12">
+            <div className="w-full max-w-md mx-auto lg:mx-0">
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[#121316]">
+                Вход в систему
+              </h2>
+              <p className="mt-1.5 text-sm text-[#6B7280]">
+                Используйте рабочую учётную запись Ratipa
+              </p>
+
+              <form className="mt-7 flex flex-col gap-4" onSubmit={handleStandardLogin}>
+                {/* Пользователь */}
+                <div className="flex flex-col gap-1.5">
+                  <label
+                    htmlFor="username"
+                    className="text-[11px] font-medium text-[#6B7280]"
+                  >
+                    Пользователь
+                  </label>
+                  <div className="relative">
+                    <select
+                      id="username"
+                      name="username"
+                      required
+                      value={username}
+                      title={username || undefined}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="h-11 w-full cursor-pointer appearance-none truncate rounded-xl border border-[#E5E7EB] bg-white pl-3.5 pr-10 text-sm font-medium text-[#121316] outline-none transition-colors placeholder:text-[#9CA3AF] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)]"
+                    >
+                      <option value="">-- Выберите пользователя --</option>
+                      {users.map((u) => (
+                        <option key={u.uid} value={u.name}>
+                          {u.name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]"
+                      aria-hidden="true"
+                    />
+                  </div>
+                </div>
+
+                {/* Пароль */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <label
+                      htmlFor="password"
+                      className="text-[11px] font-medium text-[#6B7280]"
+                    >
+                      Пароль доступа
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setErrorMsg("Для сброса пароля обратитесь к системному администратору.");
+                      }}
+                      className="rounded text-[11px] font-medium text-[#6B7280] transition-colors hover:text-[#121316] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] cursor-pointer"
+                    >
+                      Забыли пароль?
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      id="password"
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      required
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white pl-3.5 pr-11 text-sm text-[#121316] outline-none transition-colors placeholder:text-[#9CA3AF] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)]"
+                    />
+                    <button
+                      type="button"
+                      aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-xl text-[#9CA3AF] transition-colors hover:text-[#121316] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] cursor-pointer"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {errorMsg && (
+                  <div
+                    role="alert"
+                    className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-medium text-rose-700"
+                  >
+                    <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span>{errorMsg}</span>
+                  </div>
+                )}
+
                 <button
-                  type="button"
-                  onClick={() => {
-                    setErrorMsg("Для сброса пароля обратитесь к системному администратору.");
-                  }}
-                  className="text-[10px] font-semibold text-slate-500 hover:text-slate-700 transition cursor-pointer"
+                  type="submit"
+                  disabled={isLoading}
+                  className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent-solid)] text-sm font-semibold text-[var(--accent-on)] shadow-sm transition-[background-color,transform,opacity] duration-150 hover:bg-[var(--accent-hover)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ui)] focus-visible:ring-offset-2 focus-visible:ring-offset-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Забыли пароль?
-                </button>
-              </div>
-              <div className="relative">
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  required
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full px-4 py-3 rounded-xl border border-slate-200/50 bg-white/45 shadow-2xs focus:border-slate-300 focus:ring-2 focus:ring-slate-200/50 focus:outline-none text-xs font-semibold text-slate-800 pr-10 transition duration-200 focus:bg-white"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-800 transition cursor-pointer"
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
+                  {isLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                   ) : (
-                    <Eye className="h-4 w-4" />
+                    <LogIn className="h-4 w-4" aria-hidden="true" />
                   )}
+                  <span>{isLoading ? "Инициализация сессии…" : "Войти в систему"}</span>
                 </button>
-              </div>
+              </form>
             </div>
-
-            {errorMsg && (
-              <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-[10.5px] text-rose-600 font-semibold">
-                {errorMsg}
-              </div>
-            )}
-
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full flex justify-between items-center py-3.5 px-5 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 active:scale-95 transition-all duration-150 cursor-pointer shadow-sm disabled:opacity-50"
-              >
-                <span>
-                  {isLoading ? "ИНИЦИАЛИЗАЦИЯ СЕССИИ..." : "ВОЙТИ В СИСТЕМУ"}
-                </span>
-                <span className="text-sm font-bold">→</span>
-              </button>
-            </div>
-          </form>
+          </section>
         </div>
-
-        {/* Footer system info */}
-        <p className="text-center text-[10px] text-slate-400 font-semibold tracking-wider uppercase font-mono">
-          ОПЕРАЦИОННЫЙ ТЕРМИНАЛ RATIPA • ВСЕ МЕТРИКИ СИНХРОНИЗИРОВАНЫ
-        </p>
       </div>
     </div>
   );
