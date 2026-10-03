@@ -3137,11 +3137,13 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
             // Показатели прибыли: считаем на ЧИСЛОВЫХ значениях (в базе могут быть строки).
             // Пороги прежней логики: прибыль < 3000 и прибыль в день < 100 — красные;
-            // на пороге и выше — акцентный текст темы (accent-ink гарантирует 4.5:1 на светлом).
+            // на пороге и выше — акцентный текст темы. Крупные значения (20–24 px,
+            // вес 600+) — это «крупный текст» по WCAG, для него норма 3:1, поэтому
+            // берём более оранжевый --accent-ui (#D46A35, 3.55:1), а не тёмный ink.
             const profitValue = Number(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) || 0;
             const daysValue = Number(trip.days) || 0;
             const perDayValue = Math.round(profitValue / (daysValue || 1));
-            const ACCENT_VALUE_CLS = "text-[var(--accent-ink)]";
+            const ACCENT_VALUE_CLS = "text-[var(--accent-ui)]";
 
             const isHighlighted =
               trip.carNumber &&

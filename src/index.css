@@ -5,7 +5,7 @@
    Переопределяются applyAccentTheme() по выбору пользователя — src/theme/accent.ts. */
 :root {
 --accent: #FF8040;
-  --accent-ink: #A55329;
+  --accent-ink: #B75C2E;
   --accent-vivid: #D46A35;
   --accent-ui: #D46A35;
   --accent-solid: #FF8040;
@@ -251,4 +251,41 @@ input:focus, select:focus, textarea:focus, button:focus {
 [class*="bg-[var(--accent-ui)]"],
 [class*="bg-[var(--accent)]"] {
   color: var(--accent-on);
+}
+
+/* ---------- Мобильные всплывающие окна: полноэкранно, «как хаб» ----------
+   Помеченные оверлеи (data-mobile-fullscreen) на телефоне открываются от
+   шапки (56px) до низа экрана, без затемнения и боковых отступов; внутренний
+   диалог растягивается и скроллится сам. С md: — прежний вид (карточка). */
+@media (max-width: 767px) {
+  [data-scroll-lock="modal"][data-mobile-fullscreen] {
+    padding: 0 !important;
+    align-items: stretch !important;
+    justify-content: stretch !important;
+    background: transparent !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    overflow: hidden !important;
+    /* окно ВСЕГДА под нижней навигацией (она z-50) — как хаб (z-40) */
+    z-index: 40 !important;
+  }
+  [data-scroll-lock="modal"][data-mobile-fullscreen] > div:first-of-type:not([data-scroll-lock="modal"]) {
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: 56px !important;
+    bottom: 0 !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    /* запас снизу, чтобы кнопки (Сохранить и т.п.) не оказывались под полосой */
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 108px);
+  }
 }

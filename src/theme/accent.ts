@@ -136,9 +136,32 @@ function shadeUntilContrast(hex: string, background: string, target: number): st
   return current;
 }
 
+/**
+ * Минимально необходимое затемнение под порог контраста: бинарный поиск доли
+ * затемнения. Грубый шаг (6%) уводил оттенок заметно темнее нужного — оранжевый
+ * текст выглядел коричневым. Ищем самое лёгкое затемнение, которое проходит норму,
+ * и откатываемся на шаг, если после округления контраст упал ниже.
+ */
+function brightestPassing(hex: string, background: string, target: number): string {
+  if (contrastRatio(hex, background) >= target) return hex.toUpperCase();
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 24; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (contrastRatio(darken(hex, mid), background) >= target) hi = mid;
+    else lo = mid;
+  }
+  let best = darken(hex, hi);
+  for (let i = 0; i < 6 && contrastRatio(best, background) < target; i += 1) {
+    hi = Math.min(1, hi + 0.01);
+    best = darken(hex, hi);
+  }
+  return best;
+}
+
 /** Тот же оттенок, но читаемый на светлом фоне (для текста и ссылок). */
 export function inkFor(hex: string, background = '#FFFFFF'): string {
-  return shadeUntilContrast(hex, background, TEXT_TARGET);
+  return brightestPassing(hex, background, TEXT_TARGET);
 }
 
 /**
