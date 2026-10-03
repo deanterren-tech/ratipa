@@ -98,6 +98,15 @@ export function HubTruckIcon({ className, style }: HubIconProps) {
   );
 }
 
+/** Фура: тягач слева (капот со скосом лобового стекла) + длинный полуприцеп справа, три колеса. */
+export function HubSemiTruckIcon({ className, style }: HubIconProps) {
+  return (
+    <svg {...base(className, style)}>
+      <path d="M11.1 5H19.5a1.5 1.5 0 0 1 1.5 1.5V15.9a1.5 1.5 0 0 1-1.5 1.5H4.7a1.4 1.4 0 0 1-1.4-1.4V12.7L6 8.5H9.6V6.5a1.5 1.5 0 0 1 1.5-1.5Z M8.1 9.1h2.6v8.3H8.1Z M2.7 17.4a2.6 2.6 0 0 0 5.2 0Z M9.4 17.4a2.6 2.6 0 0 0 5.2 0Z M16.1 17.4a2.6 2.6 0 0 0 5.2 0Z" />
+    </svg>
+  );
+}
+
 /** Водители: человек. */
 export function HubPersonIcon({ className, style }: HubIconProps) {
   return (

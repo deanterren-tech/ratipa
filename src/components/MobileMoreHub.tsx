@@ -22,7 +22,8 @@ import { useEffect, useState, type ComponentType, type CSSProperties } from 'rea
 import { motion } from 'motion/react';
 import {
   HubHomeIcon, HubDocsIcon,
-  HubBagIcon, HubTruckIcon, HubPinIcon, HubExitIcon,
+  HubTruckIcon, HubPinIcon, HubExitIcon,
+  HubSemiTruckIcon,
   HubCalendarIcon, HubNavIcon, HubCalcIcon,
   HubTrendIcon, HubReceiptIcon,
   HubUsersIcon, HubTogglesIcon, HubChevronIcon,
@@ -58,7 +59,7 @@ const MODULE_STYLE: Record<string, { icon: HubIconComponent; color: string }> = 
   dozvola: { icon: HubKeyIcon, color: 'var(--accent)' },
   instructions: { icon: HubBookmarkIcon, color: 'var(--accent)' },
   // Планирование
-  planZagruzok: { icon: HubBagIcon, color: 'var(--accent)' },
+  planZagruzok: { icon: HubSemiTruckIcon, color: 'var(--accent)' },
   planDohod: { icon: HubTrendIcon, color: 'var(--accent)' },
   currentPlanning: { icon: HubNavIcon, color: 'var(--accent)' },
   dohod: { icon: HubCalcIcon, color: 'var(--accent)' },
