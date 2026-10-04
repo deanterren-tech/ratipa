@@ -241,7 +241,7 @@ export default function UpdateTour({ isOpen, accentAvailable, linksCount, canSee
             onClick={() => onClose('skipped')}
             title="Закрыть"
             aria-label="Закрыть превью обновлений"
-            className="-mr-1 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)] cursor-pointer"
+            className="-mr-1 -mt-1 flex h-9 w-9 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 shrink-0 items-center justify-center rounded-lg text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)] cursor-pointer"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>

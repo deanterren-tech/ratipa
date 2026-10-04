@@ -422,7 +422,7 @@ export default function DozvolaTypesDirectory({ user }: DozvolaTypesDirectoryPro
                 type="button"
                 onClick={() => setIsEditingType(false)}
                 aria-label="Закрыть"
-                className="p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+                className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
               >
                 <X className="w-4 h-4" />
               </button>

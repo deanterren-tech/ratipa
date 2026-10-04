@@ -506,7 +506,7 @@ export default function InstructionsModule({ user, settings }: Props) {
               onClick={closeDrive}
               aria-label="Закрыть панель"
               title="Закрыть панель"
-              className="rounded-lg p-1.5 text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-rose-600"
+              className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 rounded-lg p-1.5 text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-rose-600"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>

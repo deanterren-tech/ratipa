@@ -266,7 +266,7 @@ input:focus, select:focus, textarea:focus, button:focus {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
     overflow: hidden !important;
-    /* окно ВСЕГДА под нижней навигацией (она z-50) — как хаб (z-40) */
+    /* окно ВСЕГДА под нижней навигацией (она z-[6000]) — как хаб (z-40) */
     z-index: 40 !important;
   }
   [data-scroll-lock="modal"][data-mobile-fullscreen] > div:first-of-type:not([data-scroll-lock="modal"]) {

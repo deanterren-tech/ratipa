@@ -20,6 +20,7 @@
  */
 import { useEffect, useState, type ComponentType, type CSSProperties } from 'react';
 import { motion } from 'motion/react';
+import { ArrowLeft } from 'lucide-react';
 import {
   HubHomeIcon, HubDocsIcon,
   HubTruckIcon, HubPinIcon, HubExitIcon,
@@ -107,7 +108,7 @@ type Props = {
   onClose: () => void;
 };
 
-export default function MobileMoreHub({ user, groups, onNavigate, onOpenAccount }: Props) {
+export default function MobileMoreHub({ user, groups, onNavigate, onOpenAccount, onClose }: Props) {
   const fullName = getUserFullName(user);
 
   // Живые показатели — подписки только на время открытого хаба.
@@ -206,6 +207,18 @@ export default function MobileMoreHub({ user, groups, onNavigate, onOpenAccount 
             paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 108px)',
           }}
         >
+          {/* ── Закрытие хаба: понятная кнопка «Назад» (44 px). Полоса
+                 навигации теперь видна поверх хаба, и пункт «Ещё» тоже
+                 закрывает хаб повторным нажатием. ──────────────────────── */}
+          <button
+            type="button"
+            onClick={onClose}
+            className="-ml-1 inline-flex min-h-[44px] items-center gap-2 self-start rounded-xl px-3 text-xs font-medium text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] active:bg-[#F3F4F6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] cursor-pointer"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Назад
+          </button>
+
           {/* ── Профиль (UI.card + серый тайл аватара) ──────────────── */}
           <button
             type="button"

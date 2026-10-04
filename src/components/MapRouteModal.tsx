@@ -359,8 +359,10 @@ const MapRouteModal = ({
                 />
               </div>
 
-              {/* Minimalist Footnote Bar - Semi-transparent float over the map corner */}
- <div className="absolute bottom-4 left-4 right-4 md:left-auto md:right-4 z-10 p-3 bg-white rounded-2xl border border-slate-200/60 shadow-lg flex items-center justify-between gap-4 animate-fade-in max-w-sm">
+              {/* Minimalist Footnote Bar - Semi-transparent float over the map corner.
+                  На телефоне нижняя навигация лежит поверх окна — поднимаем полоску
+                  над полосой (safe-area + 108 px), иначе ссылка «Яндекс» недоступна. */}
+ <div className="absolute bottom-[calc(env(safe-area-inset-bottom,0px)+108px)] md:bottom-4 left-4 right-4 md:left-auto md:right-4 z-10 p-3 bg-white rounded-2xl border border-slate-200/60 shadow-lg flex items-center justify-between gap-4 animate-fade-in max-w-sm">
                 <div className="text-[10px] text-slate-600 font-bold flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-[var(--accent-ui)]"></span>
                   <span>Интерактивный Яндекс режим</span>

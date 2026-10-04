@@ -1,4 +1,5 @@
 import React from "react";
+import { AlertTriangle, X } from "lucide-react";
 import {CarConflict} from '../../utils/carConflictHandler'
 
 interface Props {
@@ -14,7 +15,22 @@ export const CarConflictModal: React.FC<Props> = ({ isOpen, conflicts, onResolve
   return (
     <div data-scroll-lock="modal" className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
       <div className="bg-white rounded-lg shadow-xl p-6 max-w-lg w-full">
-        <h2 className="text-xl font-semibold mb-4">Обнаружен конфликт данных</h2>
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="p-2 rounded-lg shrink-0 bg-amber-50 text-amber-600">
+              <AlertTriangle className="w-4 h-4" aria-hidden="true" />
+            </div>
+            <h2 className="text-sm font-semibold text-[#121316] pt-0.5">Обнаружен конфликт данных</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Закрыть"
+            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 -mr-2 -mt-1 rounded-lg text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] cursor-pointer"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
         <div className="mb-4">
           {conflicts.map((c) => (
             <div key={c.field} className="mb-2">

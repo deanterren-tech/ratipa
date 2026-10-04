@@ -62,7 +62,7 @@ export default function PortalInstructionsModal({ isOpen, settings, onClose }: P
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-stretch justify-center overflow-hidden bg-transparent p-0 md:items-center md:overflow-y-auto md:bg-black/40 md:p-6 md:backdrop-blur-[2px]"
+      className="fixed inset-0 z-[5900] flex items-stretch justify-center overflow-hidden bg-transparent p-0 md:items-center md:overflow-y-auto md:bg-black/40 md:p-6 md:backdrop-blur-[2px]"
       data-scroll-lock="modal"
       onClick={onClose}
     >
@@ -88,7 +88,7 @@ export default function PortalInstructionsModal({ isOpen, settings, onClose }: P
             onClick={onClose}
             aria-label="Закрыть"
             title="Закрыть"
-            className="rounded-xl border border-[#E5E7EB] bg-slate-100 p-1.5 text-[#9CA3AF] shadow-sm transition-colors hover:bg-slate-200 hover:text-[#121316]"
+            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 rounded-xl border border-[#E5E7EB] bg-slate-100 p-1.5 text-[#9CA3AF] shadow-sm transition-colors hover:bg-slate-200 hover:text-[#121316]"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -119,7 +119,7 @@ export default function PortalInstructionsModal({ isOpen, settings, onClose }: P
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+108px)] md:py-4">
           {grouped.length === 0 && (
             <div className="flex flex-col items-center gap-1.5 py-8 text-center">
               <Search className="h-5 w-5 text-[#9CA3AF]" aria-hidden="true" />

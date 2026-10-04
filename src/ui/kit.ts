@@ -146,7 +146,8 @@ export const UI = {
   modalIconTile: 'p-2 bg-[var(--accent-10)] text-[var(--accent-ink)] rounded-lg shrink-0',
   modalTitle: 'text-sm font-semibold text-[#121316]',
   modalSubtitle: 'text-xs text-[#6B7280] mt-0.5',
-  modalClose: 'p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0',
+  /** Зона нажатия крестика окна: на телефоне не меньше 44×44 px (требование заказчика). */
+  modalClose: 'inline-flex items-center justify-center p-1.5 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0',
   modalBody: 'flex-1 min-h-0 overflow-y-auto custom-scrollbar px-6 py-5',
   modalFooter: 'px-6 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+108px)] md:pb-4 border-t border-[#E5E7EB] flex items-center justify-end gap-2 shrink-0',
 } as const;

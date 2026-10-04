@@ -691,7 +691,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
     if (isNbMinimized) {
       return (
-        <div className="fixed bottom-20 right-4 z-50">
+        <div className="fixed bottom-28 md:bottom-20 right-4 z-50">
           <button
             type="button"
             onClick={() => {
@@ -724,7 +724,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
           top: isMobile ? "0" : `${nbCoords.y}px`,
           width: isMobile ? "100%" : `${nbCoords.w}px`,
           height: isMobile ? "100%" : `${nbCoords.h}px`,
-          zIndex: 20000,
+          // На телефоне блокнот лежит ПОД нижней навигацией (6000): полоса должна
+          // оставаться видимой поверх него, как и поверх остальных окон.
+          // На десктопе полосы нет — там блокнот остаётся поверх содержимого.
+          zIndex: isMobile ? 5900 : 20000,
         }}
         className={`bg-white ${isMobile ? "" : "rounded-2xl"} border border-[#E5E7EB] shadow-sm flex flex-col pointer-events-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150`}
       >
@@ -768,7 +771,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         </div>
 
         {/* Inner Content */}
-        <div className="p-4 flex-1 overflow-y-auto space-y-3.5 custom-scrollbar pb-6">
+        <div className="p-4 flex-1 overflow-y-auto space-y-3.5 custom-scrollbar pb-[calc(env(safe-area-inset-bottom,0px)+108px)] md:pb-6">
           {/* Switcher selector */}
           {permittedToSwitch ? (
             <div className="flex flex-col gap-1">

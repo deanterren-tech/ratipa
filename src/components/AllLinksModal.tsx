@@ -100,7 +100,7 @@ export default function AllLinksModal({ isOpen, links, onClose }: AllLinksModalP
             type="button"
             onClick={onClose}
             aria-label="Закрыть"
-            className="ml-auto shrink-0 p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border shadow-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+            className="ml-auto shrink-0 inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border shadow-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
           >
             <X className="w-4 h-4 text-[#6B7280]" aria-hidden="true" />
           </button>
@@ -177,8 +177,10 @@ export default function AllLinksModal({ isOpen, links, onClose }: AllLinksModalP
           )}
         </div>
 
-        {/* Подвал: подсказка и закрытие (удобно на телефоне) */}
-        <div className="flex items-center gap-3 px-4 sm:px-5 py-3 border-t border-[#E5E7EB] shrink-0">
+        {/* Подвал: подсказка и закрытие (удобно на телефоне). Нижний отступ
+            на телефоне — под нижнюю навигацию портала, которая лежит поверх
+            этого окна. */}
+        <div className="flex items-center gap-3 px-4 sm:px-5 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+108px)] md:pb-3 border-t border-[#E5E7EB] shrink-0">
           <p className="text-[11px] text-[#9CA3AF] flex-1">Ссылки открываются в новой вкладке</p>
           <button
             type="button"

@@ -379,11 +379,13 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   /**
    * Нижний отступ скроллируемой области на телефоне: считаем от фактической
    * высоты нижней навигации (в неё уже входит safe-area — нижний padding самой
-   * полосы), плюс небольшой зазор. Так футеры и кнопки действий разделов не
+   * полосы), плюс запас воздуха под последней кнопкой (28–32 px по требованию
+   * заказчика — раньше было 12 px). Так футеры и кнопки действий разделов не
    * оказываются под полосой ни на одном экране и не зависят от магических
    * констант: если полоса станет выше (или добавится safe-area), отступ
    * пересчитается сам. На десктопе (≥768px) ничего не меняется — отступ 0.
    */
+  const MOBILE_SCROLL_AIR_PX = 30;
   const mobileNavRef = useRef<HTMLElement | null>(null);
   const [mobileNavPad, setMobileNavPad] = useState<number>(0);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -401,7 +403,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     if (!el) return;
     const measure = () => {
       const h = el.getBoundingClientRect().height;
-      setMobileNavPad(h > 0 ? Math.ceil(h + 12) : 0);
+      setMobileNavPad(h > 0 ? Math.ceil(h + MOBILE_SCROLL_AIR_PX) : 0);
     };
     measure();
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
@@ -799,10 +801,42 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     return () => ro.disconnect();
   }, [measureTopbarFit]);
 
+  /**
+   * Перед переходом по навигации закрываем открытые модальные окна. Полоса
+   * теперь лежит ПОВЕРХ окон, поэтому клик по ней при открытом окне не должен
+   * оставлять «призрачное» окно на новом разделе (портальные окна не скрываются
+   * вместе с модулем). Критичные слои (подтверждения/рассылки, z ≥ 6000) не
+   * трогаем — они по-прежнему перекрывают навигацию.
+   */
+  const closeOpenOverlays = () => {
+    const visibleLocked = Array.from(document.querySelectorAll<HTMLElement>('[data-scroll-lock="modal"]')).filter((el) => {
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return false;
+      return (parseInt(cs.zIndex || '0', 10) || 0) < 6000;
+    });
+    if (visibleLocked.length === 0) return;
+    // 1) Esc — для окон, слушающих клавиатуру (useModalKeyboard и локальные хуки)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    // 2) «Клик мимо» — для окон, закрывающихся тапом по фону
+    visibleLocked.forEach((el) => {
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+  };
+
   const handleNavigate = (moduleKey: string) => {
+    closeOpenOverlays();
     window.location.hash = moduleKey;
     setActiveModule(moduleKey);
     setIsSidebarOpen(false);
+    // Окна уровня оболочки закрываем их собственными состояниями
+    setIsMobileMenuOpen(false);
+    setIsAccountOpen(false);
+    setPortalHelpOpen(false);
+    setIsCommandCenterOpen(false);
+    setIsContextMenuOpen(false);
   };
 
   const renderModuleByKey = (key: string) => {
@@ -1712,7 +1746,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          className="fixed right-4 bottom-20 md:bottom-6 z-[1000] flex items-center justify-center w-11 h-11 bg-[#121316] text-[var(--accent)] hover:bg-[#121316] transition-colors select-none cursor-pointer rounded-full shadow-lg active:scale-95"
+          className="fixed right-4 bottom-28 md:bottom-6 z-[1000] flex items-center justify-center w-11 h-11 bg-[#121316] text-[var(--accent)] hover:bg-[#121316] transition-colors select-none cursor-pointer rounded-full shadow-lg active:scale-95"
           title="Наверх"
         >
           <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
@@ -1784,8 +1818,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         </AnimatePresence>
       )}
 
-      {/* === Mobile Floating Nav с крупной активной капсулой === */}
-            <nav ref={mobileNavRef} className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-end justify-center pb-0 safe-bottom pointer-events-none select-none"
+      {/* === Mobile Floating Nav с крупной активной капсулой ===
+          Полоса лежит ПОВЕРХ всех окон (z-[6000] против 5100 у самых высоких
+          окон и листов). Выше полосы остаются только критичные слои:
+          подтверждения (z-[9999]), тосты (z-[9999]), блокирующая рассылка
+          (10000+) и экран загрузки (z-[10000]). */}
+            <nav ref={mobileNavRef} className="md:hidden fixed bottom-0 left-0 right-0 z-[6000] flex items-end justify-center pb-0 safe-bottom pointer-events-none select-none"
                  style={{paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))'}}>
               <div className="mx-4 bg-white/70 backdrop-blur-[14px] border border-white/30 rounded-[32px] shadow-[0_4px_24px_rgba(0,0,0,0.08)] flex items-stretch justify-around overflow-hidden w-full pointer-events-auto">
                 {[

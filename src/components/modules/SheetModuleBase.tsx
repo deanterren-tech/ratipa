@@ -408,7 +408,7 @@ export default function SheetModuleBase({
       {/* === GPS-БЛОКНОТ (полный, drag + resize) === */}
       {gpsEnabled && gpsOpen &&
         (gpsMin ? (
-          <div className="fixed bottom-4 left-4 z-50">
+          <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+108px)] md:bottom-4 left-4 z-50">
             <button
               type="button"
               onClick={() => { setGpsMin(false); }}

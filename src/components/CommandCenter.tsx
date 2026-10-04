@@ -83,7 +83,7 @@ export default function CommandCenter({ user, isOpen, onClose, onNavigate }: Com
               placeholder="Поиск по тягачам, водителям, документам..." 
               className="flex-1 bg-transparent border-none outline-none text-slate-800 placeholder:text-slate-400 font-medium"
             />
-            <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition">
+            <button onClick={onClose} aria-label="Закрыть" className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition">
               <X className="w-5 h-5" />
             </button>
           </div>
