@@ -3198,23 +3198,25 @@ export default function DohodModule({ user }: DohodModuleProps) {
             subtitle="Разовые затраты по рейсу и статьи расходов"
           />
           <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-3 border border-[#E5E7EB] rounded-xl px-3.5 py-3">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-[var(--accent-10)] flex items-center justify-center text-[var(--accent-ink)]">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border border-[#E5E7EB] rounded-xl px-3.5 py-3">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-[var(--accent-10)] flex items-center justify-center text-[var(--accent-ink)] shrink-0">
                   <Receipt className="w-4 h-4" />
                 </div>
-                <div className="flex flex-col">
+                <div className="flex flex-col gap-0.5 min-w-0">
                   <span className={UI.fieldLabel}>Прочие затраты по рейсу</span>
-                  <span className={UI.hint}>Общая сумма, если статьи ещё не расписаны</span>
+                  <span className="text-xs leading-relaxed text-[#6B7280]">
+                    Общая сумма, если статьи ещё не расписаны. Для подробной расшифровки добавьте статьи ниже — название и сумму.
+                  </span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
                 <input
                   type="number"
                   min="0"
                   value={additionalExpenses}
                   onChange={(e) => setAdditionalExpenses(Number(e.target.value))}
-                  className={`${UI.input} w-28 text-right font-semibold text-[var(--accent-ink)]`}
+                  className={`${UI.input} w-24 text-right font-semibold text-[var(--accent-ink)]`}
                 />
                 <span className="text-xs font-semibold text-[#6B7280]">€</span>
               </div>
