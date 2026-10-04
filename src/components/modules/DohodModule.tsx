@@ -3216,7 +3216,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
                   min="0"
                   value={additionalExpenses}
                   onChange={(e) => setAdditionalExpenses(Number(e.target.value))}
-                  className={`${UI.input} w-24 text-right font-semibold text-[var(--accent-ink)]`}
+                  style={{ width: 96, minWidth: 96 }}
+                  className={`${UI.input} text-right font-semibold text-[var(--accent-ink)]`}
                 />
                 <span className="text-xs font-semibold text-[#6B7280]">€</span>
               </div>
@@ -3248,7 +3249,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         setExpenseItems(next);
                         setAdditionalExpenses(next.reduce((a, x) => a + Number(x.amount || 0), 0));
                       }}
-                      className={`${UI.input} w-28 text-right font-semibold text-[var(--accent-ink)]`}
+                      style={{ width: 96, minWidth: 96 }}
+                      className={`${UI.input} text-right font-semibold text-[var(--accent-ink)]`}
                     />
                     <span className="text-xs font-semibold text-[#6B7280]">€</span>
                     <button
