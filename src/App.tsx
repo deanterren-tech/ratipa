@@ -77,12 +77,17 @@ export default function App() {
       const modals = document.querySelectorAll('.fixed.inset-0');
       // Учитываем только реально видимые окна: скрытые (display:none / нулевой
       // размер) оверлеи — например, оставшиеся в DOM модули и закрытые окна —
-      // не должны держать прокрутку страницы заблокированной.
+      // не должны держать прокрутку страницы заблокированной. Дополнительно
+      // пропускаем элементы, которые по факту НЕ position:fixed: например, у
+      // страниц табличных модулей на мобильном базовые классы «fixed inset-0»
+      // остаются ради десктопа (с md:), но позиционируются они как relative —
+      // это обычная страница раздела, а не окно, и прокрутку она не блокирует.
       let hasVisibleModal = false;
       modals.forEach((el) => {
         const rect = el.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) return;
         const cs = window.getComputedStyle(el);
+        if (cs.position !== 'fixed') return;
         if (cs.display !== 'none' && cs.visibility !== 'hidden') hasVisibleModal = true;
       });
       if (hasVisibleModal) {

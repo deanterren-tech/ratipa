@@ -18,7 +18,6 @@ import {
   AlertCircle,
   type LucideIcon,
 } from "lucide-react";
-import { BackButton } from "../../ui/components";
 
 type GpsTab = "beltranssputnik" | "wialon" | "era_glonass";
 
@@ -45,8 +44,12 @@ interface SheetModuleBaseProps {
 
 /**
  * Единая оболочка для модулей-таблиц (Диспозиция / Текущее планирование / План загрузок).
- * Полностью идентична поведению Диспозиции: full-screen iframe, плавающая плашка со
- * сворачиванием, GPS-блокнот (drag + resize), зум, табы.
+ * Внутренние функции едины для всех экранов: плавающая плашка поверх фрейма со
+ * сворачиванием, GPS-блокнот (drag + resize), зум, табы, открытие в новой вкладке.
+ * На телефоне (<768px) модуль — ОБЫЧНАЯ СТРАНИЦА в потоке оболочки: шапка портала
+ * видна сверху, нижняя навигация снизу, скролл не блокируется; переход назад — через
+ * навигацию приложения (своей кнопки «Назад» у страницы нет). На десктопе поведение
+ * прежнее — слой ниже шапки на всю высоту экрана.
  */
 export default function SheetModuleBase({
   user,
@@ -203,34 +206,29 @@ export default function SheetModuleBase({
     "inline-flex items-center justify-center h-8 w-9 sm:w-8 rounded-lg bg-[var(--accent-15)] text-[var(--accent-ink)] hover:bg-[var(--accent-20)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)]";
 
   return (
-    <div className="fixed inset-0 z-[4500] overflow-hidden bg-[#F8F9FA] md:top-16 md:bottom-0 md:z-40">
+    /* На телефоне (<768px) — обычная страница в потоке оболочки (relative, в прокрутке
+       main): шапка портала сверху, нижняя навигация снизу, без оверлея. Страница занимает
+       ровно область раздела и всегда помещается — ничего не уходит под полосу навигации.
+       С md: — прежний слой ниже шапки (fixed top-16 bottom-0 z-40), как было. */
+    <div className="fixed inset-0 z-[4500] overflow-hidden bg-[#F8F9FA] max-md:relative max-md:inset-auto max-md:z-0 max-md:h-full md:top-16 md:bottom-0 md:z-40">
       {/* === ШАПКА МОДУЛЯ: лежит поверх верхней части фрейма таблицы === */}
       {collapsed ? (
-        /* Свёрнутая панель: от неё остаётся только кнопка поверх таблицы — как было раньше.
-           На телефоне модуль открыт на весь экран, поэтому рядом — кнопка «Назад» (выход в раздел). */
-        <>
-          <BackButton
-            onClose={() => { window.location.hash = 'dashboard'; }}
-            className="absolute left-3 top-[calc(env(safe-area-inset-top,0px)+12px)] z-[101] border border-[#E5E7EB] bg-white shadow-sm"
-          />
-          <button
-            type="button"
-            onClick={() => setCollapsed(false)}
-            title={`Показать панель «${title}»`}
-            aria-label={`Показать панель «${title}»`}
-            aria-expanded={false}
-            className="absolute right-3 top-[calc(env(safe-area-inset-top,0px)+12px)] z-[101] inline-flex min-h-[44px] max-w-[calc(100vw-24px)] items-center gap-1.5 rounded-xl bg-[var(--accent-solid)] px-3 text-xs font-semibold text-[var(--accent-on)] shadow-sm transition-all hover:bg-[var(--accent-hover)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] sm:min-h-0 sm:py-2"
-          >
-            <ChevronDown className="h-4 w-4 shrink-0" />
-            <span className="truncate">{title}</span>
-          </button>
-        </>
+        /* Свёрнутая панель: от неё остаётся только кнопка поверх таблицы — как было раньше. */
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          title={`Показать панель «${title}»`}
+          aria-label={`Показать панель «${title}»`}
+          aria-expanded={false}
+          className="absolute right-3 top-3 z-[101] inline-flex min-h-[44px] max-w-[calc(100vw-24px)] items-center gap-1.5 rounded-xl bg-[var(--accent-solid)] px-3 text-xs font-semibold text-[var(--accent-on)] shadow-sm transition-all hover:bg-[var(--accent-hover)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] sm:min-h-0 sm:py-2"
+        >
+          <ChevronDown className="h-4 w-4 shrink-0" />
+          <span className="truncate">{title}</span>
+        </button>
       ) : (
-        <div className="absolute left-0 right-0 top-0 z-[100] border-b border-[#E5E7EB] bg-white px-3 pt-[env(safe-area-inset-top)] shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:px-4">
+        <div className="absolute left-0 right-0 top-0 z-[100] border-b border-[#E5E7EB] bg-white px-3 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:px-4">
           <div className="flex items-center justify-between gap-3 flex-wrap py-2">
             <div className="flex items-center gap-1 min-w-0">
-              {/* Назад: на телефоне модуль открыт на весь экран — это выход в прежний раздел */}
-              <BackButton onClose={() => { window.location.hash = 'dashboard'; }} />
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6] text-[#4B5563]">
                 <Icon className="h-4 w-4" />
               </div>
