@@ -164,10 +164,28 @@ export default function App() {
     setIsSessionRestoring(false);
   }, []);
 
+  // На мобильном заставка держится ещё и минимальное время (2,6 с), чтобы схема
+  // маршрутов успела прорисоваться — иначе при быстрой инициализации она мелькает.
+  // Это не задержка загрузки: приложение стартует параллельно, заставка лишь
+  // не исчезает раньше времени. На десктопе флаг сразу true — поведение прежнее.
+  const [isMinSplashElapsed, setIsMinSplashElapsed] = useState(false);
+  useEffect(() => {
+    if (!isMobileBoot) {
+      setIsMinSplashElapsed(true);
+      return;
+    }
+    const t = window.setTimeout(() => setIsMinSplashElapsed(true), 2600);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Плавное исчезновение заставки после реальной готовности приложения.
-  // Мобильные: ждём готовности стартового раздела (ready/error). Десктоп: как раньше —
-  // заставка уходит сразу после восстановления сессии.
-  const bootReady = !isSessionRestoring && (!isMobileBoot || !user || firstModuleSettled);
+  // Мобильные: ждём готовности стартового раздела (ready/error) и минимального времени.
+  // Десктоп: как раньше — заставка уходит сразу после восстановления сессии.
+  const bootReady =
+    !isSessionRestoring &&
+    (!isMobileBoot || !user || firstModuleSettled) &&
+    isMinSplashElapsed;
   useEffect(() => {
     if (!bootReady) return;
     setIsSplashLeaving(true);
