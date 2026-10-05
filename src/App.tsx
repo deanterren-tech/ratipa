@@ -170,10 +170,8 @@ export default function App() {
   // не исчезает раньше времени. На десктопе флаг сразу true — поведение прежнее.
   const [isMinSplashElapsed, setIsMinSplashElapsed] = useState(false);
   useEffect(() => {
-    if (!isMobileBoot) {
-      setIsMinSplashElapsed(true);
-      return;
-    }
+    // Одинаково на мобильном и на ПК: заставка держится не меньше 2,6 с,
+    // чтобы схема маршрутов успела прорисоваться (заказчик: «такой же экран и на ПК»).
     const t = window.setTimeout(() => setIsMinSplashElapsed(true), 2600);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
