@@ -40,6 +40,7 @@ import {
   normalizeInstruction,
   searchBlob,
 } from './instructionsData';
+import { BackButton } from '../../ui/components';
 
 /**
  * Модуль «Инструкции» (раздел «Текущее») — инструкции по ситуациям в работе.
@@ -436,6 +437,7 @@ export default function InstructionsModule({ user, settings }: Props) {
     <>
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#E5E7EB] bg-white p-3">
           <div className="flex min-w-0 items-center gap-2">
+            <BackButton onClose={closeDrive} />
             <span className="inline-flex items-center gap-1 rounded-md border border-[#E5E7EB] bg-[#F3F4F6] px-2 py-0.5 text-[10px] font-medium uppercase text-[#4B5563]">
               <HardDrive className="h-3 w-3" aria-hidden="true" />
               Drive
@@ -506,7 +508,7 @@ export default function InstructionsModule({ user, settings }: Props) {
               onClick={closeDrive}
               aria-label="Закрыть панель"
               title="Закрыть панель"
-              className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 rounded-lg p-1.5 text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-rose-600"
+              className="hidden md:inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 rounded-lg p-1.5 text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-rose-600"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>

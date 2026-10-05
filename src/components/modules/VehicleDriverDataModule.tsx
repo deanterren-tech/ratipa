@@ -34,7 +34,7 @@ import {normalizePlate, formatPlate, formatCoupling} from '../../utils/salaryAut
 import CouplingPicker from '../common/CouplingPicker';
 import { useToast } from '../ToastProvider';
 import {UI} from '../../ui/kit'
-import {SectionHeader, SearchField, EmptyState, ErrorRow} from '../../ui/components'
+import {SectionHeader, SearchField, EmptyState, ErrorRow, BackButton} from '../../ui/components'
 
 interface VehicleDriverDataModuleProps {
   user: UserProfile;
@@ -1449,8 +1449,9 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
               <div data-scroll-lock="modal" className="fixed inset-0 z-[4100] bg-black/40 backdrop-blur-[2px] flex md:hidden" onClick={() => { setIsDriveOpen(false); localStorage.setItem('ratipa_driver_drive_visible', 'false'); }}>
                 <div className="bg-white flex flex-col w-full h-full pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]" onClick={(e) => e.stopPropagation()}>
                   <div className="p-4 border-b border-[#E5E7EB] flex items-center justify-between shrink-0">
-                    <div className="flex items-center gap-2">
-                      <HardDrive className="w-4 h-4 text-[#9CA3AF]" aria-hidden="true" />
+                    <div className="flex min-w-0 items-center gap-2">
+                      <BackButton onClose={() => { setIsDriveOpen(false); localStorage.setItem('ratipa_driver_drive_visible', 'false'); }} />
+                      <HardDrive className="w-4 h-4 text-[#9CA3AF] shrink-0" aria-hidden="true" />
                       <span className="text-xs font-semibold text-[#121316]">Google Диск</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1460,9 +1461,6 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                       <a href={rawDriveUrl} target="_blank" rel="noopener noreferrer" aria-label="Открыть во вкладке" className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg bg-white border border-[#E5E7EB] text-[#4B5563] hover:bg-[#F3F4F6] transition-colors">
                         <ExternalLink className="w-4 h-4" aria-hidden="true" />
                       </a>
-                      <button type="button" onClick={() => { setIsDriveOpen(false); localStorage.setItem('ratipa_driver_drive_visible', 'false'); }} aria-label="Закрыть" className={`${UI.buttonIcon} min-h-[44px] min-w-[44px]`}>
-                        <X className="w-5 h-5" aria-hidden="true" />
-                      </button>
                     </div>
                   </div>
                   <div className="flex-1 relative overflow-hidden bg-[#F9FAFB]">
@@ -1542,14 +1540,17 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
           <div className={`${UI.modalSurface} max-w-2xl`} role="dialog" aria-modal="true" aria-label={editingId ? 'Редактировать запись' : 'Добавить новые данные авто и водителя'}>
             {/* Заголовок */}
             <div className={UI.modalHeader}>
-              <div className="flex items-start gap-3 min-w-0">
-                <div className={UI.modalIconTile}>
-                  <FileText className="w-4 h-4" aria-hidden="true" />
-                </div>
-                <div className="min-w-0">
-                  <h2 className={UI.modalTitle}>
-                    {editingId ? 'Редактировать запись' : 'Добавить новые данные авто и водителя'}
-                  </h2>
+              <div className="flex items-start gap-1 min-w-0 flex-1">
+                <BackButton onClose={() => setModalOpen(false)} className="mt-0.5" />
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className={UI.modalIconTile}>
+                    <FileText className="w-4 h-4" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className={UI.modalTitle}>
+                      {editingId ? 'Редактировать запись' : 'Добавить новые данные авто и водителя'}
+                    </h2>
+                  </div>
                 </div>
               </div>
               <button type="button" onClick={() => setModalOpen(false)} aria-label="Закрыть" className={UI.modalClose}>

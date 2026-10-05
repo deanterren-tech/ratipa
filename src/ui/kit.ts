@@ -139,15 +139,18 @@ export const UI = {
   loading: 'flex items-center justify-center gap-2 py-10 text-xs text-[#6B7280]',
 
   /* ---------- Модальные окна (единый язык) ---------- */
-  modalBackdrop: 'fixed inset-0 z-40 md:z-[5000] flex md:bg-black/40 md:backdrop-blur-[2px] md:items-center md:justify-center md:p-6',
+  /** На телефоне окно держится поверх шапки (z-50), но под нижней навигацией
+      (z-[6000]); с md: — прежний десктопный слой (z-[5000]). */
+  modalBackdrop: 'fixed inset-0 z-[5300] md:z-[5000] flex md:bg-black/40 md:backdrop-blur-[2px] md:items-center md:justify-center md:p-6',
   modalSurface:
-    'z-10 w-full bg-white flex flex-col overflow-hidden fixed inset-x-0 top-14 bottom-0 rounded-none md:relative md:border md:border-[#E5E7EB] md:rounded-2xl md:shadow-[0_25px_60px_rgba(0,0,0,0.12)] md:max-h-[90vh]',
+    'z-10 w-full bg-white flex flex-col overflow-hidden fixed inset-0 pt-[env(safe-area-inset-top,0px)] rounded-none md:pt-0 md:relative md:border md:border-[#E5E7EB] md:rounded-2xl md:shadow-[0_25px_60px_rgba(0,0,0,0.12)] md:max-h-[90vh]',
   modalHeader: 'flex items-start justify-between gap-3 px-6 py-4 border-b border-[#E5E7EB] shrink-0',
   modalIconTile: 'p-2 bg-[var(--accent-10)] text-[var(--accent-ink)] rounded-lg shrink-0',
   modalTitle: 'text-sm font-semibold text-[#121316]',
   modalSubtitle: 'text-xs text-[#6B7280] mt-0.5',
-  /** Зона нажатия крестика окна: на телефоне не меньше 44×44 px (требование заказчика). */
-  modalClose: 'inline-flex items-center justify-center p-1.5 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0',
+  /** Зона нажатия крестика окна: на телефоне крестик скрыт — его заменяет
+      кнопка «← Назад» (см. BackButton в ui/components). С md: — прежний вид. */
+  modalClose: 'hidden md:inline-flex items-center justify-center p-1.5 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0',
   modalBody: 'flex-1 min-h-0 overflow-y-auto custom-scrollbar px-6 py-5',
   modalFooter: 'px-6 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+108px)] md:pb-4 border-t border-[#E5E7EB] flex items-center justify-end gap-2 shrink-0',
 } as const;

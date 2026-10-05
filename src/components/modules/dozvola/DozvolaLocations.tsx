@@ -9,6 +9,7 @@ import {MapContainer, TileLayer, Marker, Polyline, useMap} from 'react-leaflet'
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import {useDialog} from '../../DialogProvider'
+import { BackButton } from '../../../ui/components'
 
 interface DozvolaLocationsProps {
   user: UserProfile;
@@ -1167,13 +1168,17 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
  <div data-scroll-lock="modal" data-mobile-fullscreen className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6">
           <div className="relative z-10 w-[620px] max-w-full bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] flex flex-col max-h-[90vh] overflow-hidden">
             <div className="flex justify-between items-center px-4 sm:px-6 py-4 border-b border-[#E5E7EB] shrink-0">
-              <h2 className="font-semibold text-sm text-[#121316] flex items-center gap-1.5">
-                <Route className="w-4 h-4 text-[#6B7280]" />
-                {editingDelivId ? 'Редактировать отправку дозволов' : 'Оформление транзита бланков'}
-              </h2>
+              <div className="flex items-center gap-1 min-w-0">
+                <BackButton onClose={closeDeliveryForm} />
+                <h2 className="font-semibold text-sm text-[#121316] flex items-center gap-1.5">
+                  <Route className="w-4 h-4 text-[#6B7280]" />
+                  {editingDelivId ? 'Редактировать отправку дозволов' : 'Оформление транзита бланков'}
+                </h2>
+              </div>
               <button 
 onClick={closeDeliveryForm} 
-                className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0"
+                aria-label="Закрыть"
+                className="hidden md:inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>

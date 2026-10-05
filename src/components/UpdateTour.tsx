@@ -195,7 +195,7 @@ export default function UpdateTour({ isOpen, accentAvailable, linksCount, canSee
   const palette = accentAvailable ? ACCENT_PRESETS.slice(0, 12) : [];
 
   return (
-    <div className="fixed inset-0 z-[3000]" role="dialog" aria-modal="false" aria-label="Что нового в Ratipa Portal">
+    <div className="fixed inset-0 z-[3000] max-md:z-[5600]" role="dialog" aria-modal="false" aria-label="Что нового в Ratipa Portal">
       {/* Затемнение с «окном» вокруг подсвеченного элемента.
           Слой прозрачный — затемнение даёт тень окна, клик закрывает превью. */}
       <div className="absolute inset-0" onClick={() => onClose('skipped')} aria-hidden="true" />

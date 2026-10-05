@@ -12,6 +12,7 @@ import { ACCENT_PRESETS, DEFAULT_ACCENT_ID, applyAccentTheme, resolveAccentTheme
 import AvatarCropModal from './AvatarCropModal'
 import { readImageFileForCrop, AVATAR_MAX_EDGE, CropSource } from '../utils/imageUpload'
 import { X, User as UserIcon, Palette, ShieldCheck, Clock, AlertTriangle, Loader2, Camera, Trash2, ImagePlus } from 'lucide-react'
+import { BackButton } from '../ui/components'
 
 /**
  * Настройки учётной записи.
@@ -168,20 +169,23 @@ export default function AccountSettingsModal({
         className="z-10 w-full h-full bg-white flex flex-col overflow-hidden md:h-auto md:relative md:w-auto md:max-w-lg md:border md:border-[#E5E7EB] md:rounded-2xl md:shadow-[0_25px_60px_rgba(0,0,0,0.12)] md:max-h-[90vh]"
       >
         <div className="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top,0px)+1rem)] pb-4 md:py-4 border-b border-[#E5E7EB] shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-[#F3F4F6] text-[var(--accent-ink)] rounded-lg shrink-0">
-              <UserIcon className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-[#121316]">Настройки учётной записи</h3>
-              <p className="text-xs text-[#6B7280] mt-0.5">{getUserFullName(user)}</p>
+          <div className="flex items-center gap-1 min-w-0">
+            <BackButton onClose={handleClose} />
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-[#F3F4F6] text-[var(--accent-ink)] rounded-lg shrink-0">
+                <UserIcon className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-[#121316]">Настройки учётной записи</h3>
+                <p className="text-xs text-[#6B7280] mt-0.5">{getUserFullName(user)}</p>
+              </div>
             </div>
           </div>
           <button
             type="button"
             onClick={handleClose}
             aria-label="Закрыть"
-            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+            className="hidden md:inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
           >
             <X className="w-4 h-4" />
           </button>

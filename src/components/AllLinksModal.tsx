@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Search, X, ExternalLink, Link2, Map, Wallet, Activity } from 'lucide-react';
 import { QuickLink } from '../types';
 import { useModalKeyboard } from '../hooks/useModalKeyboard';
+import { BackButton } from '../ui/components';
 
 /**
  * Все полезные ссылки портала.
@@ -90,8 +91,9 @@ export default function AllLinksModal({ isOpen, links, onClose }: AllLinksModalP
         aria-label="Все полезные ссылки"
         className="relative z-10 flex h-full w-full flex-col overflow-hidden bg-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] md:h-auto md:max-h-[88vh] md:max-w-2xl md:my-0 md:rounded-2xl md:border md:border-[#E5E7EB] md:pt-0 md:pb-0 md:shadow-[0_25px_60px_rgba(0,0,0,0.12)]"
       >
-        {/* Шапка: название, количество и закрытие */}
+        {/* Шапка: назад на телефоне, название, количество и закрытие */}
         <div className="flex items-center gap-3 px-4 sm:px-5 py-3.5 border-b border-[#E5E7EB] shrink-0">
+          <BackButton onClose={onClose} />
           <h2 className="text-base font-bold text-[#121316] whitespace-nowrap">Все ссылки</h2>
           <span className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-[var(--accent-10)] border border-[var(--accent-20)] text-[11px] font-semibold text-[var(--accent-ink)] leading-[20px] text-center tabular-nums shrink-0">
             {total}
@@ -100,7 +102,7 @@ export default function AllLinksModal({ isOpen, links, onClose }: AllLinksModalP
             type="button"
             onClick={onClose}
             aria-label="Закрыть"
-            className="ml-auto shrink-0 inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border shadow-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+            className="ml-auto shrink-0 hidden md:inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 border shadow-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
           >
             <X className="w-4 h-4 text-[#6B7280]" aria-hidden="true" />
           </button>

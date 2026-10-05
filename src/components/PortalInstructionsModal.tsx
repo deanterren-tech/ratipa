@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Search, X, ChevronDown, BookMarked, ExternalLink, ListChecks, Lightbulb, Info } from 'lucide-react';
 import { AppSettings, Instruction } from '../types';
 import { PORTAL_INSTRUCTIONS, normalizeInstruction, searchBlob } from './modules/instructionsData';
+import { BackButton } from '../ui/components';
 
 /**
  * «Инструкции по порталу» — открывается из меню пользователя.
@@ -74,13 +75,16 @@ export default function PortalInstructionsModal({ isOpen, settings, onClose }: P
         className="relative z-10 flex h-full w-full flex-col overflow-hidden bg-white pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] md:my-4 md:h-auto md:max-h-[88vh] md:max-w-2xl md:rounded-2xl md:border md:border-[#E5E7EB] md:pt-0 md:pb-0 md:shadow-[0_25px_60px_rgba(0,0,0,0.12)]"
       >
         <div className="flex items-start justify-between gap-3 border-b border-[#E5E7EB] px-5 py-4">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6] text-[var(--accent-ink)]">
-              <BookMarked className="h-4 w-4" aria-hidden="true" />
-            </span>
-            <div>
-              <h2 className="text-sm font-semibold text-[#121316]">Инструкции по порталу</h2>
-              <p className="mt-0.5 text-[11px] text-[#6B7280]">Как пользоваться разделами, таблицами и настройками</p>
+          <div className="flex items-center gap-1 min-w-0">
+            <BackButton onClose={onClose} />
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6] text-[var(--accent-ink)]">
+                <BookMarked className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-[#121316]">Инструкции по порталу</h2>
+                <p className="mt-0.5 text-[11px] text-[#6B7280]">Как пользоваться разделами, таблицами и настройками</p>
+              </div>
             </div>
           </div>
           <button
@@ -88,7 +92,7 @@ export default function PortalInstructionsModal({ isOpen, settings, onClose }: P
             onClick={onClose}
             aria-label="Закрыть"
             title="Закрыть"
-            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 rounded-xl border border-[#E5E7EB] bg-slate-100 p-1.5 text-[#9CA3AF] shadow-sm transition-colors hover:bg-slate-200 hover:text-[#121316]"
+            className="hidden md:inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 rounded-xl border border-[#E5E7EB] bg-slate-100 p-1.5 text-[#9CA3AF] shadow-sm transition-colors hover:bg-slate-200 hover:text-[#121316]"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>

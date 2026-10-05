@@ -3,6 +3,7 @@ import {dbService} from '../../api'
 import {getDriversFlat, getCouplingsFlat} from '../../services/fleetService'
 import {User, Truck, Banknote, FileText, X, ArrowRight} from 'lucide-react'
 import {UI} from '../../ui/kit'
+import { BackButton } from '../../ui/components'
 
 interface DriverCardProps {
   driverId: string;
@@ -79,13 +80,16 @@ export default function DriverCard({ driverId, driverName, onClose, onOpenCoupli
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-6 py-4 border-b border-[#E5E7EB]">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="p-2 bg-[var(--accent-10)] text-[var(--accent-ink)] rounded-lg shrink-0">
-              <User className="w-4 h-4" aria-hidden="true" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-[#121316] truncate">{driverName}</div>
-              <div className="text-xs text-[#6B7280] mt-0.5">Карточка водителя</div>
+          <div className="flex items-center gap-1 min-w-0">
+            <BackButton onClose={onClose} className="mt-0.5" />
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2 bg-[var(--accent-10)] text-[var(--accent-ink)] rounded-lg shrink-0">
+                <User className="w-4 h-4" aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-[#121316] truncate">{driverName}</div>
+                <div className="text-xs text-[#6B7280] mt-0.5">Карточка водителя</div>
+              </div>
             </div>
           </div>
           <button type="button" onClick={onClose} aria-label="Закрыть" className={UI.modalClose}>

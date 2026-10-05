@@ -13,12 +13,12 @@ import {
   ChevronDown,
   ChevronUp,
   Navigation,
-  ArrowLeft,
   X,
   Loader2,
   AlertCircle,
   type LucideIcon,
 } from "lucide-react";
+import { BackButton } from "../../ui/components";
 
 type GpsTab = "beltranssputnik" | "wialon" | "era_glonass";
 
@@ -209,15 +209,10 @@ export default function SheetModuleBase({
         /* Свёрнутая панель: от неё остаётся только кнопка поверх таблицы — как было раньше.
            На телефоне модуль открыт на весь экран, поэтому рядом — кнопка «Назад» (выход в раздел). */
         <>
-          <button
-            type="button"
-            onClick={() => { window.location.hash = 'dashboard'; }}
-            title="Назад"
-            aria-label="Назад"
-            className="absolute left-3 top-[calc(env(safe-area-inset-top,0px)+12px)] z-[101] flex md:hidden min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-[#E5E7EB] bg-white text-[#4B5563] shadow-sm transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)]"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          </button>
+          <BackButton
+            onClose={() => { window.location.hash = 'dashboard'; }}
+            className="absolute left-3 top-[calc(env(safe-area-inset-top,0px)+12px)] z-[101] border border-[#E5E7EB] bg-white shadow-sm"
+          />
           <button
             type="button"
             onClick={() => setCollapsed(false)}
@@ -233,17 +228,9 @@ export default function SheetModuleBase({
       ) : (
         <div className="absolute left-0 right-0 top-0 z-[100] border-b border-[#E5E7EB] bg-white px-3 pt-[env(safe-area-inset-top)] shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:px-4">
           <div className="flex items-center justify-between gap-3 flex-wrap py-2">
-            <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex items-center gap-1 min-w-0">
               {/* Назад: на телефоне модуль открыт на весь экран — это выход в прежний раздел */}
-              <button
-                type="button"
-                onClick={() => { window.location.hash = 'dashboard'; }}
-                title="Назад"
-                aria-label="Назад"
-                className="flex md:hidden min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg border border-[#E5E7EB] bg-white text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)]"
-              >
-                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              </button>
+              <BackButton onClose={() => { window.location.hash = 'dashboard'; }} />
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F3F4F6] text-[#4B5563]">
                 <Icon className="h-4 w-4" />
               </div>

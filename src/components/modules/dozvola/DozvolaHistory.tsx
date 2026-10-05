@@ -6,6 +6,7 @@ import { useFirebase, database, onValue } from '../../../firebase'
 import {Search, FileText, Trash2, X, User as UserIcon, Calendar, Hash, Paperclip, AlertTriangle, Info, Loader2, History, ChevronDown} from 'lucide-react'
 import { ref, remove, query, limitToLast, endAt, orderByKey, get } from 'firebase/database'
 import { useModalKeyboard } from '../../../hooks/useModalKeyboard'
+import { BackButton } from '../../../ui/components'
 import {
   HistoryKind as Kind,
   getSearchFields,
@@ -560,23 +561,26 @@ function HistoryDetailModal({
         className="relative z-10 w-full max-w-2xl bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] flex flex-col max-h-[90vh] overflow-hidden"
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="p-2 bg-[#F3F4F6] text-[var(--accent-ink)] rounded-lg shrink-0">
-              <History className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-[#121316] truncate">
-                {kind === 'document' ? (rec.documentName || 'Событие документа') : (rec.doc || 'Событие журнала')}
-              </h3>
-              <p className="text-xs text-[#6B7280] mt-0.5 truncate">
-                {rec.action || '—'} · {fmtDateTime(rec.time)}
-              </p>
+          <div className="flex items-center gap-1 min-w-0">
+            <BackButton onClose={onClose} />
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="p-2 bg-[#F3F4F6] text-[var(--accent-ink)] rounded-lg shrink-0">
+                <History className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-[#121316] truncate">
+                  {kind === 'document' ? (rec.documentName || 'Событие документа') : (rec.doc || 'Событие журнала')}
+                </h3>
+                <p className="text-xs text-[#6B7280] mt-0.5 truncate">
+                  {rec.action || '—'} · {fmtDateTime(rec.time)}
+                </p>
+              </div>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0"
+            className="hidden md:inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0"
             aria-label="Закрыть"
           >
             <X className="w-4 h-4" />

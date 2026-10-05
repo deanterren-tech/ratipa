@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { X, FilePlus2, History } from 'lucide-react'
 import { useToast } from '../../ToastProvider'
 import CouplingPicker from '../../common/CouplingPicker'
+import { BackButton } from '../../../ui/components'
 
 interface DozvolaPermitModalProps {
   isOpen: boolean;
@@ -133,25 +134,29 @@ export default function DozvolaPermitModal({
     <div data-scroll-lock="modal" data-mobile-fullscreen className="fixed inset-0 z-[5000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6">
       <div className="relative z-10 w-full max-w-2xl bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] flex flex-col max-h-[90vh] overflow-hidden" role="dialog" aria-modal="true">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-[#F3F4F6] text-[var(--accent-ink)] rounded-lg shrink-0">
-              <FilePlus2 className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-[#121316]">
-                {editingItem ? "Редактирование бланка" : "Регистрация бланка"}
-              </h3>
-              <p className="text-xs text-[#6B7280] mt-0.5">
-                {editingItem
-                  ? <>Бланк <span className="font-mono text-[#121316]">{editingItem.number || editingItem.permitNumber || '—'}</span></>
-                  : 'Ручной ввод бланка в реестр'}
-              </p>
+          <div className="flex items-center gap-1 min-w-0">
+            <BackButton onClose={onClose} />
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-[#F3F4F6] text-[var(--accent-ink)] rounded-lg shrink-0">
+                <FilePlus2 className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-[#121316]">
+                  {editingItem ? "Редактирование бланка" : "Регистрация бланка"}
+                </h3>
+                <p className="text-xs text-[#6B7280] mt-0.5">
+                  {editingItem
+                    ? <>Бланк <span className="font-mono text-[#121316]">{editingItem.number || editingItem.permitNumber || '—'}</span></>
+                    : 'Ручной ввод бланка в реестр'}
+                </p>
+              </div>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0"
+            aria-label="Закрыть"
+            className="hidden md:inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>

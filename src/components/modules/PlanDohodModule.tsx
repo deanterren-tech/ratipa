@@ -38,7 +38,7 @@ import {
   CircleDollarSign, MessageSquare, FileText, Pencil, PenLine} from "lucide-react";
 import MapRouteModal from "../MapRouteModal";
 import { UI } from "../../ui/kit";
-import { ModuleShell, SectionHeader, SearchField, FoundCount, EmptyState, ModalShell } from "../../ui/components";
+import { ModuleShell, SectionHeader, SearchField, FoundCount, EmptyState, ModalShell, BackButton } from "../../ui/components";
 
 interface PlanDohodModuleProps {
   user: UserProfile;
@@ -734,15 +734,18 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
         {/* Header Drag Handle */}
         <div
           onMouseDown={handleNbDragStart}
-          className="flex items-center justify-between border-b border-[#E5E7EB] px-4 py-3 bg-[#F8F9FA] cursor-grab active:cursor-grabbing select-none"
+          className="flex items-center justify-between border-b border-[#E5E7EB] px-4 pb-3 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] md:py-3 bg-[#F8F9FA] cursor-grab active:cursor-grabbing select-none"
         >
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 bg-white border border-[#E5E7EB] text-[#4B5563] font-medium text-[10px] rounded-md tracking-wider font-mono">
-              Блокнот
-            </span>
-            <h3 className="text-sm font-semibold text-[#121316] tracking-tight">
-              Блокнот по авто
-            </h3>
+          <div className="flex items-center gap-1 min-w-0">
+            <BackButton onClose={() => { setIsNotebookOpen(false); localStorage.setItem("ratipa_notebook_visible", "false"); }} />
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 bg-white border border-[#E5E7EB] text-[#4B5563] font-medium text-[10px] rounded-md tracking-wider font-mono">
+                Блокнот
+              </span>
+              <h3 className="text-sm font-semibold text-[#121316] tracking-tight">
+                Блокнот по авто
+              </h3>
+            </div>
           </div>
           <div className="flex items-center gap-1">
             <button
@@ -762,7 +765,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
                 setIsNotebookOpen(false);
                 localStorage.setItem("ratipa_notebook_visible", "false");
               }}
-              className="min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+              className="hidden md:flex min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 items-center justify-center p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer"
               title="Закрыть"
             >
               <X size={15} />
@@ -1737,11 +1740,13 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
           
           {/* Header */}
           <div className="bg-white px-4 md:px-6 py-3 md:py-4 flex flex-col md:flex-row md:items-center gap-4 md:gap-10 sticky top-0 z-10 border-b border-[#E5E7EB] shrink-0">
-            {/* Close button — top-right corner */}
+            {/* «Назад» на телефоне (слева) вместо крестика; крестик остаётся с md: */}
+            <BackButton onClose={() => setIsModalOpen(false)} className="self-start" />
+            {/* Close button — top-right corner (desktop) */}
             <button
               type="button"
               onClick={() => setIsModalOpen(false)}
-              className="absolute top-3 right-3 z-30 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 md:w-9 md:h-9 flex items-center justify-center text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+              className="hidden md:flex absolute top-3 right-3 z-30 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 md:w-9 md:h-9 items-center justify-center text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer"
               aria-label="Закрыть"
             >
               <X className="w-5 h-5" strokeWidth={2} />

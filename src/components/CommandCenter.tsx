@@ -5,6 +5,7 @@ import {database, dbService} from '../api'
 import {ref} from 'firebase/database'
 import {UserProfile} from '../types'
 import {formatDriverShortName} from '../utils/driverSync'
+import { BackButton } from '../ui/components'
 
 interface CommandCenterProps {
   user: UserProfile;
@@ -62,7 +63,7 @@ export default function CommandCenter({ user, isOpen, onClose, onNavigate }: Com
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
- className="fixed inset-0 z-[100] bg-slate-900/40 flex items-start justify-center pt-20 px-4 overflow-y-auto"
+className="fixed inset-0 z-[5250] md:z-[100] bg-slate-900/40 flex items-start justify-center pt-20 px-4 overflow-y-auto max-md:p-0"
         onClick={onClose}
       >
         <motion.div 
@@ -70,25 +71,26 @@ export default function CommandCenter({ user, isOpen, onClose, onNavigate }: Com
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -20, scale: 0.95 }}
           transition={{ duration: 0.15 }}
-          className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200"
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 max-md:flex max-md:h-full max-md:max-w-none max-md:flex-col max-md:rounded-none max-md:border-0 max-md:pt-[env(safe-area-inset-top,0px)]"
           onClick={e => e.stopPropagation()}
         >
-          <div className="flex items-center px-4 py-3 border-b border-slate-100 gap-3">
-            <Search className="text-slate-400 w-5 h-5" />
+          <div className="flex items-center px-4 py-3 border-b border-slate-100 gap-3 shrink-0">
+            <BackButton onClose={onClose} />
+            <Search className="text-slate-400 w-5 h-5 shrink-0" />
             <input 
               ref={inputRef}
               type="text" 
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Поиск по тягачам, водителям, документам..." 
-              className="flex-1 bg-transparent border-none outline-none text-slate-800 placeholder:text-slate-400 font-medium"
+              className="flex-1 bg-transparent border-none outline-none text-slate-800 placeholder:text-slate-400 font-medium min-w-0"
             />
-            <button onClick={onClose} aria-label="Закрыть" className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition">
+            <button onClick={onClose} aria-label="Закрыть" className="hidden md:inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition">
               <X className="w-5 h-5" />
             </button>
           </div>
           
-          <div className="max-h-[60vh] overflow-y-auto p-2">
+          <div className="max-h-[60vh] overflow-y-auto p-2 max-md:max-h-none max-md:flex-1 max-md:pb-[calc(env(safe-area-inset-bottom,0px)+108px)]">
              {results.length > 0 ? (
                <div className="flex flex-col gap-1">
                  {results.map((r, i) => (

@@ -10,6 +10,7 @@ import DozvolaWidgets from "./DozvolaWidgets";
 import DozvolaAIAssistant from "./DozvolaAIAssistant";
 import DozvolaPermitModal from "./DozvolaPermitModal";
 import CouplingPicker from "../../common/CouplingPicker";
+import { BackButton } from "../../../ui/components";
 import DozvolaExpirySummary from "./DozvolaExpirySummary";
 
 const canWriteRTDB = () => useFirebase;
@@ -170,21 +171,25 @@ const TiApplicationModal: React.FC<{
         className="relative z-10 w-full max-w-md bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] flex flex-col max-h-[90vh] overflow-hidden"
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB] shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-[#F3F4F6] text-[var(--accent-ink)] rounded-lg shrink-0">
-              <FileText className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-[#121316]">Заявление в транспортную инспекцию</h3>
-              <p className="text-xs text-[#6B7280] mt-0.5">
-                {[permit.type, permit.number || permit.permitNumber].filter(Boolean).join(' ')} · {statusLabel}
-              </p>
+          <div className="flex items-center gap-1 min-w-0">
+            <BackButton onClose={onClose} />
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-[#F3F4F6] text-[var(--accent-ink)] rounded-lg shrink-0">
+                <FileText className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-[#121316]">Заявление в транспортную инспекцию</h3>
+                <p className="text-xs text-[#6B7280] mt-0.5">
+                  {[permit.type, permit.number || permit.permitNumber].filter(Boolean).join(' ')} · {statusLabel}
+                </p>
+              </div>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0"
+            aria-label="Закрыть"
+            className="hidden md:inline-flex items-center justify-center min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-1.5 text-[#9CA3AF] hover:text-[#121316] rounded-lg hover:bg-[#F3F4F6] transition-colors cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>

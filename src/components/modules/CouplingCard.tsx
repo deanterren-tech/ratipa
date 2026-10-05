@@ -4,6 +4,7 @@ import {dbService} from '../../api'
 import {useFleetUnit} from '../../hooks/useFleet'
 import {Truck, User, Calendar, MapPin, X, ArrowRight} from 'lucide-react'
 import {UI} from '../../ui/kit'
+import { BackButton } from '../../ui/components'
 
 interface CouplingCardProps {
   carNumber: string;
@@ -66,19 +67,22 @@ export default function CouplingCard({ carNumber, onClose, onOpenDriver }: Coupl
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3 px-6 py-4 border-b border-[#E5E7EB]">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="p-2 bg-[var(--accent-10)] text-[var(--accent-ink)] rounded-lg shrink-0">
-              <Truck className="w-4 h-4" aria-hidden="true" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-[#121316] font-mono truncate">
-                {tractor?.carNumber || bazaCarNumber || carNumber}
+          <div className="flex items-center gap-1 min-w-0">
+            <BackButton onClose={onClose} className="mt-0.5" />
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2 bg-[var(--accent-10)] text-[var(--accent-ink)] rounded-lg shrink-0">
+                <Truck className="w-4 h-4" aria-hidden="true" />
               </div>
-              <div className="text-xs text-[#6B7280] font-mono mt-0.5 truncate">
-                {trailer?.trailerNumber ? `${trailer.trailerNumber}` : '—'}
-                {(tractor?.brandModel || tractor?.brandsRu || tractor?.brand) ? ` · ${tractor.brandModel || tractor?.brandsRu || tractor.brand}` : ''}
-                {trailer?.trailerBrand ? ` / ${trailer.trailerBrand}` : ''}
-                {tractor?.year ? ` · ${tractor.year} г.` : ''}
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-[#121316] font-mono truncate">
+                  {tractor?.carNumber || bazaCarNumber || carNumber}
+                </div>
+                <div className="text-xs text-[#6B7280] font-mono mt-0.5 truncate">
+                  {trailer?.trailerNumber ? `${trailer.trailerNumber}` : '—'}
+                  {(tractor?.brandModel || tractor?.brandsRu || tractor?.brand) ? ` · ${tractor.brandModel || tractor?.brandsRu || tractor.brand}` : ''}
+                  {trailer?.trailerBrand ? ` / ${trailer.trailerBrand}` : ''}
+                  {tractor?.year ? ` · ${tractor.year} г.` : ''}
+                </div>
               </div>
             </div>
           </div>

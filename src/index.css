@@ -253,10 +253,12 @@ input:focus, select:focus, textarea:focus, button:focus {
   color: var(--accent-on);
 }
 
-/* ---------- Мобильные всплывающие окна: полноэкранно, «как хаб» ----------
-   Помеченные оверлеи (data-mobile-fullscreen) на телефоне открываются от
-   шапки (56px) до низа экрана, без затемнения и боковых отступов; внутренний
-   диалог растягивается и скроллится сам. С md: — прежний вид (карточка). */
+/* ---------- Мобильные всплывающие окна: полный экран, «как хаб» ----------
+   Помеченные оверлеи (data-mobile-fullscreen) на телефоне открываются на весь
+   экран (от 0 до 0), без затемнения и боковых отступов; внутренний диалог
+   растягивается и скроллится сам. Лежат ПОВЕРХ шапки портала (z-50), но ПОД
+   нижней навигацией (она z-[6000]) — полоса остаётся видна и кликабельна.
+   Safe-area сверху/снизу учтены. С md: — прежний вид (карточка). */
 @media (max-width: 767px) {
   [data-scroll-lock="modal"][data-mobile-fullscreen] {
     padding: 0 !important;
@@ -266,14 +268,14 @@ input:focus, select:focus, textarea:focus, button:focus {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
     overflow: hidden !important;
-    /* окно ВСЕГДА под нижней навигацией (она z-[6000]) — как хаб (z-40) */
-    z-index: 40 !important;
+    /* окно ВСЕГДА под нижней навигацией (она z-[6000]), но поверх шапки (z-50) */
+    z-index: 5200 !important;
   }
   [data-scroll-lock="modal"][data-mobile-fullscreen] > div:first-of-type:not([data-scroll-lock="modal"]) {
     position: fixed !important;
     left: 0 !important;
     right: 0 !important;
-    top: 56px !important;
+    top: 0 !important;
     bottom: 0 !important;
     min-height: 0 !important;
     width: 100% !important;
@@ -285,7 +287,9 @@ input:focus, select:focus, textarea:focus, button:focus {
     box-shadow: none !important;
     overflow-y: auto !important;
     overscroll-behavior: contain;
-    /* запас снизу, чтобы кнопки (Сохранить и т.п.) не оказывались под полосой */
+    /* вырез камеры/статус-бар сверху и запас снизу, чтобы кнопки (Сохранить
+       и т.п.) не оказывались ни под чёлкой, ни под полосой навигации */
+    padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 108px);
   }
 }

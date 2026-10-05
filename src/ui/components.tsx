@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { AlertTriangle, Inbox, RefreshCw, Search, SearchX, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Inbox, RefreshCw, Search, SearchX, X } from 'lucide-react';
 import { UI, foundLabel, STATUS_DOT } from './kit';
 
 export interface TabItem {
@@ -310,6 +310,34 @@ export function FoundCount({ count, onReset, className = '' }: { count: number; 
   );
 }
 
+/**
+ * Кнопка «← Назад» мобильного окна — та же реализация и стиль, что в хабе
+ * «Ещё» (после dd546b7): зона ≥ 44 px, понятное доступное имя, закрывает окно
+ * той же логикой, что прежний крестик. Видна только на телефоне (<768):
+ * на десктопе в шапке окна остаётся крестик.
+ */
+export function BackButton({
+  onClose,
+  className = '',
+  label = 'Назад',
+}: {
+  onClose: () => void;
+  className?: string;
+  label?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label={label}
+      className={`md:hidden -ml-1 inline-flex min-h-[44px] shrink-0 items-center gap-2 self-start rounded-xl px-3 text-xs font-medium text-[#4B5563] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] active:bg-[#F3F4F6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] cursor-pointer ${className}`}
+    >
+      <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+      {label}
+    </button>
+  );
+}
+
 /** Оболочка модального окна: единый язык для всех разделов. */
 export function ModalShell({
   isOpen,
@@ -352,11 +380,14 @@ export function ModalShell({
     >
       <div className={`${UI.modalSurface} ${maxWidth}`} role="dialog" aria-modal="true" aria-label={ariaLabel || title}>
         <div className={UI.modalHeader}>
-          <div className="flex items-start gap-3 min-w-0">
-            {icon ? <div className={`${UI.modalIconTile} ${tones[iconTone]}`}>{icon}</div> : null}
-            <div className="min-w-0">
-              <h2 className={UI.modalTitle}>{title}</h2>
-              {subtitle ? <p className={UI.modalSubtitle}>{subtitle}</p> : null}
+          <div className="flex items-start gap-1 min-w-0 flex-1">
+            <BackButton onClose={onClose} className="mt-0.5" />
+            <div className="flex items-start gap-3 min-w-0">
+              {icon ? <div className={`${UI.modalIconTile} ${tones[iconTone]}`}>{icon}</div> : null}
+              <div className="min-w-0">
+                <h2 className={UI.modalTitle}>{title}</h2>
+                {subtitle ? <p className={UI.modalSubtitle}>{subtitle}</p> : null}
+              </div>
             </div>
           </div>
           <button type="button" onClick={onClose} aria-label="Закрыть" className={UI.modalClose}>

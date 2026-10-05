@@ -10,6 +10,7 @@ import {
   Trash2
 } from "lucide-react";
 import {DistancePreset} from '../types'
+import { BackButton } from '../ui/components'
 
 interface MapRouteModalProps {
   isOpen: boolean;
@@ -140,7 +141,7 @@ const MapRouteModal = ({
   const totalMileageNum = parseFloat(manualDistanceKm) || 0;
 
   return (
- <div data-scroll-lock="modal" className="fixed inset-0 z-[300] flex items-center justify-center p-0 md:p-4 bg-slate-900/60 overflow-y-auto">
+ <div data-scroll-lock="modal" className="fixed inset-0 z-[300] max-md:z-[5400] flex items-center justify-center p-0 md:p-4 bg-slate-900/60 overflow-y-auto">
       <div className="bg-white w-full h-full pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] md:h-[95vh] md:pt-0 md:pb-0 md:max-w-[98vw] md:rounded-3xl shadow-2xl flex flex-col md:flex-row border border-slate-200 animate-fade-in">
         
         {/* Sidebar Controls - Compact, Elegant & Ultra-Clean */}
@@ -148,23 +149,26 @@ const MapRouteModal = ({
           
           {/* Top Header */}
           <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-white shrink-0">
-            <div className="flex items-center gap-2.5">
-              <div className="bg-[var(--accent-10)] text-[var(--accent-ink)] p-2 rounded-xl border border-[var(--accent-20)]">
-                <Compass className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-tight">
-                  Маршрут плеча №{legIndex + 1}
-                </h3>
-                <span className="text-[9px] font-bold uppercase text-slate-400 font-mono tracking-wider block">
-                  Интерактивная карта
-                </span>
+            <div className="flex items-center gap-1 min-w-0">
+              <BackButton onClose={onClose} />
+              <div className="flex items-center gap-2.5">
+                <div className="bg-[var(--accent-10)] text-[var(--accent-ink)] p-2 rounded-xl border border-[var(--accent-20)]">
+                  <Compass className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-tight">
+                    Маршрут плеча №{legIndex + 1}
+                  </h3>
+                  <span className="text-[9px] font-bold uppercase text-slate-400 font-mono tracking-wider block">
+                    Интерактивная карта
+                  </span>
+                </div>
               </div>
             </div>
             
             <button
               onClick={onClose}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer"
+              className="hidden md:flex min-h-[44px] min-w-[44px] items-center justify-center text-slate-400 hover:text-slate-700 transition cursor-pointer"
               title="Закрыть модальное окно"
             >
               <X className="w-4 h-4" />
