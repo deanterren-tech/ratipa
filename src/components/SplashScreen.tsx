@@ -1,12 +1,13 @@
 /**
- * Брендовый экран начальной загрузки Ratipa Portal — «система оживает».
+ * Брендовый экран начальной загрузки Ratipa Portal — «система оживает»,
+ * светлая подача (эталон — светлая колонка экрана входа).
  *
  * Композиция (только фирменные токены/шрифты, полноэкранно):
- *  - фон: тёмные вариации #171820, акцентные подсветки на токенах var(--accent*),
- *    точечная сетка и мягкая виньетка (как у экрана входа — единый фирменный слой);
- *  - в центре — знак Ratipa (/R-logo-2.svg, графика не меняется; на тёмном фоне
- *    читается за счёт инверсии filter: brightness(0) invert(1), как portal.svg
- *    в шапке и на экране входа) с дышащим акцентным ореолом;
+ *  - фон: светлый #FFFFFF/#F9FAFB с мягкими акцентными подсветками на токенах
+ *    var(--accent*) и очень лёгкой точечной сеткой (без виньетки);
+ *  - в центре — знак Ratipa (/R-logo-2.svg, графика не меняется) в своих
+ *    натуральных цветах (#171820/#202022): на светлом фоне читается сам, без
+ *    инверсии, с дышащим акцентным ореолом;
  *  - вокруг — абстрактная схема маршрутов международных перевозок: линии
  *    постепенно прорисовываются от внешних узлов-хабов к кольцу, точки-узлы
  *    появляются, по трём маршрутам идут сдержанные точки-«кометы»;
@@ -41,15 +42,14 @@ export default function SplashScreen({
       role="status"
       aria-live="polite"
       aria-label="Загрузка Ratipa Portal"
-      className={`fixed inset-0 z-[10000] overflow-hidden bg-[#171820] font-sans transition-opacity duration-300 ease-out ${
+      className={`fixed inset-0 z-[10000] overflow-hidden bg-[#F9FAFB] font-sans transition-opacity duration-300 ease-out ${
         isLeaving ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >
-      {/* Фон: фирменные градиенты, акцентные подсветки, сетка, виньетка */}
+      {/* Фон: светлый градиент, акцентные подсветки, очень лёгкая сетка точек */}
       <div aria-hidden="true" className="absolute inset-0 pointer-events-none splash-bg" />
       <div aria-hidden="true" className="absolute inset-0 pointer-events-none splash-glow" />
       <div aria-hidden="true" className="absolute inset-0 pointer-events-none splash-grid" />
-      <div aria-hidden="true" className="absolute inset-0 pointer-events-none splash-vignette" />
 
       {/* Схема маршрутов: тонкие линии и точки-узлы вокруг центрального знака */}
       <div aria-hidden="true" className="splash-stage">
@@ -136,8 +136,9 @@ export default function SplashScreen({
         <div className="splash-enter relative flex items-center justify-center">
           <div aria-hidden="true" className="splash-halo" />
           {/* Центр композиции — фирменный знак R. Полный логотип portal.svg
-              остаётся в top bar; здесь он не дублируется. Инверсия — как на
-              экране входа: графика SVG не изменяется. */}
+              остаётся в top bar; здесь он не дублируется. Знак — в натуральных
+              цветах (SVG не меняется, инверсия не применяется): на светлом
+              фоне он читается сам. */}
           <img
             src="/R-logo-2.svg"
             alt="Ratipa Portal"
@@ -152,13 +153,13 @@ export default function SplashScreen({
 
         {/* Нейтральный индикатор без числового значения */}
         <div className="splash-track" aria-hidden="true">
-          <span className="splash-bar block h-full w-1/3 rounded-full bg-white/70" />
+          <span className="splash-bar block h-full w-1/3 rounded-full bg-[var(--accent-solid)]" />
         </div>
 
         {/* Длительная загрузка: понятное сообщение и повтор попытки */}
         {slow && (
           <div className="flex flex-col items-center gap-3 px-6 text-center max-w-xs" role="alert">
-            <p className="text-xs text-white/60 leading-relaxed">
+            <p className="text-xs text-[#6B7280] leading-relaxed">
               Загрузка занимает больше времени, чем обычно.
             </p>
             {onRetry && (

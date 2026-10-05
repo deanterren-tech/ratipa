@@ -21,10 +21,11 @@
     <style>
       /* Мобильный экран загрузки: показывается сразу при открытии приложения,
          ещё до старта React — пустого/белого экрана не видно. На десктопе
-         скрыт (десктопный интерфейс не меняется). Композиция и тайминги
-         совпадают с React-заставкой (SplashScreen.tsx, классы splash-*):
-         тёмный фон, знак с ореолом, схема маршрутов, подпись, индикатор —
-         поэтому переход между статичной и React-заставкой незаметен.
+         скрыт (десктопный интерфейс не меняется). Светлая подача, композиция
+         и тайминги совпадают с React-заставкой (SplashScreen.tsx, классы
+         splash-*): светлый фон, знак в натуральных цветах с ореолом, схема
+         маршрутов, подпись, индикатор — поэтому переход между статичной и
+         React-заставкой незаметен.
          Акцент — значение по умолчанию (var(--accent) = #FF8040): статичная
          заставка видна до того, как загрузится тема пользователя.
          Скриптовой логики здесь нет — только разметка, стили и страховочный
@@ -35,51 +36,49 @@
         #boot-splash {
           position: fixed; inset: 0; z-index: 10000; display: flex;
           align-items: center; justify-content: center; overflow: hidden;
-          background: #171820;
+          background: #F9FAFB;
           font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
           user-select: none; -webkit-user-select: none;
         }
         #boot-splash .boot-bg { position: absolute; inset: 0; pointer-events: none;
-          background: linear-gradient(180deg, #1A1B25 0%, #171820 48%, #141519 100%); }
+          background: linear-gradient(180deg, #FFFFFF 0%, #F9FAFB 52%, #F3F4F6 100%); }
         #boot-splash .boot-glow { position: absolute; inset: 0; pointer-events: none;
-          background: radial-gradient(48rem 34rem at 8% -6%, rgba(255,128,64,0.20), transparent 62%),
-                      radial-gradient(44rem 32rem at 102% 106%, rgba(255,128,64,0.10), transparent 60%);
+          background: radial-gradient(48rem 34rem at 8% -6%, rgba(255,128,64,0.10), transparent 62%),
+                      radial-gradient(44rem 32rem at 102% 106%, rgba(255,128,64,0.05), transparent 60%);
           animation: bootGlow 9s ease-in-out infinite alternate; }
         #boot-splash .boot-grid { position: absolute; inset: 0; pointer-events: none;
-          background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1.3px);
+          background-image: radial-gradient(rgba(100,116,139,0.08) 1px, transparent 1.3px);
           background-size: 26px 26px;
           -webkit-mask-image: radial-gradient(115% 95% at 50% 44%, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.4) 55%, transparent 84%);
           mask-image: radial-gradient(115% 95% at 50% 44%, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.4) 55%, transparent 84%); }
-        #boot-splash .boot-vignette { position: absolute; inset: 0; pointer-events: none;
-          background: radial-gradient(120% 120% at 50% 46%, transparent 40%, rgba(5,6,9,0.5) 100%); }
         #boot-splash .boot-stage { position: absolute; left: 50%; top: 50%;
           width: min(94vw, 94vh, 860px); height: min(94vw, 94vh, 860px);
           transform: translate(-50%, -50%); pointer-events: none;
           animation: bootStageIn 700ms ease-out both; }
         #boot-splash .boot-stage svg { display: block; width: 100%; height: 100%; }
         #boot-splash .boot-ring { fill: none; stroke-width: 1px; vector-effect: non-scaling-stroke; }
-        #boot-splash .boot-ring-a { stroke: rgba(255,255,255,0.12); stroke-dasharray: 2 9;
+        #boot-splash .boot-ring-a { stroke: #D1D5DB; stroke-dasharray: 2 9;
           transform-origin: 500px 500px; animation: bootSpinRot 170s linear infinite; }
-        #boot-splash .boot-ring-b { stroke: rgba(255,128,64,0.25); stroke-dasharray: 1 13;
+        #boot-splash .boot-ring-b { stroke: rgba(255,128,64,0.40); stroke-dasharray: 1 13;
           transform-origin: 500px 500px; animation: bootSpinRot 240s linear infinite reverse; }
-        #boot-splash .boot-route { fill: none; stroke: rgba(255,255,255,0.16); stroke-width: 1px;
+        #boot-splash .boot-route { fill: none; stroke: #D1D5DB; stroke-width: 1px;
           vector-effect: non-scaling-stroke; stroke-linecap: round;
           stroke-dasharray: 1; stroke-dashoffset: 1;
           animation: bootRouteDraw 2000ms cubic-bezier(0.35, 0, 0.2, 1) both; }
-        #boot-splash .boot-route-link { stroke: rgba(255,255,255,0.10); }
-        #boot-splash .boot-route-stub { stroke: rgba(255,255,255,0.13); }
-        #boot-splash .boot-route-outer { stroke: rgba(255,255,255,0.12); }
-        #boot-splash .boot-route-accent { stroke: rgba(255,128,64,0.50); }
-        #boot-splash .boot-comet { fill: none; stroke: rgba(255,128,64,0.60); stroke-width: 1.6px;
+        #boot-splash .boot-route-link { stroke: #E5E7EB; }
+        #boot-splash .boot-route-stub { stroke: #D1D5DB; }
+        #boot-splash .boot-route-outer { stroke: #E5E7EB; }
+        #boot-splash .boot-route-accent { stroke: #FF8040; }
+        #boot-splash .boot-comet { fill: none; stroke: #FF8040; stroke-width: 1.6px;
           vector-effect: non-scaling-stroke; stroke-linecap: round;
           stroke-dasharray: 0.045 0.955; stroke-dashoffset: 1; opacity: 0;
           animation: bootCometIn 600ms ease-out both, bootCometMove 7600ms linear infinite; }
         #boot-splash .boot-node { opacity: 0; transform: scale(0.35);
           transform-box: fill-box; transform-origin: center;
           animation: bootNodeIn 480ms cubic-bezier(0.2, 0.7, 0.3, 1.15) both; }
-        #boot-splash .boot-node-dot { fill: rgba(255,255,255,0.55); }
-        #boot-splash .boot-node-dot-small { fill: rgba(255,255,255,0.4); }
-        #boot-splash .boot-node-ring { fill: none; stroke: rgba(255,255,255,0.35);
+        #boot-splash .boot-node-dot { fill: #FF8040; }
+        #boot-splash .boot-node-dot-small { fill: rgba(255,128,64,0.60); }
+        #boot-splash .boot-node-ring { fill: none; stroke: rgba(255,128,64,0.50);
           stroke-width: 1px; vector-effect: non-scaling-stroke; }
         #boot-splash .boot-node-acc .boot-node-dot { fill: #FF8040; }
         #boot-splash .boot-pulse { fill: none; stroke: rgba(255,128,64,0.40); stroke-width: 1px;
@@ -92,19 +91,20 @@
         #boot-splash .boot-logo-wrap { position: relative; display: flex; align-items: center; justify-content: center; }
         #boot-splash .boot-halo { position: absolute; left: 50%; top: 50%; width: 190px; height: 190px;
           border-radius: 9999px; transform: translate(-50%, -50%);
-          background: radial-gradient(closest-side, rgba(255,128,64,0.25), transparent 72%);
+          background: radial-gradient(closest-side, rgba(255,128,64,0.20), transparent 72%);
           animation: bootHalo 6s ease-in-out infinite alternate; pointer-events: none; }
-        #boot-splash .boot-logo { position: relative; height: 48px; width: auto;
-          filter: brightness(0) invert(1); }
+        /* Знак — в натуральных цветах SVG (#171820/#202022), без инверсии:
+           на светлом фоне читается сам. */
+        #boot-splash .boot-logo { position: relative; height: 48px; width: auto; }
         #boot-splash .boot-caption { margin: 0; font-size: 12px; line-height: 1.4; font-weight: 500;
-          letter-spacing: 0.04em; color: rgba(255,255,255,0.66); }
+          letter-spacing: 0.04em; color: #4B5563; }
         #boot-splash .boot-bar { width: 150px; height: 2px; border-radius: 9999px;
-          background: rgba(255,255,255,0.12); overflow: hidden; }
+          background: #E5E7EB; overflow: hidden; }
         #boot-splash .boot-bar > span { display: block; height: 100%; width: 33%; border-radius: 9999px;
-          background: rgba(255,255,255,0.7); animation: bootBar 1250ms ease-in-out infinite; }
+          background: #FF8040; animation: bootBar 1250ms ease-in-out infinite; }
         #boot-splash .boot-error { display: none; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
-        #boot-splash .boot-error p { margin: 0; font-size: 12px; line-height: 1.5; color: rgba(255,255,255,0.6); }
-        #boot-splash .boot-error .boot-error-title { font-size: 13px; font-weight: 600; color: #FFFFFF; }
+        #boot-splash .boot-error p { margin: 0; font-size: 12px; line-height: 1.5; color: #6B7280; }
+        #boot-splash .boot-error .boot-error-title { font-size: 13px; font-weight: 600; color: #121316; }
         #boot-splash .boot-retry { display: inline-flex; align-items: center; height: 36px; padding: 0 16px; border: 0; border-radius: 10px; background: #FF8040; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
         #boot-splash.is-timeout .boot-bar { display: none; }
         #boot-splash.is-timeout .boot-error { display: flex; }
@@ -143,7 +143,6 @@
       <div class="boot-bg"></div>
       <div class="boot-glow"></div>
       <div class="boot-grid"></div>
-      <div class="boot-vignette"></div>
       <div class="boot-stage">
         <svg viewBox="0 0 1000 1000" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <circle class="boot-ring boot-ring-a" cx="500" cy="500" r="330" />
