@@ -257,6 +257,12 @@ export default function AuthScreen({ onLoginSuccess }: AuthScreenProps) {
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          e.currentTarget.form?.requestSubmit();
+                        }
+                      }}
                       className="h-11 w-full rounded-xl border border-[#E5E7EB] bg-white pl-3.5 pr-11 text-sm text-[#121316] outline-none transition-colors placeholder:text-[#9CA3AF] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)]"
                     />
                     <button
