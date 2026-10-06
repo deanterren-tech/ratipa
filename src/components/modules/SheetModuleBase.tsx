@@ -220,7 +220,7 @@ export default function SheetModuleBase({
           title={`Показать панель «${title}»`}
           aria-label={`Показать панель «${title}»`}
           aria-expanded={false}
-          className="absolute right-3 top-3 z-[101] inline-flex min-h-[44px] max-w-[calc(100vw-24px)] items-center gap-1.5 rounded-xl bg-[var(--accent-solid)] px-3 text-xs font-semibold text-[var(--accent-on)] shadow-sm transition-all hover:bg-[var(--accent-hover)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] sm:min-h-0 sm:py-2"
+          className="absolute left-3 top-3 z-[101] inline-flex min-h-[44px] max-w-[calc(100vw-24px)] items-center gap-1.5 rounded-xl bg-[var(--accent-solid)] px-3 text-xs font-semibold text-[var(--accent-on)] shadow-sm transition-all hover:bg-[var(--accent-hover)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] sm:min-h-0 sm:py-2"
         >
           <ChevronDown className="h-4 w-4 shrink-0" />
           <span className="truncate">{title}</span>
