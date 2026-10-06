@@ -33,11 +33,13 @@ const MODULE_LABELS: Record<string, string> = {
   dozvola: "Учет Дозволов",
   disposition: "Диспозиция",
   documents: "Шаблоны документов",
+  instructions: "Инструкции",
   appSettings: "Справочники",
   settings: "База данных",
   bookIssue: "Книга выдачи",
   tabel: "Табель",
   mdpJournal: "Журнал МДП",
+  driverExpenses: "Расходы водителей",
   admin: "Администрирование",
 };
 

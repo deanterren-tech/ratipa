@@ -181,7 +181,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
   // внешние системы → планирование → системное → диагностика.
   const sheetAndGpsFields = [
     'planZagruzokSheetUrl', 'planZagruzokBlacklistUrl', 'dispositionSheetUrl', 'bookIssueSheetUrl',
-    'tabelSheetUrl', 'mdpJournalSheetUrl', 'googleDriveUrl', 'instructionsDriveUrl',
+    'tabelSheetUrl', 'mdpJournalSheetUrl', 'driverExpensesUrl', 'googleDriveUrl', 'instructionsDriveUrl',
     'gpsBeltranssputnikUrl', 'gpsWialonUrl', 'gpsEraGlonassUrl',
   ] as const;
   const integrationCount = settings
@@ -394,6 +394,14 @@ export default function AdminModule({ user }: AdminModuleProps) {
                     <input type="url"
                       defaultValue={settings.mdpJournalSheetUrl || ''}
                       onBlur={(e) => saveSettings({...settings, mdpJournalSheetUrl: normalizeUrl(e.target.value)})}
+                      className={UI.input}
+                      placeholder="https://docs.google.com/spreadsheets/d/..." />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-medium text-[#6B7280] block">Расходы водителей — Google Таблица</label>
+                    <input type="url"
+                      defaultValue={settings.driverExpensesUrl || ''}
+                      onBlur={(e) => saveSettings({...settings, driverExpensesUrl: normalizeUrl(e.target.value)})}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>

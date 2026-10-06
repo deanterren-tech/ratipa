@@ -35,6 +35,7 @@ export const MODULE_LINKS: { module: string; label: string }[] = [
   { module: 'tabel', label: 'Табель' },
   { module: 'bookIssue', label: 'Книга выдачи' },
   { module: 'mdpJournal', label: 'Журнал МДП' },
+  { module: 'driverExpenses', label: 'Расходы водителей' },
   { module: 'admin', label: 'Администрирование' },
   { module: 'dashboard', label: 'Главная' },
 ];

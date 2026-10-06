@@ -6,12 +6,12 @@ export const DEFAULT_ROLE_PERMS: Record<string, Record<string, string>> = {
     dashboard: "write", dohod: "write", salary: "write", planDohod: "write",
     planZagruzok: "write", baza: "write", vehicleDriverData: "write", dozvola: "write",
     disposition: "write", documents: "write", settings: "write", admin: "write", bookIssue: "write",
-    tabel: "write", mdpJournal: "write", instructions: "read"},
+    tabel: "write", mdpJournal: "write", driverExpenses: "write", instructions: "read"},
   admin: {
     dashboard: "read", dohod: "write", salary: "write", planDohod: "write",
     planZagruzok: "write", baza: "write", vehicleDriverData: "write", dozvola: "write",
     disposition: "write", documents: "write", settings: "write", admin: "none", bookIssue: "write",
-    tabel: "write", mdpJournal: "write",
+    tabel: "write", mdpJournal: "write", driverExpenses: "write", instructions: "write",
   },
   manager: {
     dashboard: "read", dohod: "write", salary: "write", planDohod: "write",
