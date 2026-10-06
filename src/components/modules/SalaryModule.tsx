@@ -1,7 +1,7 @@
-import {useState, useEffect, useMemo} from 'react'
+import {useState, useEffect, useMemo, useRef} from 'react'
 import {UserProfile, SalaryLog, CarRateGroup, AppSettings, Driver, Vehicle} from '../../types'
 import { dbService, database, onValue } from '../../api'
-import {pdService} from '../../api'
+import {pdService, directoryService} from '../../api'
 import { ref } from 'firebase/database'
 import {Wallet, Calculator, Trash2, Edit, Copy, Calendar, TrendingUp, History, ChevronDown, CheckCircle2} from 'lucide-react'
 import {UI} from '../../ui/kit'
@@ -16,6 +16,15 @@ import {CarConflictModal} from '../common/CarConflictModal'
 import {CarConflict} from '../../utils/carConflictHandler'
 import CouplingPicker from '../common/CouplingPicker';
 
+/** Запись справочника «Группы ставок» (directories/rateGroups). */
+interface RateGroupDirItem {
+  id?: string;
+  key?: string;
+  name?: string;
+  rate?: number | string;
+  perDiemRate?: number | string;
+}
+
 interface SalaryModuleProps {
   user: UserProfile;
 }
@@ -26,6 +35,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const { toast } = useToast();
   const [logs, setLogs] = useState<SalaryLog[]>([]);
   const [carsPool, setCarsPool] = useState<CarRateGroup[]>([]);
+  const [rateGroups, setRateGroups] = useState<RateGroupDirItem[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [driversMap, setDriversMap] = useState<Record<string, string>>({});
   const [knownFleet, setKnownFleet] = useState<string[]>([]);
@@ -253,6 +263,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   // 5. General metadata subscriptions
   useEffect(() => {
     const unsubCars = dbService.getCarRateGroups((data) => setCarsPool(data));
+    const unsubRateGroups = directoryService.getRateGroups((data) => setRateGroups(data || []));
     const unsubDrivers = dbService.getDrivers((data) => setDrivers(data));
     const unsubDriversMap = pdService.subscribeDriversCarMapping((m) => setDriversMap(m));
     const unsubSettings = dbService.getSettings((data) => setSettings(data));
@@ -264,6 +275,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
     return () => {
         unsubCars();
+        unsubRateGroups();
         unsubDrivers(); 
         unsubDriversMap();
         unsubSettings();
@@ -272,11 +284,64 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     };
   }, []);
 
+  // —— Автоподстановка «ставки за км» из справочников ——
+  // Защита ручной правки: если поле правили руками после выбора авто, повторный
+  // выбор того же авто его не затирает. При смене авто ставка подставляется
+  // заново: прежнее значение относилось к другому автомобилю.
+  const rateTouchedRef = useRef(false);
+  const lastRateCarRef = useRef('');
+
+  /** Ставка авто: группа ставок (directories/rateGroups) по rateGroupId,
+   *  затем прямое числовое поле rate записи (сцепка / тягач / легаси-группа). */
+  const resolveCarRate = (source: { rateGroupId?: unknown; rate?: unknown; perDiemRate?: unknown } | null | undefined):
+    { rate: number; perDiemRate?: number } | null => {
+    if (!source) return null;
+    const groupId = String(source.rateGroupId || '').trim();
+    if (groupId) {
+      const group = rateGroups.find((x) => (x.id || x.key || '') === groupId);
+      const groupRate = Number(group?.rate);
+      if (Number.isFinite(groupRate) && groupRate > 0) {
+        const groupPerDiem = Number(group?.perDiemRate);
+        return { rate: groupRate, perDiemRate: Number.isFinite(groupPerDiem) && groupPerDiem > 0 ? groupPerDiem : undefined };
+      }
+    }
+    const directRate = Number(source.rate);
+    if (Number.isFinite(directRate) && directRate > 0) {
+      const directPerDiem = Number(source.perDiemRate);
+      return { rate: directRate, perDiemRate: Number.isFinite(directPerDiem) && directPerDiem > 0 ? directPerDiem : undefined };
+    }
+    return null;
+  };
+
+  /** Подставить ставку при выборе/смене авто. Если ставки в справочниках нет —
+   *  поле не трогаем (ничего не подставляем и не стираем существующее значение). */
+  const applyRateOnCarSelect = (
+    sources: Array<{ rateGroupId?: unknown; rate?: unknown; perDiemRate?: unknown } | null | undefined>,
+    plate: string,
+  ) => {
+    let resolved: { rate: number; perDiemRate?: number } | null = null;
+    for (const source of sources) {
+      resolved = resolveCarRate(source);
+      if (resolved) break;
+    }
+    if (!resolved) return;
+    const normalized = normalizePlate(plate || '');
+    const carChanged = normalized !== lastRateCarRef.current;
+    lastRateCarRef.current = normalized;
+    if (!carChanged && rateTouchedRef.current) return;
+    setRatePerKm(resolved.rate);
+    if (resolved.perDiemRate != null) setRatePerDiem(resolved.perDiemRate);
+    rateTouchedRef.current = false;
+  };
+
   const clearCarDriverAutofill = () => {
     setCarId('');
     setDriverId('');
     setDriverName('');
     setAutofillStatus({ type: 'none', message: '' });
+    // Контекст выбора обнулён — следующему выбору авто снова подставляем ставку
+    rateTouchedRef.current = false;
+    lastRateCarRef.current = '';
   };
 
   const applyCarAndDriverToForm = (car: Vehicle, drv: Driver | undefined) => {
@@ -284,15 +349,14 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     setCarNumber(plate);
     setCarId(car.id);
 
-    // Update rate from cars pool if matches
+    // Ставка за км из справочников: сначала группа ставок авто (rateGroupId →
+    // directories/rateGroups) или прямое значение у тягача, затем легаси-группы
+    // carsPool по номеру. Нет ставки — поле не трогаем.
     const normalizedCarPlate = normalizePlate(plate);
-    const group = carsPool.find(g => 
+    const poolGroup = carsPool.find(g =>
         (g.vehicles || []).some(v => normalizePlate(v) === normalizedCarPlate)
     );
-    if (group) {
-        setRatePerKm(group.rate);
-        setRatePerDiem(group.perDiemRate);
-    }
+    applyRateOnCarSelect([car, poolGroup], plate);
 
     if (drv) {
       setDriverId(drv.id);
@@ -387,18 +451,13 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
         message: 'Машина не найдена в базе автопарка'
       });
 
-      // Still check if rate group has this vehicle plate
+      // Машина не нашлась в базе — всё же пробуем ставку из справочника
+      // (легаси-группы carsPool по номеру). Нет ставки — поле не трогаем.
       const normalizedTyped = normalizePlate(val);
-      const group = carsPool.find(g => 
+      const group = carsPool.find(g =>
           (g.vehicles || []).some(v => normalizePlate(v) === normalizedTyped)
       );
-      if (group) {
-          setRatePerKm(group.rate);
-          setRatePerDiem(group.perDiemRate);
-      } else {
-          setRatePerKm(0.125);
-          setRatePerDiem(undefined);
-      }
+      applyRateOnCarSelect([group], val);
     }
   };
 
@@ -574,6 +633,9 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                       setDriverName(rec.driverName);
                     }
                     handleCarNumberChange(cNum);
+                    // Ставка по самой записи сцепки (rateGroupId / rate) — не зависит
+                    // от совпадения номера в tractors (кириллица/латиница в госномерах)
+                    applyRateOnCarSelect([rec], cNum);
                   }}
                 />
               </div>
@@ -646,7 +708,11 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                 type="number"
                 step="0.001"
                 value={ratePerKm}
-                onChange={e => setRatePerKm(Number(e.target.value))}
+                onChange={e => {
+                  // Ручная правка: защищаем значение от повторной автоподстановки
+                  rateTouchedRef.current = true;
+                  setRatePerKm(Number(e.target.value));
+                }}
                 className={UI.input}
               />
             </div>

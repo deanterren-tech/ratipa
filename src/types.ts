@@ -117,6 +117,10 @@ export interface Vehicle {
   phone?: string;
   ownerName?: string;
   tariffId?: string;
+  /** Ставка за км (€/км) из справочника — есть у записей tractors/couplings. */
+  rate?: number;
+  /** Группа ставок (directories/rateGroups.id) — привязка авто к справочнику ставок. */
+  rateGroupId?: string;
 }
 
 export interface Leg {
