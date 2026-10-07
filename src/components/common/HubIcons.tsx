@@ -308,6 +308,15 @@ export function HubBookIcon({ className, style }: HubIconProps) {
   );
 }
 
+/** Книга выдачи РР: книга с корешком и галочкой. */
+export function HubBookCheckIcon({ className, style }: HubIconProps) {
+  return (
+    <svg {...base(className, style)}>
+      <path d="M8 3.4h7.2a2.9 2.9 0 0 1 2.9 2.9v11.4a2.9 2.9 0 0 1-2.9 2.9H8A3.6 3.6 0 0 1 4.4 17V7A3.6 3.6 0 0 1 8 3.4Z M8.3 3.6v16.8h1.3V3.6Z M10.8 11.9l1.7 1.7 3.9-4.7-1.1-.9-2.8 3.4-1-1Z" />
+    </svg>
+  );
+}
+
 /** База данных: три полки-яруса. */
 export function HubDatabaseIcon({ className, style }: HubIconProps) {
   return (

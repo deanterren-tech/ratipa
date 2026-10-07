@@ -28,7 +28,7 @@ import {
   HubCalendarIcon, HubNavIcon, HubCalcIcon,
   HubTrendIcon, HubReceiptIcon,
   HubUsersIcon, HubTogglesIcon, HubChevronIcon,
-  HubKeyIcon, HubBookmarkIcon, HubWalletIcon, HubBookIcon, HubDatabaseIcon, HubFolderIcon,
+  HubKeyIcon, HubBookmarkIcon, HubWalletIcon, HubBookIcon, HubBookCheckIcon, HubDatabaseIcon, HubFolderIcon,
   HubGridIcon, HubFuelIcon,
 } from './common/HubIcons';
 import { dbService } from '../api';
@@ -70,6 +70,7 @@ const MODULE_STYLE: Record<string, { icon: HubIconComponent; color: string }> = 
   tabel: { icon: HubCalendarIcon, color: 'var(--accent)' },
   mdpJournal: { icon: HubBookIcon, color: 'var(--accent)' },
   driverExpenses: { icon: HubFuelIcon, color: 'var(--accent)' },
+  bookIssueRR: { icon: HubBookCheckIcon, color: 'var(--accent)' },
   // Настройки
   settings: { icon: HubDatabaseIcon, color: 'var(--accent)' },
   appSettings: { icon: HubFolderIcon, color: 'var(--accent)' },

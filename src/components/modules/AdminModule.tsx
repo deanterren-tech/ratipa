@@ -181,7 +181,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
   // внешние системы → планирование → системное → диагностика.
   const sheetAndGpsFields = [
     'planZagruzokSheetUrl', 'planZagruzokBlacklistUrl', 'dispositionSheetUrl', 'bookIssueSheetUrl',
-    'tabelSheetUrl', 'mdpJournalSheetUrl', 'driverExpensesUrl', 'googleDriveUrl', 'instructionsDriveUrl',
+    'tabelSheetUrl', 'mdpJournalSheetUrl', 'driverExpensesUrl', 'bookIssueRRUrl', 'googleDriveUrl', 'instructionsDriveUrl',
     'gpsBeltranssputnikUrl', 'gpsWialonUrl', 'gpsEraGlonassUrl',
   ] as const;
   const integrationCount = settings
@@ -402,6 +402,14 @@ export default function AdminModule({ user }: AdminModuleProps) {
                     <input type="url"
                       defaultValue={settings.driverExpensesUrl || ''}
                       onBlur={(e) => saveSettings({...settings, driverExpensesUrl: normalizeUrl(e.target.value)})}
+                      className={UI.input}
+                      placeholder="https://docs.google.com/spreadsheets/d/..." />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-medium text-[#6B7280] block">Книга выдачи РР — Google Таблица</label>
+                    <input type="url"
+                      defaultValue={settings.bookIssueRRUrl || ''}
+                      onBlur={(e) => saveSettings({...settings, bookIssueRRUrl: normalizeUrl(e.target.value)})}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>

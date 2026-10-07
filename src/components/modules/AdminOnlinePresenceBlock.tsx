@@ -40,6 +40,7 @@ const MODULE_LABELS: Record<string, string> = {
   tabel: "Табель",
   mdpJournal: "Журнал МДП",
   driverExpenses: "Расходы водителей",
+  bookIssueRR: "Книга выдачи РР",
   admin: "Администрирование",
 };
 

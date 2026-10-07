@@ -33,6 +33,7 @@ export interface UserPermissions {
   tabel?: "none" | "read" | "write";
   mdpJournal?: "none" | "read" | "write";
   driverExpenses?: "none" | "read" | "write";
+  bookIssueRR?: "none" | "read" | "write";
 }
 
 export interface UserProfile {
@@ -421,6 +422,7 @@ export interface AppSettings {
   tabelSheetUrl?: string;
   mdpJournalSheetUrl?: string;
   driverExpensesUrl?: string;
+  bookIssueRRUrl?: string;
   googleDriveUrl?: string;
   gpsBeltranssputnikUrl?: string;
   gpsWialonUrl?: string;
@@ -789,6 +791,12 @@ export const allModules = [
     label: "Расходы водителей",
     icon: "Coins",
     permissionKey: "driverExpenses",
+  },
+  {
+    key: "bookIssueRR",
+    label: "Книга выдачи РР",
+    icon: "BookCheck",
+    permissionKey: "bookIssueRR",
   },
   {
     key: "settings",
