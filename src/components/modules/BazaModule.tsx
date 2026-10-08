@@ -1006,9 +1006,10 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
   const resolveDriverName = (car: any) => {
     const tractor = normalizePlate((car.carNumber || '').split('/')[0]);
     const coupling = couplingByPlate.get(tractor);
-    const full = coupling
-      ? (coupling.driverNameRu || coupling.driverName)
-      : (car.driverNameRu || car.driverName || car.driverShortNameRu);
+    // Водитель берётся из сцепки, но если там его нет — откат к данным самой записи,
+    // иначе ячейка «Водитель» оставалась пустой (напр. «Суша»).
+    const fromCoupling = coupling ? (coupling.driverNameRu || coupling.driverName) : '';
+    const full = fromCoupling || car.driverNameRu || car.driverName || car.driverShortNameRu || '';
     return formatDriverShortName(full || '');
   };
 
