@@ -1476,7 +1476,6 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     }
     setPlEditingId(null);
     setPlName("");
-    addToast("Сравните варианты во вкладке «Потенц. грузы» и выберите наиболее выгодный маршрут.", 'info');
     setIsModalOpen(true);
   }, [directions]);
 
