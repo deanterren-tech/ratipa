@@ -128,6 +128,8 @@ export const subscribeFleetUnits = (callback: (units: FleetUnit[]) => void): (()
           trailerId: c.trailerId ?? null,
           driverId: c.driverId ?? null,
           dispatcherName: c.dispatcherName ?? null,
+          // Стабильная связь с учётной записью диспетчера (для вкладок таймлайна)
+          dispatcherId: c.dispatcherId ?? null,
           status: c.status,
           // Ключевые поля дублируются в couplings — они ПРИОРИТЕТНЕЕ
           // tractors (у 39 тракторов brand пустой, а в couplings он есть у всех 46).
@@ -195,7 +197,7 @@ export const getFleetUnitsOnce = (callback: (units: any[]) => void): void => {
         driver: driver || null,
         dispatcher: dispatcher || (c.dispatcherName ? { name: c.dispatcherName } : null),
         status: c.status || 'base',
-        raw: { tractorId: c.tractorId ?? null, trailerId: c.trailerId ?? null, trailerNumber: c.trailerNumber ?? null, trailerBrand: c.trailerBrand ?? null, driverId: c.driverId ?? null, dispatcherName: c.dispatcherName ?? null, status: c.status },
+        raw: { tractorId: c.tractorId ?? null, trailerId: c.trailerId ?? null, trailerNumber: c.trailerNumber ?? null, trailerBrand: c.trailerBrand ?? null, driverId: c.driverId ?? null, dispatcherName: c.dispatcherName ?? null, dispatcherId: c.dispatcherId ?? null, status: c.status },
       };
     });
     callback(units.map(_mapUnitToFlat));
@@ -284,6 +286,7 @@ const _mapUnitToFlat = (u: any) => {
   vehicleType: u.raw?.vehicleType || u.tractor?.vehicleType,
   rateGroupId: u.raw?.rateGroupId || (u.tractor as any)?.rateGroupId || '',
   driver2: u.raw?.driver2 || (u.tractor as any)?.driver2 || '',
+  dispatcherId: u.raw?.dispatcherId || '',
 });};
 
 const _notifyCouplingsFlat = () => {

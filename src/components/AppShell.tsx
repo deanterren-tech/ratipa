@@ -21,7 +21,7 @@ import UpdateTour from './UpdateTour'
 import PortalInstructionsModal from './PortalInstructionsModal'
 import {usePresence} from '../hooks/usePresence'
 import {useChat} from '../hooks/useChat'
-import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Truck, FileText, Files, Clock, Map, Settings, Settings2, ShieldAlert, LogOut, Menu, X, Radio, MessageSquare, Send, Trash2, Sparkles, ChevronDown, ArrowUp, Pencil, Calendar, Bell, BellRing, Check, CheckCheck, AlertTriangle, Info, LineChart, ExternalLink, Wifi, WifiOff, RefreshCw, LoaderCircle, Home, Sliders, BookOpen, ClipboardList, CircleDollarSign, Coins, BookCheck, BookMarked, Grid3x3, MoreHorizontal } from 'lucide-react';
+import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Truck, FileText, Files, Clock, Map, Settings, Settings2, ShieldAlert, LogOut, Menu, X, Radio, MessageSquare, Send, Trash2, Sparkles, ChevronDown, ArrowUp, Pencil, Calendar, CalendarRange, Bell, BellRing, Check, CheckCheck, AlertTriangle, Info, LineChart, ExternalLink, Wifi, WifiOff, RefreshCw, LoaderCircle, Home, Sliders, BookOpen, ClipboardList, CircleDollarSign, Coins, BookCheck, BookMarked, Grid3x3, MoreHorizontal } from 'lucide-react';
 
 // Import newly created business modules
 const DashboardModule = lazy(() => import('./modules/DashboardModule'));
@@ -44,6 +44,7 @@ const TabelModule = lazy(() => import('./modules/TabelModule'));
 const MdpJournalModule = lazy(() => import('./modules/MdpJournalModule'));
 const DriverExpensesModule = lazy(() => import('./modules/DriverExpensesModule'));
 const BookIssueRRModule = lazy(() => import('./modules/BookIssueRRModule'));
+const TripTimelineModule = lazy(() => import('./modules/TripTimelineModule'));
 const AgentAuditModule = lazy(() => import('./modules/AgentAuditModule'));
 const NotFoundPage = lazy(() => import('./common/NotFoundPage'));
 
@@ -557,6 +558,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'planDohod', label: 'План Дохода', icon: TrendingUp, permissionKey: 'planDohod' },
     { key: 'planZagruzok', label: 'План Загрузок', icon: FileSpreadsheet, permissionKey: 'planZagruzok' },
     { key: 'currentPlanning', label: 'Текущее планирование', icon: Calendar, permissionKey: 'currentPlanning' },
+    { key: 'tripTimeline', label: 'Таймлайн рейсов', icon: CalendarRange, permissionKey: 'tripTimeline' },
     { key: 'baza', label: 'Учет выезда', icon: Truck, permissionKey: 'baza' },
     { key: 'vehicleDriverData', label: 'Авто и Водители', icon: FileText, permissionKey: 'vehicleDriverData' },
     { key: 'dozvola', label: 'Учет Дозволов', icon: FileText, permissionKey: 'dozvola' },
@@ -630,7 +632,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     return [
       { id: 'g_home', label: 'Главная', isDropdown: false, singleModuleKey: 'dashboard' },
       { id: 'g_ops', label: 'Текущее', isDropdown: true, subtabKeys: ['disposition', 'baza', 'documents', 'vehicleDriverData', 'dozvola', 'instructions'] },
-      { id: 'g_planning', label: 'Планирование', isDropdown: true, subtabKeys: ['planZagruzok', 'planDohod', 'currentPlanning', 'dohod'] },
+      { id: 'g_planning', label: 'Планирование', isDropdown: true, subtabKeys: ['planZagruzok', 'planDohod', 'currentPlanning', 'tripTimeline', 'dohod'] },
       { id: 'g_report', label: 'Отчетность', isDropdown: true, subtabKeys: ['salary', 'bookIssue', 'tabel', 'mdpJournal', 'driverExpenses', 'bookIssueRR'] },
       { id: 'g_settings', label: 'Настройки', isDropdown: true, subtabKeys: ['settings', 'appSettings', 'admin'] }
     ];
@@ -849,6 +851,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         return <DashboardModule user={user} onNavigate={handleNavigate} />;
       case 'currentPlanning':
         return <CurrentPlanningModule user={user} />;
+      case 'tripTimeline':
+        return <TripTimelineModule user={user} settings={settings} />;
       case 'dohod':
         return <DohodModule user={user} />;
       case 'salary':

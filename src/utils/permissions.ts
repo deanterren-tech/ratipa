@@ -6,26 +6,26 @@ export const DEFAULT_ROLE_PERMS: Record<string, Record<string, string>> = {
     dashboard: "write", dohod: "write", salary: "write", planDohod: "write",
     planZagruzok: "write", baza: "write", vehicleDriverData: "write", dozvola: "write",
     disposition: "write", documents: "write", settings: "write", admin: "write", bookIssue: "write", bookIssueRR: "write",
-    tabel: "write", mdpJournal: "write", driverExpenses: "write", instructions: "read"},
+    tabel: "write", mdpJournal: "write", driverExpenses: "write", instructions: "read", tripTimeline: "write"},
   admin: {
     dashboard: "read", dohod: "write", salary: "write", planDohod: "write",
     planZagruzok: "write", baza: "write", vehicleDriverData: "write", dozvola: "write",
     disposition: "write", documents: "write", settings: "write", admin: "none", bookIssue: "write", bookIssueRR: "write",
-    tabel: "write", mdpJournal: "write", driverExpenses: "write", instructions: "write",
+    tabel: "write", mdpJournal: "write", driverExpenses: "write", instructions: "write", tripTimeline: "write",
   },
   manager: {
     dashboard: "read", dohod: "write", salary: "write", planDohod: "write",
     planZagruzok: "write", baza: "write", vehicleDriverData: "write", dozvola: "write",
-    disposition: "write", documents: "write", settings: "write", admin: "none", instructions: "read"},
+    disposition: "write", documents: "write", settings: "write", admin: "none", instructions: "read", tripTimeline: "write"},
   mechanic: { dashboard: "read", baza: "read", instructions: "read"},
   dispatcher: {
     dashboard: "read", dohod: "write", salary: "write", planDohod: "read",
     planZagruzok: "read", baza: "read", vehicleDriverData: "read", dozvola: "read",
-    disposition: "read", documents: "write", settings: "none", admin: "none", instructions: "read"},
+    disposition: "read", documents: "write", settings: "none", admin: "none", instructions: "read", tripTimeline: "write"},
   accountant: {
     dashboard: "read", dohod: "write", salary: "write", planDohod: "read",
     planZagruzok: "read", baza: "read", vehicleDriverData: "read", dozvola: "read",
-    disposition: "read", documents: "write", settings: "none", admin: "none", instructions: "read"},
+    disposition: "read", documents: "write", settings: "none", admin: "none", instructions: "read", tripTimeline: "read"},
   viewer: {
     dashboard: "read", dohod: "none", salary: "none", planDohod: "none",
     planZagruzok: "none", baza: "read", vehicleDriverData: "none", dozvola: "none",
@@ -33,7 +33,7 @@ export const DEFAULT_ROLE_PERMS: Record<string, Record<string, string>> = {
   logist: {
     dashboard: "read", dohod: "none", salary: "none", planDohod: "read",
     planZagruzok: "write", baza: "read", vehicleDriverData: "read", dozvola: "read",
-    disposition: "write", documents: "none", settings: "none", admin: "none", instructions: "read"},
+    disposition: "write", documents: "none", settings: "none", admin: "none", instructions: "read", tripTimeline: "read"},
 };
 
 /**

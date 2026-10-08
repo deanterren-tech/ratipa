@@ -131,6 +131,49 @@ function BazaDateField({
 
 export default function BazaModule({ user: ratipaUser, settings }: BazaModuleProps) {
   const { showConfirm } = useDialog();
+
+  // Переход из таймлайна: «Открыть учёт выезда» помечает запись — подсвечиваем
+  // и прокручиваем к ней, когда список загрузился (данные приходят асинхронно).
+  useEffect(() => {
+    let focusId = '';
+    try {
+      focusId = sessionStorage.getItem('ratipa_focus_baza_record') || '';
+      if (focusId) sessionStorage.removeItem('ratipa_focus_baza_record');
+    } catch {
+      /* не критично */
+    }
+    if (!focusId) return;
+    let tries = 0;
+    const clickTab = (re: RegExp) => {
+      const btn = Array.from(document.querySelectorAll('button, [role="tab"]')).find((b) =>
+        re.test((b.textContent || '').trim()),
+      );
+      if (btn) {
+        (btn as HTMLElement).click();
+        return true;
+      }
+      return false;
+    };
+    const timer = window.setInterval(() => {
+      tries += 1;
+      const el = document.querySelector(`[data-baza-id="${focusId}"]`);
+      if (el) {
+        window.clearInterval(timer);
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-[var(--accent-30)]');
+        window.setTimeout(() => el.classList.remove('ring-2', 'ring-[var(--accent-30)]'), 3000);
+        return;
+      }
+      // Запись может лежать в другой вкладке или ниже по списку (пагинация) —
+      // переключаемся/догружаем, не теряя намерение показать именно эту запись.
+      if (tries === 2) clickTab(/^Архив\b/);
+      if (tries === 4 || tries === 6 || tries === 8) clickTab(/^Показать ещё\b/);
+      if (tries === 10) clickTab(/^На базе\b/);
+      if (tries > 14) window.clearInterval(timer);
+    }, 600);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const { toast } = useToast();
   const [currentTab, setCurrentTab] = useState<'base' | 'archive' | 'history'>('base');
   
@@ -1344,7 +1387,7 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
                     </thead>
                     <tbody>
                       {visibleList.map((v, rowIndex) => (
-                        <tr key={`${v.id}-${normalizePlate(v.carNumber)}-${rowIndex}`} data-nav-item className={`${UI.tr} cursor-pointer`}>
+                        <tr key={`${v.id}-${normalizePlate(v.carNumber)}-${rowIndex}`} data-nav-item data-baza-id={v.id} className={`${UI.tr} cursor-pointer`}>
                           <td onClick={() => openCarModal(v)} className={UI.tdMono}><span className="select-all">{v.carNumber}</span></td>
                           <td onClick={() => openCarModal(v)} className={UI.tdStrong}>{v.displayDriver || '—'}</td>
                           <td onClick={() => openCarModal(v)} className={UI.td}><span className="whitespace-nowrap">{v.dateArrival ? v.dateArrival.split('-').reverse().join('/') : '—'}</span></td>

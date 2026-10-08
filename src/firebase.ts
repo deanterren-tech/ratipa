@@ -31,6 +31,9 @@ import {
   DirectionPreset,
   Driver,
   CurrencyPreset,
+  TimelineTrip,
+  TimelineVehicleEvent,
+  TimelineStageType,
 } from "./types";
 import { firebaseConfig } from "./firebaseConfig";
 import { registerRead, markRead, releaseRead } from "./db/moduleReadiness";
@@ -542,6 +545,23 @@ export const directoryService = {
 // Throttle для trackPresence (live-обновление блока онлайна не чаще 30с)
 let __lastPresenceWrite = 0;
 const __PRESENCE_THROTTLE_MS = 30000;
+
+/** Рекурсивно вычищает undefined перед записью в RTDB (undefined отвергается базой).
+ *  Массивы сохраняются массивами, вложенные объекты — объектами; null остаётся. */
+const stripUndefinedDeep = <T,>(value: T): T => {
+  if (Array.isArray(value)) {
+    return value.map((v) => stripUndefinedDeep(v)) as unknown as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    Object.keys(value as Record<string, unknown>).forEach((k) => {
+      const v = (value as Record<string, unknown>)[k];
+      if (v !== undefined) out[k] = stripUndefinedDeep(v);
+    });
+    return out as unknown as T;
+  }
+  return value;
+};
 
 export const dbService = {
   // Test/Connectivity state
@@ -1416,6 +1436,31 @@ export const dbService = {
     return () => {};
   },
 
+  /** Рейсы «Плана дохода» — рабочая ветка модуля (trips_dashboard, с подчёркиванием).
+   *  Используется таймлайном для автоматических полос; легаси-ветку tripsdashboard
+   *  не трогаем (её читают другие блоки). */
+  getPlanDohodTrips: (callback: (trips: any[]) => void) => {
+    if (useFirebase) {
+      return onValue(
+        ref(database, "trips_dashboard"),
+        (snap) => {
+          const val = snap.val();
+          if (!val) {
+            callback([]);
+            return;
+          }
+          callback(Object.keys(val).map((k) => ({ ...val[k], id: k })));
+        },
+        (err) => {
+          console.warn("Plan Dohod trips read lock:", err);
+          callback([]);
+        },
+      );
+    }
+    callback([]);
+    return () => {};
+  },
+
   getDriverSalaryLogs: (driverId: string, callback: (logs: any[]) => void) => {
     if (useFirebase && driverId) {
       return onValue(ref(database, `salaryHistory/flat/${driverId}`), (snap) => {
@@ -1773,6 +1818,313 @@ export const dbService = {
       id,
       `План рейса удален`,
     );
+  },
+
+  // ---- ТАЙМЛАЙН РЕЙСОВ ПО МАШИНАМ (модуль tripTimeline) --------------------
+  // Собственные ветки модуля: tripTimeline/trips (рейсы со этапами),
+  // tripTimeline/vehicleEvents (события машин), tripTimeline/config/stageTypes
+  // (расширяемый справочник типов). Существующие ветки портала (tripsdashboard
+  // и др.) модуль не читает и не перезаписывает — конфликтов схем нет.
+  // Все правки — partial-merge через update(); undefined вычищается до записи
+  // (RTDB отвергает undefined).
+
+  getTimelineTrips: (callback: (trips: TimelineTrip[]) => void) => {
+    if (useFirebase) {
+      return onValue(
+        ref(database, "tripTimeline/trips"),
+        (snapshot) => {
+          const data = snapshot.val();
+          const list: TimelineTrip[] = data
+            ? Object.keys(data).map((key) => ({ ...data[key], id: key }))
+            : [];
+          callback(list);
+        },
+        (err) => {
+          console.warn("Timeline trips read lock:", err);
+          callback(getLocalStorageData<TimelineTrip[]>("ratipa_timeline_trips", []));
+        },
+      );
+    }
+    callback(getLocalStorageData<TimelineTrip[]>("ratipa_timeline_trips", []));
+    return () => {};
+  },
+
+  createTimelineTrip: (trip: TimelineTrip, user: string, role: string) => {
+    const payload = stripUndefinedDeep(trip);
+    if (useFirebase) {
+      set(ref(database, `tripTimeline/trips/${trip.id}`), payload).catch((err) =>
+        handleFailure('firebase', err, { path: `tripTimeline/trips/${trip.id}`, userMessage: 'Не удалось сохранить рейс — попробуйте ещё раз' }),
+      );
+    } else {
+      const local = getLocalStorageData<TimelineTrip[]>("ratipa_timeline_trips", []);
+      local.push(trip);
+      setLocalStorageData("ratipa_timeline_trips", local);
+    }
+    dbService.logAction(user, role, "Создание рейса таймлайна", "TripTimeline", trip.id, `Рейс ${trip.carNumber}: ${trip.route || 'без маршрута'}`);
+  },
+
+  /** Правка полей рейса (маршрут, диспетчер, запас, даты диапазона) — merge, без перезаписи этапов. */
+  updateTimelineTrip: (id: string, patch: Partial<TimelineTrip>) => {
+    if (!id || !patch) return;
+    const clean = stripUndefinedDeep(patch) as Record<string, unknown>;
+    if (useFirebase) {
+      update(ref(database, `tripTimeline/trips/${id}`), clean).catch((err) =>
+        handleFailure('firebase', err, { path: `tripTimeline/trips/${id}`, userMessage: 'Не удалось сохранить правку рейса' }),
+      );
+    } else {
+      const local = getLocalStorageData<TimelineTrip[]>("ratipa_timeline_trips", []);
+      const idx = local.findIndex((t) => t.id === id);
+      if (idx >= 0) local[idx] = { ...local[idx], ...(clean as Partial<TimelineTrip>) };
+      setLocalStorageData("ratipa_timeline_trips", local);
+    }
+  },
+
+  /** Правка одного этапа — merge по узлу этапа (остальные этапы не трогаются). */
+  updateTimelineStage: (tripId: string, stageId: string, patch: Record<string, unknown>) => {
+    if (!tripId || !stageId || !patch) return;
+    const clean = stripUndefinedDeep(patch);
+    if (useFirebase) {
+      update(ref(database, `tripTimeline/trips/${tripId}/stages/${stageId}`), clean).catch((err) =>
+        handleFailure('firebase', err, { path: `tripTimeline/trips/${tripId}/stages/${stageId}`, userMessage: 'Не удалось сохранить этап' }),
+      );
+    } else {
+      const local = getLocalStorageData<TimelineTrip[]>("ratipa_timeline_trips", []);
+      const idx = local.findIndex((t) => t.id === tripId);
+      if (idx >= 0) {
+        const stages = Array.isArray(local[idx].stages) ? local[idx].stages : [];
+        local[idx] = { ...local[idx], stages: stages.map((s) => (s.id === stageId ? { ...s, ...patch } : s)) };
+        setLocalStorageData("ratipa_timeline_trips", local);
+      }
+    }
+  },
+
+  /** Добавление этапа целиком (новый узел). */
+  addTimelineStage: (tripId: string, stage: Record<string, unknown>) => {
+    const sid = typeof stage.id === 'string' ? stage.id : '';
+    if (!tripId || !sid) return;
+    const clean = stripUndefinedDeep(stage);
+    if (useFirebase) {
+      update(ref(database, `tripTimeline/trips/${tripId}/stages/${sid}`), clean).catch((err) =>
+        handleFailure('firebase', err, { path: `tripTimeline/trips/${tripId}/stages/${sid}`, userMessage: 'Не удалось добавить этап' }),
+      );
+    } else {
+      const local = getLocalStorageData<TimelineTrip[]>("ratipa_timeline_trips", []);
+      const idx = local.findIndex((t) => t.id === tripId);
+      if (idx >= 0) {
+        const stages = Array.isArray(local[idx].stages) ? local[idx].stages : [];
+        local[idx] = { ...local[idx], stages: [...stages, stage as never] };
+        setLocalStorageData("ratipa_timeline_trips", local);
+      }
+    }
+  },
+
+  deleteTimelineStage: (tripId: string, stageId: string) => {
+    if (!tripId || !stageId) return;
+    if (useFirebase) {
+      remove(ref(database, `tripTimeline/trips/${tripId}/stages/${stageId}`)).catch((err) =>
+        handleFailure('firebase', err, { path: `tripTimeline/trips/${tripId}/stages/${stageId}`, userMessage: 'Не удалось удалить этап' }),
+      );
+    } else {
+      const local = getLocalStorageData<TimelineTrip[]>("ratipa_timeline_trips", []);
+      const idx = local.findIndex((t) => t.id === tripId);
+      if (idx >= 0) {
+        local[idx] = { ...local[idx], stages: (local[idx].stages || []).filter((s) => s.id !== stageId) };
+        setLocalStorageData("ratipa_timeline_trips", local);
+      }
+    }
+  },
+
+  deleteTimelineTrip: (id: string, user: string, role: string) => {
+    if (!id) return;
+    if (useFirebase) {
+      remove(ref(database, `tripTimeline/trips/${id}`)).catch((err) =>
+        handleFailure('firebase', err, { path: `tripTimeline/trips/${id}`, userMessage: 'Не удалось удалить рейс' }),
+      );
+    } else {
+      const local = getLocalStorageData<TimelineTrip[]>("ratipa_timeline_trips", []);
+      setLocalStorageData("ratipa_timeline_trips", local.filter((t) => t.id !== id));
+    }
+    dbService.logAction(user, role, "Удаление рейса таймлайна", "TripTimeline", id, "Рейс удалён с таймлайна");
+  },
+
+  getVehicleEvents: (callback: (events: TimelineVehicleEvent[]) => void) => {
+    if (useFirebase) {
+      return onValue(
+        ref(database, "tripTimeline/vehicleEvents"),
+        (snapshot) => {
+          const data = snapshot.val();
+          const list: TimelineVehicleEvent[] = data
+            ? Object.keys(data).map((key) => ({ ...data[key], id: key }))
+            : [];
+          callback(list);
+        },
+        (err) => {
+          console.warn("Vehicle events read lock:", err);
+          callback(getLocalStorageData<TimelineVehicleEvent[]>("ratipa_timeline_events", []));
+        },
+      );
+    }
+    callback(getLocalStorageData<TimelineVehicleEvent[]>("ratipa_timeline_events", []));
+    return () => {};
+  },
+
+  saveVehicleEvent: (ev: TimelineVehicleEvent, user: string, role: string) => {
+    const payload = stripUndefinedDeep(ev);
+    if (useFirebase) {
+      update(ref(database, `tripTimeline/vehicleEvents/${ev.id}`), payload).catch((err) =>
+        handleFailure('firebase', err, { path: `tripTimeline/vehicleEvents/${ev.id}`, userMessage: 'Не удалось сохранить событие машины' }),
+      );
+    } else {
+      const local = getLocalStorageData<TimelineVehicleEvent[]>("ratipa_timeline_events", []);
+      const idx = local.findIndex((e) => e.id === ev.id);
+      if (idx >= 0) local[idx] = ev;
+      else local.push(ev);
+      setLocalStorageData("ratipa_timeline_events", local);
+    }
+    dbService.logAction(user, role, "Событие машины", "TripTimeline", ev.id, `${ev.carNumber}: ${ev.kind} ${ev.dateFrom} – ${ev.dateTo || ev.dateFrom}`);
+  },
+
+  /** Правка полей события — merge без записи в журнал (частые правки строк). */
+  updateVehicleEvent: (id: string, patch: Partial<TimelineVehicleEvent>) => {
+    if (!id || !patch) return;
+    const clean = stripUndefinedDeep(patch);
+    if (useFirebase) {
+      update(ref(database, `tripTimeline/vehicleEvents/${id}`), clean).catch((err) =>
+        handleFailure('firebase', err, { path: `tripTimeline/vehicleEvents/${id}`, userMessage: 'Не удалось сохранить правку события' }),
+      );
+    } else {
+      const local = getLocalStorageData<TimelineVehicleEvent[]>("ratipa_timeline_events", []);
+      const idx = local.findIndex((e) => e.id === id);
+      if (idx >= 0) local[idx] = { ...local[idx], ...patch };
+      setLocalStorageData("ratipa_timeline_events", local);
+    }
+  },
+
+  deleteVehicleEvent: (id: string, user: string, role: string) => {
+    if (!id) return;
+    if (useFirebase) {
+      remove(ref(database, `tripTimeline/vehicleEvents/${id}`)).catch((err) =>
+        handleFailure('firebase', err, { path: `tripTimeline/vehicleEvents/${id}`, userMessage: 'Не удалось удалить событие машины' }),
+      );
+    } else {
+      const local = getLocalStorageData<TimelineVehicleEvent[]>("ratipa_timeline_events", []);
+      setLocalStorageData("ratipa_timeline_events", local.filter((e) => e.id !== id));
+    }
+    dbService.logAction(user, role, "Удаление события машины", "TripTimeline", id, "Событие удалено");
+  },
+
+  /** Расширяемый справочник типов этапов: tripTimeline/config/stageTypes.
+   *  Пустой ответ = справочник ещё не задан; модуль использует встроенные
+   *  значения (DEFAULT_STAGE_TYPES) и показывает их как fallback. */
+  getTimelineStageTypes: (callback: (types: TimelineStageType[]) => void) => {
+    if (useFirebase) {
+      return onValue(
+        ref(database, "tripTimeline/config/stageTypes"),
+        (snapshot) => {
+          const data = snapshot.val();
+          const list: TimelineStageType[] = data
+            ? Object.keys(data).map((key) => ({
+                key: data[key].key || key,
+                name: data[key].name || key,
+                order: Number(data[key].order) || 0,
+              }))
+            : [];
+          callback(list);
+        },
+        (err) => {
+          console.warn("Timeline stage types read lock:", err);
+          callback([]);
+        },
+      );
+    }
+    callback([]);
+    return () => {};
+  },
+
+  // ---- Этапы целых рейсов из внешних источников (План дохода) --------------
+  // Рейсы, построенные из «Плана дохода», не хранят этапы внутри источника —
+  // они живут в отдельной ветке tripTimeline/tripStages/<planId>/<stageId>
+  // и связаны стабильным идентификатором записи плана. Ручные рейсы модуля
+  // по-прежнему хранят этапы внутри себя (обратная совместимость).
+
+  getTimelineTripStages: (callback: (store: Record<string, Record<string, unknown>>) => void) => {
+    if (useFirebase) {
+      return onValue(
+        ref(database, "tripTimeline/tripStages"),
+        (snapshot) => {
+          const data = snapshot.val();
+          callback(data || {});
+        },
+        (err) => {
+          console.warn("Timeline trip stages read lock:", err);
+          callback({});
+        },
+      );
+    }
+    callback({});
+    return () => {};
+  },
+
+  addTimelineTripStage: (sourceId: string, stage: Record<string, unknown>) => {
+    const sid = typeof stage.id === 'string' ? stage.id : '';
+    if (!sourceId || !sid) return;
+    const clean = stripUndefinedDeep(stage);
+    if (useFirebase) {
+      update(ref(database, `tripTimeline/tripStages/${sourceId}/${sid}`), clean).catch((err) =>
+        handleFailure('firebase', err, { path: `tripTimeline/tripStages/${sourceId}/${sid}`, userMessage: 'Не удалось добавить этап рейса' }),
+      );
+    }
+  },
+
+  updateTimelineTripStage: (sourceId: string, stageId: string, patch: Record<string, unknown>) => {
+    if (!sourceId || !stageId || !patch) return;
+    const clean = stripUndefinedDeep(patch);
+    if (useFirebase) {
+      update(ref(database, `tripTimeline/tripStages/${sourceId}/${stageId}`), clean).catch((err) =>
+        handleFailure('firebase', err, { path: `tripTimeline/tripStages/${sourceId}/${stageId}`, userMessage: 'Не удалось сохранить этап рейса' }),
+      );
+    }
+  },
+
+  deleteTimelineTripStage: (sourceId: string, stageId: string) => {
+    if (!sourceId || !stageId) return;
+    if (useFirebase) {
+      remove(ref(database, `tripTimeline/tripStages/${sourceId}/${stageId}`)).catch((err) =>
+        handleFailure('firebase', err, { path: `tripTimeline/tripStages/${sourceId}/${stageId}`, userMessage: 'Не удалось удалить этап рейса' }),
+      );
+    }
+  },
+
+  // ---- Общие тексты рейса (Причина / Меры при просрочке) -------------------
+  // Живут отдельно от источника, ключ — стабильный ключ рейса ('pd:<planId>'
+  // для рейсов из плана дохода, 'tl:<id>' для ручных), чтобы тексты не терялись
+  // и не перетирали поля исходных записей.
+
+  getTimelineTripMeta: (callback: (store: Record<string, Record<string, unknown>>) => void) => {
+    if (useFirebase) {
+      return onValue(
+        ref(database, "tripTimeline/tripMeta"),
+        (snapshot) => {
+          callback(snapshot.val() || {});
+        },
+        (err) => {
+          console.warn("Timeline trip meta read lock:", err);
+          callback({});
+        },
+      );
+    }
+    callback({});
+    return () => {};
+  },
+
+  saveTimelineTripMeta: (tripKey: string, patch: Record<string, unknown>) => {
+    if (!tripKey) return;
+    const clean = stripUndefinedDeep({ ...patch, updatedAt: new Date().toISOString() });
+    if (useFirebase) {
+      update(ref(database, `tripTimeline/tripMeta/${tripKey}`), clean).catch((err) =>
+        handleFailure('firebase', err, { path: `tripTimeline/tripMeta/${tripKey}`, userMessage: 'Не удалось сохранить причину и меры' }),
+      );
+    }
   },
 
   // PERMITS (Dozvola) — unified to dozvolsRegistryV4

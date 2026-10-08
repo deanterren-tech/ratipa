@@ -34,6 +34,8 @@ export interface UserPermissions {
   mdpJournal?: "none" | "read" | "write";
   driverExpenses?: "none" | "read" | "write";
   bookIssueRR?: "none" | "read" | "write";
+  /** Модуль «Таймлайн рейсов по машинам» (tripTimeline). */
+  tripTimeline?: "none" | "read" | "write";
 }
 
 export interface UserProfile {
@@ -284,6 +286,78 @@ export interface TripPlan {
   driverName?: string;
   currentMonth: string;
   isArchived: boolean;
+}
+
+// ---- Таймлайн рейсов по машинам (модуль tripTimeline) ----
+// Все даты хранятся строками YYYY-MM-DD (без времени и часовых поясов) —
+// так не бывает сдвигов по дням. Ветки RTDB: tripTimeline/trips,
+// tripTimeline/vehicleEvents, конфиг справочника — tripTimeline/config/stageTypes.
+
+/** Этап рейса: плановая/фактическая дата, критический срок, причина и меры. */
+export interface TimelineStage {
+  id: string;
+  /** Ключ типа из расширяемого справочника (load, border, unl, …). */
+  type: string;
+  /** «Уточнение»: конкретный переход/КПП или пояснение к этапу. */
+  label?: string;
+  /** План, YYYY-MM-DD. */
+  plannedDate?: string;
+  /** Факт, YYYY-MM-DD. */
+  actualDate?: string;
+  /** Критический срок — ставится флагом на любом этапе. */
+  isCritical?: boolean;
+  /** Причина просрочки. */
+  reason?: string;
+  /** Принятые меры. */
+  action?: string;
+  /** Порядок этапа в рейсе. */
+  order: number;
+}
+
+/** Рейс для таймлайна машин (ветка RTDB: tripTimeline/trips/{id}). */
+export interface TimelineTrip {
+  id: string;
+  /** couplings.id — связь с единой базой сцепок. */
+  vehicleId?: string;
+  /** Номер машины (тягача) — ключ строки таймлайна. */
+  carNumber: string;
+  /** Маршрут текстом. */
+  route: string;
+  /** uid пользователя-диспетчера (users_list). */
+  dispatcherId?: string;
+  /** Имя диспетчера для отображения (снимок на момент сохранения). */
+  dispatcherName?: string;
+  /** Запас на риски после плана, дней. */
+  bufferDays: number;
+  /** Архивный рейс (не автоархивация — только флаг пользователя). */
+  archived?: boolean;
+  /** Вычисляемый диапазон рейса (мин/макс по плану и факту) — для окна загрузки. */
+  startDate?: string;
+  endDate?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  stages: TimelineStage[];
+}
+
+/** Событие машины: ремонт / на базе / простой / другое (tripTimeline/vehicleEvents/{id}). */
+export interface TimelineVehicleEvent {
+  id: string;
+  vehicleId?: string;
+  carNumber: string;
+  /** repair | base | idle | other */
+  kind: string;
+  dateFrom: string;
+  dateTo?: string;
+  note?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Тип этапа из расширяемого справочника (tripTimeline/config/stageTypes). */
+export interface TimelineStageType {
+  key: string;
+  name: string;
+  order: number;
 }
 
 export interface Permit {

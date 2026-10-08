@@ -26,7 +26,7 @@ import {
   HubTruckIcon, HubPinIcon, HubExitIcon,
   HubSemiTruckIcon,
   HubCalendarIcon, HubNavIcon, HubCalcIcon,
-  HubTrendIcon, HubReceiptIcon,
+  HubTrendIcon, HubReceiptIcon, HubRouteIcon,
   HubUsersIcon, HubTogglesIcon, HubChevronIcon,
   HubKeyIcon, HubBookmarkIcon, HubWalletIcon, HubBookIcon, HubBookCheckIcon, HubDatabaseIcon, HubFolderIcon,
   HubGridIcon, HubFuelIcon,
@@ -63,6 +63,7 @@ const MODULE_STYLE: Record<string, { icon: HubIconComponent; color: string }> = 
   planZagruzok: { icon: HubSemiTruckIcon, color: 'var(--accent)' },
   planDohod: { icon: HubTrendIcon, color: 'var(--accent)' },
   currentPlanning: { icon: HubNavIcon, color: 'var(--accent)' },
+  tripTimeline: { icon: HubRouteIcon, color: 'var(--accent)' },
   dohod: { icon: HubCalcIcon, color: 'var(--accent)' },
   // Отчетность
   salary: { icon: HubWalletIcon, color: 'var(--accent)' },
@@ -115,11 +116,14 @@ export default function MobileMoreHub({ user, groups, onNavigate, onOpenAccount,
 
   // Живые показатели — подписки только на время открытого хаба.
   const [trips, setTrips] = useState<number | null>(null);
+  const [timelineTrips, setTimelineTrips] = useState<number | null>(null);
   const [fleet, setFleet] = useState<number | null>(null);
   const [drivers, setDrivers] = useState<number | null>(null);
 
   useEffect(() => {
     const u1 = dbService.getTrips((list) => setTrips((list || []).filter((t) => !t.isArchived).length));
+    // Таймлайн рейсов: активные (не архивные) рейсы модуля tripTimeline
+    const u1b = dbService.getTimelineTrips((list) => setTimelineTrips((list || []).filter((t) => !t.archived).length));
     // Автопарк — счёт из единой базы сцепок: тот же источник и та же цифра,
     // что «База сцепок» в «Справочниках» и «Реестр автопарка и экипажей» в
     // разделе «Авто и Водители» (не сырой узел tractors).
@@ -128,6 +132,7 @@ export default function MobileMoreHub({ user, groups, onNavigate, onOpenAccount,
     const u3 = getDriversFlat((list: any[]) => setDrivers((list || []).length));
     return () => {
       if (typeof u1 === 'function') u1();
+      if (typeof u1b === 'function') u1b();
       if (typeof u2 === 'function') u2();
       if (typeof u3 === 'function') u3();
     };
@@ -140,6 +145,9 @@ export default function MobileMoreHub({ user, groups, onNavigate, onOpenAccount,
   const metricPartsFor = (key: string): { num: string; text: string }[] | null => {
     if (key === 'planDohod' && trips !== null) {
       return [{ num: String(trips), text: ` ${pluralRu(trips, 'активный', 'активных', 'активных')}` }];
+    }
+    if (key === 'tripTimeline' && timelineTrips !== null) {
+      return [{ num: String(timelineTrips), text: ` ${pluralRu(timelineTrips, 'активный', 'активных', 'активных')}` }];
     }
     if (key === 'vehicleDriverData') {
       const parts: { num: string; text: string }[] = [];

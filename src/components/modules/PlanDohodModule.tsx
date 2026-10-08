@@ -441,6 +441,34 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   /** Справочник диспетчеров: идентификатор учётной записи ↔ имя */
   const dispatcherDirectory = useMemo(() => buildDispatcherDirectory(dispatcherRefs), [dispatcherRefs]);
 
+  // Переход из таймлайна: «Открыть план дохода» помечает запись — прокручиваем
+  // к строке рейса и подсвечиваем её, когда список отрисовался.
+  useEffect(() => {
+    let focusId = '';
+    try {
+      focusId = sessionStorage.getItem('ratipa_focus_plan_trip') || '';
+      if (focusId) sessionStorage.removeItem('ratipa_focus_plan_trip');
+    } catch {
+      /* не критично */
+    }
+    if (!focusId) return;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      tries += 1;
+      const el = document.querySelector(`[data-trip-id="${focusId}"]`);
+      if (el) {
+        window.clearInterval(timer);
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-[var(--accent-30)]');
+        window.setTimeout(() => el.classList.remove('ring-2', 'ring-[var(--accent-30)]'), 3000);
+      } else if (tries > 10) {
+        window.clearInterval(timer);
+      }
+    }, 600);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Derived state for dispatchers
   const filterDispatchers = useMemo(() => dispatchersOrder.filter(
     (d) =>
@@ -1390,6 +1418,53 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     };
   };
 
+  // Прямая ссылка на запись плана дохода: #planDohod/trip/<id>. Открывает
+  // редактор именно этой записи (в том числе архивной), переживает F5 и
+  // открытие в новой вкладке; при недоступности — понятное сообщение.
+  const deepLinkHandled = useRef("");
+  useEffect(() => {
+    const m = (window.location.hash || "").match(/#planDohod\/trip\/(.+)$/);
+    if (!m) return;
+    let targetId = "";
+    try {
+      targetId = decodeURIComponent(m[1]);
+    } catch {
+      targetId = m[1];
+    }
+    if (!targetId || deepLinkHandled.current === targetId) return;
+    let tries = 0;
+    let askedArchive = false;
+    const timer = window.setInterval(() => {
+      tries += 1;
+      const found = trips.find((t) => t.id === targetId);
+      if (found) {
+        window.clearInterval(timer);
+        deepLinkHandled.current = targetId;
+        if (found.isArchived) {
+          setActiveTab("archive");
+          if (found.currentMonth) setArchiveMonth(found.currentMonth);
+        } else {
+          setActiveTab("active");
+        }
+        loadTripToForm(found);
+        setIsModalOpen(true);
+        return;
+      }
+      // Архивные записи подгружаются при открытии вкладки архива
+      if (!askedArchive && tries >= 2) {
+        askedArchive = true;
+        setActiveTab("archive");
+      }
+      if (tries > 16) {
+        window.clearInterval(timer);
+        deepLinkHandled.current = targetId;
+        addToast("Запись плана дохода не найдена или недоступна", "error");
+      }
+    }, 600);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trips]);
+
   const resetForm = () => {
     setEditingTripId(null);
     setCarNumber("");
@@ -1755,6 +1830,25 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 <h2 className="text-base md:text-lg font-semibold text-[#121316] tracking-tight truncate">
                   {editingTripId ? "Редактирование плана" : "Новый план"}
                 </h2>
+                {editingTripId ? (
+                  <button
+                    type="button"
+                    data-ui="copy-plan-link"
+                    onClick={async () => {
+                      const url = `${window.location.origin}${window.location.pathname}#planDohod/trip/${encodeURIComponent(editingTripId)}`;
+                      try {
+                        await navigator.clipboard.writeText(url);
+                        addToast("Ссылка на запись плана дохода скопирована", "success");
+                      } catch {
+                        window.prompt("Ссылка на запись плана дохода (скопируйте вручную):", url);
+                      }
+                    }}
+                    title="Постоянная ссылка на эту запись (переживает обновление и открывается в новой вкладке)"
+                    className="ml-1 hidden md:inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium border border-[#E5E7EB] text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    Скопировать ссылку
+                  </button>
+                ) : null}
               </div>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium text-[#6B7280] ml-0 mt-1.5">
                 <span className="text-[var(--accent-ink)] font-semibold">Авто: {carNumber || "—"}</span>
