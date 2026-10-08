@@ -41,42 +41,226 @@ export const MODULE_LINKS: { module: string; label: string }[] = [
   { module: 'dashboard', label: 'Главная' },
 ];
 
-export const EMPTY_INSTRUCTION = {
+/** Шаг «Порядка действий» в структурированном виде: постоянный id + текст (может быть многоабзацным). */
+export interface InstructionStepItem {
+  id: string;
+  text: string;
+}
+
+/**
+ * Инструкция с дополнительным структурированным полем шагов.
+ *
+ * `steps: string[]` остаётся основным совместимым полем — его читают и старые версии,
+ * и другие потребители (список, поиск, «Инструкции по порталу»). `stepItems` хранит
+ * те же шаги с постоянными id: из него собирается редактор, и он же пишется при
+ * сохранении вместе с `steps`, чтобы ничего не потерялось.
+ */
+export interface InstructionData extends Instruction {
+  stepItems?: InstructionStepItem[];
+}
+
+/** Черновик редактора: то же содержимое, но списки — редактируемыми блоками. */
+export interface InstructionDraft {
+  id: string;
+  theme: string;
+  title: string;
+  summary: string;
+  prerequisites: string[];
+  steps: InstructionStepItem[];
+  tips: string[];
+  links: { label: string; module: string }[];
+  needsWork: boolean;
+}
+
+export const EMPTY_INSTRUCTION: InstructionData = {
   id: '',
   theme: '',
   title: '',
   summary: '',
-  prerequisites: '',
-  steps: '',
-  tips: '',
-  links: [] as { label: string; module: string }[],
+  prerequisites: [],
+  steps: [],
+  stepItems: [],
+  tips: [],
+  links: [],
   needsWork: false,
 };
 
+/**
+ * Чистит текст из базы: технические <br> превращает в перенос строки, чтобы теги
+ * никогда не показывались пользователю как текст. При этом абзацы внутри шага
+ * (обычные переводы строк) сохраняются — по ним шаг НЕ разделяется.
+ */
+export function cleanInstructionText(value: unknown): string {
+  const s = String(value ?? '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/<\s*br[^>]*>/gi, '\n')
+    .replace(/&nbsp;/gi, ' ');
+  const lines = s.split('\n').map((line) => line.replace(/[ \t]+$/g, ''));
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/** Разбивает текст шага на абзацы для итогового отображения. */
+export function paragraphList(text: string): string[] {
+  return cleanInstructionText(text)
+    .split(/\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+let stepSeq = 0;
+/** Id нового шага: уникален в записи и сохраняется при правках и сохранении. */
+export function newStepId(): string {
+  stepSeq += 1;
+  return `stp-${Date.now().toString(36)}-${stepSeq.toString(36)}`;
+}
+
+/** Детерминированный id для шага, полученного из старого формата без id. */
+export function legacyStepId(index: number, text: string): string {
+  let hash = 0x811c9dc5;
+  const src = `${index + 1}:${text}`;
+  for (let i = 0; i < src.length; i += 1) {
+    hash ^= src.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `stp-l-${index + 1}-${(hash >>> 0).toString(36)}`;
+}
+
+/** Приводит текстовое поле к массиву строк (старые записи могли хранить строку). */
+export function arrayFromField(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((v) => cleanInstructionText(v)).filter(Boolean);
+  if (typeof value === 'string' && value.trim()) {
+    return value
+      .split('\n')
+      .map((s) => cleanInstructionText(s))
+      .filter(Boolean);
+  }
+  return [];
+}
+
+/**
+ * Шаги «Порядка действий» в структурированном виде.
+ *
+ * Приоритет — за `stepItems` (сохранённые редактором id). Для старых записей шаги
+ * берутся из `steps`: каждый элемент массива — ОДИН шаг, несколько абзацев внутри
+ * элемента сохраняются. Если поле пришло одной строкой, границей шага считается
+ * пустая строка — обычный перенос внутри шага границей не является.
+ */
+export function toStepItems(instruction: Instruction | InstructionData): InstructionStepItem[] {
+  const raw = instruction as InstructionData;
+  if (Array.isArray(raw.stepItems) && raw.stepItems.length > 0) {
+    const items = raw.stepItems
+      .filter((s) => s && typeof s === 'object')
+      .map((s, idx) => ({
+        id: typeof s.id === 'string' && s.id ? s.id : legacyStepId(idx, String(s.text ?? '')),
+        text: cleanInstructionText(s.text),
+      }))
+      .filter((s) => s.text.length > 0);
+    if (items.length > 0) return items;
+  }
+
+  const rawSteps: unknown = (instruction as { steps?: unknown }).steps;
+  const chunks: string[] = [];
+  if (Array.isArray(rawSteps)) {
+    rawSteps.forEach((s) => {
+      const t = cleanInstructionText(s);
+      if (t) chunks.push(t);
+    });
+  } else if (typeof rawSteps === 'string' && rawSteps.trim()) {
+    rawSteps.split(/\n\s*\n/).forEach((chunk) => {
+      const t = cleanInstructionText(chunk);
+      if (t) chunks.push(t);
+    });
+  }
+  return chunks.map((text, idx) => ({ id: legacyStepId(idx, text), text }));
+}
+
+/** Черновик редактора из записи базы (или из шаблона новой инструкции). */
+export function instructionToDraft(i: Instruction | InstructionData): InstructionDraft {
+  return {
+    id: i.id || '',
+    theme: i.theme || '',
+    title: cleanInstructionText(i.title || ''),
+    summary: cleanInstructionText(i.summary || ''),
+    prerequisites: arrayFromField(i.prerequisites),
+    steps: toStepItems(i),
+    tips: arrayFromField(i.tips),
+    links: Array.isArray(i.links)
+      ? i.links.filter((l) => l && l.module).map((l) => ({ label: l.label || '', module: l.module }))
+      : [],
+    needsWork: !!i.needsWork,
+  };
+}
+
+/** Собирает запись для сохранения: пишет и совместимое `steps`, и структурированные `stepItems`. */
+export function draftToInstruction(d: InstructionDraft): InstructionData {
+  const steps = d.steps
+    .map((s) => ({ id: s.id || newStepId(), text: cleanInstructionText(s.text) }))
+    .filter((s) => s.text.length > 0);
+  return {
+    id: d.id,
+    theme: d.theme.trim() || 'Прочее',
+    title: d.title.trim(),
+    summary: d.summary.trim(),
+    prerequisites: arrayFromField(d.prerequisites),
+    steps: steps.map((s) => s.text),
+    stepItems: steps,
+    tips: arrayFromField(d.tips),
+    links: d.links.filter((l) => l.module).map((l) => ({ label: l.label || moduleLabel(l.module), module: l.module })),
+    needsWork: d.needsWork || undefined,
+  };
+}
+
+/** Слепок черновика — для индикатора несохранённых изменений. */
+export function draftFingerprint(d: InstructionDraft): string {
+  return JSON.stringify([
+    d.id,
+    d.theme,
+    d.title,
+    d.summary,
+    d.prerequisites,
+    d.steps.map((s) => [s.id, s.text]),
+    d.tips,
+    d.links.map((l) => [l.module, l.label]),
+    d.needsWork,
+  ]);
+}
+
+/** Подпись раздела приложения по его ключу. */
+export function moduleLabel(module: string): string {
+  return MODULE_LINKS.find((m) => m.module === module)?.label || module;
+}
+
 /** Достраивает пропущенные поля, чтобы интерфейс не падал на неполных записях из базы. */
-export function normalizeInstruction(i: Instruction): Instruction {
+export function normalizeInstruction(i: Instruction): InstructionData {
+  const stepItems = toStepItems(i);
   return {
     id: String(i.id),
     theme: i.theme || 'Прочее',
-    title: i.title || '',
-    summary: i.summary || '',
-    prerequisites: Array.isArray(i.prerequisites) ? i.prerequisites : [],
-    steps: Array.isArray(i.steps) && i.steps.length > 0 ? i.steps : ['Шаги пока не описаны.'],
-    tips: Array.isArray(i.tips) ? i.tips : [],
+    title: cleanInstructionText(i.title || ''),
+    summary: cleanInstructionText(i.summary || ''),
+    prerequisites: arrayFromField(i.prerequisites),
+    steps: stepItems.length > 0 ? stepItems.map((s) => s.text) : ['Шаги пока не описаны.'],
+    stepItems: stepItems.length > 0 ? stepItems : undefined,
+    tips: arrayFromField(i.tips),
     links: Array.isArray(i.links) ? i.links.filter((l) => l && l.module) : [],
     needsWork: !!i.needsWork,
   };
 }
 
 /** Складывает всё содержимое инструкции в строку для поиска. */
-export function searchBlob(i: Instruction): string {
+export function searchBlob(i: Instruction | InstructionData): string {
   const norm = (s: string) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const data = i as InstructionData;
+  const stepTexts =
+    Array.isArray(data.stepItems) && data.stepItems.length > 0
+      ? data.stepItems.map((s) => s.text)
+      : i.steps || [];
   return norm([
     i.title,
     i.summary,
     i.theme,
     ...(i.prerequisites || []),
-    ...(i.steps || []),
+    ...stepTexts,
     ...(i.tips || []),
   ].join(' \n '));
 }

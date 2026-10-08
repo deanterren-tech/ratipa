@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Search, X, ChevronDown, BookMarked, ExternalLink, ListChecks, Lightbulb, Info } from 'lucide-react';
 import { AppSettings, Instruction } from '../types';
 import { PORTAL_INSTRUCTIONS, normalizeInstruction, searchBlob } from './modules/instructionsData';
+import { ParagraphText } from './modules/instructionUi';
 import { BackButton } from '../ui/components';
 
 /**
@@ -165,7 +166,7 @@ export default function PortalInstructionsModal({ isOpen, settings, onClose }: P
                                 {i.prerequisites.map((p, idx) => (
                                   <li key={idx} className="flex items-start gap-2 text-xs leading-relaxed text-[#121316]">
                                     <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-[#9CA3AF]" aria-hidden="true" />
-                                    {p}
+                                    <ParagraphText text={p} />
                                   </li>
                                 ))}
                               </ul>
@@ -182,7 +183,7 @@ export default function PortalInstructionsModal({ isOpen, settings, onClose }: P
                                 <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent-15)] text-[10px] font-semibold text-[var(--accent-ink)]">
                                   {idx + 1}
                                 </span>
-                                <span>{s}</span>
+                                <ParagraphText text={s} />
                               </li>
                             ))}
                           </ol>
@@ -197,7 +198,7 @@ export default function PortalInstructionsModal({ isOpen, settings, onClose }: P
                                 {i.tips.map((t, idx) => (
                                   <li key={idx} className="flex items-start gap-2 text-xs leading-relaxed text-[#4B5563]">
                                     <Info className="mt-0.5 h-3 w-3 shrink-0 text-[#9CA3AF]" aria-hidden="true" />
-                                    {t}
+                                    <ParagraphText text={t} />
                                   </li>
                                 ))}
                               </ul>
