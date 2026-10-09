@@ -19,8 +19,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
-import type { AppSettings, TimelinePlanGuard, TimelinePlanPermission, TimelinePlanRequest, TimelineTrip, UserProfile } from '../../types';
-import { dbService } from '../../api';
+import type { AppSettings, TimelinePlanGuard, TimelinePlanPermission, TimelinePlanRequest, UserProfile } from '../../types';
+import { dbService, pdService } from '../../api';
 import { resolvePermission } from '../../utils/permissions';
 import { buildDispatcherDirectory } from '../../utils/dispatcher';
 import { UI } from '../../ui/kit';
@@ -29,13 +29,14 @@ import { useToast } from '../ToastProvider';
 import { useHashRoute } from '../../hooks/useHashRoute';
 import TimelineGrid from './tripTimeline/TimelineGrid';
 import TripCard from './tripTimeline/TripCard';
-import NewTripForm, { type NewTripDraft } from './tripTimeline/NewTripForm';
+import NewTripForm, { type NewTripDraft, type NewTripResult } from './tripTimeline/NewTripForm';
 import StatsBlock from './tripTimeline/StatsBlock';
 import PeriodModal from './tripTimeline/PeriodModal';
 import CarOverviewModal from './tripTimeline/CarOverviewModal';
 import { useTimelineData } from './tripTimeline/useTimelineData';
-import { computeStoredRange, sortMonthLabelsDesc, todayNum, zoomColW, zoomIndexOf } from './tripTimeline/lib/timeline';
+import { sortMonthLabelsDesc, todayNum, zoomColW, zoomIndexOf } from './tripTimeline/lib/timeline';
 import { plateKeyOf } from './tripTimeline/lib/sources';
+import { buildTimelinePlanPayload } from './tripTimeline/lib/planFromDraft';
 
 type TabId = 'timeline' | 'stats';
 
@@ -71,6 +72,12 @@ export default function TripTimelineModule({ user, settings }: Props) {
 
   const canWrite = resolvePermission(user, 'tripTimeline', settings?.rolePermissions) === 'write';
   const canEditPlan = resolvePermission(user, 'planDohod', settings?.rolePermissions) === 'write';
+  /**
+   * Создание рейса из таймлайна сразу создаёт запись «Плана дохода»
+   * (целые рейсы таймлайна строятся из неё), поэтому право нужно ровно то же,
+   * что на создание записи плана: обойти его другой формой нельзя.
+   */
+  const canCreateTrip = canWrite && canEditPlan;
   const [today, setToday] = useState<number>(() => todayNum());
   /**
    * Текущий день — по календарной дате пользователя (та же конвенция, что во
@@ -422,48 +429,85 @@ export default function TripTimelineModule({ user, settings }: Props) {
     [toast, user.name, user.role],
   );
 
+  /**
+   * Создание рейса формой таймлайна: единственная запись — trips_dashboard
+   * («План дохода») + маркер черновика плана этапов одним атомарным обновлением.
+   * Отдельный «ручной рейс» (tripTimeline/trips) НЕ создаётся: целые рейсы
+   * таймлайна строятся из записи плана на чтении — дубликата и цикла нет.
+   *
+   * Повторные нажатия и ретраи после ошибки не создают несколько планов:
+   * на время записи форма заблокирована, параллельный вызов получает тот же
+   * запрос, а ключ записи фиксируется до записи и переиспользуется при повторе
+   * (повторная запись перезаписывает ту же запись).
+   */
+  const creatingRef = useRef<Promise<NewTripResult> | null>(null);
+  const pendingPlanIdRef = useRef('');
+
   const createTrip = useCallback(
-    (draft: NewTripDraft) => {
-      if (!canWrite) return;
-      const nowIso = new Date().toISOString();
-      const stamp = Date.now().toString(36);
-      const id = `tl_${stamp}${Math.random().toString(36).slice(2, 7)}`;
-      const stageId = `s_${stamp}${Math.random().toString(36).slice(2, 6)}`;
-      const trip: TimelineTrip = {
-        id,
-        vehicleId: draft.vehicleId,
-        carNumber: draft.carNumber,
-        route: draft.route,
-        dispatcherId: draft.dispatcherId,
-        dispatcherName: draft.dispatcherName,
-        bufferDays: draft.bufferDays,
-        archived: false,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-        stages: [
-          {
-            id: stageId,
-            type: 'load',
-            label: '',
-            plannedDate: draft.startDate,
-            actualDate: '',
-            isCritical: false,
-            reason: '',
-            action: '',
-            order: 1,
-          },
-        ],
-      };
-      const range = computeStoredRange(trip);
-      dbService.createTimelineTrip({ ...trip, ...range }, user.name, user.role);
-      // Новый рейс — план этапов в состоянии черновика (первичное планирование).
-      dbService.markTimelinePlanDraft(`tl:${id}`);
-      toast('Рейс добавлен', 'success');
-      setShowNewTrip(false);
-      setOpenTripKey(`tl:${id}`);
-      window.location.hash = `#tripTimeline/trip/${encodeURIComponent(`tl:${id}`)}`;
+    (draft: NewTripDraft): Promise<NewTripResult> => {
+      if (!canWrite || !canEditPlan) {
+        const message = !canWrite
+          ? 'Нет права на изменение — рейс не создан.'
+          : 'Нет права на создание записи «Плана дохода» — рейс не создан.';
+        return Promise.resolve({ ok: false, error: message });
+      }
+      if (creatingRef.current) return creatingRef.current;
+      const run = (async (): Promise<NewTripResult> => {
+        try {
+          if (!dbService.isOnline()) {
+            return {
+              ok: false,
+              error:
+                'Нет подключения к базе — связанная запись «Плана дохода» не создана. Данные формы сохранены, повторите после восстановления связи.',
+            };
+          }
+          // Ключ записи фиксируем ДО записи: повтор после ошибки перезапишет её же.
+          if (!pendingPlanIdRef.current) {
+            let id = '';
+            do {
+              id = `tl${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+            } while (data.trips.some((t) => t.key === `pd:${id}`));
+            pendingPlanIdRef.current = id;
+          }
+          const planId = pendingPlanIdRef.current;
+          const carRef = data.fleetCars.find(
+            (c) =>
+              (draft.vehicleId ? c.carId === draft.vehicleId : false) ||
+              plateKeyOf(c.carNumber) === plateKeyOf(draft.carNumber),
+          );
+          // Диспетчер: выбор формы, иначе — из справочника сцепок (существующий источник),
+          // как это делает и сама форма «Плана дохода». Не выдумываем.
+          const dispId = draft.dispatcherId || carRef?.dispatcherId || '';
+          const dispName =
+            draft.dispatcherName ||
+            (dispId ? dir.byId.get(dispId)?.name || '' : '') ||
+            carRef?.dispatcherName ||
+            '';
+          const payload = buildTimelinePlanPayload(draft, {
+            createdBy: user.name,
+            dispatcher: dispId ? { id: dispId, name: dispName || dispId } : null,
+          });
+          await pdService.createLinkedTimelineTrip(planId, `pd:${planId}`, payload, user.name, user.role);
+          pendingPlanIdRef.current = '';
+          toast('Рейс создан — связанная запись «Плана дохода» открыта', 'success');
+          setShowNewTrip(false);
+          setOpenTripKey(`pd:${planId}`);
+          window.location.hash = `#tripTimeline/trip/${encodeURIComponent(`pd:${planId}`)}`;
+          return { ok: true };
+        } catch (err) {
+          return {
+            ok: false,
+            error: `Не удалось создать рейс: ${(err as Error)?.message || 'неизвестная ошибка'}. Данные формы сохранены — повторите отправку.`,
+          };
+        }
+      })();
+      creatingRef.current = run;
+      void run.then(() => {
+        if (creatingRef.current === run) creatingRef.current = null;
+      });
+      return run;
     },
-    [canWrite, toast, user.name, user.role],
+    [canWrite, canEditPlan, data.trips, data.fleetCars, dir, user.name, user.role, toast],
   );
 
   // Переход к связанной записи «Плана дохода» — по прямой ссылке (переживает F5,
@@ -546,11 +590,19 @@ export default function TripTimelineModule({ user, settings }: Props) {
       actions={
         <div className="flex items-center gap-2">
           {!canWrite ? <span className={UI.chip}>режим чтения</span> : null}
-          {canWrite ? (
+          {canCreateTrip ? (
             <button type="button" data-ui="new-trip" onClick={() => setShowNewTrip(true)} className={UI.buttonPrimary}>
               <Plus className="w-4 h-4" aria-hidden="true" />
               Новый рейс
             </button>
+          ) : canWrite ? (
+            <span
+              className={UI.hint}
+              data-ui="new-trip-denied"
+              title="Создание рейса из таймлайна создаёт связанную запись «Плана дохода» — нужно право её создания"
+            >
+              Создание рейса недоступно: нет права записи в «План дохода»
+            </span>
           ) : null}
         </div>
       }
@@ -701,13 +753,14 @@ export default function TripTimelineModule({ user, settings }: Props) {
         />
       ) : null}
 
-      {/* Новый ручной рейс — форма остаётся, но открывается в модальном окне с таймлайна */}
-      {showNewTrip && canWrite ? (
+      {/* Новый рейс: создаётся сразу связанная запись «Плана дохода» (тот же id —
+          ключ полосы `pd:<id>`), отдельный ручной рейс не создаётся */}
+      {showNewTrip && canCreateTrip ? (
         <ModalShell
           isOpen
           onClose={() => setShowNewTrip(false)}
           title="Новый рейс"
-          subtitle="Ручной рейс модуля — «План дохода» не создаётся"
+          subtitle="Рейс создаётся вместе со связанной записью «Плана дохода» — финансовые данные заполняются в плане"
           icon={<Plus className="w-4 h-4" aria-hidden="true" />}
           ariaLabel="Новый рейс"
           maxWidth="max-w-2xl"
@@ -715,7 +768,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
           <NewTripForm
             dispatchers={data.dispatchers}
             defaultDispatcherId={defaultDispatcherId}
-            canWrite={canWrite}
+            canWrite={canCreateTrip}
             onCreate={createTrip}
             onCancel={() => setShowNewTrip(false)}
           />

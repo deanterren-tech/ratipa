@@ -144,6 +144,8 @@ export interface PlanTripInfo {
   note?: string;
   legs: PlanLegInfo[];
   isArchived?: boolean;
+  /** Запись создана формой таймлайна и ещё не заполнена («Требует заполнения»). */
+  needsFill?: boolean;
 }
 
 /** Целый рейс таймлайна: ручной рейс модуля либо рейс, связанный с планом. */
@@ -249,6 +251,7 @@ export const planTripsToWholeTrips = (
           note: rec.tripNote ? String(rec.tripNote) : undefined,
           legs: parseLegs(rec.legs),
           isArchived: rec.isArchived === true,
+          needsFill: rec.needsFill === true,
         },
       };
       return trip;

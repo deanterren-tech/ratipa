@@ -45,6 +45,7 @@ import TripEventsJournal from './TripEventsJournal';
 import { PlanBarLabel, planBarLabelParts } from './PlanBarLabel';
 import { eventMarkOf, groupEventMarks, type EventMark } from './lib/eventMarks';
 import { computePlanStageChanges, resolvePlanLock, type PlanStageChanges } from './lib/planLock';
+import { hasPlanFinancials } from './lib/planFromDraft';
 import {
   WEEKEND_HINT,
   ZOOM_LEVELS,
@@ -1382,21 +1383,20 @@ export default function TripCard({
           Number(raw.ferryCost) || 0,
           Number(raw.factKm) || 0,
         );
-        await pdService.updateTrip(
-          planSourceId,
-          {
-            dateStart: startIso,
-            dateEnd: endIso,
-            days: fin.days,
-            totalKm: fin.totalKm,
-            totalFreight: fin.totalFreight,
-            totalExpenses: fin.totalExpensesFact,
-            profit: fin.profitPlan,
-            profitFact: fin.profitFact,
-          },
-          'timeline',
-          'timeline',
-        );
+        const patch: Record<string, unknown> = { dateStart: startIso, dateEnd: endIso };
+        // Дни пишем только при обеих датах (та же функция, что в «Плане дохода»);
+        // без дат расчёт даёт «1» — вымышленное число не сохраняем.
+        if (s != null && e != null) patch.days = fin.days;
+        // Финансы пересчитываются только у записи, где они уже заполнены:
+        // у незаполненной (созданной из таймлайна) нули не подставляются.
+        if (hasPlanFinancials(raw)) {
+          patch.totalKm = fin.totalKm;
+          patch.totalFreight = fin.totalFreight;
+          patch.totalExpenses = fin.totalExpensesFact;
+          patch.profit = fin.profitPlan;
+          patch.profitFact = fin.profitFact;
+        }
+        await pdService.updateTrip(planSourceId, patch, 'timeline', 'timeline');
         toast('Плановые даты сохранены в «План дохода» — таймлайн обновится', 'success');
         setDraft((d) => ({ ...d, planStart: startIso, planEnd: endIso }));
       } catch (err) {
@@ -2134,6 +2134,15 @@ export default function TripCard({
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[#4B5563]">
               <span className="font-semibold text-[#121316]">План дохода</span>
               <span>#{plan.id}</span>
+              {plan.needsFill === true ? (
+                <span
+                  data-ui="plan-needs-fill"
+                  className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700"
+                  title="Запись создана из таймлайна: фрахт и расходы ещё не заполнены — откройте план дохода и заполните"
+                >
+                  Требует заполнения
+                </span>
+              ) : null}
               {plan.direction ? <span>направление: {plan.direction}</span> : null}
               {plan.month ? <span>месяц в плане: {plan.month}</span> : null}
               {plan.days != null ? <span>дней: {plan.days}</span> : null}

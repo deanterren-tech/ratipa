@@ -1712,6 +1712,9 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
         isArchived: editingTripId
           ? trips.find((t) => t.id === editingTripId)?.isArchived || false
           : false,
+        // Явное сохранение в форме «Плана дохода» = запись заполнена человеком:
+        // статус «Требует заполнения» (запись из таймлайна) снимается.
+        needsFill: false,
       };
 
       if (editingTripId) {
@@ -3278,9 +3281,20 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             // на пороге и выше — акцентный текст темы. Крупные значения (20–24 px,
             // вес 600+) — это «крупный текст» по WCAG, для него норма 3:1, поэтому
             // берём более оранжевый --accent-ui (#D46A35, 3.55:1), а не тёмный ink.
-            const profitValue = Number(trip.profitFact !== undefined ? trip.profitFact : (trip.profit || 0)) || 0;
+            // Если финансы ещё не заполнены (запись из таймлайна «Требует заполнения»)
+            // или отсутствуют вовсе — показываем «—», нули вместо неизвестных не подставляем.
+            const hasProfit = trip.profitFact !== undefined || trip.profit !== undefined;
+            const profitValue = Number(hasProfit ? (trip.profitFact !== undefined ? trip.profitFact : trip.profit) : 0) || 0;
             const daysValue = Number(trip.days) || 0;
             const perDayValue = Math.round(profitValue / (daysValue || 1));
+            const hasKm = trip.factKm !== undefined || trip.totalKm !== undefined;
+            const hasFreight = trip.totalFreight !== undefined;
+            const expensesValue =
+              trip.totalExpenses !== undefined
+                ? Number(trip.totalExpenses)
+                : trip.totalFreight !== undefined || trip.profit !== undefined
+                  ? Number(trip.totalFreight || 0) - Number(trip.profit || 0)
+                  : undefined;
             const ACCENT_VALUE_CLS = "text-[var(--accent-ink)]";
 
             const isHighlighted =
@@ -3332,6 +3346,15 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     {archived && trip.currentMonth && (
                       <span className="inline-flex items-center rounded-full border border-[#E5E7EB] bg-[#F3F4F6] px-2.5 py-1 text-[11px] font-medium text-[#4B5563]">
                         {trip.currentMonth}
+                      </span>
+                    )}
+                    {trip.needsFill === true && (
+                      <span
+                        data-ui="needs-fill-badge"
+                        className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700"
+                        title="Запись создана из таймлайна: фрахт и расходы ещё не заполнены — откройте карточку и заполните"
+                      >
+                        Требует заполнения
                       </span>
                     )}
                     {/* Пометка «кто редактировал и когда» — отдельной строкой под номером авто */}
@@ -3450,8 +3473,14 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                   <div className="grid grid-cols-3 gap-x-4 gap-y-2 xl:justify-items-end">
                     <div className="flex flex-col min-w-0">
                       <span className={`${UI.caption} leading-tight`}>Прибыль</span>
-                      <span className={`text-2xl font-semibold font-mono tabular-nums whitespace-nowrap leading-tight ${profitValue < 3000 ? "text-rose-600" : ACCENT_VALUE_CLS}`}>
-                        {Math.round(profitValue).toLocaleString("ru-RU")} <span className="text-[11px] font-medium text-[#6B7280]">€</span>
+                      <span className={`text-2xl font-semibold font-mono tabular-nums whitespace-nowrap leading-tight ${!hasProfit ? "text-[#9CA3AF]" : profitValue < 3000 ? "text-rose-600" : ACCENT_VALUE_CLS}`}>
+                        {hasProfit ? (
+                          <>
+                            {Math.round(profitValue).toLocaleString("ru-RU")} <span className="text-[11px] font-medium text-[#6B7280]">€</span>
+                          </>
+                        ) : (
+                          "—"
+                        )}
                       </span>
                     </div>
                     <div className="flex flex-col min-w-0">
@@ -3460,23 +3489,29 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     </div>
                     <div className="flex flex-col min-w-0">
                       <span className={`${UI.caption} leading-tight`}>В день</span>
-                      <span className={`text-xl font-semibold font-mono tabular-nums whitespace-nowrap leading-tight ${perDayValue < 100 ? "text-rose-600" : ACCENT_VALUE_CLS}`}>
-                        {perDayValue.toLocaleString("ru-RU")} <span className="text-[11px] font-medium text-[#6B7280]">€</span>
+                      <span className={`text-xl font-semibold font-mono tabular-nums whitespace-nowrap leading-tight ${hasProfit && perDayValue < 100 ? "text-rose-600" : ACCENT_VALUE_CLS}`}>
+                        {hasProfit ? (
+                          <>
+                            {perDayValue.toLocaleString("ru-RU")} <span className="text-[11px] font-medium text-[#6B7280]">€</span>
+                          </>
+                        ) : (
+                          "—"
+                        )}
                       </span>
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-x-4 gap-y-2 xl:justify-items-end">
                     <div className="flex flex-col min-w-0">
                       <span className={`${UI.caption} leading-tight`}>Км</span>
-                      <span className="text-sm font-semibold text-[#4B5563] font-mono tabular-nums whitespace-nowrap">{Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU")}</span>
+                      <span className="text-sm font-semibold text-[#4B5563] font-mono tabular-nums whitespace-nowrap">{hasKm ? Math.round(trip.factKm || trip.totalKm || 0).toLocaleString("ru-RU") : "—"}</span>
                     </div>
                     <div className="flex flex-col min-w-0">
                       <span className={`${UI.caption} leading-tight`}>Фрахт</span>
-                      <span className="text-sm font-semibold text-[#4B5563] font-mono tabular-nums whitespace-nowrap">{Math.round(trip.totalFreight || 0).toLocaleString("ru-RU")}</span>
+                      <span className="text-sm font-semibold text-[#4B5563] font-mono tabular-nums whitespace-nowrap">{hasFreight ? Math.round(trip.totalFreight || 0).toLocaleString("ru-RU") : "—"}</span>
                     </div>
                     <div className="flex flex-col min-w-0">
                       <span className={`${UI.caption} leading-tight`}>Расходы</span>
-                      <span className="text-sm font-semibold text-rose-600/90 font-mono tabular-nums whitespace-nowrap">{Math.round(trip.totalExpenses !== undefined ? trip.totalExpenses : (trip.totalFreight - (trip.profit || 0))).toLocaleString("ru-RU")}</span>
+                      <span className="text-sm font-semibold text-rose-600/90 font-mono tabular-nums whitespace-nowrap">{expensesValue !== undefined ? Math.round(expensesValue).toLocaleString("ru-RU") : "—"}</span>
                     </div>
                   </div>
                 </div>

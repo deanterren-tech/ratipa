@@ -26,6 +26,30 @@ const setLocalData = <T>(key: string, value: T) => {
   }
 };
 
+/**
+ * Полезная нагрузка записи «Плана дохода», создаваемой формой «Новый рейс»
+ * таймлайна (см. `createLinkedTimelineTrip`). Финансовые поля намеренно
+ * отсутствуют: фрахт/расходы/прибыль не выдумываются, запись создаётся в
+ * состоянии «Требует заполнения» (`needsFill`).
+ */
+export interface TimelineLinkedPlanPayload {
+  carNumber: string;
+  logist: string;
+  dateStart?: string;
+  dateEnd?: string;
+  days?: number;
+  /** Плечи из маршрута формы: только города (from/to), без ставок и пробега. */
+  legs?: Array<{ from: string; to: string }>;
+  tripNote?: string;
+  stripColor: string;
+  isArchived: false;
+  needsFill: true;
+  createdFrom: 'timeline';
+  dispatcher?: string;
+  dispatcherName?: string;
+  dispatcherId?: string;
+}
+
 
 // The new methods specifically for Plan Dohod matching exact schema requested
 
@@ -73,6 +97,61 @@ export const pdService = {
       console.error("Error creating trip in Firebase:", e);
       alert("Ошибка при сохранении в БД: " + (e as Error).message);
     }
+  },
+
+  /**
+   * Создание записи «Плана дохода» из формы «Новый рейс» таймлайна — одной
+   * атомарной парой с маркером черновика плана этапов.
+   *
+   * Ключ записи задаёт вызывающая сторона (таймлайн): повторная отправка с тем
+   * же id перезаписывает ту же запись — повторные нажатия и ретраи после ошибки
+   * дубликатов не создают. Запись плана и черновик плана этапов
+   * (tripTimeline/planGuard) пишутся ОДНИМ multi-path обновлением: либо обе
+   * ветки, либо ни одной — бесхозного рейса и несвязанной записи не остаётся.
+   * Финансовые поля сюда не кладутся: запись создаётся с состоянием
+   * «Требует заполнения» (needsFill), числа не выдумываются.
+   *
+   * Ошибка пробрасывается наверх (без alert) — форма сохраняет введённые
+   * данные и показывает понятное сообщение.
+   */
+  createLinkedTimelineTrip: async (
+    id: string,
+    planTripKey: string,
+    payload: TimelineLinkedPlanPayload,
+    user: string,
+    role: string,
+  ): Promise<string> => {
+    if (!useFirebase) throw new Error('нет подключения к базе');
+    if (!id || !planTripKey) throw new Error('не задан идентификатор записи');
+    const now = new Date().toLocaleString('ru-RU');
+    const nowIso = new Date().toISOString();
+    const record: Record<string, unknown> = {};
+    Object.entries(payload).forEach(([k, v]) => {
+      if (v !== undefined) record[k] = v;
+    });
+    record.id = id;
+    record.createdAt = now;
+    record.createdBy = user;
+    record.updatedAt = now;
+    record.updatedBy = user;
+    try {
+      await update(ref(database), {
+        [`trips_dashboard/${id}`]: record,
+        [`tripTimeline/planGuard/${planTripKey}`]: { version: 0, draftCreated: true, updatedAt: nowIso },
+      });
+    } catch (e) {
+      console.error('Error creating timeline-linked trip in Firebase:', e);
+      throw new Error(String((e as Error)?.message || e));
+    }
+    dbService.logAction(
+      user,
+      role,
+      'Создание плана рейса',
+      'PlanDohod',
+      id,
+      `Создан план рейса из таймлайна (требует заполнения) для ТС ${payload.carNumber || id}`,
+    );
+    return id;
   },
 
   updateTrip: async (id: string, tripInfo: any, user: string, role: string) => {
