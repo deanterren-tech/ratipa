@@ -3953,6 +3953,28 @@ export const dbService = {
     }
   },
 
+  /**
+   * Прохождение интерактивного гайда «Таймлайн рейсов» — в ПРОФИЛЕ
+   * пользователя (merge-апдейт users_list/{uid}/tlGuide): версия гайда, шаг,
+   * статус и время. Автозапуск «один раз на пользователя» и «Что нового»
+   * переживают перезагрузку и смену устройства (браузер — лишь страховка).
+   */
+  saveTimelineGuideProgress: (
+    uid: string,
+    data: { version: string; status: 'shown' | 'in-progress' | 'done' | 'skipped'; step?: number; at?: string }
+  ) => {
+    if (useFirebase) {
+      const patch: Record<string, any> = {};
+      patch[`tlGuide/version`] = data.version;
+      patch[`tlGuide/status`] = data.status;
+      patch[`tlGuide/step`] = typeof data.step === 'number' ? data.step : null;
+      patch[`tlGuide/at`] = data.at || new Date().toISOString();
+      update(ref(database, `users_list/${uid}`), patch).catch((err) =>
+        console.warn("Failed to save timeline guide progress:", err)
+      );
+    }
+  },
+
   saveUserViewMode: (uid: string, moduleKey: string, mode: string) => {
     if (useFirebase) {
       const patch: Record<string, any> = {};

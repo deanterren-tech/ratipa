@@ -38,6 +38,7 @@ import {
   type LaneTrackItem,
 } from './lib/timeline';
 import { eventTypeOf, stageFullName } from './lib/catalog';
+import { buildLegendItems } from './lib/legend';
 import { planBarLabelParts, planBarLabelText, type PlanBarParts } from './PlanBarLabel';
 import { eventMarkOf, groupEventMarks, type EventMark } from './lib/eventMarks';
 import {
@@ -87,63 +88,25 @@ import {
 import DateInput from './DateInput';
 import CalendarHeader from './CalendarHeader';
 import { plural } from '../../../ui/kit';
-import { AlertTriangle, ArrowRightLeft, CalendarClock, CarFront, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleDashed, Hourglass, LogIn, LogOut, Maximize2, Minimize2, OctagonX, Palette, TriangleAlert, Wrench } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, CalendarClock, CarFront, ChevronDown, ChevronLeft, ChevronRight, CircleDashed, LogIn, LogOut, Maximize2, Minimize2, Palette, TriangleAlert, Wrench } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
-// Палитра полос (визуальная логика прототипа; цвета — единая семья заливок
-// под светлый холст, согласованы с токенами .tl-scope в index.css)
+// Палитра полос / штриховок / маркеров / статусных значков — в lib/visuals:
+// единый источник для полотна таймлайна, мини-таймлайна карточки рейса,
+// попапа «Обозначения» и интерактивного гайда (guide/).
 // ---------------------------------------------------------------------------
+import {
+  BAR_ICON_CLS,
+  CLR,
+  MARKER_TONE,
+  PLAN_ACCENT,
+  PLAN_ACCENT_ARCH,
+  circleBadgeStyle,
+  conflictHatch,
+  hatch45,
+  waitHatch,
+} from './lib/visuals';
 
-const CLR = {
-  planBg: '#DFEAFD',
-  planBg2: '#CFE0FB',
-  planBorder: '#8FBBF7',
-  planText: '#1C3D8C',
-  planArchBg: '#EBEDF1',
-  planArchBorder: '#B4BBC6',
-  planArchText: '#5D6470',
-  planNoneBg: '#F7F8FA',
-  planNoneBorder: '#AAB1BD',
-  bufferA: '#F7DF9E',
-  fact: '#2FB68C',
-  factOpenA: '#9FE2C6',
-  weekend: 'var(--tl-weekend)',
-  today: '#F43F5E',
-  warn: '#D97706',
-  return: '#2563EB',
-};
-
-/**
- * ПЛАН рейса — ОДИН акцентный цвет приложения (токены темы), без индикации
- * сроков: никаких зелёного/жёлтого/оранжевого/красного на плановой полосе.
- */
-const PLAN_ACCENT = {
-  bg: 'var(--accent-10)',
-  border: 'var(--accent-40)',
-  text: '#7E3A0D',
-};
-
-/** Архивная план-полоса — тот же акцент, приглушённый (правило архива). */
-const PLAN_ACCENT_ARCH = {
-  bg: CLR.planArchBg,
-  border: CLR.planArchBorder,
-  text: CLR.planArchText,
-};
-
-const planBarBg = `linear-gradient(180deg, ${CLR.planBg} 0%, ${CLR.planBg2} 100%)`;
-
-const hatch45 = `repeating-linear-gradient(45deg, ${CLR.bufferA}, ${CLR.bufferA} 4px, transparent 4px, transparent 8px)`;
-const hatchOpen = `repeating-linear-gradient(45deg, ${CLR.factOpenA}, ${CLR.factOpenA} 5px, transparent 5px, transparent 10px)`;
-/** Тонкая штриховка зоны конфликта данных (рейс ↔ простой) — предупреждение, не маскировка. */
-const conflictHatch = 'repeating-linear-gradient(45deg, rgba(190,18,60,0.30), rgba(190,18,60,0.30) 2px, transparent 2px, transparent 6px)';
-/** Нейтральная штриховка промежутка «Ожидание выезда». */
-const waitHatch = 'repeating-linear-gradient(45deg, rgba(100,116,139,0.22), rgba(100,116,139,0.22) 2px, transparent 2px, transparent 7px)';
-/** Тона маркеров стыков: янтарный — расхождение с учётом (выехала раньше/позже). */
-const MARKER_TONE = {
-  'early-departure': { fg: '#B45309', bg: '#FFF4DE', border: '#E3B04B' },
-  departure: { fg: '#475569', bg: 'rgba(255,255,255,0.97)', border: '#CBD5E1' },
-  arrival: { fg: '#0F6246', bg: 'rgba(255,255,255,0.97)', border: '#8FC9AE' },
-} as const;
 /** Промежутки «Ожидание выезда»: совпадает ли полоса base-gap с зоной ожидания. */
 const waitCovers = (gaps: Array<{ a: number; b: number }>, s: { a: number; b: number }): boolean =>
   gaps.some((g) => s.a <= g.b && s.b >= g.a);
@@ -298,14 +261,6 @@ const PLAN_BAR_H = 16;
 const FACT_BAR_H = 8;
 const FACT_NONE_H = 14;
 
-/** Единый набор иконок статусов/предупреждений (вместо эмодзи), один размер. */
-const BAR_ICON_CLS = 'w-3 h-3 shrink-0';
-const STATUS_ICON = {
-  violated: { Icon: OctagonX, color: '#BE123C', label: 'срок нарушен (подтверждён фактом)' },
-  missed: { Icon: Hourglass, color: '#B45309', label: 'плановая дата прошла, факт не указан' },
-  risk: { Icon: TriangleAlert, color: '#B45309', label: 'критический срок под угрозой' },
-} as const;
-
 const navBtn =
   'inline-flex items-center justify-center h-7 px-2.5 rounded-lg text-[11px] font-medium bg-white border border-[var(--tl-hairline)] text-[var(--tl-text)] hover:text-[var(--tl-text-strong)] hover:bg-[#F3F4F6] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default';
 const navBtnIcon = `${navBtn} w-7 px-0`;
@@ -324,12 +279,8 @@ const factSegSummaryOf = (segs: FactSegment[]): string => {
     .join('; ');
 };
 
-/** Единый стиль бейджа круга: у одного круга — приглушённый, у двух+ — заметный;
- *  незавершённый («круг идёт») — пунктирная обводка. */
-const circleBadgeStyle = (total: number, ongoing: boolean): React.CSSProperties =>
-  total >= 2
-    ? { background: 'var(--accent-10)', border: `1px ${ongoing ? 'dashed' : 'solid'} var(--accent-40)`, color: '#8A4A12' }
-    : { background: 'rgba(255,255,255,0.9)', border: `1px ${ongoing ? 'dashed' : 'solid'} #C3C8CF`, color: '#5B6472' };
+/** Единый стиль бейджа круга — в lib/visuals (circleBadgeStyle): один источник
+ *  с гайдом и справочником. */
 
 /**
  * Дорожки полос по интервалам (жадная раскладка, как у полос базы): при
@@ -2578,95 +2529,10 @@ export default function TimelineGrid({
   /** Точная высота липкой шапки (месяцы + дни) — столько же держат шапки групп. */
   const headH = colW >= 12 ? 48 : 42;
 
-  /** Все обозначения легенды — один компактный попап (информация не удалена). */
-  const segSw = (c: FactSegColor, extra?: React.ReactNode): React.ReactNode => {
-    const st = FACT_SEGMENT_COLORS[c];
-    return (
-      <i
-        className="inline-flex items-center justify-center w-[18px] h-[14px]"
-        style={{
-          background: st.bg,
-          backgroundImage:
-            c === 'orange' || c === 'red'
-              ? c === 'red'
-                ? 'repeating-linear-gradient(45deg, rgba(159,18,57,0.16), rgba(159,18,57,0.16) 2px, transparent 2px, transparent 7px)'
-                : 'repeating-linear-gradient(45deg, rgba(138,58,10,0.16), rgba(138,58,10,0.16) 2px, transparent 2px, transparent 7px)'
-              : undefined,
-          border: `1px solid ${st.border}`,
-          borderRadius: 4,
-        }}
-      >
-        {extra}
-      </i>
-    );
-  };
-  const legendItems: Array<{ swatch: React.ReactNode; label: string }> = [
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: PLAN_ACCENT.bg, border: `1px solid ${PLAN_ACCENT.border}`, borderRadius: 4 }} />, label: 'рейс (ПЛАН): вся полоса — акцентный цвет приложения, без индикации сроков' },
-    { swatch: <i className="inline-block w-[3px] h-[12px]" style={{ background: CLR.return, borderRadius: 2 }} />, label: 'плановое возвращение' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: hatch45, border: '1px solid rgba(217,119,6,0.25)', borderRadius: 4 }} />, label: 'запас на риски' },
-    // ФАКТ рейса — сегменты по отставанию (пороги в lib/factSegments):
-    { swatch: segSw('green'), label: 'факт: участок выполнен в срок или раньше плана' },
-    { swatch: segSw('yellow'), label: 'факт: опоздание 1–2 дня' },
-    { swatch: segSw('orange', <TriangleAlert className="w-2.5 h-2.5" style={{ color: FACT_SEGMENT_COLORS.orange.text }} aria-hidden="true" />), label: 'факт: опоздание больше 2 дней (штриховка и значок — вторичный признак)' },
-    { swatch: segSw('red', <TriangleAlert className="w-2.5 h-2.5" style={{ color: FACT_SEGMENT_COLORS.red.text }} aria-hidden="true" />), label: 'факт: критический дедлайн нарушен или просрочка (срок прошёл, этап не выполнен)' },
-    { swatch: segSw('neutral'), label: 'факт: план не указан — нейтральная полоса, зелёный не ставится' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: FACT_SEGMENT_COLORS.green.bg, border: `1px solid ${FACT_SEGMENT_COLORS.green.border}`, borderRight: 'none', borderRadius: '4px 0 0 4px' }} />, label: 'факт идёт: продолжающийся край без скругления — отставание считается до сегодня' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: CLR.planNoneBg, border: `1px dashed ${CLR.planNoneBorder}`, borderRadius: 4 }} />, label: '«Факт не указан» (не выполнен)' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-fact').bg, border: `1px solid ${bzKindColor('base-fact').border}`, borderRadius: 4 }} />, label: 'фактический простой на базе (период: приезд → выезд) — сплошная полоса, цвет = статус «Учёта выезда»' },
-    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: VYEZD_STATUS.active.bg, border: `1px solid ${VYEZD_STATUS.active.border}`, borderRadius: 4 }}><CircleDashed className="w-2.5 h-2.5" style={{ color: VYEZD_STATUS.active.text }} aria-hidden="true" /></i>, label: 'учёт выезда: учёт ведётся (период открыт)' },
-    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: VYEZD_STATUS.closed.bg, border: `1px solid ${VYEZD_STATUS.closed.border}`, borderRadius: 4 }}><CircleCheck className="w-2.5 h-2.5" style={{ color: VYEZD_STATUS.closed.text }} aria-hidden="true" /></i>, label: 'учёт выезда: период закрыт (фактический выезд указан)' },
-    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: VYEZD_STATUS['no-departure'].bg, border: `1px solid ${VYEZD_STATUS['no-departure'].border}`, borderRadius: 4 }}><Hourglass className="w-2.5 h-2.5" style={{ color: VYEZD_STATUS['no-departure'].text }} aria-hidden="true" /></i>, label: 'учёт выезда: выезд не зафиксирован (срок готовности прошёл) — «Готовится к выезду», дата выезда не указана' },
-    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: VYEZD_STATUS.conflict.bg, border: `1px solid ${VYEZD_STATUS.conflict.border}`, borderRadius: 4 }}><TriangleAlert className="w-2.5 h-2.5" style={{ color: VYEZD_STATUS.conflict.text }} aria-hidden="true" /></i>, label: 'учёт выезда: расхождение с рейсом (клик — окно периода)' },
-    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: VYEZD_STATUS['early-departure'].bg, border: `1px solid ${VYEZD_STATUS['early-departure'].border}`, borderRadius: 4 }}><CircleDashed className="w-2.5 h-2.5" style={{ color: VYEZD_STATUS['early-departure'].text }} aria-hidden="true" /></i>, label: 'учёт выезда: выезд раньше учётного срока — расхождение объяснено правилом «выехала раньше» (полоса нейтральна, маркер на стыке; в «Учёте выезда» статус не смягчается)' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-plan').bg, border: `1px solid ${bzKindColor('base-plan').border}`, borderRadius: 4 }} />, label: 'плановый простой на базе (приезд → срок готовности) — сплошная полоса' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('repair').bg, border: `1px solid ${bzKindColor('repair').border}`, borderRadius: 4 }} />, label: 'ремонт (внутри базы) — сплошная полоса, подпись внутри' },
-    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: bzKindColor('repair-end').bg, border: `1px solid ${bzKindColor('repair-end').border}`, borderRadius: 4 }}><Wrench className="w-2.5 h-2.5" style={{ color: bzKindColor('repair-end').text }} aria-hidden="true" /></i>, label: 'дата окончания ремонта — вся ячейка дня (иконка)' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-gap').bg, border: `1px dashed ${bzKindColor('base-gap').border}`, borderRadius: 4 }} />, label: 'простой на базе между рейсами (записи учёта нет)' },
-    // Круги машины (правило lib/directions.circlesOf):
-    { swatch: <i className="inline-flex items-center justify-center w-[14px] h-[14px] rounded-full text-[8px] font-bold" style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid #C3C8CF', color: '#5B6472' }}>1</i>, label: 'круг: один рейс машины на внешнем направлении; номер — порядок внутри периода учёта выезда (приезд→выезд); у одного круга бейдж приглушённый' },
-    { swatch: <i className="inline-flex items-center justify-center w-[14px] h-[14px] rounded-full text-[8px] font-bold" style={{ background: 'var(--accent-10)', border: '1px solid var(--accent-40)', color: '#8A4A12' }}>2</i>, label: 'два круга и больше — бейдж заметный: номер на начале полосы, счётчик в колонке; незавершённый рейс — пунктирный бейдж «круг идёт»' },
-    // Направления — отдельная приглушённая палитра (сине-фиолетовые, бирюзовые):
-    // не конфликтует со статусами; различие подкреплено кодом (CN, TR…).
-    ...directions.map((d) => {
-      const dc = directionChipColors(d.color);
-      return {
-        swatch: (
-          <i
-            className="inline-flex items-center justify-center w-[18px] h-[14px]"
-            style={{ background: dc.bg, border: `1px solid ${dc.border}`, borderRadius: 4 }}
-          >
-            <span className="text-[8px] leading-none font-semibold" style={{ color: dc.text }}>
-              {d.code}
-            </span>
-          </i>
-        ),
-        label: `направление «${d.name}» — код ${d.code}: акцент по краю полосы и мини-чип в колонке`,
-      };
-    }),
-    { swatch: <i className="inline-block w-[9px] h-[9px] rotate-45" style={{ background: '#7C3AED', opacity: 0.95, borderRadius: 2 }} />, label: 'событие машины / журнала рейса (клик — к записи)' },
-    { swatch: <i className="inline-block w-[14px] h-[10px]" style={{ background: '#DFEAFD', border: '1px solid #8FBBF7', borderRadius: 4 }} />, label: 'этап: заливка/секция дня — цвет по типу (клик — этап в карточке)' },
-    { swatch: <i className="inline-block w-[3px] h-[12px]" style={{ background: 'repeating-linear-gradient(to bottom, #6B7280 0 3px, transparent 3px 6px)' }} />, label: 'передача диспетчера (дата не указана — стык между рейсами)' },
-    { swatch: <i className="inline-block w-[12px] h-[10px]" style={{ background: '#F7F8FA', border: '1px dashed #DC2626', borderRadius: 3 }} />, label: 'критический срок этапа' },
-    // Маркеры стыков рейса и простоя (единое разрешение наложений, lib/overlap):
-    // день смены делится по горизонтали, обе части кликабельны.
-    { swatch: <i className="inline-flex items-center justify-center w-[16px] h-[16px] rounded-full" style={{ background: 'rgba(255,255,255,0.97)', border: '1px solid #8FC9AE' }}><LogIn className="w-2.5 h-2.5" style={{ color: '#0F6246' }} aria-hidden="true" /></i>, label: 'маркер «прибытие на базу»: рейс завершён в день начала простоя (день делится)' },
-    { swatch: <i className="inline-flex items-center justify-center w-[16px] h-[16px] rounded-full" style={{ background: 'rgba(255,255,255,0.97)', border: '1px solid #CBD5E1' }}><LogOut className="w-2.5 h-2.5" style={{ color: '#475569' }} aria-hidden="true" /></i>, label: 'маркер «выезд»: простой закончился и рейс начался в один день' },
-    { swatch: <i className="inline-flex items-center justify-center w-[16px] h-[16px] rounded-full" style={{ background: '#FFF4DE', border: '1px solid #E3B04B' }}><LogOut className="w-2.5 h-2.5" style={{ color: '#B45309' }} aria-hidden="true" /></i>, label: 'выехала раньше/позже учёта выезда — простой укорочен до дня выезда (клик — окно периода)' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: waitHatch, border: '1px dashed #94A3B8', borderRadius: 4 }} />, label: '«Ожидание выезда» — промежуток между простоем и рейсом (учёт не закрыт) с числом дней' },
-    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: conflictHatch, border: '1px solid #EFA3B1', borderRadius: 4 }}><TriangleAlert className="w-2.5 h-2.5" style={{ color: '#BE123C' }} aria-hidden="true" /></i>, label: 'конфликт данных — тонкая штриховка зоны и значок со ссылкой на источник (не маскируется)' },
-    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: bzKindColor('ready').bg, border: `1px solid ${bzKindColor('ready').border}`, borderRadius: 4 }}><CarFront className="w-2.5 h-2.5" style={{ color: bzKindColor('ready').text }} aria-hidden="true" /></i>, label: 'плановое окончание базы (срок готовности, иконка выезда) — вся ячейка дня' },
-    { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: CLR.planArchBg, border: `1px solid ${CLR.planArchBorder}`, borderRadius: 4 }} />, label: 'архивные данные (приглушённые)' },
-    {
-      swatch: (
-        <span className="inline-flex items-center gap-1">
-          <OctagonX className={BAR_ICON_CLS} style={{ color: '#BE123C' }} aria-hidden="true" />
-          <Hourglass className={BAR_ICON_CLS} style={{ color: '#B45309' }} aria-hidden="true" />
-          <TriangleAlert className={BAR_ICON_CLS} style={{ color: '#D97706' }} aria-hidden="true" />
-        </span>
-      ),
-      label: 'статусы критических сроков (в подсказках полос и в колонке): срок нарушен / план прошёл без факта / срок под угрозой; оранжевый значок — предупреждения данных',
-    },
-  ];
+  /** Все обозначения — из ЕДИНОГО источника lib/legend: тот же список
+   *  показывает вкладка «Справочник» интерактивного гайда, поэтому
+   *  названия, цвета и значки не расходятся с дизайном полос. */
+  const legendItems = buildLegendItems(directions);
 
   const legendSwatchCls = 'inline-flex items-center justify-center w-[26px] shrink-0';
   const legendRowCls = 'flex items-center gap-2 min-w-0';

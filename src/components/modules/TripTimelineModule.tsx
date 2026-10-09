@@ -18,7 +18,7 @@
  * видимой области при догрузке слева сохраняется.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { HelpCircle, Plus } from 'lucide-react';
 import type { AppSettings, TimelinePlanGuard, TimelinePlanPermission, TimelinePlanRequest, UserProfile } from '../../types';
 import { dbService, pdService } from '../../api';
 import { resolvePermission } from '../../utils/permissions';
@@ -43,6 +43,8 @@ import {
 } from './tripTimeline/lib/vyezd';
 import VyezdPeriodWindow from './tripTimeline/VyezdPeriodWindow';
 import { buildTimelinePlanPayload } from './tripTimeline/lib/planFromDraft';
+import TripTimelineGuide, { guideStepAvailable } from './tripTimeline/guide/TripTimelineGuide';
+import { GUIDE_VERSION, GUIDE_WHATS_NEW, buildGuideSteps, type GuideContext, type GuideStep } from './tripTimeline/guide/guideContent';
 
 type TabId = 'timeline' | 'stats';
 
@@ -680,6 +682,181 @@ export default function TripTimelineModule({ user, settings }: Props) {
     { key: 'stats', label: 'Статистика' },
   ];
 
+  // ── Интерактивный гайд «Обучение» ──────────────────────────────────────
+  /**
+   * Дождаться, пока полотно таймлайна «осело»: есть строки машин и полосы
+   * (или истёк лимит ожидания). Нужно, чтобы шаги гайда, чьи элементы
+   * появляются вместе с данными (плановая полоса, полоса «Учёта выезда»,
+   * фактическая полоса), не пропускались из-за гонки с загрузкой данных.
+   */
+  const waitForTimelineReady = useCallback(
+    (maxMs = 5000): Promise<void> =>
+      new Promise((resolve) => {
+        const started = Date.now();
+        const tick = () => {
+          const ready =
+            !!document.querySelector('[data-tl-row]') && !!document.querySelector('[data-bar], [data-bz-stripe]');
+          if (ready || Date.now() - started > maxMs) resolve();
+          else window.setTimeout(tick, 350);
+        };
+        tick();
+      }),
+    [],
+  );
+
+  /**
+   * Гайд по разделу: автозапуск при первом заходе пользователя (факт — в
+   * профиле users_list/{uid}/tlGuide, страховка — localStorage), кнопка
+   * «Обучение» в верхней панели для повторного запуска и перехода к разделу.
+   * Тексты — guide/guideContent (единый файл), демо-иллюстрации —
+   * guide/guideDemos (изолированные данные), справочник — общий с легендой
+   * (lib/legend). Модуль передаёт данные и сохраняет факт прохождения.
+   */
+  const guideCtx: GuideContext = useMemo(
+    () => ({
+      scenario: user.role === 'root_admin' || user.role === 'admin' ? 'admin' : 'dispatcher',
+      canWrite,
+      canCreateTrip,
+      canEditPlan,
+      canEditBaza,
+      isAdmin: user.role === 'root_admin' || user.role === 'admin',
+    }),
+    [user.role, canWrite, canCreateTrip, canEditPlan, canEditBaza],
+  );
+
+  const guideLocalKey = user.uid ? `ratipa_tlguide_${GUIDE_VERSION}_${user.uid}` : '';
+  const guideSeenLocal = (() => {
+    if (!guideLocalKey) return false;
+    try {
+      return window.localStorage.getItem(guideLocalKey) === '1';
+    } catch {
+      return false;
+    }
+  })();
+  /** Текущая версия гайда отмечена (профиль — основное, localStorage — страховка). */
+  const guideSeen = user.tlGuide?.version === GUIDE_VERSION || guideSeenLocal;
+  /** Прошлая версия — после повышения версии гайда показывается «Что нового». */
+  const guidePrevVersion = user.tlGuide?.version && user.tlGuide.version !== GUIDE_VERSION ? user.tlGuide.version : null;
+  const guideStoredStep = typeof user.tlGuide?.step === 'number' ? user.tlGuide.step : null;
+
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideSteps, setGuideSteps] = useState<GuideStep[]>([]);
+  const [guideOpenAt, setGuideOpenAt] = useState<number | null>(null);
+  const [guideResumeAt, setGuideResumeAt] = useState<number | null>(null);
+  const [guideWhatsNew, setGuideWhatsNew] = useState<string[] | null>(null);
+  const [guideShownThisSession, setGuideShownThisSession] = useState(false);
+  const guideStepRef = useRef(0);
+  const guideSaveTimer = useRef<number | null>(null);
+
+  /** Запись прохождения в профиль (+ localStorage как страховка от разрыва сети). */
+  const saveGuideProgress = useCallback(
+    (status: 'shown' | 'in-progress' | 'done' | 'skipped', step?: number) => {
+      if (!user.uid) return;
+      if (guideLocalKey) {
+        try {
+          window.localStorage.setItem(guideLocalKey, '1');
+        } catch {
+          /* приватный режим — не критично */
+        }
+      }
+      dbService.saveTimelineGuideProgress(user.uid, {
+        version: GUIDE_VERSION,
+        status,
+        ...(typeof step === 'number' ? { step } : {}),
+      });
+    },
+    [user.uid, guideLocalKey],
+  );
+
+  /**
+   * Открытие гайда: список шагов собирается ПО РОЛИ и по фактическому наличию
+   * элементов на экране (шаг, чей элемент недоступен роли, пропускается).
+   * Факт показа записывается сразу — перезагрузка не покажет гайд второй раз.
+   */
+  const openGuide = useCallback(
+    (opts?: { at?: number | null; resume?: boolean }) => {
+      const list = buildGuideSteps(guideCtx).filter((s) => !s.spotlight || guideStepAvailable(s));
+      setGuideSteps(list);
+      setGuideOpenAt(typeof opts?.at === 'number' ? Math.max(0, Math.min(opts.at, list.length - 1)) : null);
+      setGuideWhatsNew(guidePrevVersion ? GUIDE_WHATS_NEW : null);
+      setGuideResumeAt(
+        opts?.resume && guideStoredStep != null && guideStoredStep > 0 ? Math.min(guideStoredStep, list.length - 1) : null,
+      );
+      setGuideShownThisSession(true);
+      setGuideOpen(true);
+      saveGuideProgress('shown', guideStepRef.current);
+    },
+    [guideCtx, guidePrevVersion, guideStoredStep, saveGuideProgress],
+  );
+
+  const handleGuideStepChange = useCallback(
+    (index: number) => {
+      guideStepRef.current = index;
+      if (guideSaveTimer.current) window.clearTimeout(guideSaveTimer.current);
+      guideSaveTimer.current = window.setTimeout(() => {
+        saveGuideProgress('in-progress', guideStepRef.current);
+      }, 400);
+    },
+    [saveGuideProgress],
+  );
+
+  const handleGuideClose = useCallback(
+    (reason: 'done' | 'skipped') => {
+      if (guideSaveTimer.current) {
+        window.clearTimeout(guideSaveTimer.current);
+        guideSaveTimer.current = null;
+      }
+      saveGuideProgress(reason, guideStepRef.current);
+      setGuideOpen(false);
+    },
+    [saveGuideProgress],
+  );
+
+  /**
+   * Автозапуск: один раз на пользователя и версию гайда. Показываем после
+   * загрузки рабочей области и НЕ перебиваем уже открытые окна (например,
+   * превью обновлений приложения); при занятом экране автозапуск молча
+   * отменяется — гайд всегда доступен кнопкой «Обучение».
+   */
+  useEffect(() => {
+    if (!user?.uid || guideShownThisSession || guideSeen) return;
+    if (activeTab !== 'timeline') return;
+    let cancelled = false;
+    let attempts = 0;
+    const tryShow = () => {
+      if (cancelled) return;
+      const occupied = !!document.querySelector('[role="dialog"]:not([data-ui="tl-guide"]), [data-ratipa-dialog="1"]');
+      if (occupied) {
+        if (attempts < 8) {
+          attempts += 1;
+          window.setTimeout(tryShow, 1200);
+        }
+        return;
+      }
+      const busy = !!document.querySelector('[data-module-loading]');
+      if (busy) {
+        if (attempts < 12) {
+          attempts += 1;
+          window.setTimeout(tryShow, 900);
+        }
+        return;
+      }
+      // Ждём появления полос: иначе шаги, чьи элементы появляются с данными,
+      // были бы ошибочно пропущены (гонка с загрузкой источников).
+      void waitForTimelineReady(6000).then(() => {
+        if (cancelled) return;
+        openGuide({ resume: true });
+      });
+    };
+    const timer = window.setTimeout(tryShow, 1600);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, guideShownThisSession, guideSeen, activeTab, openGuide, waitForTimelineReady]);
+
+
   const renderVe = renderVs + renderVn - 1;
   const overviewCarNumber = overviewCarKey
     ? data.fleetCars.find((c) => `car:${c.carId || c.carNumber}` === overviewCarKey)?.carNumber ||
@@ -718,6 +895,20 @@ export default function TripTimelineModule({ user, settings }: Props) {
       onTabChange={(key) => navigate(TAB_SLUGS[key as TabId] || DEFAULT_TAB)}
       actions={
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            data-ui="guide-open"
+            onClick={() => {
+              // Небольшая пауза на «оседание» полос — шаги с полосами не
+              // пропускаются из-за гонки с загрузкой данных; затем гайд.
+              void waitForTimelineReady(3000).then(() => openGuide());
+            }}
+            className={UI.buttonGhost}
+            title="Интерактивный гайд по разделу: шаги с подсветкой, типичные ситуации и справочник обозначений"
+          >
+            <HelpCircle className="w-4 h-4" aria-hidden="true" />
+            Обучение
+          </button>
           {!canWrite ? <span className={UI.chip}>режим чтения</span> : null}
           {canCreateTrip ? (
             <button type="button" data-ui="new-trip" onClick={() => setShowNewTrip(true)} className={UI.buttonPrimary}>
@@ -992,6 +1183,23 @@ export default function TripTimelineModule({ user, settings }: Props) {
             openTripAtEvent(key, eventId);
           }}
           onClose={() => setOverviewCarKey(null)}
+        />
+      ) : null}
+
+      {/* Интерактивный гайд «Обучение» — окно-мастер поверх таймлайна:
+          шаги с подсветкой реальных элементов, демо-иллюстрации и справочник
+          (единый источник с легендой). Прохождение хранится в профиле. */}
+      {guideOpen ? (
+        <TripTimelineGuide
+          isOpen
+          user={user}
+          steps={guideSteps}
+          directions={data.directions}
+          whatsNew={guideWhatsNew}
+          resumeAt={guideResumeAt}
+          openAt={guideOpenAt}
+          onClose={handleGuideClose}
+          onStepChange={handleGuideStepChange}
         />
       ) : null}
     </ModuleShell>
