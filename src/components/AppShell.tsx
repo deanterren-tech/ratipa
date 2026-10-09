@@ -1265,8 +1265,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         <div className="flex items-center gap-1.5 md:gap-3 shrink-0">
           
           {/* Avatar overlap stack */}
-          <div className="hidden md:flex items-center space-x-1 mr-1 relative group cursor-pointer">
-            {onlineUsers.slice(0, 3).map((u) => {
+          <div className="hidden md:flex items-center -space-x-2 mr-1 relative group cursor-pointer">
+            {onlineUsers.slice(0, 3).map((u, idx) => {
                // Тот же аватар и тот же профиль, что и в остальных местах портала:
                // фотография, если выбрана, иначе настроенная цветная иконка.
                const profile = profileFor(u);
@@ -1281,7 +1281,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                    photo={profile?.avatarPhoto}
                    size={28}
                    title={label}
-                   className="border-2 border-white"
+                   // Левый аватар рисуется поверх правого (z-30 > z-20 > z-10):
+                   // фото пользователя больше не уходит под обводку соседа.
+                   className={`relative border-2 border-white ${idx === 0 ? 'z-30' : idx === 1 ? 'z-20' : 'z-10'}`}
                  />
                )
             })}
