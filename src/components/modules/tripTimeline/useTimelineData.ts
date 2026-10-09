@@ -40,8 +40,13 @@ export interface DispatcherOption {
 }
 
 export interface TimelineData {
-  /** Целые рейсы: ручные + из «Плана дохода» (порядок: ручные, затем планы). */
+  /** Целые рейсы: ручные + из «Плана дохода» (порядок: ручные, затем планы).
+   *  Записи с `hiddenFromTimeline` сюда НЕ попадают — ни в полосы, ни в
+   *  счётчики, ни в конфликты таймлайна («План дохода» их по-прежнему видит). */
   trips: WholeTrip[];
+  /** Скрытые дубли (hiddenFromTimeline в источнике): только для прямого открытия
+   *  карточки (deep link) с плашкой; в таймлайне не участвуют. */
+  hiddenTrips: WholeTrip[];
   /** Периоды «Учёт выезда»: база и ремонт. */
   bases: BasePeriod[];
   /** События машины (ручные, ветка модуля). */
@@ -158,11 +163,17 @@ export function useTimelineData(): TimelineData {
   const dir = useMemo(() => buildDispatcherDirectory(dispatchers.map((d) => ({ id: d.id, name: d.name }))), [dispatchers]);
   const fleetCars = useMemo(() => uniqueFleetCars(carIndex), [carIndex]);
 
-  const trips = useMemo(() => {
+  const tripsAll = useMemo(() => {
     const manual = manualTrips.map((t) => normalizeManualTrip(t, carIndex, dir));
     const fromPlan = planTripsToWholeTrips(planTrips, carIndex, dir, stagesStore);
     return [...manual, ...fromPlan];
   }, [manualTrips, planTrips, carIndex, dir, stagesStore]);
+
+  // Скрытые дубли исключаются из таймлайна здесь — единственная точка входа
+  // целых рейсов для всех экранов модуля; для прямого открытия карточки они
+  // остаются в hiddenTrips (без выдумывания данных, «План дохода» не затронут).
+  const trips = useMemo(() => tripsAll.filter((t) => t.hiddenFromTimeline !== true), [tripsAll]);
+  const hiddenTrips = useMemo(() => tripsAll.filter((t) => t.hiddenFromTimeline === true), [tripsAll]);
 
   const bases = useMemo(() => bazaToBasePeriods(baza, carIndex, dir), [baza, carIndex, dir]);
 
@@ -170,5 +181,5 @@ export function useTimelineData(): TimelineData {
 
   const directions = useMemo(() => mergeDirections(dbDirections), [dbDirections]);
 
-  return { trips, bases, events, fleetCars, dispatchers, stageTypes, cities, directions };
+  return { trips, hiddenTrips, bases, events, fleetCars, dispatchers, stageTypes, cities, directions };
 }

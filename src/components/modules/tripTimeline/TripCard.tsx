@@ -25,6 +25,7 @@ import {
   CalendarClock,
   ClipboardCopy,
   ExternalLink,
+  EyeOff,
   Flag,
   LogIn,
   LogOut,
@@ -2210,6 +2211,25 @@ export default function TripCard({
       }
     >
       <div ref={rootRef} data-atrip={trip.key} className="flex flex-col gap-4">
+        {trip.hiddenFromTimeline ? (
+          <div
+            data-ui="trip-hidden-notice"
+            role="note"
+            className="flex items-start gap-2.5 rounded-xl border border-[#CBD5E1] bg-[#F4F6F9] px-3 py-2.5"
+          >
+            <EyeOff className="w-4 h-4 mt-[1px] shrink-0 text-[#64748B]" aria-hidden="true" />
+            <div className="flex flex-col gap-1 text-[11px] leading-[15px] text-[#334155]">
+              <span className="font-semibold text-[#121316]">Рейс скрыт на таймлайне как дубль</span>
+              <span>
+                {trip.hiddenInfo?.reason ? `Причина: ${trip.hiddenInfo.reason}. ` : ''}
+                {trip.hiddenInfo?.duplicate
+                  ? `Основная (живая) запись — «${trip.hiddenInfo.duplicate.carNumber}», ${fmtFull(trip.hiddenInfo.duplicate.dateStart)} — ${fmtFull(trip.hiddenInfo.duplicate.dateEnd)}${trip.hiddenInfo.duplicate.archived ? ' (в архиве)' : ''}. `
+                  : ''}
+                Запись не удалена и по-прежнему видна в «Плане дохода»; в полосах, счётчиках и конфликтах таймлайна она не участвует.
+              </span>
+            </div>
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]">
           <span className={`inline-flex items-center gap-1.5 ${tone.text}`}>
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${tone.dot}`} aria-hidden="true" />

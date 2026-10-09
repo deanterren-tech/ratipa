@@ -28,7 +28,7 @@ import {
   type BasePeriod,
 } from './sources';
 import { fmtDM } from './timeline';
-import { vyezdStatusOf, vyezdSummaryOf, VYEZD_STATUS, type VyezdStatusKind, type VyezdTripRange } from './vyezd';
+import { EARLY_DEPARTURE_TIMELINE_NOTE, vyezdStatusOf, vyezdSummaryOf, VYEZD_STATUS, type VyezdStatusKind, type VyezdTripRange } from './vyezd';
 
 export type BzFillKind = 'base-plan' | 'ready' | 'base-fact' | 'repair' | 'repair-end' | 'base-gap';
 
@@ -109,7 +109,12 @@ export interface BzStripe {
   /** Ключ записи учёта выезда (bz:<id>) — клик открывает период; у промежутка без записи null. */
   periodKey: string | null;
   archived: boolean;
-  /** Статус периода «Учёта выезда» (только base-fact): цвет и иконка полосы. */
+  /**
+   * Статус периода «Учёта выезда» (только base-fact): цвет и иконка полосы.
+   * На таймлайне конфликт, ПОЛНОСТЬЮ объяснённый правилом «выехала раньше»,
+   * показывается нейтральным статусом 'early-departure' (смягчение только
+   * отображения; в модуле «Учёт выезда» статус остаётся конфликтом).
+   */
   status?: VyezdStatusKind;
   /** Короткая подпись внутри полосы (если хватает ширины). */
   label: string;
@@ -269,10 +274,20 @@ export const layoutBzFills = (
       const readyTxt = p.plannedReadyDay != null ? fmtDM(p.plannedReadyDay) : 'не указан';
       const status = vyezdStatusOf(p, today, tripRanges);
       const sum = vyezdSummaryOf(p, today, tripRanges);
+      // Смягчение ТОЛЬКО случая «ранний выезд» и только на таймлайне: все
+      // настоящие пересечения периода объясняются правилом «выехала раньше»
+      // (lib/overlap, правило 1) — полоса укорочена до дня выезда, на стыке
+      // маркер «выехал на N дн. раньше». Красный конфликт и зелёный «закрыт»
+      // для этого случая показываются нейтрально; статусы модуля «Учёт
+      // выезда» (окно периода) не меняются.
+      const softenedOnTimeline = status.earlyDepartureOnly && (status.kind === 'conflict' || status.kind === 'closed');
+      const stripeStatus: VyezdStatusKind = softenedOnTimeline ? 'early-departure' : status.kind;
       const titleLines = [
         `Учёт выезда · ${p.carNumber}${p.dispatcherName ? ` · ${p.dispatcherName}` : ''}${arch}`,
         `Период: приезд ${fmtDM(rb.a)} – ${rb.open ? 'выезд не указан (период продолжается)' : fmtDM(rb.b)} · ${sum.total} дн на базе · срок готовности ${readyTxt}`,
-        `Статус: ${status.label} — ${status.reason}`,
+        softenedOnTimeline
+          ? `Статус: ранний выезд — расхождение объяснено: машина выехала раньше учётного срока, простой укорочен до дня выезда (маркер на стыке дня; данные учёта не изменены). ${EARLY_DEPARTURE_TIMELINE_NOTE}`
+          : `Статус: ${status.label} — ${status.reason}`,
       ];
       const realTrips = sum.trips.filter((t) => !t.boundary);
       const boundaryTrips = sum.trips.filter((t) => t.boundary);
@@ -314,7 +329,7 @@ export const layoutBzFills = (
         lanes: 1,
         periodKey: p.key,
         archived: p.archived,
-        status: status.kind,
+        status: stripeStatus,
         label: 'Учёт выезда',
         dateLabel: `${fmtDM(rb.a)} – ${rb.open ? '…' : fmtDM(rb.b)}`,
         stickyLabel: false,

@@ -627,7 +627,11 @@ export default function TripTimelineModule({ user, settings }: Props) {
   const overviewBases = overviewCarKey ? data.bases.filter((p) => p.carKey === overviewCarKey) : [];
   const defaultDispatcherId = isDispatcherUser && dispatcherTabs.some((t) => t.id === user.uid) ? user.uid : '';
 
-  const openTripObj = openTripKey ? data.trips.find((t) => t.key === openTripKey) || null : null;
+  // Прямое открытие карточки (deep link): скрытый дубль ищем и среди hiddenTrips —
+  // карточка открывается с понятной плашкой (см. TripCard), из таймлайна он скрыт.
+  const openTripObj = openTripKey
+    ? data.trips.find((t) => t.key === openTripKey) || data.hiddenTrips.find((t) => t.key === openTripKey) || null
+    : null;
   const openTripMetaRaw = openTripKey ? metaStore[openTripKey] || {} : {};
   const openTripMeta = {
     reason: String(openTripMetaRaw.reason || ''),

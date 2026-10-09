@@ -124,7 +124,7 @@ export const parseVyezdHash = (hash: string): ParsedVyezdRoute | null => {
 // Статусы периода «Учёта выезда»
 // ---------------------------------------------------------------------------
 
-export type VyezdStatusKind = 'active' | 'closed' | 'no-departure' | 'conflict';
+export type VyezdStatusKind = 'active' | 'closed' | 'no-departure' | 'conflict' | 'early-departure';
 
 export interface VyezdStatusColor {
   bg: string;
@@ -137,18 +137,25 @@ export interface VyezdStatusColor {
  * серо-синий факта базы (как было), «закрыт» — мягкий зелёный (успешное
  * завершение), «выезд не зафиксирован» — янтарный (как просроченные сроки),
  * «расхождение» — розово-красный (как предупреждения/просрочка).
+ * `early-departure` — НЕ статус модуля «Учёт выезда», а смягчённый показ
+ * конфликта НА ТАЙМЛАЙНЕ: расхождение полностью объясняется правилом «выехала
+ * раньше» (полоса укорочена до дня выезда, на стыке маркер) — мягкий серо-синий
+ * без тревоги. Сам vyezdStatusOf такую запись по-прежнему считает конфликтом
+ * (в «Учёте выезда» красный не меняется).
  */
 export const VYEZD_STATUS: Record<VyezdStatusKind, VyezdStatusColor & { label: string; short: string }> = {
   active: { label: 'Учёт ведётся', short: 'учёт ведётся', bg: '#EAECF0', border: '#A6ADBA', text: '#444B57' },
   closed: { label: 'Период закрыт', short: 'период закрыт', bg: '#E9F6F0', border: '#8FC9AE', text: '#1D6B50' },
   'no-departure': { label: 'Выезд не зафиксирован', short: 'выезд не зафиксирован', bg: '#FBEFD4', border: '#E3B04B', text: '#8A5A0A' },
   conflict: { label: 'Расхождение с рейсом', short: 'расхождение с рейсом', bg: '#FDEBEE', border: '#EFA3B1', text: '#9F1239' },
+  'early-departure': { label: 'Ранний выезд (расхождение объяснено)', short: 'ранний выезд', bg: '#EAECF0', border: '#A6ADBA', text: '#444B57' },
 };
 
 export const vyezdStatusIcon = (kind: VyezdStatusKind): LucideIcon => {
   if (kind === 'closed') return CircleCheck;
   if (kind === 'no-departure') return Hourglass;
   if (kind === 'conflict') return TriangleAlert;
+  // «Ранний выезд» (смягчённый конфликт на таймлайне) — нейтральная иконка без тревоги.
   return CircleDashed;
 };
 
@@ -181,6 +188,17 @@ export interface VyezdStatusResult extends VyezdStatusColor {
   reason: string;
   /** Пересечения с рейсами (включая честные стыки — они показываются отдельно). */
   conflicts: VyezdConflict[];
+  /**
+   * true — ВСЕ настоящие пересечения объясняются правилом «выехала раньше»
+   * (lib/overlap, правило 1): рейс начался внутри учётного периода и машина
+   * выехала раньше учётного конца X (фактический выезд / срок готовности) —
+   * ровно тот случай, где полоса укорочена до дня выезда и стоит маркер
+   * «выехал на N дн. раньше». Такой случай НА ТАЙМЛАЙНЕ показывается
+   * нейтрально (смягчённый статус — и для конфликта, и для закрытой/архивной
+   * записи); в модуле «Учёт выезда» статусы не меняются. Для остальных
+   * случаев — false (не смягчаем).
+   */
+  earlyDepartureOnly: boolean;
 }
 
 /**
@@ -196,6 +214,32 @@ const isVyezdBoundary = (
   lo: number,
   hi: number,
 ): boolean => (e === baseA && s < baseA) || (p.departureDay != null && lo === hi && s === p.departureDay);
+
+/**
+ * Все настоящие пересечения объясняются правилом «выехала раньше»
+ * (lib/overlap, правило 1) — условие, при котором ТАЙМЛАЙН смягчает показ
+ * статуса до нейтрального. Само значение vyezdStatusOf остаётся прежним
+ * (в модуле «Учёт выезда» ничего не меняется). Условие зеркалит правило 1:
+ * рейс начинается внутри учётного периода (после приезда, не позже учётного
+ * конца), тянется до конца периода/дальше, и его старт раньше учётного конца X
+ * (фактический выезд либо срок готовности) — то есть маркер «выехал на N дн.
+ * раньше». Рейс целиком внутри простоя, рейс, начавшийся до/в день приезда,
+ * или выезд ПОЗЖЕ учётного срока сюда не попадают — такие случаи остаются
+ * «расхождением» и на таймлайне.
+ */
+const earlyDepartureExplainsAll = (
+  p: BasePeriod,
+  rb: { a: number; b: number },
+  real: VyezdConflict[],
+): boolean => {
+  const xEnd = p.departureDay ?? p.plannedReadyDay;
+  if (xEnd == null || !real.length) return false;
+  return real.every((c) => c.a > rb.a && c.a <= rb.b && c.b >= rb.b && c.a < xEnd);
+};
+
+/** Минимальное описание случая «ранний выезд» для подсказок таймлайна. */
+export const EARLY_DEPARTURE_TIMELINE_NOTE =
+  'На таймлайне статус показан нейтрально (расхождение объяснено правилом «выехала раньше»); в «Учёте выезда» статус не изменяется.';
 
 /**
  * Статус периода по существующим данным. Правило пересечения с рейсом:
@@ -221,6 +265,10 @@ export const vyezdStatusOf = (p: BasePeriod, today: number, trips: VyezdTripRang
     });
   }
   const real = conflicts.filter((c) => !c.boundary && c.days >= 1);
+  // Случай «ранний выезд» (см. earlyDepartureExplainsAll). Флаг описывает
+  // данные; смягчение показа применяет только таймлайн (lib/bzFills), статусы
+  // модуля «Учёт выезда» не меняются.
+  const earlyOnly = rb != null && earlyDepartureExplainsAll(p, rb, real);
   const base = VYEZD_STATUS;
   if (real.length && !p.archived) {
     const c = real[0];
@@ -229,6 +277,7 @@ export const vyezdStatusOf = (p: BasePeriod, today: number, trips: VyezdTripRang
       ...base.conflict,
       reason: `Период пересекается с рейсом ${c.label} (${fmtDM(c.a)} – ${fmtDM(c.b)}): общих дней — ${c.days}. Проверьте даты в «Учёте выезда» и в «Плане дохода».`,
       conflicts,
+      earlyDepartureOnly: earlyOnly,
     };
   }
   if (p.departureDay == null) {
@@ -238,6 +287,7 @@ export const vyezdStatusOf = (p: BasePeriod, today: number, trips: VyezdTripRang
         ...base['no-departure'],
         reason: `Срок готовности прошёл (${p.plannedReadyDay != null ? fmtDM(p.plannedReadyDay) : 'дата не указана'}), фактический выезд не указан — возможно, факт просто не внесён.`,
         conflicts,
+        earlyDepartureOnly: false,
       };
     }
     return {
@@ -245,6 +295,7 @@ export const vyezdStatusOf = (p: BasePeriod, today: number, trips: VyezdTripRang
       ...base.active,
       reason: 'Период открыт: приезд зафиксирован, фактический выезд ещё не внесён — учёт ведётся.',
       conflicts,
+      earlyDepartureOnly: false,
     };
   }
   return {
@@ -254,6 +305,7 @@ export const vyezdStatusOf = (p: BasePeriod, today: number, trips: VyezdTripRang
       real.length ? `; в архиве есть пересечение с рейсом ${real[0].label} — см. пояснения` : ''
     }.`,
     conflicts,
+    earlyDepartureOnly: earlyOnly,
   };
 };
 

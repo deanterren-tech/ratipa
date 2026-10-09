@@ -149,6 +149,20 @@ export interface PlanTripInfo {
   needsFill?: boolean;
 }
 
+/**
+ * Скрытый на таймлайне дубль (поле `hiddenFromTimeline` в исходной записи
+ * «Плана дохода»): запись не удаляется и остаётся видимой в самом «Плане
+ * дохода», но на таймлайне не участвует в полосах/счётчиках/конфликтах.
+ */
+export interface HiddenTripInfo {
+  /** Причина скрытия из источника (`hiddenReason`), как записана в данных. */
+  reason: string;
+  hiddenAt?: string;
+  hiddenBy?: string;
+  /** Основная (живая) запись — по `duplicateOf` из источника, если найден (данные не выдумываются). */
+  duplicate?: { key: string; id: string; carNumber: string; dateStart: string; dateEnd: string; archived: boolean };
+}
+
 /** Целый рейс таймлайна: ручной рейс модуля либо рейс, связанный с планом. */
 export interface WholeTrip extends TimelineTrip {
   /** manual — ручной рейс модуля; plan — целый рейс из «Плана дохода». */
@@ -173,6 +187,10 @@ export interface WholeTrip extends TimelineTrip {
    * контролем плана (у заполненных реальных рейсов он не даёт бесплатную правку).
    */
   planDraftFromTimeline?: boolean;
+  /** Запись помечена в источнике `hiddenFromTimeline` — дубль, скрытый на таймлайне. */
+  hiddenFromTimeline?: boolean;
+  /** Для скрытого дубля: причина и основная запись (см. HiddenTripInfo). */
+  hiddenInfo?: HiddenTripInfo;
   /** Понятные предупреждения по данным (конфликты не исправляются автоматически). */
   warnings: string[];
 }
@@ -196,15 +214,19 @@ const parseLegs = (raw: unknown): PlanLegInfo[] => {
     .filter((l) => l.from || l.to);
 };
 
-/** Рейсы из «Плана дохода» → целые рейсы таймлайна (идемпотентно, без записей). */
+/** Рейсы из «Плана дохода» → целые рейсы таймлайна (идемпотентно, без записей).
+ *  Записи с `hiddenFromTimeline` помечаются (hiddenFromTimeline/hiddenInfo) и НЕ
+ *  отбрасываются здесь — вызывающий слой (useTimelineData) исключает их из
+ *  таймлайна, оставляя доступными для плашки при прямом открытии. */
 export const planTripsToWholeTrips = (
   planTrips: Array<Record<string, unknown>>,
   carIndex: Map<string, CarRef>,
   dir: DispatcherDirectory,
   stagesStore: Record<string, Record<string, unknown>>,
-): WholeTrip[] =>
-  (planTrips || [])
-    .filter((rec) => rec && typeof rec === 'object' && rec.id)
+): WholeTrip[] => {
+  const list = (planTrips || []).filter((rec) => rec && typeof rec === 'object' && rec.id);
+  const byId = new Map(list.map((rec) => [String(rec.id), rec]));
+  return list
     .map((rec) => {
       const id = String(rec.id);
       const carNumberText = String(rec.carNumber || '');
@@ -226,6 +248,26 @@ export const planTripsToWholeTrips = (
       if (pMin == null) warnings.push('В плане не указана дата старта — полоса рейса не строится');
       if (pMin != null && pMax == null) warnings.push('В плане не указана дата возвращения — показан неполный план');
       if (pMin != null && pMax != null && pMax < pMin) warnings.push('Дата возвращения в плане раньше старта — проверьте план дохода');
+      // Дубль, скрытый на таймлайне: флаг и основная запись — из источника, без выдумывания.
+      const hiddenFromTimeline = rec.hiddenFromTimeline === true;
+      const dupRec = hiddenFromTimeline && rec.duplicateOf ? byId.get(String(rec.duplicateOf)) : undefined;
+      const hiddenInfo: HiddenTripInfo | undefined = hiddenFromTimeline
+        ? {
+            reason: rec.hiddenReason ? String(rec.hiddenReason) : '',
+            hiddenAt: rec.hiddenAt ? String(rec.hiddenAt) : undefined,
+            hiddenBy: rec.hiddenBy ? String(rec.hiddenBy) : undefined,
+            duplicate: dupRec
+              ? {
+                  key: `pd:${String(dupRec.id)}`,
+                  id: String(dupRec.id),
+                  carNumber: String(dupRec.carNumber || ''),
+                  dateStart: String(dupRec.dateStart || ''),
+                  dateEnd: String(dupRec.dateEnd || ''),
+                  archived: dupRec.isArchived === true,
+                }
+              : undefined,
+          }
+        : undefined;
       const trip: WholeTrip = {
         id: `pd:${id}`,
         kind: 'plan',
@@ -247,6 +289,8 @@ export const planTripsToWholeTrips = (
         // Черновик формы таймлайна (маркер planGuard.draftCreated действителен):
         // запись создана «Новым рейсом» и ещё «Требует заполнения».
         planDraftFromTimeline: rec.createdFrom === 'timeline' || rec.needsFill === true,
+        hiddenFromTimeline,
+        hiddenInfo,
         warnings,
         plan: {
           id,
@@ -268,6 +312,7 @@ export const planTripsToWholeTrips = (
     })
     // Рейс без старта не может дать полосу, но остаётся в обзоре машины
     .filter((t) => !(t.warnings.some((w) => w.includes('не указана дата старта')) && t.stages.length === 0));
+};
 
 // ---------------------------------------------------------------------------
 // Периоды «Учёта выезда»: база и ремонт

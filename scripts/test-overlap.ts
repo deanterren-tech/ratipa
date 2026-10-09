@@ -14,6 +14,7 @@ import {
 import { resolveRowOverlaps } from '../src/components/modules/tripTimeline/lib/overlapRow';
 import { baseBarRange, readyBarRange, repairBarRange, type BasePeriod } from '../src/components/modules/tripTimeline/lib/sources';
 import { layoutBzFills } from '../src/components/modules/tripTimeline/lib/bzFills';
+import { vyezdStatusOf, VYEZD_STATUS } from '../src/components/modules/tripTimeline/lib/vyezd';
 
 let failures = 0;
 let total = 0;
@@ -260,6 +261,92 @@ const markerOf = (res: ReturnType<typeof resolveOverlaps>, kind: string) => res.
   // Дубль периода-записи не дублирует маркеры.
   const dup = resolveRowOverlaps([period, { ...period }], planTrips, 'plan', 20, fmt, 'T 0009');
   ok('9.6: дубль периода не дублирует маркеры', dup.markers.length === plan.markers.length, dup.markers.length);
+}
+
+// ── 10. Смягчение статуса «ранний выезд» — ТОЛЬКО таймлайн ──────────────────
+{
+  const periodOf = (over: Partial<BasePeriod>): BasePeriod => ({
+    id: 'p10', key: 'bz:p10', carKey: 'car:10', carId: '10', carNumber: 'T 0010', dispatcherId: '', dispatcherName: '',
+    arrivalDay: null, departureDay: null, repairStartDay: null, repairEndDay: null, plannedReadyDay: null,
+    causeLabel: 'На базе', causeKind: 'base', comment: '', archived: false, openBase: false, openRepair: false,
+    repairCappedByDeparture: false, warnings: [],
+    ...over,
+  });
+  // Ранний выезд (−1 день, как AT 4458-7 / AC 3392-7): рейс начался внутри
+  // периода, идёт дальше его конца; учётный конец — фактический выезд.
+  const earlyPeriod = periodOf({ arrivalDay: 10, departureDay: 20, plannedReadyDay: 18 });
+  const earlyTrip = { a: 19, b: 40, label: 'Рейс «Ранний»', archived: false };
+  {
+    const st = vyezdStatusOf(earlyPeriod, 25, [earlyTrip]);
+    ok('10.1: у источника статус конфликт (модуль не смягчается)', st.kind === 'conflict' && st.earlyDepartureOnly === true, st);
+    const layout = layoutBzFills([{ period: earlyPeriod, tripRanges: [earlyTrip] }], [], 'fact', 0, 100, 25);
+    const stripe = layout.stripes.find((s) => s.kind === 'base-fact');
+    ok('10.2: полоса таймлайна смягчена до early-departure', stripe?.status === 'early-departure', stripe?.status);
+    ok(
+      '10.3: смягчённая полоса нейтральна и без тревоги (палитра как active)',
+      stripe?.status === 'early-departure' && VYEZD_STATUS['early-departure'].bg === VYEZD_STATUS.active.bg && VYEZD_STATUS['early-departure'].text === VYEZD_STATUS.active.text,
+      stripe?.status,
+    );
+    ok('10.4: подсказка полосы сохраняет объяснение и маркер', !!stripe && stripe.title.includes('ранний выезд') && stripe.title.includes('маркер на стыке'), stripe?.title);
+  }
+  {
+    // Архивная закрытая запись того же случая (AT 4458-7, AC 3392-7): на
+    // таймлайне — тоже нейтрально, хотя у источника статус «закрыт».
+    const archEarly = { ...earlyPeriod, id: 'p10a', key: 'bz:p10a', archived: true };
+    const st = vyezdStatusOf(archEarly, 25, [earlyTrip]);
+    ok('10.5: архивная ранняя — у источника closed, флаг earlyDepartureOnly', st.kind === 'closed' && st.earlyDepartureOnly === true, st);
+    const layout = layoutBzFills([{ period: archEarly, tripRanges: [earlyTrip] }], [], 'fact', 0, 100, 25);
+    const stripe = layout.stripes.find((s) => s.kind === 'base-fact');
+    ok('10.6: архивная ранняя — полоса таймлайна нейтральна', stripe?.status === 'early-departure', stripe?.status);
+  }
+  {
+    // Настоящий конфликт — рейс ЦЕЛИКОМ внутри простоя: на таймлайне красный.
+    const inside = periodOf({ id: 'p10b', key: 'bz:p10b', arrivalDay: 10, departureDay: 30, plannedReadyDay: 28 });
+    const insideTrip = { a: 15, b: 20, label: 'Рейс «Внутри»' };
+    const st = vyezdStatusOf(inside, 35, [insideTrip]);
+    ok('10.7: рейс внутри — флаг не поднимается', st.kind === 'conflict' && st.earlyDepartureOnly === false, st);
+    const layout = layoutBzFills([{ period: inside, tripRanges: [insideTrip] }], [], 'fact', 0, 100, 35);
+    ok('10.8: рейс внутри — полоса остаётся красной (conflict)', layout.stripes.find((s) => s.kind === 'base-fact')?.status === 'conflict');
+  }
+  {
+    // Хвост рейса внутри простоя (как AO 3086-7: рейс начался до приезда) — красный.
+    const tail = periodOf({ id: 'p10c', key: 'bz:p10c', arrivalDay: 10, departureDay: 30, plannedReadyDay: 28 });
+    const tailTrip = { a: 5, b: 15, label: 'Рейс «Хвост»' };
+    const st = vyezdStatusOf(tail, 35, [tailTrip]);
+    ok('10.9: рейс с хвостом внутри — без смягчения', st.kind === 'conflict' && st.earlyDepartureOnly === false, st);
+    const layout = layoutBzFills([{ period: tail, tripRanges: [tailTrip] }], [], 'fact', 0, 100, 35);
+    ok('10.10: хвост внутри — полоса красная', layout.stripes.find((s) => s.kind === 'base-fact')?.status === 'conflict');
+  }
+  {
+    // Смешанный случай: ранний рейс + рейс внутри — смягчения нет (красный).
+    const mixed = periodOf({ id: 'p10d', key: 'bz:p10d', arrivalDay: 10, departureDay: 40, plannedReadyDay: 38 });
+    const trips = [
+      { a: 36, b: 60, label: 'Рейс «Ранний»' },
+      { a: 15, b: 20, label: 'Рейс «Внутри»' },
+    ];
+    const st = vyezdStatusOf(mixed, 45, trips);
+    ok('10.11: смешанные пересечения — без смягчения', st.kind === 'conflict' && st.earlyDepartureOnly === false, st);
+    const layout = layoutBzFills([{ period: mixed, tripRanges: trips }], [], 'fact', 0, 100, 45);
+    ok('10.12: смешанные — полоса красная', layout.stripes.find((s) => s.kind === 'base-fact')?.status === 'conflict');
+  }
+  {
+    // Выезд ПОЗЖЕ срока готовности (открытый период, n < 0) — смягчения нет.
+    const late = periodOf({ id: 'p10e', key: 'bz:p10e', arrivalDay: 10, departureDay: null, plannedReadyDay: 18 });
+    const lateTrip = { a: 25, b: 45, label: 'Рейс «Поздний»' };
+    const st = vyezdStatusOf(late, 40, [lateTrip]);
+    ok('10.13: поздний выезд — без смягчения (как AC 5448-7 / AO 3921-7)', st.kind === 'conflict' && st.earlyDepartureOnly === false, st);
+    const layout = layoutBzFills([{ period: late, tripRanges: [lateTrip] }], [], 'fact', 0, 100, 40);
+    ok('10.14: поздний выезд — полоса красная', layout.stripes.find((s) => s.kind === 'base-fact')?.status === 'conflict');
+  }
+  {
+    // Честный стык (рейс начался в день выезда) — конфликта нет, closed.
+    const swap = periodOf({ id: 'p10f', key: 'bz:p10f', arrivalDay: 10, departureDay: 20, plannedReadyDay: 20 });
+    const swapTrip = { a: 20, b: 40, label: 'Рейс «В один день»' };
+    const st = vyezdStatusOf(swap, 25, [swapTrip]);
+    ok('10.15: смена в день выезда — не конфликт и не «ранний»', st.kind === 'closed' && st.earlyDepartureOnly === false, st);
+    const layout = layoutBzFills([{ period: swap, tripRanges: [swapTrip] }], [], 'fact', 0, 100, 25);
+    ok('10.16: смена в день выезда — полоса закрыта (closed)', layout.stripes.find((s) => s.kind === 'base-fact')?.status === 'closed');
+  }
 }
 
 if (failures) {
