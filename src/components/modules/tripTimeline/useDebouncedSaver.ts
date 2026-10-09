@@ -19,6 +19,8 @@ export interface TimelineSaver {
   /** Этапы рейсов из внешних источников (План дохода): tripTimeline/tripStages/<sourceId>. */
   queueAutoStage: (sourceId: string, stageId: string, patch: Record<string, unknown>) => void;
   flush: () => void;
+  /** Сбросить ещё НЕ записанный буфер без записи (сценарий «Выйти без сохранения»). */
+  cancel: () => void;
   status: SaverStatus;
 }
 
@@ -108,8 +110,23 @@ export function useDebouncedSaver(delayMs = 650): TimelineSaver {
     [schedule],
   );
 
+  /**
+   * Отменить буфер: ещё не записанные правки НЕ уходят в базу. Используется
+   * сценарием «Выйти без сохранения» (осознанный отказ от последних правок);
+   * уже записанные ранее значения не откатываются.
+   */
+  const cancel = useCallback(() => {
+    if (timer.current !== null) {
+      window.clearTimeout(timer.current);
+      timer.current = null;
+    }
+    tripBuf.current = new Map();
+    stageBuf.current = new Map();
+    autoBuf.current = new Map();
+  }, []);
+
   // Уход со страницы/смена вкладки — не теряем несохранённое
   useEffect(() => () => flush(), [flush]);
 
-  return { queueTrip, queueStage, queueAutoStage, flush, status };
+  return { queueTrip, queueStage, queueAutoStage, flush, cancel, status };
 }

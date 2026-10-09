@@ -114,6 +114,12 @@ export function useKeyboardShortcuts() {
         activeEl.tagName === 'SELECT' ||
         activeEl.isContentEditable
       );
+      // Окна, управляющие клавишами сами (карточка рейса/машины через
+      // useWindowHotkeys), помечены data-hotkeys="managed": глобальные
+      // Enter/Ctrl+S не должны «вслепую» нажимать чужие кнопки внутри них.
+      const managedWindow = !!document.querySelector('[data-hotkeys="managed"]');
+      // Брендированное окно подтверждения (DialogProvider) обрабатывает Esc само
+      const confirmOpen = !!document.querySelector('[data-ratipa-dialog="1"]');
 
       // Verify typing context: allow saving (Ctrl+S), search (Ctrl+K) and Escape
       // to pass through even while typing in inputs (so modals can be closed).
@@ -131,6 +137,7 @@ export function useKeyboardShortcuts() {
 
       // Ctrl/Cmd + S — Save form or record
       if (isCtrlOrCmd && key === 's') {
+        if (managedWindow) return; // окно сохраняет само (useWindowHotkeys)
         e.preventDefault();
         const saveBtn = Array.from(document.querySelectorAll('button')).find(btn => {
           const text = btn.textContent?.toLowerCase() || '';
@@ -155,12 +162,18 @@ export function useKeyboardShortcuts() {
 
       // Escape — Close topmost modal, menu, or clear active search input
       if (e.key === 'Escape') {
+        if (confirmOpen) return; // верхний слой — окно подтверждения (закроется «Остаться»)
         const modal = getActiveModal();
         if (modal) {
-          const cancelBtn = Array.from(modal.querySelectorAll('button')).find(btn => {
-            const text = btn.textContent?.toLowerCase() || '';
-            return text.includes('отмена') || text.includes('закрыть') || text.includes('close') || text.includes('cancel');
-          }) || modal.querySelector('button[title*="Закрыть"], button[aria-label*="close"], button.rounded-full');
+          // В первую очередь — собственная кнопка закрытия окна (крестик в шапке):
+          // не «вслепую» жмём первую «Отмену» вложенной формы внутри окна.
+          const cancelBtn = (
+            modal.querySelector('button[data-close-modal], button[aria-label="Закрыть"], button[aria-label*="close" i], button[title*="Закрыть"], button.rounded-full')
+            || Array.from(modal.querySelectorAll('button')).find(btn => {
+              const text = btn.textContent?.toLowerCase() || '';
+              return text.includes('отмена') || text.includes('закрыть') || text.includes('close') || text.includes('cancel');
+            })
+          ) as HTMLElement | null;
 
           if (cancelBtn) {
             cancelBtn.click();
@@ -183,6 +196,7 @@ export function useKeyboardShortcuts() {
 
       // Enter — Confirm primary action or open selected row card
       if (e.key === 'Enter') {
+        if (managedWindow) return; // окно само решает Enter (сохранение в поле)
         if (activeEl && activeEl.tagName === 'TEXTAREA') {
           return; // Let textarea handle text wrapping normally
         }

@@ -825,6 +825,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
           focusStageId={focusStageId}
           onFocusStageDone={() => setFocusStageId(null)}
           onOpenEventTrip={openTripAtEvent}
+          onOpenBasePeriod={openPeriod}
           planGuard={openTripKey ? planGuardStore[openTripKey] || null : null}
           planPerms={openTripKey ? planPermsStore[openTripKey] || {} : {}}
           planRequests={openTripKey ? planRequestsStore[openTripKey] || {} : {}}
@@ -874,6 +875,8 @@ export default function TripTimelineModule({ user, settings }: Props) {
           carNumber={overviewCarNumber}
           trips={overviewTrips}
           bases={overviewBases}
+          events={data.events.filter((e) => plateKeyOf(e.carNumber) === plateKeyOf(overviewCarNumber))}
+          stageTypes={data.stageTypes}
           today={today}
           onSelectTrip={(key) => {
             setOverviewCarKey(null);
@@ -882,6 +885,10 @@ export default function TripTimelineModule({ user, settings }: Props) {
           onSelectPeriod={(key) => {
             setOverviewCarKey(null);
             openPeriod(key);
+          }}
+          onOpenEventTrip={(key, eventId) => {
+            setOverviewCarKey(null);
+            openTripAtEvent(key, eventId);
           }}
           onClose={() => setOverviewCarKey(null)}
         />

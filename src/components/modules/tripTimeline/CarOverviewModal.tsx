@@ -1,7 +1,8 @@
 /**
- * Обзор машины: её рейсы (целые) и периоды «Учёта выезда» (база и ремонт).
- * Открывается кликом по названию машины на таймлайне. Позволяет выбрать
- * конкретный рейс — случайный не выбирается, если рейсов несколько.
+ * Обзор машины: её рейсы (целые) и периоды «Учёта выезда» (база и ремонт),
+ * а также встроенный таймлайн машины (единый компонент с карточкой рейса):
+ * вся хронология — архивные, текущие и будущие рейсы, база, ремонт, готовность,
+ * этапы и события; без выбранного рейса позиция — на сегодняшней дате.
  */
 import { CalendarRange, Truck, Wrench } from 'lucide-react';
 import { ModalShell } from '../../../ui/components';
@@ -10,15 +11,22 @@ import { formatPlate } from '../../../utils/salaryAutofill';
 import { dayStr, fmtFull, tripSpan } from './lib/timeline';
 import { planBarLabelParts } from './PlanBarLabel';
 import type { BasePeriod, WholeTrip } from './lib/sources';
+import type { TimelineStageType, TimelineVehicleEvent } from '../../../types';
+import { CarMiniTimeline } from './TripCard';
+import { useWindowHotkeys } from './lib/useWindowHotkeys';
 
 interface Props {
   carKey: string | null;
   carNumber: string;
   trips: WholeTrip[];
   bases: BasePeriod[];
+  events: TimelineVehicleEvent[];
+  stageTypes: TimelineStageType[];
   today: number;
   onSelectTrip: (tripKey: string) => void;
   onSelectPeriod: (periodKey: string) => void;
+  /** Клик по маркеру события связанного рейса — открыть рейс и показать запись. */
+  onOpenEventTrip?: (tripKey: string, eventId: string) => void;
   onClose: () => void;
 }
 
@@ -29,10 +37,17 @@ export default function CarOverviewModal({
   carNumber,
   trips,
   bases,
+  events,
+  stageTypes,
+  today,
   onSelectTrip,
   onSelectPeriod,
+  onOpenEventTrip,
   onClose,
 }: Props) {
+  // Esc закрывает окно машины (общий хук окон модуля; календари/подтверждения
+  // верхних слоёв перехватывают клавишу раньше). Вызов до раннего return — hooks-порядок стабилен.
+  useWindowHotkeys({ onEscape: onClose });
   if (!carKey) return null;
   const myTrips = [...trips].sort(
     (a, b) => ((a.spanOverride?.pMin ?? tripSpan(a).pMin) ?? 0) - ((b.spanOverride?.pMin ?? tripSpan(b).pMin) ?? 0),
@@ -47,9 +62,28 @@ export default function CarOverviewModal({
       subtitle="Обзор рейсов и периодов на базе"
       icon={<Truck className="w-4 h-4" aria-hidden="true" />}
       ariaLabel="Обзор рейсов машины"
-      maxWidth="max-w-2xl"
+      closeTitle="Закрыть · Esc"
+      hotkeysManaged
+      maxWidth="max-w-[min(1200px,94vw)]"
     >
       <div className="flex flex-col gap-5">
+        {/* Встроенный таймлайн машины — единый компонент (тот же, что в карточке
+            рейса): вся хронология доступна прокруткой; выбранного рейса нет —
+            позиция на сегодняшней дате */}
+        <div className="flex flex-col gap-2">
+          <h3 className={UI.sectionTitle}>Таймлайн машины</h3>
+          <CarMiniTimeline
+            focusKey={null}
+            carTrips={trips}
+            carBases={bases}
+            carEvents={events}
+            stageTypes={stageTypes}
+            today={today}
+            onSelectTrip={onSelectTrip}
+            onOpenEventTrip={onOpenEventTrip}
+            onOpenBasePeriod={onSelectPeriod}
+          />
+        </div>
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <CalendarRange className="w-4 h-4 text-[#6B7280]" aria-hidden="true" />

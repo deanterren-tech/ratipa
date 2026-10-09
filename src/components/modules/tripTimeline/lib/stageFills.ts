@@ -77,6 +77,63 @@ export const stagePlanRange = (s: TimelineStage): { a: number; b: number } | nul
 export const stageFactRange = (s: TimelineStage): { a: number; b: number } | null =>
   rangeFrom(s.actualDate, (s as unknown as Record<string, unknown>).actualDateEnd);
 
+/**
+ * Полоса для общей раскладки заливок по дням: интервал в днях + стабильный
+ * порядок секций в дне (order, затем tie). Один механизм для этапов и отметок
+ * базы/ремонта: раскладка не зависит от порядка входных данных.
+ */
+export interface DaySectionSpan {
+  a: number;
+  b: number;
+  /** Базовый порядок секции в дне. */
+  order: number;
+  /** Тай-брейкер внутри одного order (стабильный ключ, не зависящий от данных). */
+  tie: string;
+}
+
+export interface PlacedDaySection<T extends DaySectionSpan> {
+  span: T;
+  /** День (номер дня), который покрывает секция. */
+  day: number;
+  /** Номер секции в дне (0..sections-1) и их общее число. */
+  section: number;
+  sections: number;
+}
+
+/**
+ * Раскладка интервалов по дням окна: каждый день получает секции ВСЕХ
+ * покрывающих его интервалов. Несколько отметок в одном дне делят ячейку на
+ * sections цветных секций, друг друга не скрывают; порядок секций стабилен
+ * (order, tie), поэтому обновление данных не переставляет цвета местами.
+ * За пределами окна интервалы обрезаются — горизонтальная геометрия считается
+ * только из дат (день × colW), как у шапки и полос.
+ */
+export const layoutDaySections = <T extends DaySectionSpan>(spans: T[], vs: number, ve: number): Array<PlacedDaySection<T>> => {
+  const clipped = spans
+    .filter((sp) => sp.b >= vs && sp.a <= ve)
+    .map((sp) => ({ ...sp, a: Math.max(sp.a, vs), b: Math.min(sp.b, ve) }));
+  if (!clipped.length) return [];
+  const byDay = new Map<number, typeof clipped>();
+  clipped.forEach((sp) => {
+    for (let d = sp.a; d <= sp.b; d += 1) {
+      const arr = byDay.get(d);
+      if (arr) arr.push(sp);
+      else byDay.set(d, [sp]);
+    }
+  });
+  const out: Array<PlacedDaySection<T>> = [];
+  Array.from(byDay.keys())
+    .sort((a, b) => a - b)
+    .forEach((d) => {
+      const list = byDay.get(d) as typeof clipped;
+      list.sort((x, y) => x.order - y.order || x.tie.localeCompare(y.tie));
+      list.forEach((sp, i) => {
+        out.push({ span: sp, day: d, section: i, sections: list.length });
+      });
+    });
+  return out;
+};
+
 export interface StageFillInput {
   tripKey: string;
   stage: TimelineStage;
@@ -97,10 +154,9 @@ export interface StageFillSection {
 }
 
 /**
- * Раскладка заливок по дням окна: каждая секция — (день × этап). Если в дне
- * несколько этапов, ячейка делится на sections цветных секций; порядок секций
- * стабилен (по order этапа, затем по id), поэтому обновление данных не
- * переставляет цвета местами.
+ * Раскладка заливок этапов по дням окна (общий механизм layoutDaySections):
+ * каждая секция — (день × этап); несколько этапов в одном дне делят ячейку на
+ * цветные секции, порядок стабилен (по order этапа, затем по id).
  */
 export const layoutStageFills = (
   inputs: StageFillInput[],
@@ -108,46 +164,30 @@ export const layoutStageFills = (
   vs: number,
   ve: number,
 ): StageFillSection[] => {
-  const spans: Array<{ tripKey: string; stage: TimelineStage; archived: boolean; a: number; b: number }> = [];
-  inputs.forEach((it) => {
-    const r = kind === 'plan' ? stagePlanRange(it.stage) : stageFactRange(it.stage);
-    if (!r) return;
-    if (r.b < vs || r.a > ve) return;
-    spans.push({ tripKey: it.tripKey, stage: it.stage, archived: it.archived, a: Math.max(r.a, vs), b: Math.min(r.b, ve) });
-  });
-  if (!spans.length) return [];
-  const byDay = new Map<number, typeof spans>();
-  spans.forEach((sp) => {
-    for (let d = sp.a; d <= sp.b; d += 1) {
-      const arr = byDay.get(d);
-      if (arr) arr.push(sp);
-      else byDay.set(d, [sp]);
-    }
-  });
-  const out: StageFillSection[] = [];
-  Array.from(byDay.keys())
-    .sort((a, b) => a - b)
-    .forEach((d) => {
-      const list = byDay.get(d) as typeof spans;
-      list.sort(
-        (x, y) =>
-          (Number(x.stage.order) || 0) - (Number(y.stage.order) || 0) ||
-          String(x.stage.id).localeCompare(String(y.stage.id)) ||
-          x.tripKey.localeCompare(y.tripKey),
-      );
-      list.forEach((sp, i) => {
-        out.push({
-          day: d,
-          tripKey: sp.tripKey,
-          stage: sp.stage,
-          archived: sp.archived,
-          section: i,
-          sections: list.length,
-          order: Number(sp.stage.order) || 0,
-        });
-      });
-    });
-  return out;
+  const spans = inputs
+    .map((it) => {
+      const r = kind === 'plan' ? stagePlanRange(it.stage) : stageFactRange(it.stage);
+      if (!r) return null;
+      return {
+        a: r.a,
+        b: r.b,
+        order: Number(it.stage.order) || 0,
+        tie: `${it.tripKey}|${it.stage.id}`,
+        tripKey: it.tripKey,
+        stage: it.stage,
+        archived: it.archived,
+      };
+    })
+    .filter((sp): sp is NonNullable<typeof sp> => sp != null);
+  return layoutDaySections(spans, vs, ve).map((p) => ({
+    day: p.day,
+    tripKey: p.span.tripKey,
+    stage: p.span.stage,
+    archived: p.span.archived,
+    section: p.section,
+    sections: p.sections,
+    order: p.span.order,
+  }));
 };
 
 /** Краткое имя этапа для текста внутри секции (тип + место, если есть место). */

@@ -350,6 +350,8 @@ export function ModalShell({
   children,
   maxWidth = 'max-w-lg',
   ariaLabel,
+  closeTitle = 'Закрыть',
+  hotkeysManaged = false,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -361,6 +363,10 @@ export function ModalShell({
   children: React.ReactNode;
   maxWidth?: string;
   ariaLabel?: string;
+  /** Подсказка кнопки закрытия (например, «Закрыть · Esc» для окон с этим хоткеем). */
+  closeTitle?: string;
+  /** Окно само управляет Enter/Ctrl+S/Esc (useWindowHotkeys): глобальные хоткеи его не трогают. */
+  hotkeysManaged?: boolean;
 }) {
   if (!isOpen) return null;
   const tones: Record<string, string> = {
@@ -374,6 +380,7 @@ export function ModalShell({
     <div
       className={UI.modalBackdrop}
       data-scroll-lock="modal"
+      data-hotkeys={hotkeysManaged ? 'managed' : undefined}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -390,7 +397,7 @@ export function ModalShell({
               </div>
             </div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Закрыть" className={UI.modalClose}>
+          <button type="button" onClick={onClose} aria-label="Закрыть" title={closeTitle} className={UI.modalClose}>
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>

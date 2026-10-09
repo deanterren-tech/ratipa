@@ -49,10 +49,15 @@ import {
   type StageFillSection,
 } from './lib/stageFills';
 import {
+  bzKindColor,
+  layoutBzFills,
+  type BzFillGap,
+  type BzFillInput,
+  type BzFillSection,
+} from './lib/bzFills';
+import {
   baseBarRange,
-  baseDeviation,
   plateKeyOf,
-  readyBarRange,
   repairBarRange,
   type BasePeriod,
   type CarRef,
@@ -78,24 +83,11 @@ const CLR = {
   bufferA: '#FDE68A',
   fact: '#10B981',
   factOpenA: '#A7F3D0',
-  gapLine: '#E5E7EB',
-  gapBorder: '#D1D5DB',
-  baseBorder: '#9CA3AF',
-  baseText: '#4B5563',
-  repair: '#D97706',
-  markPlan: '#2563EB',
-  markCritical: '#DC2626',
-  markFact: '#10B981',
-  markLate: '#E11D48',
   weekend: '#F1F2F4',
   today: '#F43F5E',
-  warn: '#B45309',
 };
 
 const hatch45 = `repeating-linear-gradient(45deg, ${CLR.bufferA}, ${CLR.bufferA} 4px, transparent 4px, transparent 8px)`;
-const hatchReady = `repeating-linear-gradient(45deg, #FDE68A, #FDE68A 3px, transparent 3px, transparent 6px)`;
-const hatch135 = `repeating-linear-gradient(135deg, transparent, transparent 5px, ${CLR.gapLine} 5px, ${CLR.gapLine} 6px)`;
-const hatchBase = `repeating-linear-gradient(135deg, transparent, transparent 4px, #CFD4DC 4px, #CFD4DC 5px)`;
 const hatchOpen = `repeating-linear-gradient(45deg, ${CLR.factOpenA}, ${CLR.factOpenA} 5px, transparent 5px, transparent 10px)`;
 
 // ---------------------------------------------------------------------------
@@ -106,7 +98,6 @@ type PlanItem =
   | { kind: 'plan'; a: number; b: number; tripKey: string; parts: PlanBarParts; archived: boolean; statusKind: DeadlineStatusKind; open: boolean; title: string }
   | { kind: 'buffer'; a: number; b: number; days: number }
   | { kind: 'markReturn'; day: number; title: string; tripKey: string }
-  | { kind: 'ready'; a: number; b: number; periodKey: string; title: string; deviation: string; archived: boolean }
   | { kind: 'handover'; point: number; from: string; to: string; note: string; title: string; chip: boolean };
 
 type DeadlineStatusKind = 'none' | 'ok' | 'risk' | 'violated' | 'missed';
@@ -114,11 +105,7 @@ type DeadlineStatusKind = 'none' | 'ok' | 'risk' | 'violated' | 'missed';
 type FactItem =
   | { kind: 'fact'; a: number; b: number; open: boolean; tripKey: string; title: string }
   | { kind: 'factNone'; a: number; b: number; tripKey: string; title: string }
-  | { kind: 'base'; a: number; b: number; open: boolean; label: string; periodKey: string; title: string; archived: boolean }
-  | { kind: 'repair'; a: number; b: number; open: boolean; capped: boolean; periodKey: string; title: string; archived: boolean }
   | { kind: 'event'; day: number; lastDay: number; count: number; color: string; title: string; tripKey?: string; eventId?: string }
-  | { kind: 'gap'; a: number; b: number; days: number }
-  | { kind: 'markReady'; day: number; title: string; periodKey: string; archived: boolean }
   | { kind: 'handover'; point: number; from: string; to: string; note: string; title: string; chip: boolean };
 
 interface CarRowModel {
@@ -139,6 +126,10 @@ interface CarRowModel {
   factItems: FactItem[];
   /** Этапы всех рейсов машины в окне — источник заливок «План»/«Факт». */
   stageInputs: StageFillInput[];
+  /** Записи «Учёта выезда» машины в окне — источник заливок базы/ремонта. */
+  bzInputs: BzFillInput[];
+  /** Промежутки «на базе» между рейсами без записи учёта выезда (заливка «Факт»). */
+  bzGaps: BzFillGap[];
 }
 
 /** Маркер стыка смены диспетчера: точка между двумя рейсами разных диспетчеров. */
@@ -224,8 +215,6 @@ const TRACK_GAP = 2;
 const PLAN_BAR_H = 16;
 const FACT_BAR_H = 8;
 const FACT_NONE_H = 14;
-const BASE_BAR_H = 14;
-const REPAIR_BAR_H = 10;
 
 const navBtn =
   'inline-flex items-center justify-center px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-white border border-[#E5E7EB] text-[#4B5563] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer';
@@ -387,67 +376,17 @@ const buildRows = (
       // для stages ничего не добавляется. Состав и даты не изменяются.
     });
 
-    // ── Периоды «Учёта выезда»: ПЛАН приезд→срок готовности, ФАКТ приезд→выезд ──
-    // Архивность — из СВОЕЙ записи учёта выезда (не по датам и не по соседям);
-    // архивные периоды показываются только при включённой галочке и с пометкой.
+    // ── Периоды «Учёта выезда» ──
+    // Отметки базы/ремонта больше НЕ тонкие полосы: layoutBzFills ниже раскладывает
+    // их заливкой ячейки дня (план базы и готовность — в «План», факт базы, ремонт,
+    // окончание ремонта — в «Факт»). Здесь собираются только видимые интервалы
+    // (чтобы вычесть их из промежутков «на базе») — даты и границы не меняются.
     const baseRanges: Array<{ a: number; b: number }> = [];
     myBases.forEach((p) => {
-      const isArch = p.archived;
-      const archMark = isArch ? ' · архив' : '';
       p.warnings.forEach((w) => warnings.add(w));
-      const dev = baseDeviation(p, today);
-      const readyDay = p.plannedReadyDay;
-      const readyTxt = readyDay != null ? fmtDM(readyDay) : 'не указан';
       const rb = baseBarRange(p, today);
       if (rb && visible(rb.a, rb.b)) {
         baseRanges.push({ a: rb.a, b: rb.b });
-        const baseLabel = rb.open ? `${p.causeLabel} · выезд не указан` : dev.short ? `${p.causeLabel} · ${dev.short}` : p.causeLabel;
-        factItems.push({
-          kind: 'base',
-          a: rb.a,
-          b: rb.b,
-          open: rb.open,
-          label: `${baseLabel}${isArch ? ' · архив' : ''}`,
-          periodKey: p.key,
-          archived: isArch,
-          title: `База (факт)${archMark}: приезд ${fmtDM(rb.a)} – ${rb.open ? 'выезд не указан (период продолжается)' : fmtDM(rb.b)} · срок готовности ${readyTxt} · ${dev.label}${p.comment ? ` · ${p.comment}` : ''}`,
-        });
-      }
-      // Плановая полоса базы: приезд → срок готовности (это НЕ окончание ремонта)
-      const rdy = readyBarRange(p);
-      if (rdy && visible(rdy.a, rdy.b)) {
-        planItems.push({
-          kind: 'ready',
-          a: rdy.a,
-          b: rdy.b,
-          periodKey: p.key,
-          deviation: dev.short,
-          archived: isArch,
-          title: `План базы${archMark}: приезд ${fmtDM(rdy.a)} → срок готовности ${fmtDM(rdy.b)}${dev.short ? ` · ${dev.label}` : ''}`,
-        });
-      }
-      // Отметка срока готовности на подстроке «Факт» — для сравнения с выездом
-      if (readyDay != null && visible(readyDay, readyDay)) {
-        factItems.push({
-          kind: 'markReady',
-          day: readyDay,
-          periodKey: p.key,
-          archived: isArch,
-          title: `Срок готовности${archMark}: ${fmtDM(readyDay)} — ${dev.label}`,
-        });
-      }
-      const rr = repairBarRange(p, today);
-      if (rr && visible(rr.a, rr.b)) {
-        factItems.push({
-          kind: 'repair',
-          a: rr.a,
-          b: rr.b,
-          open: rr.open,
-          capped: rr.capped,
-          periodKey: p.key,
-          archived: isArch,
-          title: `Ремонт${archMark}: ${fmtDM(rr.a)} – ${rr.open ? 'продолжается (окончание не указано)' : fmtDM(rr.b)}${rr.capped ? ' · показан до фактического выезда (ремонт не закрыт)' : ''}`,
-        });
       }
     });
 
@@ -467,6 +406,7 @@ const buildRows = (
       if (cur <= end) segs.push({ a: cur, b: end });
       return segs;
     };
+    const bzGaps: BzFillGap[] = [];
     for (let i = 0; i < tripsSorted.length - 1; i += 1) {
       const prev = tripsSorted[i];
       const next = tripsSorted[i + 1];
@@ -480,7 +420,7 @@ const buildRows = (
       if (gapEnd < gapStart) continue;
       gapSegments(gapStart, gapEnd).forEach((seg) => {
         if (visible(seg.a, seg.b)) {
-          factItems.push({ kind: 'gap', a: seg.a, b: seg.b, days: seg.b - seg.a + 1 });
+          bzGaps.push({ a: seg.a, b: seg.b, days: seg.b - seg.a + 1 });
         }
       });
     }
@@ -594,6 +534,8 @@ const buildRows = (
       planItems,
       factItems,
       stageInputs,
+      bzInputs: myBases.map((p) => ({ period: p })),
+      bzGaps,
     });
   });
 
@@ -662,20 +604,16 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
 
   const warnTitle = row.warnings.join('\n');
   /**
-   * Дорожки подстроки «План»: группа 0 — рейсы (план и запас на риски),
-   * группа 1 — план базы (приезд → срок готовности). Пересекающиеся полосы
-   * одной группы уходят на под-дорожки: обе видны и кликабельны. Тонкие
-   * маркеры (этапы, возвращение) — наложения на всю высоту, не полосы.
+   * Дорожки подстроки «План»: группа 0 — рейсы (план и запас на риски).
+   * Пересекающиеся полосы одной группы уходят на под-дорожки: обе видны и
+   * кликабельны. Тонкие маркеры (возвращение) — наложения на всю высоту.
+   * План базы и срок готовности — заливки ячейки дня (layoutBzFills), не полосы.
    */
   const planTrack = useMemo(() => {
     const items: LaneTrackItem[] = [];
     const slot: Array<number | null> = row.planItems.map((it) => {
       if (it.kind === 'plan' || it.kind === 'buffer') {
         items.push({ group: 0, a: it.a, b: it.b, h: PLAN_BAR_H });
-        return items.length - 1;
-      }
-      if (it.kind === 'ready') {
-        items.push({ group: 1, a: it.a, b: it.b, h: PLAN_BAR_H });
         return items.length - 1;
       }
       return null;
@@ -688,9 +626,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     return s == null ? PLAN_PAD : planTrack.layout.tops[s];
   };
   /**
-   * Дорожки подстроки «Факт»: группа 0 — факт рейса («Факт не указан»),
-   * группа 1 — база (приезд → выезд) и промежутки «на базе», группа 2 — ремонт.
-   * Ремонт больше не лежит поверх базы: у каждой группы своя дорожка.
+   * Дорожки подстроки «Факт»: группа 0 — факт рейса («Факт не указан»).
+   * База, ремонт и промежутки «на базе» — заливки ячейки дня (layoutBzFills);
+   * вертикальных дорожек под них больше не требуется.
    */
   const factTrack = useMemo(() => {
     const items: LaneTrackItem[] = [];
@@ -701,14 +639,6 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       }
       if (it.kind === 'factNone') {
         items.push({ group: 0, a: it.a, b: it.b, h: FACT_NONE_H });
-        return items.length - 1;
-      }
-      if (it.kind === 'base' || it.kind === 'gap') {
-        items.push({ group: 1, a: it.a, b: it.b, h: BASE_BAR_H });
-        return items.length - 1;
-      }
-      if (it.kind === 'repair') {
-        items.push({ group: 2, a: it.a, b: it.b, h: REPAIR_BAR_H });
         return items.length - 1;
       }
       return null;
@@ -729,6 +659,21 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
    */
   const planFills = useMemo(() => layoutStageFills(row.stageInputs, 'plan', vs, ve), [row.stageInputs, vs, ve]);
   const factFills = useMemo(() => layoutStageFills(row.stageInputs, 'fact', vs, ve), [row.stageInputs, vs, ve]);
+  /**
+   * Заливки базы/ремонта (тот же механизм секций, что у этапов): план базы и
+   * срок готовности — в подстроке «План»; факт базы, ремонт, дата окончания
+   * ремонта и промежутки «на базе» — в «Факт». Каждая секция кликабельна и
+   * ведёт к своей записи периода; открытые периоды обрезаются теми же
+   * функциями источников, что и раньше (границы не меняются).
+   */
+  const planBzFills = useMemo(
+    () => layoutBzFills(row.bzInputs, [], 'plan', vs, ve, today),
+    [row.bzInputs, vs, ve, today],
+  );
+  const factBzFills = useMemo(
+    () => layoutBzFills(row.bzInputs, row.bzGaps, 'fact', vs, ve, today),
+    [row.bzInputs, row.bzGaps, vs, ve, today],
+  );
   /** Спокойная сетка: слабые вертикальные деления дней на читаемых масштабах. */
   const laneBg = colW >= 12
     ? {
@@ -773,6 +718,60 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         {width >= 44 ? (
           <span className="text-[8px] leading-[10px] truncate max-w-full">{stageShortName(stageTypes, f.stage)}</span>
         ) : null}
+      </div>
+    );
+  };
+  /**
+   * Секция заливки отметки базы/ремонта — на всю высоту своей подстроки;
+   * кликабельна (открывает карточку периода), несколько секций в дне не
+   * скрывают друг друга, у промежутка «на базе» без записи клика нет.
+   */
+  const renderBzFill = (f: BzFillSection, keyPrefix: string) => {
+    const color = bzKindColor(f.kind);
+    const left = dayToX(f.day, vs, colW) + Math.round((f.section * colW) / f.sections);
+    const right = dayToX(f.day, vs, colW) + Math.round(((f.section + 1) * colW) / f.sections);
+    const width = Math.max(1, right - left);
+    const periodKey = f.periodKey;
+    const open = periodKey ? () => onOpenBase(periodKey) : undefined;
+    return (
+      <div
+        key={`${keyPrefix}-${f.kind}-${periodKey || 'gap'}-${f.day}`}
+        role={periodKey ? 'button' : undefined}
+        tabIndex={periodKey ? 0 : undefined}
+        data-bz-fill={f.kind}
+        data-bz-day={f.day}
+        data-bz-section={f.section}
+        data-bz-sections={f.sections}
+        data-period={periodKey || undefined}
+        onClick={open}
+        onKeyDown={
+          periodKey
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onOpenBase(periodKey);
+                }
+              }
+            : undefined
+        }
+        className={`absolute top-0 bottom-0 z-[2] overflow-hidden whitespace-nowrap flex items-center justify-center ${periodKey ? 'cursor-pointer' : ''}`}
+        style={{
+          left,
+          width,
+          background: color.bg,
+          // Разделители секций — inset-тень: не участвует в box-sizing и не
+          // расширяет узкие секции на мелком масштабе (границы не выезжают за день).
+          boxShadow:
+            f.section === f.sections - 1
+              ? `inset 1px 0 0 ${color.border}, inset -1px 0 0 ${color.border}`
+              : `inset 1px 0 0 ${color.border}`,
+          color: color.text,
+          ...(f.archived ? { opacity: 0.72 } : {}),
+          ...(f.kind === 'base-gap' ? { borderTopStyle: 'dashed', borderBottomStyle: 'dashed', borderTopColor: color.border, borderBottomColor: color.border, borderTopWidth: 1, borderBottomWidth: 1 } : {}),
+        }}
+        title={f.title}
+      >
+        {width >= 44 ? <span className="px-0.5 text-[8px] leading-[10px] truncate max-w-full">{f.label}</span> : null}
       </div>
     );
   };
@@ -881,35 +880,13 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       </div>
       <div data-lane="plan" className="relative z-0 border-b border-[#EEF0F3]" style={{ width: W, height: planH, ...laneBg }}>
         {bgPlane('bg', 0.75)}
+        {planBzFills.map((f) => renderBzFill(f, 'pb'))}
         {planFills.map((f) => renderStageFill(f, 'pf'))}
         {todayStrip('t', 0.14)}
         {row.planItems.map((it, idx) => {
           if (it.kind === 'handover') return renderHandover(it, `ph${idx}`);
           const p = pos(it.kind === 'markReturn' ? it.day : it.a, it.kind === 'markReturn' ? it.day : it.b);
           if (!p) return null;
-          if (it.kind === 'ready') {
-            return (
-              <div
-                key={`rd${idx}`}
-                role="button"
-                tabIndex={0}
-                data-bar="ready"
-                data-period={it.periodKey}
-                onClick={() => onOpenBase(it.periodKey)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onOpenBase(it.periodKey);
-                  }
-                }}
-                className="absolute overflow-hidden whitespace-nowrap text-ellipsis text-[9px] leading-[16px] z-[2] cursor-pointer px-1 text-[#92400E]"
-                style={{ left: p.left, width: p.width, top: planTopOf(idx), height: PLAN_BAR_H, background: hatchReady, border: `1px solid #F59E0B`, borderRadius: 3, ...(it.archived ? { filter: 'saturate(0.45)' } : {}) }}
-                title={it.title}
-              >
-                {p.width > 80 ? `готовность${it.deviation ? ` · ${it.deviation}` : ''}${it.archived ? ' · архив' : ''}` : ''}
-              </div>
-            );
-          }
           if (it.kind === 'markReturn') {
             // Аккуратный маркер планового возвращения: линия в конце рейса + клик
             return (
@@ -1007,14 +984,12 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       </div>
       <div data-lane="fact" className="relative z-0 border-b border-[#E5E7EB]" style={{ width: W, height: factH, ...laneBg }}>
         {bgPlane('fbg', 0.6)}
+        {factBzFills.map((f) => renderBzFill(f, 'fb'))}
         {factFills.map((f) => renderStageFill(f, 'ff'))}
         {todayStrip('ft', 0.14)}
         {row.factItems.map((it, idx) => {
           if (it.kind === 'handover') return renderHandover(it, `fh${idx}`);
-          const p =
-            it.kind === 'event' || it.kind === 'markReady'
-              ? pos(it.day, it.day)
-              : pos(it.a, it.b);
+          const p = it.kind === 'event' ? pos(it.day, it.day) : pos(it.a, it.b);
           if (!p) return null;
           switch (it.kind) {
             case 'fact':
@@ -1080,50 +1055,6 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   {p.width > 90 ? 'Факт не указан' : ''}
                 </div>
               );
-            case 'base':
-              return (
-                <div
-                  key={`bs${idx}`}
-                  role="button"
-                  tabIndex={0}
-                  data-bar="base"
-                  data-period={it.periodKey}
-                  onClick={() => onOpenBase(it.periodKey)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onOpenBase(it.periodKey);
-                    }
-                  }}
-                  className="absolute overflow-hidden whitespace-nowrap text-ellipsis text-[9px] leading-[14px] z-[2] cursor-pointer px-1"
-                  style={{ left: p.left, width: p.width, top: factTopOf(idx), height: BASE_BAR_H, background: hatchBase, border: `1px ${it.archived ? 'dashed' : 'solid'} ${CLR.baseBorder}`, borderRadius: 3, color: CLR.baseText, ...(it.archived ? { filter: 'saturate(0.45)' } : {}) }}
-                  title={it.title}
-                >
-                  {p.width > 70 ? it.label : ''}
-                </div>
-              );
-            case 'repair':
-              return (
-                <div
-                  key={`rp${idx}`}
-                  role="button"
-                  tabIndex={0}
-                  data-bar="repair"
-                  data-period={it.periodKey}
-                  onClick={() => onOpenBase(it.periodKey)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onOpenBase(it.periodKey);
-                    }
-                  }}
-                  className="absolute overflow-hidden whitespace-nowrap text-ellipsis text-[9px] leading-[10px] text-white z-[3] cursor-pointer px-1 text-center"
-                  style={{ left: p.left, width: p.width, top: factTopOf(idx), height: REPAIR_BAR_H, background: CLR.repair, opacity: 0.92, borderRadius: 2, ...(it.archived ? { filter: 'saturate(0.45)' } : {}) }}
-                  title={it.title}
-                >
-                  {p.width > 60 ? `ремонт${it.archived ? ' · архив' : ''}` : ''}
-                </div>
-              );
             case 'event': {
               // Компактный маркер события на РЕАЛЬНОЙ дате (не полоса): ромб —
               // одиночное событие, плашка со счётчиком — группа близких событий.
@@ -1170,39 +1101,6 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 </div>
               );
             }
-            case 'gap':
-              return (
-                <div
-                  key={`g${idx}`}
-                  data-bar="gap"
-                  className="absolute overflow-hidden whitespace-nowrap text-ellipsis text-[9px] leading-[14px] text-center z-[1]"
-                  style={{ left: p.left, width: p.width, top: factTopOf(idx), height: BASE_BAR_H, background: hatch135, border: `1px dashed ${CLR.gapBorder}`, borderRadius: 3, color: CLR.baseText }}
-                  title={`Между рейсами: ${it.days} дн (записи учёта выезда нет)`}
-                >
-                  {p.width > 70 ? `на базе · ${it.days} дн` : ''}
-                </div>
-              );
-            case 'markReady':
-              return (
-                <div
-                  key={`mr${idx}`}
-                  role="button"
-                  tabIndex={0}
-                  data-bar="mark-ready"
-                  data-period={it.periodKey}
-                  onClick={() => onOpenBase(it.periodKey)}
-                  className="absolute z-[6] cursor-pointer"
-                  style={{
-                    left: dayToX(it.day, vs, colW) + Math.round(colW * 0.45),
-                    top: 2,
-                    height: factH - 4,
-                    width: 3,
-                    background: CLR.warn,
-                    opacity: 0.85,
-                  }}
-                  title={it.title}
-                />
-              );
             default:
               return null;
           }
@@ -1781,16 +1679,24 @@ export default function TimelineGrid({
           «Факт не указан» (не выполнен)
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: hatchBase, border: `1px solid ${CLR.baseBorder}` }} />
-          база: факт (приезд → выезд)
+          <i className="inline-block w-[18px] h-[14px] rounded-[2px]" style={{ background: bzKindColor('base-fact').bg, border: `1px solid ${bzKindColor('base-fact').border}` }} />
+          база: факт (приезд → выезд) — заливка дней
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: hatchReady, border: '1px solid #F59E0B' }} />
+          <i className="inline-block w-[18px] h-[14px] rounded-[2px]" style={{ background: bzKindColor('base-plan').bg, border: `1px solid ${bzKindColor('base-plan').border}` }} />
           база: план (приезд → готовность)
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[8px] rounded-[2px]" style={{ background: CLR.repair }} />
-          ремонт (внутри базы)
+          <i className="inline-block w-[18px] h-[14px] rounded-[2px]" style={{ background: bzKindColor('repair').bg, border: `1px solid ${bzKindColor('repair').border}` }} />
+          ремонт (внутри базы) — заливка дней
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <i className="inline-block w-[18px] h-[14px] rounded-[2px]" style={{ background: bzKindColor('repair-end').bg, border: `1px solid ${bzKindColor('repair-end').border}` }} />
+          дата окончания ремонта
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <i className="inline-block w-[18px] h-[14px] rounded-[2px]" style={{ background: bzKindColor('base-gap').bg, border: `1px dashed ${bzKindColor('base-gap').border}` }} />
+          на базе между рейсами (записи учёта нет)
         </span>
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block w-[9px] h-[9px] rotate-45 rounded-[2px]" style={{ background: '#7C3AED', opacity: 0.95 }} />
@@ -1809,8 +1715,8 @@ export default function TimelineGrid({
           критический срок этапа
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[3px] h-[12px]" style={{ background: CLR.warn, opacity: 0.7 }} />
-          плановая готовность
+          <i className="inline-block w-[18px] h-[14px] rounded-[2px]" style={{ background: bzKindColor('ready').bg, border: `1px solid ${bzKindColor('ready').border}` }} />
+          срок готовности (плановая) — заливка дня
         </span>
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: CLR.planArchBg, border: `1px solid ${CLR.planArchBorder}` }} />
@@ -1819,7 +1725,7 @@ export default function TimelineGrid({
       </div>
       <p className="text-[10px] text-[#9CA3AF] mt-2">
         Клик по плановой или фактической полосе открывает модальное окно всего рейса; клик по названию машины — обзор её рейсов и периодов.
-        Периоды базы и ремонта открываются кликом по полосе. Заливка дня — этап: клик открывает рейс и выделяет этап в карточке; несколько этапов в дне делят ячейку на цветные секции.
+        База и ремонт — заливка ячейки дня: план базы и срок готовности в строке «План», факт базы, ремонт и окончание ремонта в «Факт»; несколько отметок в одном дне делят ячейку на цветные секции, каждая открывает свою запись периода.
         Прокрутка — тачпад, Shift+колесо, полоса; масштаб — «−/+/ползунок» или Ctrl+колесо над календарём (дата под курсором остаётся на месте).
         Прокрутка догружает даты влево и вправо; выходные подсвечены фоном; «⌛» — плановая дата прошла, факт не указан, «⛔» — опоздание подтверждено фактом.
       </p>

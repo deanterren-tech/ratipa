@@ -1,8 +1,8 @@
-import {createContext, useContext, useState, ReactNode, useCallback, useEffect} from 'react'
+import {createContext, useContext, useState, ReactNode, useCallback, useEffect, useRef} from 'react'
 import {motion, AnimatePresence} from 'motion/react'
 import {AlertTriangle, HelpCircle, Info, PencilLine} from 'lucide-react'
 
-type DialogType = 'alert' | 'confirm' | 'prompt';
+type DialogType = 'alert' | 'confirm' | 'prompt' | 'unsaved';
 
 /** Вариант оформления и поведение подтверждения. */
 export interface DialogVariantOptions {
@@ -14,10 +14,22 @@ export interface DialogVariantOptions {
   cancelLabel?: string;
 }
 
+/** Параметры подтверждения выхода с несохранёнными изменениями. */
+export interface UnsavedDialogOptions {
+  /** Список изменённых полей/блоков — честно показываем, что будет потеряно. */
+  changed?: string[];
+  /** Своё сообщение (по умолчанию — стандартный текст про потерю изменений). */
+  message?: string;
+}
+
+/** Выбор в брендированном подтверждении выхода. */
+export type UnsavedChoice = 'save' | 'discard' | 'stay';
+
 interface DialogOptions extends DialogVariantOptions {
   title?: string;
   message: string;
   defaultValue?: string;
+  changed?: string[];
 }
 
 interface DialogState extends DialogOptions {
@@ -31,6 +43,13 @@ interface DialogContextType {
   showAlert: (message: string, title?: string, options?: DialogVariantOptions) => Promise<void>;
   showConfirm: (message: string, title?: string, options?: DialogVariantOptions) => Promise<boolean>;
   showPrompt: (message: string, defaultValue?: string, title?: string, options?: DialogVariantOptions) => Promise<string | null>;
+  /**
+   * Единое брендированное окно «Выйти без сохранения?» для всех окон с
+   * несохранёнными данными: «Сохранить и выйти» (основное), «Выйти без
+   * сохранения» (опасное, вторичное), «Остаться» (фокус по умолчанию).
+   * Esc и клик по фону равны «Остаться»; Tab/Shift+Tab ходят только внутри окна.
+   */
+  showUnsaved: (options?: UnsavedDialogOptions) => Promise<UnsavedChoice>;
 }
 
 const DialogContext = createContext<DialogContextType | undefined>(undefined);
@@ -46,9 +65,13 @@ const DEFAULT_TITLE: Record<DialogType, string> = {
   alert: 'Внимание',
   confirm: 'Подтвердите действие',
   prompt: 'Ввод данных',
+  unsaved: 'Выйти без сохранения?',
 };
 
 export const DialogProvider = ({ children }: { children: ReactNode }) => {
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
+  /** Время открытия: Esc, которым ОТКРЫЛИ окно, не должен его же закрывать. */
+  const openedAtRef = useRef(0);
   const [dialog, setDialog] = useState<DialogState>({
     isOpen: false,
     type: 'alert',
@@ -60,6 +83,7 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
   });
 
   const open = (next: Omit<DialogState, 'resolve' | 'isOpen'> & { resolve: (v: any) => void }) => {
+    openedAtRef.current = typeof performance !== 'undefined' ? performance.now() : Date.now();
     setDialog({ ...next, isOpen: true });
   };
 
@@ -96,6 +120,20 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
+  const showUnsaved = useCallback((options?: UnsavedDialogOptions) => {
+    return new Promise<UnsavedChoice>((resolve) => {
+      open({
+        type: 'unsaved',
+        title: 'Выйти без сохранения?',
+        message: options?.message || 'В окне есть несохранённые изменения.',
+        changed: options?.changed || [],
+        inputValue: '',
+        variant: 'danger',
+        resolve,
+      });
+    });
+  }, []);
+
   const handleClose = (value: any) => {
     setDialog(prev => {
       prev.resolve(value);
@@ -103,40 +141,68 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
-  const cancelValue = dialog.type === 'prompt' ? null : (dialog.type === 'confirm' ? false : undefined);
-  const confirmValue = dialog.type === 'prompt' ? dialog.inputValue : true;
+  const cancelValue = dialog.type === 'prompt' ? null : dialog.type === 'confirm' ? false : dialog.type === 'unsaved' ? 'stay' : undefined;
+  const confirmValue = dialog.type === 'prompt' ? dialog.inputValue : dialog.type === 'unsaved' ? 'save' : true;
   const isDanger = dialog.variant === 'danger';
-  // Enter подтверждает только безопасное и однозначное действие
-  const enterConfirms = !isDanger;
+  // Enter подтверждает только безопасное и однозначное действие; в окне выхода
+  // Enter активирует кнопку с фокусом (по умолчанию «Остаться») нативно.
+  const enterConfirms = !isDanger && dialog.type !== 'unsaved';
 
   useEffect(() => {
     if (!dialog.isOpen) return;
     const onKey = (e: KeyboardEvent) => {
+      // Клавиша, которой открыли это окно (её timeStamp раньше открытия), не
+      // должна его закрывать тем же нажатием.
+      if (typeof e.timeStamp === 'number' && e.timeStamp > 0 && e.timeStamp <= openedAtRef.current) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         handleClose(cancelValue);
-      } else if (e.key === 'Enter' && dialog.type !== 'prompt' && enterConfirms) {
+      } else if (e.key === 'Enter' && dialog.type !== 'prompt' && dialog.type !== 'unsaved' && enterConfirms) {
         const el = e.target as HTMLElement | null;
         if (el && el.tagName === 'TEXTAREA') return;
         e.preventDefault();
         handleClose(confirmValue);
+      } else if (e.key === 'Tab' && dialog.type === 'unsaved') {
+        // Фокус-трап: Tab/Shift+Tab ходят только внутри окна подтверждения
+        const host = surfaceRef.current;
+        if (!host) return;
+        const items = Array.from(host.querySelectorAll<HTMLElement>('button:not([disabled])'));
+        if (!items.length) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        const active = document.activeElement as HTMLElement | null;
+        if (e.shiftKey) {
+          if (active === first || !host.contains(active)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else if (active === last || !host.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [dialog.isOpen, dialog.type, enterConfirms, cancelValue, confirmValue]);
 
-  const Icon = dialog.type === 'prompt' ? PencilLine
+  const Icon = dialog.type === 'unsaved' ? AlertTriangle : dialog.type === 'prompt' ? PencilLine
     : dialog.type === 'confirm' ? (isDanger ? AlertTriangle : HelpCircle)
     : Info;
 
   return (
-    <DialogContext.Provider value={{ showAlert, showConfirm, showPrompt }}>
+    <DialogContext.Provider value={{ showAlert, showConfirm, showPrompt, showUnsaved }}>
       {children}
       <AnimatePresence>
         {dialog.isOpen && (
-          <div data-scroll-lock="modal" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4 overflow-y-auto">
+          <div
+            data-ratipa-dialog="1"
+            data-scroll-lock="modal"
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4 overflow-y-auto"
+            onMouseDown={dialog.type === 'unsaved' ? (e) => { if (e.target === e.currentTarget) handleClose('stay'); } : undefined}
+          >
             <motion.div
+              ref={surfaceRef}
               role="dialog"
               aria-modal="true"
               aria-label={dialog.title || DEFAULT_TITLE[dialog.type]}
@@ -157,6 +223,19 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
                   <p className="text-xs text-[#4B5563] leading-relaxed whitespace-pre-wrap mt-1">
                     {dialog.message}
                   </p>
+                  {dialog.type === 'unsaved' && dialog.changed && dialog.changed.length ? (
+                    <div className="mt-2 text-xs text-[#4B5563]">
+                      <span className="text-[#6B7280]">Будут потеряны изменения:</span>
+                      <ul className="mt-1 flex flex-col gap-0.5">
+                        {dialog.changed.map((c) => (
+                          <li key={c} className="flex items-start gap-1.5">
+                            <span className="mt-[5px] w-1 h-1 rounded-full bg-amber-500 shrink-0" aria-hidden="true" />
+                            <span>{c}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -172,6 +251,35 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
                 </div>
               )}
 
+              {dialog.type === 'unsaved' ? (
+                <div className="px-5 py-4 mt-4 flex flex-wrap justify-end gap-2.5 border-t border-[#E5E7EB]">
+                  <button
+                    type="button"
+                    data-ui="unsaved-stay"
+                    autoFocus
+                    onClick={() => handleClose('stay')}
+                    className="px-4 py-2 text-xs font-medium text-[#4B5563] bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]"
+                  >
+                    Остаться
+                  </button>
+                  <button
+                    type="button"
+                    data-ui="unsaved-discard"
+                    onClick={() => handleClose('discard')}
+                    className="px-4 py-2 text-xs font-medium text-rose-600 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+                  >
+                    Выйти без сохранения
+                  </button>
+                  <button
+                    type="button"
+                    data-ui="unsaved-save"
+                    onClick={() => handleClose('save')}
+                    className="px-4 py-2 text-xs font-semibold text-[var(--accent-on)] bg-[var(--accent-ui)] hover:bg-[var(--accent-ui-hover)] rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]"
+                  >
+                    Сохранить и выйти
+                  </button>
+                </div>
+              ) : (
               <div className="px-5 py-4 mt-4 flex justify-end gap-2.5 border-t border-[#E5E7EB]">
                 {dialog.type !== 'alert' && (
                   <button
@@ -195,6 +303,7 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
                   {dialog.confirmLabel || (dialog.type === 'alert' ? 'Понятно' : 'Подтвердить')}
                 </button>
               </div>
+              )}
             </motion.div>
           </div>
         )}

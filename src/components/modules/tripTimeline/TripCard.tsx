@@ -39,6 +39,7 @@ import { useDialog } from '../../DialogProvider';
 import { useToast } from '../../ToastProvider';
 import type { DispatcherOption } from './useTimelineData';
 import { useDebouncedSaver } from './useDebouncedSaver';
+import { useWindowHotkeys } from './lib/useWindowHotkeys';
 import DateInput from './DateInput';
 import CityAutocomplete from '../../common/CityAutocomplete';
 import TripEventsJournal from './TripEventsJournal';
@@ -82,13 +83,14 @@ import {
 import CalendarHeader from './CalendarHeader';
 import { eventTypeOf, stageFullName } from './lib/catalog';
 import {
-  baseBarRange,
-  baseDeviation,
-  readyBarRange,
-  repairBarRange,
   type BasePeriod,
   type WholeTrip,
 } from './lib/sources';
+import {
+  bzKindColor,
+  layoutBzFills,
+  type BzFillSection,
+} from './lib/bzFills';
 
 const STATUS_TONE: Record<number, { dot: string; text: string }> = {
   3: { dot: 'bg-rose-500', text: 'text-rose-600 font-semibold' },
@@ -136,6 +138,8 @@ interface Props {
   onFocusStageDone?: () => void;
   /** Клик по маркеру события другого рейса во встроенном таймлайне. */
   onOpenEventTrip?: (tripKey: string, eventId: string) => void;
+  /** Клик по заливке базы/ремонта во встроенном таймлайне: открыть карточку периода. */
+  onOpenBasePeriod?: (periodKey: string) => void;
   /** Состояние плана этапов рейса (tripTimeline/planGuard) — блокировка плановых дат. */
   planGuard?: TimelinePlanGuard | null;
   /** Действующие разовые разрешения рейса (tripTimeline/planPerms). */
@@ -202,15 +206,11 @@ const MINI_TRACK_GAP = 2;
 const MINI_PLAN_BAR_H = 16;
 const MINI_FACT_BAR_H = 8;
 const MINI_FACT_NONE_H = 14;
-const MINI_BASE_BAR_H = 14;
-const MINI_REPAIR_BAR_H = 10;
 
-const hatchReady = 'repeating-linear-gradient(45deg,#FDE68A,#FDE68A 3px,transparent 3px,transparent 6px)';
-const hatchBase = 'repeating-linear-gradient(135deg,transparent,transparent 4px,#CFD4DC 4px,#CFD4DC 5px)';
 const hatchOpen = 'repeating-linear-gradient(45deg,#A7F3D0,#A7F3D0 5px,transparent 5px,transparent 10px)';
 const hatchBuffer = 'repeating-linear-gradient(45deg,#FDE68A,#FDE68A 4px,transparent 4px,transparent 8px)';
 
-function CarMiniTimeline({
+export function CarMiniTimeline({
   focusKey,
   carTrips,
   carBases,
@@ -220,8 +220,10 @@ function CarMiniTimeline({
   onSelectTrip,
   onOpenEventTrip,
   onFocusStage,
+  onOpenBasePeriod,
 }: {
-  focusKey: string;
+  /** Выбранный рейс (выделен и в центре открытия); null — обзор машины: позиция на «сегодня». */
+  focusKey: string | null;
   carTrips: WholeTrip[];
   carBases: BasePeriod[];
   carEvents: TimelineVehicleEvent[];
@@ -232,19 +234,22 @@ function CarMiniTimeline({
   onOpenEventTrip?: (tripKey: string, eventId: string) => void;
   /** Клик по маркеру этапа — переход и подсветка этапа в верхнем блоке окна. */
   onFocusStage?: (stageId: string) => void;
+  /** Клик по заливке базы/ремонта — открыть карточку периода «Учёта выезда». */
+  onOpenBasePeriod?: (periodKey: string) => void;
 }) {
   const focus = carTrips.find((t) => t.key === focusKey) || null;
   const focusSpan = focus ? tripSpan(focus) : null;
   // Начальный видимый диапазон — объединение ПЛАНА и ФАКТА выбранного рейса
   // с небольшим запасом по краям (а не «сегодня»): архивный рейс открывается
   // на своих реальных датах, факт за плановой границей не обрезается.
+  // Без выбранного рейса (обзор машины) — позиция на сегодняшней дате.
   const planA = focus?.spanOverride?.pMin ?? focusSpan?.pMin ?? null;
   const planB = focus?.spanOverride?.pMax ?? focusSpan?.pMax ?? null;
   const factA = focusSpan?.fMin ?? null;
   const factB = focusSpan?.fMax ?? null;
   const starts = [planA, factA].filter((v): v is number => v != null);
   const ends = [planB, factB].filter((v): v is number => v != null);
-  const anchorStart = starts.length ? Math.min(...starts) : today - 10;
+  const anchorStart = starts.length ? Math.min(...starts) : today;
   const anchorEnd = ends.length ? Math.max(...ends, anchorStart) : anchorStart;
   const spanDays = Math.max(1, anchorEnd - anchorStart + 1);
   /** Масштаб, при котором весь период рейса (± неделя запаса) виден целиком. */
@@ -260,7 +265,7 @@ function CarMiniTimeline({
   // масштаб не двигают основной таймлайн.
   const [miniZoom, setMiniZoom] = useState<number>(() => fitZoom());
   const colW = zoomColW(miniZoom);
-  const initialStart = anchorStart - 7;
+  const initialStart = focus ? anchorStart - 7 : anchorStart - 10;
   const initialVn = Math.max(30, anchorEnd + 7 - initialStart + 1);
   const [vs, setVs] = useState(initialStart);
   const [vn, setVn] = useState(initialVn);
@@ -295,6 +300,15 @@ function CarMiniTimeline({
         el.scrollLeft = max;
         return;
       }
+      if (target < -1) {
+        // Дата левее загруженного диапазона: запоминаем якорь, догрузка слева
+        // расширит окно (scrollLeft = 0 инициирует шаг расширения), затем якорь
+        // будет доведён точно — позиция не теряется.
+        pendingAnchor.current = { day, frac };
+        lastExtend.current = 0;
+        el.scrollLeft = 0;
+        return;
+      }
       pendingAnchor.current = null;
       el.scrollLeft = Math.max(0, target);
     },
@@ -313,12 +327,14 @@ function CarMiniTimeline({
     [renderVs, colW, anchorStart],
   );
 
-  // При открытии окна: масштаб подобран под рейс (fitZoom), позиция — начало рейса.
+  // При открытии окна: масштаб подобран под рейс (fitZoom), позиция — начало рейса;
+  // без выбранного рейса (обзор машины) — позиция на сегодняшней дате.
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el || didInit.current) return;
     didInit.current = true;
-    applyAnchor(anchorStart, 0);
+    if (focus) applyAnchor(anchorStart, 0);
+    else applyAnchor(today, 0.35);
     lastExtend.current = Date.now() + 600;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -354,14 +370,45 @@ function CarMiniTimeline({
     if (!el) return;
     const now = Date.now();
     if (now < lastExtend.current) return;
-    if (el.scrollLeft < colW * 2 && extL < 300) {
+    // Порционное расширение окна дней влево/вправо — вплоть до всей хронологии
+    // машины (те же рамки, что у основного таймлайна). Данные по машине уже
+    // загружены полностью; расширяется только окно отрисовки.
+    if (el.scrollLeft < colW * 2 && extL < 400) {
       lastExtend.current = now + 250;
       setExtL((v) => v + 30);
-    } else if (el.scrollLeft + el.clientWidth > el.scrollWidth - colW * 2 && extR < 300) {
+    } else if (el.scrollLeft + el.clientWidth > el.scrollWidth - colW * 2 && extR < 400) {
       lastExtend.current = now + 250;
       setExtR((v) => v + 30);
     }
   }, [extL, extR, colW]);
+
+  /**
+   * Переход к произвольной дате: если день вне загруженного окна — сначала
+   * расширяем нужную сторону (якорь запоминается и доводится после расширения),
+   * иначе прокручиваем сразу. Позиция/масштаб — только вид; данные не фильтруются.
+   */
+  const jumpTo = useCallback(
+    (day: number, frac = 0) => {
+      if (day < renderVs) {
+        pendingAnchor.current = { day, frac };
+        lastExtend.current = Date.now() + 600;
+        setExtL((v) => Math.min(400, v + (renderVs - day) + 14));
+        return;
+      }
+      if (day > ve) {
+        pendingAnchor.current = { day, frac };
+        lastExtend.current = Date.now() + 600;
+        setExtR((v) => Math.min(400, v + (day - ve) + 14));
+        return;
+      }
+      applyAnchor(day, frac);
+    },
+    [renderVs, ve, applyAnchor],
+  );
+  const goToday = useCallback(() => {
+    jumpTo(today, 0.35);
+  }, [jumpTo, today]);
+  const [jumpDate, setJumpDate] = useState<string>(() => dayStr(today));
 
   /** «Показать рейс целиком»: масштаб под полный период (план + факт) и позиция
    *  от начала рейса — независимо от основного таймлайна. */
@@ -408,21 +455,15 @@ function CarMiniTimeline({
 
   /**
    * Дорожки встроенного таймлайна — те же правила, что в основном:
-   * группа 0 — рейсы (план/факт), 1 — база (готовность/приезд→выезд),
-   * 2 — ремонт. Пересекающиеся полосы одной группы разводятся на под-дорожки;
-   * горизонтальные координаты не меняются — только вертикальные дорожки.
+   * группа 0 — рейсы (план/факт). База, ремонт и готовность — заливки дня
+   * (layoutBzFills, один механизм с основным таймлайном). Пересекающиеся
+   * полосы одной группы разводятся на под-дорожки; горизонтальные координаты
+   * не меняются — только вертикальные дорожки.
    */
   const miniPlanTrack = useMemo(() => {
     const items: LaneTrackItem[] = [];
-    const readySlot = new Map<string, number>();
     const tripSlot = new Map<string, number>();
     const bufferSlot = new Map<string, number>();
-    carBases.forEach((p) => {
-      const rdy = readyBarRange(p);
-      if (!rdy) return;
-      items.push({ group: 1, a: rdy.a, b: rdy.b, h: MINI_PLAN_BAR_H });
-      readySlot.set(p.key, items.length - 1);
-    });
     carTrips.forEach((t) => {
       const ov = t.spanOverride || {};
       const sp = tripSpan(t);
@@ -439,28 +480,14 @@ function CarMiniTimeline({
         }
       }
     });
-    return { layout: layoutLaneTracks(items, { padTop: 5, padBottom: 5, gap: MINI_TRACK_GAP }), readySlot, tripSlot, bufferSlot };
-  }, [carBases, carTrips]);
+    return { layout: layoutLaneTracks(items, { padTop: 5, padBottom: 5, gap: MINI_TRACK_GAP }), tripSlot, bufferSlot };
+  }, [carTrips]);
   const miniPlanH = Math.max(MINI_PLAN_H, miniPlanTrack.layout.laneH);
 
   const miniFactTrack = useMemo(() => {
     const items: LaneTrackItem[] = [];
-    const baseSlot = new Map<string, number>();
-    const repairSlot = new Map<string, number>();
     const factSlot = new Map<string, number>();
     const factNoneSlot = new Map<string, number>();
-    carBases.forEach((p) => {
-      const rb = baseBarRange(p, today);
-      if (rb) {
-        items.push({ group: 1, a: rb.a, b: rb.b, h: MINI_BASE_BAR_H });
-        baseSlot.set(p.key, items.length - 1);
-      }
-      const rr = repairBarRange(p, today);
-      if (rr) {
-        items.push({ group: 2, a: rr.a, b: rr.b, h: MINI_REPAIR_BAR_H });
-        repairSlot.set(p.key, items.length - 1);
-      }
-    });
     carTrips.forEach((t) => {
       const sp = tripSpan(t);
       if (sp.fMin != null) {
@@ -478,8 +505,12 @@ function CarMiniTimeline({
         factNoneSlot.set(t.key, items.length - 1);
       }
     });
-    return { layout: layoutLaneTracks(items, { padTop: 3, padBottom: 3, gap: MINI_TRACK_GAP }), baseSlot, repairSlot, factSlot, factNoneSlot };
-  }, [carBases, carTrips, today]);
+    return {
+      layout: layoutLaneTracks(items, { padTop: 3, padBottom: 3, gap: MINI_TRACK_GAP }),
+      factSlot,
+      factNoneSlot,
+    };
+  }, [carTrips, today]);
   const miniFactH = Math.max(MINI_FACT_H, miniFactTrack.layout.laneH);
   const miniFactZone0 = miniFactTrack.layout.zones.find((z) => z.key === 0) ?? null;
 
@@ -534,6 +565,67 @@ function CarMiniTimeline({
       </div>
     );
   };
+  // Заливки базы/ремонта (тот же механизм и палитра, что в основном таймлайне):
+  // план базы и срок готовности — в подстроке «План»; факт базы, ремонт и дата
+  // окончания ремонта — в «Факт». Клик открывает карточку периода (если доступно).
+  const miniBzInputs = useMemo(() => carBases.map((p) => ({ period: p })), [carBases]);
+  const miniPlanBzFills = useMemo(
+    () => layoutBzFills(miniBzInputs, [], 'plan', renderVs, ve, today),
+    [miniBzInputs, renderVs, ve, today],
+  );
+  const miniFactBzFills = useMemo(
+    () => layoutBzFills(miniBzInputs, [], 'fact', renderVs, ve, today),
+    [miniBzInputs, renderVs, ve, today],
+  );
+  const renderMiniBzFill = (f: BzFillSection, keyPrefix: string) => {
+    const color = bzKindColor(f.kind);
+    const left = dayToX(f.day, renderVs, colW) + Math.round((f.section * colW) / f.sections);
+    const right = dayToX(f.day, renderVs, colW) + Math.round(((f.section + 1) * colW) / f.sections);
+    const width = Math.max(1, right - left);
+    const clickable = !!(f.periodKey && onOpenBasePeriod);
+    const open = clickable && f.periodKey ? () => onOpenBasePeriod?.(f.periodKey as string) : undefined;
+    return (
+      <div
+        key={`${keyPrefix}-${f.kind}-${f.periodKey || 'gap'}-${f.day}`}
+        role={clickable ? 'button' : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        data-bz-fill={f.kind}
+        data-bz-day={f.day}
+        data-bz-section={f.section}
+        data-bz-sections={f.sections}
+        data-period={f.periodKey || undefined}
+        onClick={open}
+        onKeyDown={
+          clickable && f.periodKey
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onOpenBasePeriod?.(f.periodKey as string);
+                }
+              }
+            : undefined
+        }
+        className={`absolute top-0 bottom-0 z-[2] overflow-hidden whitespace-nowrap flex items-center justify-center ${clickable ? 'cursor-pointer' : ''}`}
+        style={{
+          left,
+          width,
+          background: color.bg,
+          // Разделители секций — inset-тень: не участвует в box-sizing и не
+          // расширяет узкие секции на мелком масштабе.
+          boxShadow:
+            f.section === f.sections - 1
+              ? `inset 1px 0 0 ${color.border}, inset -1px 0 0 ${color.border}`
+              : `inset 1px 0 0 ${color.border}`,
+          color: color.text,
+          ...(f.archived ? { opacity: 0.72 } : {}),
+          ...(f.kind === 'base-gap' ? { borderTopStyle: 'dashed', borderBottomStyle: 'dashed', borderTopColor: color.border, borderBottomColor: color.border, borderTopWidth: 1, borderBottomWidth: 1 } : {}),
+        }}
+        title={`${f.title}${clickable ? '' : ' · (только просмотр)'}`}
+      >
+        {width >= 40 ? <span className="px-0.5 text-[8px] leading-[10px] truncate max-w-full">{f.label}</span> : null}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col gap-2">
@@ -541,9 +633,29 @@ function CarMiniTimeline({
         <span className="text-[10px] text-[#6B7280] tabular-nums" data-ui="mini-range">
           {fmtFull(isoOf(renderVs))} – {fmtFull(isoOf(ve))}
         </span>
-        <button type="button" data-ui="mini-fit-trip" onClick={showWholeTrip} className={UI.buttonGhost}>
-          Показать рейс целиком
+        {/* Навигация встроенного таймлайна: меняет только положение/масштаб —
+            набор записей машины не фильтруется (видны архив, текущие и будущие) */}
+        <button type="button" data-ui="mini-today" onClick={goToday} className={UI.buttonGhost} title="Прокрутить к сегодняшней дате">
+          Сегодня
         </button>
+        <label className="flex items-center gap-1.5 text-[10px] text-[#6B7280]">
+          Перейти к
+          <DateInput
+            className="w-[110px]"
+            value={jumpDate}
+            ariaLabel="Перейти к дате (встроенный таймлайн)"
+            onChange={(v) => {
+              setJumpDate(v);
+              const n = dayNum(v);
+              if (n != null) jumpTo(n, 0);
+            }}
+          />
+        </label>
+        {focus ? (
+          <button type="button" data-ui="mini-fit-trip" onClick={showWholeTrip} className={UI.buttonGhost} title="Масштаб и позиция по выбранному рейсу целиком">
+            Показать рейс целиком
+          </button>
+        ) : null}
         {/* Масштаб встроенного таймлайна — независимый от основного */}
         <div className="flex items-center gap-1.5" role="group" aria-label="Масштаб встроенного таймлайна" data-ui="mini-zoom-control">
           <button
@@ -613,6 +725,7 @@ function CarMiniTimeline({
                 style={{ left: s.left, width: s.width, background: '#F1F2F4', opacity: 0.7, pointerEvents: 'none' }}
               />
             ))}
+            {miniPlanBzFills.map((f) => renderMiniBzFill(f, 'mpbz'))}
             {miniPlanFills.map((f) => renderMiniFill(f, 'mpf'))}
             {bgSegs.filter((s) => s.today).map((s, i) => (
               <div
@@ -622,26 +735,6 @@ function CarMiniTimeline({
                 style={{ left: s.left, width: s.width, background: '#F43F5E', opacity: 0.14, pointerEvents: 'none' }}
               />
             ))}
-            {carBases.map((p) => {
-              const rdy = readyBarRange(p);
-              if (!rdy) return null;
-              const q = pos(rdy.a, rdy.b);
-              if (!q) return null;
-              const dev = baseDeviation(p, today);
-              const ti = miniPlanTrack.readySlot.get(p.key);
-              const top = ti == null ? 5 : miniPlanTrack.layout.tops[ti];
-              return (
-                <div
-                  key={`rdy-${p.key}`}
-                  data-bar="ready"
-                  className="absolute z-[2] overflow-hidden whitespace-nowrap text-ellipsis text-[9px] leading-[16px] px-1 text-[#92400E]"
-                  style={{ left: q.left, width: q.width, top, height: MINI_PLAN_BAR_H, background: hatchReady, border: '1px solid #F59E0B', borderRadius: 3 }}
-                  title={`План базы: ${fmtFull(isoOf(rdy.a))} → срок готовности ${fmtFull(isoOf(rdy.b))} · ${dev.label}`}
-                >
-                  {q.width > 90 ? `готовность${dev.short ? ` · ${dev.short}` : ''}` : ''}
-                </div>
-              );
-            })}
             {carTrips.map((t) => {
               const ov = t.spanOverride || {};
               const sp = tripSpan(t);
@@ -711,6 +804,7 @@ function CarMiniTimeline({
                 style={{ left: s.left, width: s.width, background: '#F1F2F4', opacity: 0.6, pointerEvents: 'none' }}
               />
             ))}
+            {miniFactBzFills.map((f) => renderMiniBzFill(f, 'mfbz'))}
             {miniFactFills.map((f) => renderMiniFill(f, 'mff'))}
             {bgSegs.filter((s) => s.today).map((s, i) => (
               <div
@@ -720,41 +814,6 @@ function CarMiniTimeline({
                 style={{ left: s.left, width: s.width, background: '#F43F5E', opacity: 0.14, pointerEvents: 'none' }}
               />
             ))}
-            {carBases.map((p) => {
-              const dev = baseDeviation(p, today);
-              const rb = baseBarRange(p, today);
-              const rr = repairBarRange(p, today);
-              const qb = rb ? pos(rb.a, rb.b) : null;
-              const qr = rr ? pos(rr.a, rr.b) : null;
-              const tBase = miniFactTrack.baseSlot.get(p.key);
-              const tRep = miniFactTrack.repairSlot.get(p.key);
-              return (
-                <React.Fragment key={`base-${p.key}`}>
-                  {qb ? (
-                    <div
-                      data-bar="base"
-                      className="absolute z-[2] overflow-hidden whitespace-nowrap text-ellipsis text-[9px] leading-[14px] px-1 text-[#4B5563]"
-                      style={{ left: qb.left, width: qb.width, top: tBase == null ? 16 : miniFactTrack.layout.tops[tBase], height: MINI_BASE_BAR_H, background: hatchBase, border: '1px solid #9CA3AF', borderRadius: 3 }}
-                      title={`База (факт): ${fmtFull(isoOf(rb ? rb.a : null))} → ${rb && rb.open ? 'выезд не указан' : fmtFull(isoOf(rb ? rb.b : null))} · срок готовности ${
-                        p.plannedReadyDay != null ? fmtFull(isoOf(p.plannedReadyDay)) : 'не указан'
-                      } · ${dev.label}`}
-                    >
-                      {qb.width > 70 ? `${p.causeLabel}${dev.short ? ` · ${dev.short}` : ''}` : ''}
-                    </div>
-                  ) : null}
-                  {qr ? (
-                    <div
-                      data-bar="repair"
-                      className="absolute z-[3] text-center text-ellipsis text-[9px] leading-[10px] text-white px-1"
-                      style={{ left: qr.left, width: qr.width, top: tRep == null ? 18 : miniFactTrack.layout.tops[tRep], height: MINI_REPAIR_BAR_H, background: '#D97706', opacity: 0.92, borderRadius: 2 }}
-                      title={`Ремонт: ${fmtFull(isoOf(rr ? rr.a : null))} – ${rr && rr.open ? 'не завершён' : fmtFull(isoOf(rr ? rr.b : null))}`}
-                    >
-                      {qr.width > 60 ? 'ремонт' : ''}
-                    </div>
-                  ) : null}
-                </React.Fragment>
-              );
-            })}
             {(() => {
               // Компактные маркеры событий на их реальных датах (не полосы);
               // близкие события — один маркер со счётчиком.
@@ -861,26 +920,13 @@ function CarMiniTimeline({
                 </div>
               );
             })}
-            {carBases.map((p) => {
-              if (p.plannedReadyDay == null) return null;
-              const q = pos(p.plannedReadyDay, p.plannedReadyDay);
-              if (!q) return null;
-              return (
-                <div
-                  key={`mk-${p.key}`}
-                  data-bar="mark-ready"
-                  className="absolute z-[6]"
-                  style={{ left: dayToX(p.plannedReadyDay, renderVs, colW) + Math.round(colW * 0.45), top: 2, height: miniFactH - 4, width: 3, background: '#B45309', opacity: 0.85 }}
-                  title={`Срок готовности: ${fmtFull(isoOf(p.plannedReadyDay))} — ${baseDeviation(p, today).label}`}
-                />
-              );
-            })}
           </div>
         </div>
       </div>
       <p className="text-[10px] text-[#9CA3AF]">
         Соседние рейсы показаны как контекст — клик открывает их окно. База и ремонт — из «Учёта выезда» по этой машине
-        (план базы: приезд → срок готовности; факт: приезд → фактический выезд; ремонт — свои даты).
+        (план базы: приезд → срок готовности; факт: приезд → фактический выезд; ремонт — свои даты) — заливка ячейки дня,
+        клик открывает карточку периода. Несколько отметок в одном дне делят ячейку на цветные секции.
       </p>
     </div>
   );
@@ -904,6 +950,7 @@ export default function TripCard({
   focusStageId,
   onFocusStageDone,
   onOpenEventTrip,
+  onOpenBasePeriod,
   planGuard,
   planPerms,
   planRequests,
@@ -919,7 +966,7 @@ export default function TripCard({
   onDelete,
   onClose,
 }: Props) {
-  const { showConfirm } = useDialog();
+  const { showConfirm, showUnsaved } = useDialog();
   const { toast } = useToast();
   const [draft, setDraft] = useState<Draft>(() => toDraft(trip));
   const dirtyRef = useRef(false);
@@ -949,6 +996,7 @@ export default function TripCard({
   const [savingPlan, setSavingPlan] = useState(false);
   const saver = useDebouncedSaver();
   const flush = saver.flush;
+  const saverCancel = saver.cancel;
   const isPlan = trip.kind === 'plan';
   const planSourceId = trip.plan?.id || '';
   const archived = !!trip.archived;
@@ -1035,22 +1083,14 @@ export default function TripCard({
   useEffect(() => setMetaDraft(meta), [meta]);
   useEffect(() => () => flush(), [flush]);
 
-  // Фокус и Escape — управление фокусом внутри окна
+  // Фокус и горячие клавиши окна (общий хук): Esc — закрыть (с проверкой
+  // несохранённых), Enter в поле и Ctrl/Cmd+S — сохранить без закрытия.
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const requestCloseRef = useRef<() => void>(() => {});
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     const first = rootRef.current?.querySelector<HTMLElement>('button, input, select, textarea, a[href]');
     first?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        requestCloseRef.current();
-      }
-    };
-    document.addEventListener('keydown', onKey, true);
     return () => {
-      document.removeEventListener('keydown', onKey, true);
       prev?.focus?.();
     };
   }, []);
@@ -1060,22 +1100,157 @@ export default function TripCard({
     setDirty(true);
   };
 
-  const requestClose = useCallback(() => {
-    if (dirtyRef.current || journalDirtyRef.current || planDirtyRef.current) {
-      const notes: string[] = [];
-      if (journalDirtyRef.current) notes.push('в журнале событий есть несохранённый текст');
-      if (planDirtyRef.current) notes.push('в плане этапов есть несохранённые изменения (записываются кнопкой «Сохранить план этапов»)');
-      const ok = window.confirm(
-        notes.length
-          ? `${notes.join('; ')}. При закрытии это будет потеряно. Закрыть окно? «Отмена» — остаться.`
-          : 'Есть несохранённые изменения. Сохранить и закрыть? «Отмена» — остаться в окне.',
-      );
-      if (!ok) return;
-      if (dirtyRef.current) flush();
+  /** Список изменённых полей/блоков для окна «Выйти без сохранения?» — что именно потеряется. */
+  const changedFields = useCallback((): string[] => {
+    const out: string[] = [];
+    const od = toDraft(trip);
+    if (draft.route !== od.route) out.push('маршрут');
+    if (draft.dispatcherId !== od.dispatcherId) out.push('диспетчер');
+    if (draft.bufferDays !== od.bufferDays) out.push('запас дней');
+    if (draft.planStart !== od.planStart) out.push('плановый старт');
+    if (draft.planEnd !== od.planEnd) out.push('плановое возвращение');
+    if (draft.stages.length !== od.stages.length) out.push('состав этапов');
+    else if (
+      draft.stages.some(
+        (s, i) =>
+          s.label !== od.stages[i].label ||
+          s.plannedDate !== od.stages[i].plannedDate ||
+          s.actualDate !== od.stages[i].actualDate ||
+          s.type !== od.stages[i].type,
+      )
+    ) {
+      out.push('поля этапов');
     }
-    onClose();
-  }, [flush, onClose]);
-  requestCloseRef.current = requestClose;
+    if (metaDraft.comment !== meta.comment) out.push('комментарий к рейсу');
+    if (metaDraft.reason !== meta.reason) out.push('причина');
+    if (metaDraft.measures !== meta.measures) out.push('меры');
+    if (planDirtyRef.current) out.push('план этапов — сохраняется кнопкой «Сохранить план этапов»');
+    if (journalDirtyRef.current) out.push('текст в форме журнала событий — сохраняется кнопкой в журнале');
+    return out;
+  }, [draft, metaDraft, meta, trip]);
+
+  /** Вышли из окна/переключились на другую запись — сбросить флаги черновика. */
+  const resetDirty = useCallback(() => {
+    dirtyRef.current = false;
+    journalDirtyRef.current = false;
+    planDirtyRef.current = false;
+    setDirty(false);
+  }, []);
+
+  const leaveBusy = useRef(false);
+
+  const requestClose = useCallback(async () => {
+    if (leaveBusy.current) return;
+    if (!(dirtyRef.current || journalDirtyRef.current || planDirtyRef.current)) {
+      onClose();
+      return;
+    }
+    leaveBusy.current = true;
+    try {
+      const res = await showUnsaved({ changed: changedFields() });
+      if (res === 'stay') return;
+      if (res === 'save') {
+        flush();
+        toast('Изменения сохранены', 'success');
+      } else {
+        // «Выйти без сохранения»: ещё не записанный буфер отменяем (без записи)
+        saverCancel();
+      }
+      resetDirty();
+      onClose();
+    } finally {
+      leaveBusy.current = false;
+    }
+  }, [changedFields, flush, onClose, resetDirty, saverCancel, showUnsaved, toast]);
+
+  /** Переход из окна к другой записи (рейс/событие встроенного таймлайна):
+   *  окно не закрывается — спрашиваем только при несохранённых изменениях. */
+  const leaveThen = useCallback(
+    (action: () => void) => {
+      if (!(dirtyRef.current || journalDirtyRef.current || planDirtyRef.current)) {
+        action();
+        return;
+      }
+      if (leaveBusy.current) return;
+      leaveBusy.current = true;
+      void (async () => {
+        try {
+          const res = await showUnsaved({ changed: changedFields() });
+          if (res === 'stay') return;
+          if (res === 'save') {
+            flush();
+            toast('Изменения сохранены', 'success');
+          } else {
+            saverCancel();
+          }
+          resetDirty();
+          action();
+        } finally {
+          leaveBusy.current = false;
+        }
+      })();
+    },
+    [changedFields, flush, resetDirty, saverCancel, showUnsaved],
+  );
+
+  /** «Сохранить»: кнопка и горячие клавиши (Enter, Ctrl/Cmd+S) — без дублей. */
+  const lastSaveAt = useRef(0);
+  const saveNow = useCallback(() => {
+    const now = Date.now();
+    if (now - lastSaveAt.current < 350) return;
+    lastSaveAt.current = now;
+    flush();
+    dirtyRef.current = false;
+    setDirty(false);
+    toast('Изменения сохранены', 'success');
+  }, [flush, toast]);
+
+  useWindowHotkeys({
+    onEscape: () => {
+      void requestClose();
+    },
+    onSave: saveNow,
+  });
+
+  // Закрытие вкладки/перезагрузка: кастомное окно браузер показать не даёт —
+  // оставляем минимальный системный диалог ТОЛЬКО при несохранённых изменениях.
+  useEffect(() => {
+    if (!(dirty || journalDirty || planDirty)) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty, journalDirty, planDirty]);
+
+  // Кнопка «Назад» браузера: ставим страховочную запись истории, чтобы первый
+  // «Назад» вернулся к тому же адресу и спросил о несохранённых данных (SPA-
+  // навигацию beforeunload не ловит). «Остаться» — страховка ставится снова.
+  useEffect(() => {
+    const here = window.location.href;
+    const arm = () => {
+      try {
+        window.history.pushState({ ratipaCardGuard: 1 }, '', here);
+      } catch {
+        /* не критично */
+      }
+    };
+    arm();
+    const onPop = () => {
+      if (dirtyRef.current || journalDirtyRef.current || planDirtyRef.current) {
+        void requestClose().then(() => {
+          // Остались в окне — снова закрываем «Назад» страховкой
+          if (dirtyRef.current || journalDirtyRef.current || planDirtyRef.current) arm();
+        });
+      } else {
+        onClose();
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Черновик журнала событий — часть несохранённых изменений карточки. */
   const handleJournalDirty = useCallback((v: boolean) => {
@@ -1565,6 +1740,8 @@ export default function TripCard({
       subtitle={`${isPlan ? 'Рейс из «Плана дохода»' : 'Ручной рейс'}${archived ? ' · архив (просмотр)' : ''} · ${dispatcherShown}`}
       icon={<CalendarClock className="w-4 h-4" aria-hidden="true" />}
       ariaLabel={`Рейс ${title}`}
+      closeTitle="Закрыть · Esc"
+      hotkeysManaged
       maxWidth="max-w-[min(1440px,94vw)]"
       footer={
         <div className="flex flex-wrap items-center gap-2 w-full">
@@ -1600,12 +1777,8 @@ export default function TripCard({
               <button
                 type="button"
                 data-ui="trip-save"
-                onClick={() => {
-                  flush();
-                  dirtyRef.current = false;
-                  setDirty(false);
-                  toast('Изменения сохранены', 'success');
-                }}
+                title="Сохранить · Enter (Ctrl/Cmd+S — сохранить без закрытия)"
+                onClick={saveNow}
                 className="inline-flex items-center px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-[#121316] text-white hover:bg-black transition-colors cursor-pointer"
               >
                 Сохранить
@@ -2269,9 +2442,10 @@ export default function TripCard({
             carEvents={carEvents}
             stageTypes={stageTypes}
             today={today}
-            onSelectTrip={onSelectTrip}
-            onOpenEventTrip={onOpenEventTrip}
+            onSelectTrip={(key) => leaveThen(() => onSelectTrip(key))}
+            onOpenEventTrip={onOpenEventTrip ? (k, ev) => leaveThen(() => onOpenEventTrip(k, ev)) : undefined}
             onFocusStage={readOnly ? undefined : focusStage}
+            onOpenBasePeriod={onOpenBasePeriod}
           />
         </div>
       </div>

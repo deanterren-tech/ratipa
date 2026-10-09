@@ -96,6 +96,7 @@ export default function CityAutocomplete({
       {open && filtered.length > 0 && coords && (
         <div
           ref={listRef}
+          data-ac-popup="1"
           className="fixed z-[99999] bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto custom-scrollbar"
           style={{
             top: coords.top,
