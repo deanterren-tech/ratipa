@@ -355,9 +355,12 @@ export const visibleRangeText = (startDay: number, endDay: number): string => {
   return `${left} — ${right}`;
 };
 
-/** День (номер дня) в контентной координате X ленты (0 = начало ленты до колонки). */
-export const dayAtContentX = (x: number, vs: number, colW: number): number =>
-  vs + Math.floor((x - TIMELINE_COL_W) / colW);
+/**
+ * Дата по координате ВНУТРИ области прокрутки (учитывает закреплённую колонку
+ * «Автомобили» — её ширина регулируемая, поэтому передаётся параметром).
+ */
+export const dayAtContentX = (x: number, vs: number, colW: number, carColW: number = TIMELINE_COL_W): number =>
+  vs + Math.floor((x - carColW) / colW);
 
 /** Ширина закреплённой колонки автомобилей (px) — общая константа раскладки. */
 export const TIMELINE_COL_W = 170;

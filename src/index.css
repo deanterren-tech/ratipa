@@ -532,28 +532,27 @@ input:focus, select:focus, textarea:focus, button:focus {
   outline-offset: 1px;
 }
 
-/* Полосы рейсов: мягкое «поднятие» и подсветка при наведении (без тяжёлых
-   теней и размытий — только compositor-свойства). */
-.tl-scope [data-bar="plan"],
-.tl-scope [data-bar="fact"],
-.tl-scope [data-bar="fact-none"] {
-  transition: filter 120ms ease, transform 120ms ease;
-}
-.tl-scope [data-bar="plan"]:hover,
-.tl-scope [data-bar="fact"]:hover {
-  filter: brightness(1.03) saturate(1.04);
-  transform: translateY(-1px);
-}
-
-/* Этапы и отметки базы/ремонта: единый мягкий hover (compositor-only). */
+/* ВСЕ полосы (рейс ПЛАН/ФАКТ, база, ремонт, отметки) — единый мягкий hover:
+   одна высота/скругление/подпись задаются общим компонентом, hover тоже общий
+   (compositor-only, без «поднятия» — полоса остаётся непрерывной по дням). */
+.tl-scope [data-bar],
 .tl-scope [data-stage-fill],
 .tl-scope [data-bz-stripe],
 .tl-scope [data-bz-mark] {
   transition: filter 120ms ease;
 }
+.tl-scope [data-bar="plan"]:hover,
+.tl-scope [data-bar="fact"]:hover,
+.tl-scope [data-bar="fact-none"]:hover,
 .tl-scope [data-stage-fill]:hover,
 .tl-scope [data-bz-stripe]:hover,
 .tl-scope [data-bz-mark]:hover {
   filter: brightness(0.97) saturate(1.05);
+}
+
+/* Тень у границы закреплённой колонки «Автомобили» — только при горизонтальной
+   прокрутке ленты (атрибут ставит TimelineGrid без ре-рендера строк). */
+.tl-scroll[data-hscroll] [data-tl-colcell] {
+  box-shadow: 6px 0 8px -6px rgba(18, 19, 22, 0.28);
 }
 

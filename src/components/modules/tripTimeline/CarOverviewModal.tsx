@@ -143,7 +143,9 @@ export default function CarOverviewModal({
                 >
                   <span className="text-[11px] font-semibold text-[#121316]">{p.causeLabel}</span>
                   <span className="text-[11px] text-[#6B7280]">
-                    база: {fmtFull(iso(p.arrivalDay))} – {p.departureDay != null ? fmtFull(iso(p.departureDay)) : 'выезд не указан'}
+                    {p.departureDay != null
+                      ? `простой на базе: ${fmtFull(iso(p.arrivalDay))} – ${fmtFull(iso(p.departureDay))}`
+                      : `готовится к выезду (дата выезда не указана): ${p.arrivalDay != null ? fmtFull(iso(p.arrivalDay)) : '—'} – …`}
                   </span>
                   {p.repairStartDay != null ? (
                     <span className="text-[11px] text-[#B45309]">

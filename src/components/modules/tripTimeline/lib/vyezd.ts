@@ -121,6 +121,73 @@ export const parseVyezdHash = (hash: string): ParsedVyezdRoute | null => {
 };
 
 // ---------------------------------------------------------------------------
+// Окно «Учёт выезда» ПОВЕРХ таймлайна (страница не меняется)
+// ---------------------------------------------------------------------------
+
+/**
+ * ЕДИНЫЙ хелпер «открыть учёт выезда (машина, период)» из таймлайна: открывает
+ * ВСТРОЕННОЕ ОКНО поверх «Таймлайна рейсов» — страница и модуль НЕ меняются,
+ * hash остаётся адресом таймлайна с идентификатором окна:
+ *   #tripTimeline/vehicle/{ключ машины}/departure/{id периода | nearest}
+ * «Назад» браузера закрывает окно (возвращает прежний hash), прямая ссылка
+ * открывает то же окно поверх таймлайна. Переход в сам модуль «Учёт выезда» —
+ * только отдельным ЯВНЫМ действием внутри окна.
+ */
+export const departurePanelHashOf = (t: VyezdTarget): string | null => {
+  const carKey = String(t.carKey || '').trim() || String(t.carNumber || '').trim();
+  const periodId = String(t.periodId || '').trim();
+  if (!carKey && !periodId) return null;
+  const car = carKey ? encodeURIComponent(carKey) : '_';
+  const per = periodId ? encodeURIComponent(periodId) : 'nearest';
+  return `#tripTimeline/vehicle/${car}/departure/${per}`;
+};
+
+/** Открыть окно «Учёт выезда» поверх таймлайна (единая точка для всех ссылок). */
+export const openDepartureAccountingPanel = (t: VyezdTarget): boolean => {
+  const hash = departurePanelHashOf(t);
+  if (!hash) return false;
+  try {
+    if (window.location.hash !== hash) window.location.hash = hash;
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Замена адреса окна без новой записи истории (переключение периода в окне). */
+export const replaceDeparturePanelHash = (t: VyezdTarget): void => {
+  const hash = departurePanelHashOf(t);
+  if (!hash) return;
+  try {
+    const { pathname, search } = window.location;
+    window.history.replaceState(null, '', `${pathname}${search}${hash}`);
+  } catch {
+    /* не критично */
+  }
+};
+
+export interface ParsedDeparturePanel {
+  carKey: string | null;
+  /** id периода «Учёта выезда»; null — открыть ближайший период машины. */
+  periodId: string | null;
+}
+
+/** Разбор hash окна учёта выезда ПОВЕРХ таймлайна. null — не наш маршрут. */
+export const parseDeparturePanelHash = (hash: string): ParsedDeparturePanel | null => {
+  const raw = String(hash || '').replace(/^#/, '');
+  const [pathPart, queryPart] = raw.split('?');
+  const segs = pathPart.split('/').filter(Boolean); // [tripTimeline, vehicle, key, departure, id]
+  if (segs[0] !== 'tripTimeline' || segs[1] !== 'vehicle' || segs[3] !== 'departure') return null;
+  const params = new URLSearchParams(queryPart || '');
+  const carKeyRaw = segs[2] && segs[2] !== '_' ? safeDecode(segs[2]) : '';
+  const perRaw = segs[4] ? safeDecode(segs[4]) : '';
+  return {
+    carKey: carKeyRaw || params.get('car') || null,
+    periodId: perRaw && perRaw !== 'nearest' ? perRaw : null,
+  };
+};
+
+// ---------------------------------------------------------------------------
 // Статусы периода «Учёта выезда»
 // ---------------------------------------------------------------------------
 

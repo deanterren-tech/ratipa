@@ -118,7 +118,7 @@ export default function StatsBlock({ trips, allTrips, allEvents, bases, stageTyp
                   <th className={UI.th}>Машина</th>
                   <th className={UI.th}>В рейсе, дн</th>
                   <th className={UI.th}>Ремонт, дн</th>
-                  <th className={UI.th}>База / простой, дн</th>
+                  <th className={UI.th}>Простой на базе, дн</th>
                   <th className={UI.th}>Загрузка</th>
                 </tr>
               </thead>
@@ -137,7 +137,7 @@ export default function StatsBlock({ trips, allTrips, allEvents, bases, stageTyp
           </div>
         )}
         <p className={UI.hint}>
-          «В рейсе» — день покрыт любым рейсом машины (включая архивные); «ремонт» — событие типа «Ремонт»; остальные дни — база/простой.
+          «В рейсе» — день покрыт любым рейсом машины (включая архивные); «ремонт» — событие типа «Ремонт»; остальные дни — простой на базе («Учёт выезда»).
           {allTrips.length > trips.length ? ` Фильтр по диспетчеру сузил список машин: ${trips.length} из ${allTrips.length} рейсов.` : ''}
         </p>
       </div>

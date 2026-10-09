@@ -118,6 +118,8 @@ export interface BzStripe {
   status?: VyezdStatusKind;
   /** Короткая подпись внутри полосы (если хватает ширины). */
   label: string;
+  /** Ещё более короткая подпись для узких полос («Простой на базе»). */
+  shortLabel?: string;
   /** Даты периода для подписи — «13/07 – 18/08» (ремонт/учёт выезда; открытый — без конца). */
   dateLabel: string;
   /** Подпись обязана оставаться видимой при прокрутке (sticky внутри полосы). */
@@ -244,23 +246,24 @@ export const layoutBzFills = (
           lanes: 1,
           periodKey: p.key,
           archived: p.archived,
-          label: 'план базы',
+          label: 'Плановый простой на базе',
+          shortLabel: 'Простой на базе',
           dateLabel: `${fmtDM(rdy.a)} – ${fmtDM(rdy.b)}`,
           stickyLabel: false,
-          title: `План базы${arch}: приезд ${fmtDM(rdy.a)} → срок готовности ${fmtDM(rdy.b)} · ${rdy.b - rdy.a + 1} дн${dev.short ? ` · ${dev.label}` : ''} · клик — открыть период`,
+          title: `Плановый простой на базе${arch}: приезд ${fmtDM(rdy.a)} → срок готовности ${fmtDM(rdy.b)} · ${rdy.b - rdy.a + 1} дн${dev.short ? ` · ${dev.label}` : ''} · клик — открыть период`,
         });
       }
-      // Срок готовности: однодневная отметка на всю ячейку дня.
+      // Плановое окончание базы (срок готовности): однодневная отметка на всю ячейку дня.
       if (p.plannedReadyDay != null && inWindow(p.plannedReadyDay, p.plannedReadyDay)) {
         marksRaw.push({
           kind: 'ready',
           day: p.plannedReadyDay,
           periodKey: p.key,
           archived: p.archived,
-          label: 'готовность',
-          title: `Срок готовности (плановый)${arch}: ${fmtDM(p.plannedReadyDay)}${
-            p.arrivalDay != null ? ` (план базы с ${fmtDM(p.arrivalDay)})` : ''
-          } — ${dev.label}${p.comment ? ` · ${p.comment}` : ''} · клик — открыть период`,
+          label: 'плановое окончание базы',
+          title: `Плановое окончание базы (срок готовности)${arch}: ${fmtDM(p.plannedReadyDay)}${
+            p.arrivalDay != null ? ` (простой на базе с ${fmtDM(p.arrivalDay)})` : ''
+          } — к этой дате машина готова к выезду; ${dev.label}${p.comment ? ` · ${p.comment}` : ''} · клик — открыть период`,
         });
       }
       return;
@@ -283,8 +286,9 @@ export const layoutBzFills = (
       const softenedOnTimeline = status.earlyDepartureOnly && (status.kind === 'conflict' || status.kind === 'closed');
       const stripeStatus: VyezdStatusKind = softenedOnTimeline ? 'early-departure' : status.kind;
       const titleLines = [
-        `Учёт выезда · ${p.carNumber}${p.dispatcherName ? ` · ${p.dispatcherName}` : ''}${arch}`,
+        `${rb.open ? 'Готовится к выезду' : 'Фактический простой на базе'} · ${p.carNumber}${p.dispatcherName ? ` · ${p.dispatcherName}` : ''}${arch}`,
         `Период: приезд ${fmtDM(rb.a)} – ${rb.open ? 'выезд не указан (период продолжается)' : fmtDM(rb.b)} · ${sum.total} дн на базе · срок готовности ${readyTxt}`,
+        ...(rb.open ? ['Дата выезда не указана — простой продолжается, учёт ведётся.'] : []),
         softenedOnTimeline
           ? `Статус: ранний выезд — расхождение объяснено: машина выехала раньше учётного срока, простой укорочен до дня выезда (маркер на стыке дня; данные учёта не изменены). ${EARLY_DEPARTURE_TIMELINE_NOTE}`
           : `Статус: ${status.label} — ${status.reason}`,
@@ -330,7 +334,8 @@ export const layoutBzFills = (
         periodKey: p.key,
         archived: p.archived,
         status: stripeStatus,
-        label: 'Учёт выезда',
+        label: rb.open ? 'Готовится к выезду' : 'Фактический простой на базе',
+        shortLabel: rb.open ? 'Готовится к выезду' : 'Простой на базе',
         dateLabel: `${fmtDM(rb.a)} – ${rb.open ? '…' : fmtDM(rb.b)}`,
         stickyLabel: false,
         title: titleLines.join('\n'),
@@ -393,10 +398,11 @@ export const layoutBzFills = (
         lanes: 1,
         periodKey: null,
         archived: false,
-        label: `на базе · ${g.days} дн`,
+        label: `Простой на базе · ${g.days} дн`,
+        shortLabel: `Простой · ${g.days} дн`,
         dateLabel: `${fmtDM(g.a)} – ${fmtDM(g.b)}`,
         stickyLabel: false,
-        title: `Между рейсами: ${g.days} дн (записи учёта выезда нет)`,
+        title: `Простой на базе между рейсами: ${g.days} дн — записи «Учёта выезда» нет (детальные даты периода не фиксировались).`,
       });
     });
   }

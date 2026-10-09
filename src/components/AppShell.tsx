@@ -936,7 +936,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const activeModuleMeta = allModules.find(m => m.key === activeModule);
 
   return (
-    <div className={`min-h-screen ${activeModule === "admin" ? "bg-transparent" : "bg-slate-50"} flex flex-col font-sans transition-colors duration-300`}>
+    <div className={`${activeModule === 'tripTimeline' ? 'h-dvh overflow-hidden' : 'min-h-screen'} ${activeModule === "admin" ? "bg-transparent" : "bg-slate-50"} flex flex-col font-sans transition-colors duration-300`}>
       {!useFirebase && (
         <div className="bg-amber-500 text-white text-[11px] font-bold text-center py-1 px-3">
           ⚠ Офлайн-режим: данные сохраняются только локально на этом устройстве и не синхронизируются с сервером.
@@ -1818,7 +1818,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       </header>
 
       {/* Main Container workspace */}
-      <div className="flex-1 flex relative w-full max-w-full overflow-hidden">
+      <div className={`flex-1 flex relative w-full max-w-full overflow-hidden ${activeModule === 'tripTimeline' ? 'min-h-0' : ''}`}>
 
         {/* Dynamic active viewport card frame */}
         <main 
@@ -1829,6 +1829,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
           className={`flex-1 w-full max-w-full relative pb-52 md:pb-0 ${
                       activeModule === 'dashboard' 
                         ? 'p-0 bg-[#F9FAFB] overflow-hidden' 
+                        : activeModule === 'tripTimeline'
+                        ? 'p-0 bg-[#F9FAFB] overflow-hidden min-h-0'
                         : activeModule === 'admin'
                         ? 'p-3 sm:p-4 lg:p-6 bg-[#F9FAFB] overflow-y-auto overflow-x-hidden'
                         : 'p-3 sm:p-4 lg:p-6 overflow-y-auto overflow-x-hidden bg-[#F9FAFB]'

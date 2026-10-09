@@ -114,6 +114,17 @@ const metaFits = (meta: string, width: number | undefined, fontPx: number): bool
 };
 
 /**
+ * Текст подписи полосы в ЕДИНОМ стиле (8px/600, как у базы/ремонта): маршрут
+ * + хвост « / План · N дней», если хватает ширины; иначе только маршрут
+ * (обрезается многоточием, полный текст — в подсказке полосы).
+ */
+export const planBarLabelText = (parts: PlanBarParts, width: number, fontPx = 8): string => {
+  if (!parts.meta) return parts.main;
+  const combined = `${parts.main}${parts.meta}`;
+  return width >= combined.length * (fontPx * 0.56) + 14 ? combined : parts.main;
+};
+
+/**
  * Подпись полосы: маршрут сокращается многоточием, дни сохраняются, если
  * помещаются; полный текст — в подсказке полосы (title задаёт вызывающий).
  */

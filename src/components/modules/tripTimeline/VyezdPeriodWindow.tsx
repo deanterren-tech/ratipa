@@ -70,6 +70,17 @@ interface Props {
   onClose: () => void;
   /** Переключить окно на другую запись этой машины (список записей, мини-таймлайн). */
   onSwitchPeriod: (periodId: string) => void;
+  /** Замена адреса окна при переключении периода: хост решает маршрут
+   *  (BazaModule — #baza/vyezd/…; таймлайн — #tripTimeline/vehicle/…/departure/…).
+   *  Не задан — используется штатный baza-маршрут (поведение модуля не меняется). */
+  onReplaceTarget?: (t: { periodId: string; carKey: string | null }) => void;
+  /**
+   * Куда ведёт правка записи:
+   *  - 'inline'  — существующая карточка записи (поведение модуля «Учёт выезда»);
+   *  - 'module'  — явный переход в модуль «Учёт выезда» (таймлайн: карточка
+   *    записи не дублируется, правка идёт тем же сохранением и проверками прав).
+   */
+  editMode?: 'inline' | 'module';
 }
 
 /** Те же дни между датами, что в карточке автомобиля (календарные, включительно по дню). */
@@ -92,6 +103,8 @@ export default function VyezdPeriodWindow({
   onOpenFull,
   onClose,
   onSwitchPeriod,
+  onReplaceTarget,
+  editMode = 'inline',
 }: Props) {
   const { showUnsaved } = useDialog();
   const data = useTimelineData();
@@ -221,10 +234,11 @@ export default function VyezdPeriodWindow({
   const switchTo = useCallback(
     (periodId: string) => {
       if (!periodId) return;
-      replaceVyezdHash({ periodId, carKey: period?.carKey || null });
+      if (onReplaceTarget) onReplaceTarget({ periodId, carKey: period?.carKey || null });
+      else replaceVyezdHash({ periodId, carKey: period?.carKey || null });
       onSwitchPeriod(periodId);
     },
-    [period?.carKey, onSwitchPeriod],
+    [period?.carKey, onSwitchPeriod, onReplaceTarget],
   );
 
   // ── Состояние «не найдено / загрузка» ──────────────────────────────────
@@ -298,7 +312,7 @@ export default function VyezdPeriodWindow({
       maxWidth="max-w-[min(1180px,94vw)]"
       footer={
         <div className="flex flex-wrap items-center justify-end gap-2 w-full">
-          {canEdit ? (
+          {canEdit && editMode !== 'module' ? (
             <button
               type="button"
               data-ui="vyezd-edit"
@@ -309,10 +323,23 @@ export default function VyezdPeriodWindow({
               Исправить в учёте выезда
             </button>
           ) : null}
-          <button type="button" data-ui="vyezd-open-full" onClick={() => onOpenFull(period.id)} className={UI.buttonGhost}>
-            <ExternalLink className="w-4 h-4" aria-hidden="true" />
-            Открыть полный учёт выезда
-          </button>
+          {canEdit && editMode === 'module' ? (
+            <button
+              type="button"
+              data-ui="vyezd-edit-module"
+              onClick={() => onOpenFull(period.id)}
+              className={`${UI.buttonGhost} mr-auto`}
+              title="Правка записи — в модуле «Учёт выезда» (та же карточка, то же сохранение и проверки прав; логика на таймлайне не дублируется)"
+            >
+              Открыть в модуле «Учёт выезда» (правка записи)
+            </button>
+          ) : null}
+          {!canEdit || editMode !== 'module' ? (
+            <button type="button" data-ui="vyezd-open-full" onClick={() => onOpenFull(period.id)} className={UI.buttonGhost}>
+              <ExternalLink className="w-4 h-4" aria-hidden="true" />
+              Открыть полный учёт выезда
+            </button>
+          ) : null}
           <button
             type="button"
             data-ui="vyezd-open-trip"
@@ -566,9 +593,15 @@ export default function VyezdPeriodWindow({
                 : ''}
               .{' '}
               {canEdit ? (
-                <button type="button" data-ui="vyezd-edit-inline" onClick={() => onEditRecord(period.id)} className="underline text-[var(--accent-ink)] font-medium cursor-pointer">
-                  Открыть карточку записи
-                </button>
+                editMode === 'module' ? (
+                  <button type="button" data-ui="vyezd-edit-inline" onClick={() => onOpenFull(period.id)} className="underline text-[var(--accent-ink)] font-medium cursor-pointer">
+                    Открыть модуль «Учёт выезда» для правки записи
+                  </button>
+                ) : (
+                  <button type="button" data-ui="vyezd-edit-inline" onClick={() => onEditRecord(period.id)} className="underline text-[var(--accent-ink)] font-medium cursor-pointer">
+                    Открыть карточку записи
+                  </button>
+                )
               ) : (
                 <span className="text-[#6B7280]">Изменение записи недоступно: нет права правки учёта выезда.</span>
               )}

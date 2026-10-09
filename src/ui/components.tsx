@@ -30,6 +30,7 @@ export function ModuleShell({
   children,
   contentClassName,
   tabsAriaLabel,
+  fillHeight = false,
 }: {
   title: string;
   tabs?: TabItem[];
@@ -39,9 +40,12 @@ export function ModuleShell({
   children: React.ReactNode;
   contentClassName?: string;
   tabsAriaLabel?: string;
+  /** Экран с собственной прокруткой (таймлайн): оболочка ровно по высоте
+   *  родителя — контент тянется (flex), внешней прокрутки страницы нет. */
+  fillHeight?: boolean;
 }) {
   return (
-    <div className={UI.shell}>
+    <div className={`${UI.shell}${fillHeight ? ' h-full min-h-0 overflow-hidden' : ''}`}>
       <div className={UI.shellHeader}>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <h1 className={UI.title}>{title}</h1>

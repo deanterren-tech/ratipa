@@ -13,14 +13,17 @@
  * Встроенные записи переопределяются справочником по id/названию, но не
  * пропадают: цвет и код остаются даже при пустом справочнике.
  *
- * КРУГИ: в данных отдельного поля нет (проверены все поля trips_dashboard).
- * Правило количества кругов НЕ внедряется до согласования владельца — см. отчёт
- * (предлагаемое правило: круг = один рейс машины на внешнем направлении,
- * номер — порядок рейсов на этом направлении внутри периода учёта выезда;
- * незавершённый рейс = «круг идёт»). После согласования функция будет добавлена
- * сюда (`circlesOf`), интерфейс зарезервирован.
+ * КРУГИ: отдельного поля в данных нет (проверены все поля trips_dashboard и
+ * записей учёта выезда). Правило владельца, внедряется здесь:
+ *   круг = один рейс машины на внешнем направлении (направление определено
+ *   справочником направлений); номер = порядок рейсов внутри периода учёта
+ *   выезда (приезд→выезд) — хронологически по началу рейса; рейсы вне периода
+ *   нумеруются сквозной группой «вне периода учёта»;
+ *   незавершённый рейс (факт начат, окончание не внесено) = «круг идёт».
+ * Функция `circlesOf` — точка истины; интерфейс не меняет данные.
  */
-import type { WholeTrip } from './sources';
+import type { WholeTrip, BasePeriod } from './sources';
+import { tripFactEnd, tripSpan } from './timeline';
 
 export interface DirectionDef {
   id: string;
@@ -134,3 +137,122 @@ export const directionChipColors = (color: string): DirectionChipColors => ({
   text: mixHex(color, '#121316', 0.35),
   solid: color,
 });
+
+// ---------------------------------------------------------------------------
+// КРУГИ — правило владельца (единая точка истины)
+// ---------------------------------------------------------------------------
+
+/**
+ * Круг машины: один рейс на внешнем направлении.
+ *  - n — номер (порядок внутри периода учёта выезда; хронологически);
+ *  - ongoing — «круг идёт»: факт начат (есть фактический старт), окончание
+ *    не внесено, рейс не архивный;
+ *  - periodKey/periodText — период учёта выезда, внутри которого начался рейс
+ *    (или null — «вне периода учёта», сквозная нумерация).
+ */
+export interface TripCircle {
+  n: number;
+  tripKey: string;
+  dir: DirectionDef | null;
+  /** Плановые границы рейса (фолбэк — фактические), дни. */
+  a: number;
+  b: number;
+  fA: number | null;
+  fB: number | null;
+  ongoing: boolean;
+  archived: boolean;
+  periodKey: string | null;
+  /** Человекочитаемый период: «приезд 12/03 → выезд 20/04». */
+  periodText: string | null;
+}
+
+const fmtD = (n: number): string => {
+  const d = new Date(n * 86400000);
+  return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+
+/** Дата начала рейса (план, иначе факт) — та же, что у полосы. */
+const tripStartDay = (t: WholeTrip): number | null => {
+  const ov = t.spanOverride || {};
+  const span = tripSpan(t);
+  return ov.pMin ?? span.pMin ?? span.fMin ?? null;
+};
+
+/**
+ * Круги всех машин: Map carKey → список кругов (по возрастанию номера).
+ * Внешнее направление = directionOfTrip(t) != null (справочник направлений).
+ * Рейсы без дат начала пропускаются (номер не выдумывается).
+ */
+export const circlesOf = (
+  trips: WholeTrip[],
+  dirs: DirectionDef[],
+  bases: BasePeriod[],
+): Map<string, TripCircle[]> => {
+  const byCar = new Map<string, WholeTrip[]>();
+  const seen = new Set<string>();
+  trips.forEach((t) => {
+    if (!t.carKey || seen.has(t.key)) return;
+    if (directionOfTrip(t, dirs) == null) return; // внешнее направление — только определённые
+    if (tripStartDay(t) == null) return;
+    seen.add(t.key);
+    const arr = byCar.get(t.carKey);
+    if (arr) arr.push(t);
+    else byCar.set(t.carKey, [t]);
+  });
+
+  const out = new Map<string, TripCircle[]>();
+  byCar.forEach((list, carKey) => {
+    const carBases = bases.filter((p) => p.carKey === carKey && p.arrivalDay != null);
+    const sorted = [...list].sort((x, y) => (tripStartDay(x) as number) - (tripStartDay(y) as number) || x.key.localeCompare(y.key));
+    /** Счётчик номера внутри группы (период учёта / вне периода). */
+    const counters = new Map<string, number>();
+    const circles: TripCircle[] = [];
+    sorted.forEach((t) => {
+      const start = tripStartDay(t) as number;
+      const span = tripSpan(t);
+      const ov = t.spanOverride || {};
+      const a = ov.pMin ?? span.pMin ?? span.fMin ?? start;
+      const b = Math.max(a, ov.pMax ?? span.pMax ?? span.fMax ?? a);
+      // Период учёта выезда, внутри которого начался рейс (приезд → выезд).
+      const hit = carBases
+        .filter((p) => {
+          const end = p.departureDay ?? p.plannedReadyDay ?? null;
+          return start >= (p.arrivalDay as number) && (end == null || start <= end);
+        })
+        .sort((x, y) => (y.arrivalDay as number) - (x.arrivalDay as number))[0];
+      const groupKey = hit ? hit.key : '∅';
+      const n = (counters.get(groupKey) || 0) + 1;
+      counters.set(groupKey, n);
+      const ongoing = span.fMin != null && tripFactEnd(t) == null && !t.archived;
+      circles.push({
+        n,
+        tripKey: t.key,
+        dir: directionOfTrip(t, dirs),
+        a,
+        b,
+        fA: span.fMin,
+        fB: span.fMax,
+        ongoing,
+        archived: !!t.archived,
+        periodKey: hit ? hit.key : null,
+        periodText: hit
+          ? `приезд ${fmtD(hit.arrivalDay as number)} → ${hit.departureDay != null ? `выезд ${fmtD(hit.departureDay)}` : 'выезд не указан'}`
+          : null,
+      });
+    });
+    out.set(carKey, circles);
+  });
+  return out;
+};
+
+/** Подсказка по кругу: номер, направление, даты, состояние. */
+export const circleTitleOf = (c: TripCircle, total: number): string => {
+  const dir = c.dir ? c.dir.name : 'направление не определено';
+  const dates =
+    c.fA != null
+      ? `факт: ${fmtD(c.fA)} – ${c.ongoing ? 'идёт (окончание не внесено)' : c.fB != null ? fmtD(c.fB) : '—'}`
+      : `план: ${fmtD(c.a)} – ${c.b > c.a ? fmtD(c.b) : 'дата окончания не указана'}`;
+  const per = c.periodText ? ` · период учёта выезда: ${c.periodText}` : ' · вне периода учёта выезда';
+  const state = c.ongoing ? ' · круг идёт (рейс не завершён)' : c.archived ? ' · архив' : '';
+  return `Круг ${c.n} из ${total} · ${dir}${state}\n${dates}${per}${c.archived ? ' · архивный рейс' : ''}`;
+};

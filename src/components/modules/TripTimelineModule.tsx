@@ -35,7 +35,13 @@ import CarOverviewModal from './tripTimeline/CarOverviewModal';
 import { useTimelineData } from './tripTimeline/useTimelineData';
 import { sortMonthLabelsDesc, todayNum, zoomColW, zoomIndexOf } from './tripTimeline/lib/timeline';
 import { plateKeyOf } from './tripTimeline/lib/sources';
-import { openVyezdPeriod } from './tripTimeline/lib/vyezd';
+import {
+  openDepartureAccountingPanel,
+  parseDeparturePanelHash,
+  replaceDeparturePanelHash,
+  type ParsedDeparturePanel,
+} from './tripTimeline/lib/vyezd';
+import VyezdPeriodWindow from './tripTimeline/VyezdPeriodWindow';
 import { buildTimelinePlanPayload } from './tripTimeline/lib/planFromDraft';
 
 type TabId = 'timeline' | 'stats';
@@ -72,6 +78,13 @@ export default function TripTimelineModule({ user, settings }: Props) {
 
   const canWrite = resolvePermission(user, 'tripTimeline', settings?.rolePermissions) === 'write';
   const canEditPlan = resolvePermission(user, 'planDohod', settings?.rolePermissions) === 'write';
+  /**
+   * Правка записи «Учёта выезда» — та же проверка, что в модуле (запись в baza;
+   * механик — специальное правило портала: доступ есть, правка через карточку
+   * модуля ему недоступна — там тот же запрет).
+   */
+  const bazaWrite = user.role === 'root_admin' || resolvePermission(user, 'baza', settings?.rolePermissions) === 'write';
+  const canEditBaza = bazaWrite && user.role !== 'mechanic';
   /**
    * Создание рейса из таймлайна сразу создаёт запись «Плана дохода»
    * (целые рейсы таймлайна строятся из неё), поэтому право нужно ровно то же,
@@ -333,6 +346,17 @@ export default function TripTimelineModule({ user, settings }: Props) {
 
   // ── Карточки и модалки ─────────────────────────────────────────────────
   const [openTripKey, setOpenTripKey] = useState<string | null>(null);
+  /**
+   * Окно «Учёт выезда» ПОВЕРХ таймлайна (требование владельца: страница НЕ
+   * меняется). Открывается единым хелпером openDepartureAccountingPanel; hash —
+   * #tripTimeline/vehicle/<ключ>/departure/<id|nearest> («Назад» закрывает окно,
+   * прямая ссылка открывает то же окно поверх таймлайна).
+   */
+  const [panelTarget, setPanelTarget] = useState<ParsedDeparturePanel | null>(() =>
+    typeof window === 'undefined' ? null : parseDeparturePanelHash(window.location.hash),
+  );
+  /** Hash до открытия окна — «Закрыть» возвращает его без новой записи истории. */
+  const panelReturnHash = useRef<string>('');
   /** Событие, к которому нужно перейти в журнале карточки (с маркера таймлайна). */
   const [focusEventId, setFocusEventId] = useState<string | null>(null);
   /** Этап, который нужно выделить в карточке (клик по заливке этапа на полотне). */
@@ -384,17 +408,25 @@ export default function TripTimelineModule({ user, settings }: Props) {
     [openTrip],
   );
 
-  // Прямые ссылки: #tripTimeline/trip/<key>; старый маршрут #tripTimeline/trips → таймлайн
+  // Прямые ссылки: #tripTimeline/trip/<key>; окно учёта выезда поверх таймлайна
+  // (#tripTimeline/vehicle/…/departure/…); старый маршрут #tripTimeline/trips → таймлайн
   useEffect(() => {
     const parse = () => {
       const h = window.location.hash || '';
       const m = h.match(/#tripTimeline\/trip\/(.+)$/);
       if (m) {
+        setPanelTarget(null);
         try {
           setOpenTripKey(decodeURIComponent(m[1]));
         } catch {
           /* не критично */
         }
+        return;
+      }
+      // Окно «Учёт выезда» поверх таймлайна: hash остаётся маршрутом таймлайна.
+      const panel = parseDeparturePanelHash(h);
+      if (panel) {
+        setPanelTarget(panel);
         return;
       }
       if (h.startsWith('#tripTimeline/events')) {
@@ -415,7 +447,10 @@ export default function TripTimelineModule({ user, settings }: Props) {
         }
         navigate(DEFAULT_TAB, undefined, { replace: true });
         if (focus) setOpenTripKey(focus);
+        return;
       }
+      // Любой другой hash таймлайна (в т.ч. возврат «Назад» из окна) — окно закрыто.
+      setPanelTarget(null);
     };
     parse();
     window.addEventListener('hashchange', parse);
@@ -455,20 +490,49 @@ export default function TripTimelineModule({ user, settings }: Props) {
 
   /**
    * Клик по полосе/отметке периода «Учёта выезда» — ЕДИНЫЙ хелпер
-   * «открыть учёт выезда (машина, период)» (lib/vyezd): открывает окно периода
-   * в модуле «Учёт выезда» именно этой машины (прямой URL #baza/vyezd/<id>;
-   * «Назад» возвращает на таймлайн в прежней позиции прокрутки и масштабе).
+   * «открыть учёт выезда (машина, период)» (lib/vyezd): открывает ВСТРОЕННОЕ
+   * ОКНО поверх таймлайна (страница не меняется, hash —
+   * #tripTimeline/vehicle/<ключ>/departure/<id>; «Назад» закрывает окно).
    * Общий список не открывается, чужая машина не показывается.
    */
   const openPeriod = useCallback(
     (key: string) => {
       const p = data.bases.find((b) => b.key === key);
       if (!p) return;
-      openVyezdPeriod({ periodId: p.id, carKey: p.carKey, carNumber: p.carNumber });
+      try {
+        panelReturnHash.current = window.location.hash || '';
+      } catch {
+        panelReturnHash.current = '';
+      }
+      openDepartureAccountingPanel({ periodId: p.id, carKey: p.carKey, carNumber: p.carNumber });
     },
     [data.bases],
   );
   const openCar = useCallback((carKey: string) => setOverviewCarKey(carKey), []);
+
+  /** Закрыть окно «Учёт выезда» без смены страницы: возврат к прежнему hash. */
+  const closeDeparturePanel = useCallback(() => {
+    setPanelTarget(null);
+    try {
+      const { pathname, search } = window.location;
+      const back = panelReturnHash.current || `#tripTimeline/${TAB_SLUGS[activeTab] || DEFAULT_TAB}`;
+      window.history.replaceState(null, '', `${pathname}${search}${back}`);
+    } catch {
+      /* не критично */
+    }
+  }, [activeTab]);
+
+  /** Явное действие окна «Открыть в модуле Учёт выезда»: страница меняется
+   *  ТОЛЬКО по желанию пользователя; запись подсветится в списке модуля. */
+  const openBazaModuleFor = useCallback((recordId: string | null) => {
+    try {
+      if (recordId) sessionStorage.setItem('ratipa_focus_baza_record', recordId);
+    } catch {
+      /* не критично */
+    }
+    window.location.hash = '#baza';
+  }, []);
+
   const extendRange = useCallback((dir: 'left' | 'right') => {
     if (dir === 'left') setExtL((v) => Math.min(v + EXT_STEP, EXT_MAX));
     else setExtR((v) => Math.min(v + EXT_STEP, EXT_MAX));
@@ -649,6 +713,8 @@ export default function TripTimelineModule({ user, settings }: Props) {
       title="Таймлайн рейсов"
       tabs={tabs}
       activeTab={activeTab}
+      fillHeight={activeTab === 'timeline' && !fullscreen}
+      contentClassName={activeTab === 'timeline' && !fullscreen ? 'flex-1 min-h-0 flex flex-col pt-2' : undefined}
       onTabChange={(key) => navigate(TAB_SLUGS[key as TabId] || DEFAULT_TAB)}
       actions={
         <div className="flex items-center gap-2">
@@ -676,6 +742,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
           дата-якорь сохраняются при входе и выходе. */}
       <div
         data-ui={fullscreen ? 'timeline-fullscreen' : 'timeline-workarea'}
+        className={fullscreen ? '' : 'flex-1 min-h-0 flex flex-col'}
         style={
           fullscreen
             ? {
@@ -688,7 +755,8 @@ export default function TripTimelineModule({ user, settings }: Props) {
                 background: '#F6F7FA',
                 display: 'flex',
                 flexDirection: 'column',
-                padding: '10px 14px',
+                // Полный экран — таймлайн от края до края (без пустых полей).
+                padding: 0,
                 overflow: 'hidden',
               }
             : undefined
@@ -768,7 +836,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
         ) : null}
 
         {/* Вкладки модуля держим смонтированными: возврат сохраняет прокрутку и состояние */}
-        <div className={activeTab === 'timeline' ? (fullscreen ? 'flex-1 min-h-0 flex flex-col' : '') : 'hidden'}>
+        <div className={activeTab === 'timeline' ? 'flex-1 min-h-0 flex flex-col' : 'hidden'}>
           <TimelineGrid
             trips={filteredTrips}
             bases={filteredBases}
@@ -848,6 +916,35 @@ export default function TripTimelineModule({ user, settings }: Props) {
           onArchiveToggle={archiveToggle}
           onDelete={deleteTrip}
           onClose={closeTrip}
+        />
+      ) : null}
+
+      {/* Окно «Учёт выезда» ПОВЕРХ таймлайна: те же данные, что показывает
+          модуль (общий VyezdPeriodWindow и общие источники useTimelineData —
+          ничего не копируется и не пересчитывается на стороне таймлайна).
+          Страница не меняется; «Назад» браузера закрывает окно. */}
+      {panelTarget ? (
+        <VyezdPeriodWindow
+          target={{
+            kind: panelTarget.periodId ? 'period' : 'car',
+            periodId: panelTarget.periodId,
+            carKey: panelTarget.carKey,
+            carNumber: null,
+          }}
+          today={today}
+          user={user}
+          settings={settings}
+          canEdit={canEditBaza}
+          editMode="module"
+          editorOpen={false}
+          onEditRecord={() => undefined}
+          onOpenTrip={(key) => {
+            window.location.hash = `#tripTimeline/trip/${encodeURIComponent(key)}`;
+          }}
+          onOpenFull={openBazaModuleFor}
+          onClose={closeDeparturePanel}
+          onSwitchPeriod={(periodId) => setPanelTarget((prev) => ({ carKey: prev?.carKey ?? null, periodId }))}
+          onReplaceTarget={(t) => replaceDeparturePanelHash({ periodId: t.periodId, carKey: t.carKey })}
         />
       ) : null}
 

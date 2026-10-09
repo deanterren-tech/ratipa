@@ -21,7 +21,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
-  CalendarCheck2,
+  CarFront,
   CalendarClock,
   ClipboardCopy,
   ExternalLink,
@@ -49,6 +49,7 @@ import DateInput from './DateInput';
 import CityAutocomplete from '../../common/CityAutocomplete';
 import TripEventsJournal from './TripEventsJournal';
 import { PlanBarLabel, planBarLabelParts } from './PlanBarLabel';
+import { FACT_SEGMENT_COLORS, factSegmentsOfTrip } from './lib/factSegments';
 import { eventMarkOf, groupEventMarks, type EventMark } from './lib/eventMarks';
 import {
   layoutStageFills,
@@ -831,7 +832,7 @@ export function CarMiniTimeline({
         : `${m.section === 0 ? r : '0px'} ${m.section === total - 1 ? r : '0px'} ${
             m.section === total - 1 ? r : '0px'
           } ${m.section === 0 ? r : '0px'}`;
-    const Icon = m.kind === 'ready' ? CalendarCheck2 : Wrench;
+    const Icon = m.kind === 'ready' ? CarFront : Wrench;
     const clickable = !!onOpenBasePeriod;
     const open = clickable ? () => onOpenBasePeriod?.(m.periodKey) : undefined;
     return (
@@ -1154,9 +1155,9 @@ export function CarMiniTimeline({
                     width: qa.width,
                     top,
                     height: MINI_PLAN_BAR_H,
-                    background: t.archived ? '#E5E7EB' : '#DBEAFE',
-                    border: `1px solid ${t.archived ? '#9CA3AF' : '#60A5FA'}`,
-                    color: t.archived ? '#6B7280' : '#1E3A8A',
+                    background: t.archived ? '#E5E7EB' : 'var(--accent-10)',
+                    border: `1px solid ${t.archived ? '#9CA3AF' : 'var(--accent-40)'}`,
+                    color: t.archived ? '#6B7280' : '#7E3A0D',
                     borderRadius: 3,
                     ...link(t.key),
                   }}
@@ -1277,6 +1278,10 @@ export function CarMiniTimeline({
               const qf = miniAdjRect(q, adjF) ?? q;
               const ti = miniFactTrack.factSlot.get(t.key);
               const top = ti == null ? 4 : miniFactTrack.layout.tops[ti];
+              // Сегменты цвета факта — ТА ЖЕ чистая функция и палитра, что на
+              // основном таймлайне (lib/factSegments): правила не копируются.
+              const segRes = factSegmentsOfTrip(t, sp.fMin, fEnd, today);
+              const segs = segRes.segments;
               return (
                 <div
                   key={`f-${t.key}`}
@@ -1294,14 +1299,37 @@ export function CarMiniTimeline({
                     width: qf.width,
                     top,
                     height: MINI_FACT_BAR_H,
-                    background: ongoing ? hatchOpen : '#10B981',
-                    opacity: ongoing ? 1 : 0.65,
-                    border: ongoing ? '1px dashed #10B981' : undefined,
                     borderRadius: 2,
+                    // Продолжающийся край — мягкий обрыв без скругления.
+                    ...(ongoing ? { WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 10px), transparent 100%)', maskImage: 'linear-gradient(to right, #000 calc(100% - 10px), transparent 100%)' } : {}),
                     ...link(t.key),
                   }}
-                  title={`${formatPlate(t.carNumber)} · факт: ${fmtFull(isoOf(sp.fMin))} – ${ongoing ? 'окончание не указано' : fmtFull(isoOf(fEnd))}${t.key === focusKey ? ' · выбранный рейс' : ''}`}
+                  title={`${formatPlate(t.carNumber)} · факт: ${fmtFull(isoOf(sp.fMin))} – ${ongoing ? 'окончание не указано' : fmtFull(isoOf(fEnd))} · ${segs
+                    .map((x) => FACT_SEGMENT_COLORS[x.color].label)
+                    .filter((v, i, arr) => arr.indexOf(v) === i)
+                    .join('; ')}${segRes.noPlan ? ' · план не указан' : ''}${t.key === focusKey ? ' · выбранный рейс' : ''}`}
                 >
+                  {segs.map((x, i) => {
+                    const col = FACT_SEGMENT_COLORS[x.color];
+                    const xL = Math.max(0, Math.round(dayToX(x.a, renderVs, colW) - qf.left));
+                    const xR = Math.min(qf.width, Math.round(dayToX(x.b, renderVs, colW) + colW - qf.left));
+                    return (
+                      <span
+                        key={`mseg-${x.a}-${x.b}-${x.color}-${i}`}
+                        data-fact-seg-mini={`${x.a}-${x.b}-${x.color}`}
+                        className="absolute top-0 bottom-0"
+                        style={{
+                          left: xL,
+                          width: Math.max(1, xR - xL),
+                          background: col.bg,
+                          borderTop: `1px solid ${col.border}`,
+                          borderBottom: `1px solid ${col.border}`,
+                          ...(i === 0 ? { borderLeft: `1px solid ${col.border}` } : {}),
+                          ...(i === segs.length - 1 ? { borderRight: `1px solid ${col.border}` } : {}),
+                        }}
+                      />
+                    );
+                  })}
                   {adjF?.overlap ? (
                     <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatchMini }} />
                   ) : null}
@@ -1347,8 +1375,10 @@ export function CarMiniTimeline({
       </div>
       <p className="text-[10px] text-[#9CA3AF]">
         Соседние рейсы показаны как контекст — клик открывает их окно. База и ремонт — из «Учёта выезда» по этой машине
-        (план базы: приезд → срок готовности; факт: приезд → фактический выезд; ремонт — свои даты) — заливка ячейки дня,
-        клик открывает карточку периода. Несколько отметок в одном дне делят ячейку на цветные секции.
+        (плановый простой на базе: приезд → срок готовности; фактический простой на базе: приезд → выезд — открытый период
+        подписан «Готовится к выезду»; ремонт — свои даты) — заливка ячейки дня, клик открывает карточку периода.
+        Факт рейса окрашен сегментами по отставанию (в срок / 1–2 дня / больше 2 дней / критический срок).
+        Несколько отметок в одном дне делят ячейку на цветные секции.
       </p>
     </div>
   );

@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "test:segments": "tsx scripts/test-fact-segments.ts",
     "typecheck": "tsc --noEmit && node scripts/check-any.mjs"
   },
   "dependencies": {

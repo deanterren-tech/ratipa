@@ -38,7 +38,7 @@ import {
   type LaneTrackItem,
 } from './lib/timeline';
 import { eventTypeOf, stageFullName } from './lib/catalog';
-import { PlanBarLabel, planBarLabelParts, type PlanBarParts } from './PlanBarLabel';
+import { planBarLabelParts, planBarLabelText, type PlanBarParts } from './PlanBarLabel';
 import { eventMarkOf, groupEventMarks, type EventMark } from './lib/eventMarks';
 import {
   layoutStageFills,
@@ -60,7 +60,21 @@ import {
 import { tripRangeOf, VYEZD_STATUS, vyezdStatusIcon } from './lib/vyezd';
 import { resolveRowOverlaps, type RowOverlapResolution, type RowTripAdjust, type RowTripInterval } from './lib/overlapRow';
 import type { ResolvedMarker, ResolvedWarning, WaitGap } from './lib/overlap';
-import { directionChipColors, directionOfTrip, mixHex, type DirectionDef } from './lib/directions';
+import {
+  circleTitleOf,
+  circlesOf,
+  directionChipColors,
+  directionOfTrip,
+  mixHex,
+  type DirectionDef,
+  type TripCircle,
+} from './lib/directions';
+import {
+  FACT_SEGMENT_COLORS,
+  factSegmentsOfTrip,
+  type FactSegment,
+  type FactSegColor,
+} from './lib/factSegments';
 import {
   baseBarRange,
   baseDeviation,
@@ -72,7 +86,8 @@ import {
 } from './lib/sources';
 import DateInput from './DateInput';
 import CalendarHeader from './CalendarHeader';
-import { AlertTriangle, ArrowRightLeft, CalendarCheck2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleDashed, Hourglass, LogIn, LogOut, Maximize2, Minimize2, OctagonX, Palette, TriangleAlert, Wrench } from 'lucide-react';
+import { plural } from '../../../ui/kit';
+import { AlertTriangle, ArrowRightLeft, CalendarClock, CarFront, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleDashed, Hourglass, LogIn, LogOut, Maximize2, Minimize2, OctagonX, Palette, TriangleAlert, Wrench } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Палитра полос (визуальная логика прототипа; цвета — единая семья заливок
@@ -98,6 +113,23 @@ const CLR = {
   return: '#2563EB',
 };
 
+/**
+ * ПЛАН рейса — ОДИН акцентный цвет приложения (токены темы), без индикации
+ * сроков: никаких зелёного/жёлтого/оранжевого/красного на плановой полосе.
+ */
+const PLAN_ACCENT = {
+  bg: 'var(--accent-10)',
+  border: 'var(--accent-40)',
+  text: '#7E3A0D',
+};
+
+/** Архивная план-полоса — тот же акцент, приглушённый (правило архива). */
+const PLAN_ACCENT_ARCH = {
+  bg: CLR.planArchBg,
+  border: CLR.planArchBorder,
+  text: CLR.planArchText,
+};
+
 const planBarBg = `linear-gradient(180deg, ${CLR.planBg} 0%, ${CLR.planBg2} 100%)`;
 
 const hatch45 = `repeating-linear-gradient(45deg, ${CLR.bufferA}, ${CLR.bufferA} 4px, transparent 4px, transparent 8px)`;
@@ -121,7 +153,21 @@ const waitCovers = (gaps: Array<{ a: number; b: number }>, s: { a: number; b: nu
 // ---------------------------------------------------------------------------
 
 type PlanItem =
-  | { kind: 'plan'; a: number; b: number; tripKey: string; parts: PlanBarParts; archived: boolean; statusKind: DeadlineStatusKind; open: boolean; title: string; warn: boolean; dir?: DirectionDef | null }
+  | {
+      kind: 'plan';
+      a: number;
+      b: number;
+      tripKey: string;
+      parts: PlanBarParts;
+      archived: boolean;
+      statusKind: DeadlineStatusKind;
+      open: boolean;
+      title: string;
+      warn: boolean;
+      dir?: DirectionDef | null;
+      /** Круг рейса (правило directions.circlesOf): номер на полосе. */
+      circle?: { n: number; total: number; ongoing: boolean; title: string } | null;
+    }
   | { kind: 'buffer'; a: number; b: number; days: number }
   | { kind: 'markReturn'; day: number; title: string; tripKey: string }
   | { kind: 'handover'; point: number; from: string; to: string; note: string; title: string; chip: boolean };
@@ -129,7 +175,7 @@ type PlanItem =
 type DeadlineStatusKind = 'none' | 'ok' | 'risk' | 'violated' | 'missed';
 
 type FactItem =
-  | { kind: 'fact'; a: number; b: number; open: boolean; tripKey: string; title: string }
+  | { kind: 'fact'; a: number; b: number; open: boolean; tripKey: string; title: string; segments: FactSegment[]; noPlan: boolean; missedCount: number; parts: PlanBarParts }
   | { kind: 'factNone'; a: number; b: number; tripKey: string; title: string }
   | { kind: 'event'; day: number; lastDay: number; count: number; color: string; title: string; tripKey?: string; eventId?: string }
   | { kind: 'handover'; point: number; from: string; to: string; note: string; title: string; chip: boolean };
@@ -162,6 +208,8 @@ interface CarRowModel {
   factOv: RowOverlapResolution;
   /** Направления рейсов машины в окне (для мини-чипа в левой колонке). */
   directions: DirectionDef[];
+  /** Круги машины (правило directions.circlesOf) — бейдж в колонке и на полосе. */
+  circles: TripCircle[];
 }
 
 /** Маркер стыка смены диспетчера: точка между двумя рейсами разных диспетчеров. */
@@ -267,6 +315,44 @@ const barSegment = 'inline-flex items-center gap-1.5 rounded-xl border border-[v
 const intersects = (a: number | null, b: number | null, from: number, to: number): boolean =>
   a != null && b != null && b >= from && a <= to;
 
+/** Сводка цветов сегментов факта для подсказки полосы: «в срок — 3 дн; опоздание 1–2 дня — 2 дн». */
+const factSegSummaryOf = (segs: FactSegment[]): string => {
+  const byColor = new Map<FactSegColor, number>();
+  segs.forEach((s) => byColor.set(s.color, (byColor.get(s.color) || 0) + (s.b - s.a + 1)));
+  return Array.from(byColor.entries())
+    .map(([c, days]) => `${FACT_SEGMENT_COLORS[c].label} — ${days} дн`)
+    .join('; ');
+};
+
+/** Единый стиль бейджа круга: у одного круга — приглушённый, у двух+ — заметный;
+ *  незавершённый («круг идёт») — пунктирная обводка. */
+const circleBadgeStyle = (total: number, ongoing: boolean): React.CSSProperties =>
+  total >= 2
+    ? { background: 'var(--accent-10)', border: `1px ${ongoing ? 'dashed' : 'solid'} var(--accent-40)`, color: '#8A4A12' }
+    : { background: 'rgba(255,255,255,0.9)', border: `1px ${ongoing ? 'dashed' : 'solid'} #C3C8CF`, color: '#5B6472' };
+
+/**
+ * Дорожки полос по интервалам (жадная раскладка, как у полос базы): при
+ * пересечении полосы одной подстроки делят высоту — обе видны и кликабельны.
+ */
+const barLanesOf = (itv: Array<{ a: number; b: number }>): Array<{ lane: number; lanes: number }> => {
+  const order = itv.map((_, i) => i).sort((x, y) => itv[x].a - itv[y].a || itv[x].b - itv[y].b || x - y);
+  const laneOf: number[] = new Array(itv.length).fill(0);
+  const laneEnds: number[] = [];
+  order.forEach((i) => {
+    let li = laneEnds.findIndex((end) => end < itv[i].a);
+    if (li === -1) {
+      li = laneEnds.length;
+      laneEnds.push(itv[i].b);
+    } else {
+      laneEnds[li] = itv[i].b;
+    }
+    laneOf[i] = li;
+  });
+  const lanes = Math.max(1, laneEnds.length);
+  return itv.map((_, i) => ({ lane: laneOf[i], lanes }));
+};
+
 // ---------------------------------------------------------------------------
 // Сборка строк
 // ---------------------------------------------------------------------------
@@ -291,6 +377,10 @@ const buildRows = (
   const from = vs - WINDOW_MARGIN;
   const to = ve + WINDOW_MARGIN;
   const visibleTrips = trips.filter((t) => showArchived || !t.archived);
+  /** Круги машин — правило владельца (lib/directions, circlesOf): один рейс на
+   *  внешнем направлении = один круг; считаются по всем рейсам вкладки (включая
+   *  архивные — номер не зависит от галочки «архивные данные»). */
+  const circlesByCar = circlesOf(trips, directions, bases);
   // Уникальность — по СТАБИЛЬНЫМ ключам исходных записей (`pd:` / `tl:` / `bz:`):
   // повторные записи одного источника не создают вторую полосу, а смена
   // диспетчера у машины не порождает дубликатов.
@@ -348,6 +438,7 @@ const buildRows = (
 
   const rows: CarRowModel[] = [];
   carMap.forEach((car) => {
+    const carCircles = circlesByCar.get(car.carKey) || [];
     const myTrips = tripCandidates
       .filter((t) => t.carKey === car.carKey)
       .sort((a, b) => ((a.spanOverride?.pMin ?? tripSpan(a).pMin) ?? 0) - ((b.spanOverride?.pMin ?? tripSpan(b).pMin) ?? 0));
@@ -376,9 +467,10 @@ const buildRows = (
       const tripLabel = `Рейс «${t.route || 'без маршрута'}»`;
       const deadline = getDeadlineStatus(t, today, (s) => stageFullName(stageTypes, s));
       const dir = directionOfTrip(t, directions);
+      const parts = planBarLabelParts(t);
       if (visible(pMin, planEnd)) {
-        const parts = planBarLabelParts(t);
         const shown: PlanBarParts = openPlan ? { ...parts, main: 'неполный план', meta: '' } : parts;
+        const circ = carCircles.find((c) => c.tripKey === t.key) || null;
         planItems.push({
           kind: 'plan',
           a: pMin,
@@ -390,7 +482,8 @@ const buildRows = (
           open: openPlan,
           warn: false,
           dir,
-          title: `${formatPlate(car.carNumber)} · ${parts.titleText} · ${t.dispatcherName || 'без диспетчера'}${dir ? ` · направление: ${dir.name}` : ''}${t.kind === 'plan' ? ' · из плана дохода' : ''}${t.archived ? ' · архив' : ''}${openPlan ? ' · неполный план (нет даты возвращения)' : ''} · ${deadline.label}`,
+          circle: circ ? { n: circ.n, total: carCircles.length, ongoing: circ.ongoing, title: circleTitleOf(circ, carCircles.length) } : null,
+          title: `${formatPlate(car.carNumber)} · ${parts.titleText} · ${t.dispatcherName || 'без диспетчера'}${dir ? ` · направление: ${dir.name}` : ''}${circ ? ` · круг ${circ.n} из ${carCircles.length}${circ.ongoing ? ' (идёт)' : ''}` : ''}${t.kind === 'plan' ? ' · из плана дохода' : ''}${t.archived ? ' · архив' : ''}${openPlan ? ' · неполный план (нет даты возвращения)' : ''} · ${deadline.label}`,
         });
       }
       planInts.push({ key: t.key, a: pMin, b: planEnd, open: openPlan, label: tripLabel });
@@ -416,13 +509,22 @@ const buildRows = (
         const fEnd = ongoing ? Math.max(today, span.fMax ?? span.fMin) : (factEndDay ?? span.fMax ?? span.fMin);
         factInts.push({ key: t.key, a: span.fMin, b: fEnd, open: ongoing, label: tripLabel });
         if (visible(span.fMin, fEnd)) {
+          // Сегменты цвета факта — ОДИН расчёт на рейс (чистая функция
+          // lib/factSegments: правила отставания/критического срока в одном месте).
+          const segRes = factSegmentsOfTrip(t, span.fMin, fEnd, today);
           factItems.push({
             kind: 'fact',
             a: span.fMin,
             b: fEnd,
             open: ongoing,
             tripKey: t.key,
-            title: `${formatPlate(car.carNumber)} · факт: ${fmtDM(span.fMin)} – ${ongoing ? 'продолжается (окончание не указано)' : fmtDM(fEnd)}`,
+            segments: segRes.segments,
+            noPlan: segRes.noPlan,
+            missedCount: segRes.missed.length,
+            parts,
+            title: `${formatPlate(car.carNumber)} · факт: ${fmtDM(span.fMin)} – ${ongoing ? 'продолжается (окончание не указано)' : fmtDM(fEnd)} · ${factSegSummaryOf(segRes.segments)}${
+              segRes.noPlan ? ' · план не указан' : ''
+            }${segRes.missed.length ? ` · пропущено этапов: ${segRes.missed.length} (${segRes.missed.map((m) => m.label).join(', ')})` : ''}`,
           });
         }
       } else {
@@ -642,6 +744,7 @@ const buildRows = (
       planOv,
       factOv,
       directions: rowDirs,
+      circles: carCircles,
     });
   });
 
@@ -721,6 +824,7 @@ const todayBadgeOf = (row: CarRowModel, today: number): TodayBadge | null => {
 const TimelineCarRow = React.memo(function TimelineCarRow({
   row,
   colW,
+  carColW,
   vs,
   vn,
   bg,
@@ -737,6 +841,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
 }: {
   row: CarRowModel;
   colW: number;
+  /** Ширина закреплённой колонки «Автомобили» (регулируемая). */
+  carColW: number;
   vs: number;
   vn: number;
   bg: BgSeg[];
@@ -782,10 +888,6 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     if (hoverTrip === tripKey) return { boxShadow: 'inset 0 0 0 2px var(--accent)' };
     return { boxShadow: 'inset 0 0 0 1px rgba(18,19,22,0.25)' };
   };
-  const hoverProps = (tripKey: string) => ({
-    onMouseEnter: () => setHoverTrip(tripKey),
-    onMouseLeave: () => setHoverTrip((v) => (v === tripKey ? null : v)),
-  });
 
   /** Правка полосы рейса из разрешения наложений (доли дня смены у краёв). */
   const adjRect = (
@@ -885,7 +987,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     );
   };
   /** Конфликт данных: тонкая штриховка зоны + значок со ссылкой на источник. */
-  const renderConflict = (w: ResolvedWarning, keyPrefix: string, rowH: number): React.ReactNode => {
+  const renderConflict = (w: ResolvedWarning, keyPrefix: string, rowH: number, keyIdx = 0): React.ReactNode => {
     const clipA = Math.max(w.a, vs);
     const clipB = Math.min(w.b, ve);
     if (clipB < clipA) return null;
@@ -898,7 +1000,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     };
     return (
       <div
-        key={`${keyPrefix}-${w.a}-${w.b}`}
+        key={`${keyPrefix}-${keyIdx}-${w.a}-${w.b}`}
         data-tl-conflict="1"
         data-tl-conflict-a={w.a}
         data-tl-conflict-b={w.b}
@@ -979,12 +1081,95 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     return { slot, layout: layoutLaneTracks(items, { padTop: FACT_PAD, padBottom: FACT_PAD, gap: TRACK_GAP }) };
   }, [row.factItems]);
   const factH = Math.max(FACT_H, factTrack.layout.laneH);
-  const factTopOf = (idx: number): number => {
-    const s = factTrack.slot[idx];
-    return s == null ? FACT_PAD : factTrack.layout.tops[s];
-  };
   /** Дорожка «факта рейса» (группа 0) — над ней стоят маркеры событий. */
   const factZone0 = factTrack.layout.zones.find((z) => z.key === 0) ?? null;
+  /**
+   * Дорожки полос рейса (lane/lanes) — та же модель раскладки, что у полос
+   * базы/ремонта: при пересечении полосы делят высоту подстроки, обе видны.
+   */
+  const planBarLanes = useMemo(() => {
+    const idxs: number[] = [];
+    const itv: Array<{ a: number; b: number }> = [];
+    row.planItems.forEach((it, i) => {
+      if (it.kind === 'plan' || it.kind === 'buffer') {
+        idxs.push(i);
+        itv.push({ a: it.a, b: it.b });
+      }
+    });
+    const info = barLanesOf(itv);
+    const m = new Map<number, { lane: number; lanes: number }>();
+    idxs.forEach((ii, k) => m.set(ii, info[k]));
+    return m;
+  }, [row.planItems]);
+  const factBarLanes = useMemo(() => {
+    const idxs: number[] = [];
+    const itv: Array<{ a: number; b: number }> = [];
+    row.factItems.forEach((it, i) => {
+      if (it.kind === 'fact' || it.kind === 'factNone') {
+        idxs.push(i);
+        itv.push({ a: it.a, b: it.b });
+      }
+    });
+    const info = barLanesOf(itv);
+    const m = new Map<number, { lane: number; lanes: number }>();
+    idxs.forEach((ii, k) => m.set(ii, info[k]));
+    return m;
+  }, [row.factItems]);
+  /** Тонкая штриховка проблемных сегментов (оранжевый/красный) — вторичный
+   *  признак для дальтоников (вместе со значком в начале сегмента). */
+  const segHatch = (color: FactSegColor): string =>
+    color === 'red'
+      ? 'repeating-linear-gradient(45deg, rgba(159,18,57,0.16), rgba(159,18,57,0.16) 2px, transparent 2px, transparent 7px)'
+      : 'repeating-linear-gradient(45deg, rgba(138,58,10,0.16), rgba(138,58,10,0.16) 2px, transparent 2px, transparent 7px)';
+  /** Подсказка сегмента: этап, план, факт, отставание в днях, причина цвета. */
+  const segTitleOf = (s: FactSegment): string => {
+    const st = FACT_SEGMENT_COLORS[s.color];
+    const parts: string[] = [s.stageLabel ? `Этап «${s.stageLabel}»` : 'Участок факта'];
+    parts.push(s.planDay != null ? `план ${fmtDM(s.planDay)}` : 'план не указан');
+    parts.push(s.factDay != null ? `факт ${fmtDM(s.factDay)}` : 'факт ещё не внесён');
+    if (s.lagDays != null) parts.push(s.lagDays > 0 ? `отставание: +${s.lagDays} дн` : 'отставание: нет');
+    parts.push(`цвет: ${st.label}`);
+    return `${parts.join(' · ')}\n${s.reason}`;
+  };
+  /** Сегменты факта — ОДИН элемент на сегмент, стыкуются без зазоров и
+   *  разделителей (граница сегментов — день завершения этапа). */
+  const factSegEls = (segs: FactSegment[], barLeft: number, barWidth: number): React.ReactNode[] =>
+    segs.map((s, i) => {
+      const st = FACT_SEGMENT_COLORS[s.color];
+      const left = Math.max(0, Math.round(dayToX(s.a, vs, colW) - barLeft));
+      const right = Math.min(barWidth, Math.round(dayToX(s.b, vs, colW) + colW - barLeft));
+      const width = Math.max(1, right - left);
+      const first = i === 0;
+      const last = i === segs.length - 1;
+      const problem = s.color === 'orange' || s.color === 'red';
+      return (
+        <span
+          key={`seg-${s.a}-${s.b}-${s.color}-${i}`}
+          data-fact-seg={`${s.a}-${s.b}-${s.color}`}
+          data-fact-seg-color={s.color}
+          className="absolute top-0 bottom-0"
+          style={{
+            left,
+            width,
+            background: st.bg,
+            ...(problem ? { backgroundImage: segHatch(s.color) } : {}),
+            borderTop: `1px solid ${st.border}`,
+            borderBottom: `1px solid ${st.border}`,
+            ...(first ? { borderLeft: `1px solid ${st.border}` } : {}),
+            ...(last ? { borderRight: `1px solid ${st.border}` } : {}),
+          }}
+          title={segTitleOf(s)}
+        >
+          {problem && width >= 18 ? (
+            <TriangleAlert
+              className="absolute left-0.5 top-1/2 -translate-y-1/2 w-2.5 h-2.5"
+              style={{ color: st.text }}
+              aria-hidden="true"
+            />
+          ) : null}
+        </span>
+      );
+    });
   /**
    * Полосы и отметки базы/ремонта: НЕПРЕРЫВНЫЕ полосы периодов (один элемент на
    * период — не по элементу на день) и однодневные отметки «срок готовности» /
@@ -1080,11 +1265,112 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     );
   };
   /**
-   * НЕПРЕРЫВНАЯ полоса периода базы/ремонта: ОДИН элемент на период (не по
-   * элементу на день) — от первого до последнего дня, без внутренних
-   * разделителей и зазоров, на всю высоту подстроки. Скругление — только на
-   * реальном начале/конце; если период продолжается за видимую область, на краю
-   * обрыв без скругления с мягким градиентом. Клик и подсказка — на всей полосе.
+   * ЕДИНЫЙ компонент полосы — база, ремонт, ПЛАН и ФАКТ рейса используют его
+   * без отдельных стилей: одна высота (вся подстрока или своя дорожка при
+   * пересечении), одинаковое скругление (только реальные края), обводка,
+   * подпись 8px/600 слева по центру, общие hover/focus (index.css). Полоса
+   * непрерывна по дням: один элемент на период/участок, без разделителей.
+   * Параметры: цвет {bg,border,text}, подпись, иконка, оверлеи (pre/post).
+   */
+  const renderPeriodBar = (o: {
+    key: string;
+    attrKind: 'bz' | 'bar';
+    kind: string;
+    color: { bg: string; border: string; text: string };
+    left: number;
+    width: number;
+    lane?: number;
+    lanes?: number;
+    radius: string;
+    title: string;
+    labelText?: string;
+    labelIcon?: React.ReactNode;
+    labelOnlyIcon?: boolean;
+    stickyLabel?: boolean;
+    mask?: string;
+    opacity?: number;
+    dashed?: 'tb' | 'all';
+    zClass?: string;
+    role?: string;
+    tabIndex?: number;
+    cursor?: boolean;
+    onClick?: () => void;
+    onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+    onMouseEnter?: () => void;
+    onMouseLeave?: () => void;
+    style?: React.CSSProperties;
+    attrs?: Record<string, string | number | undefined>;
+    pre?: React.ReactNode;
+    post?: React.ReactNode;
+  }) => {
+    const lanes = o.lanes ?? 1;
+    const lane = o.lane ?? 0;
+    const labelEl =
+      o.labelOnlyIcon && o.labelIcon && !o.labelText ? (
+        <span data-bz-label="icon" className="w-full h-full flex items-center justify-center" aria-hidden="true">
+          {o.labelIcon}
+        </span>
+      ) : o.labelText || o.labelIcon ? (
+        <span
+          data-bar-label="1"
+          className={`inline-flex items-center gap-0.5 min-w-0 px-1 text-[8px] leading-[10px] font-semibold truncate max-w-full ${
+            o.stickyLabel ? 'sticky' : ''
+          }`}
+          style={{
+            ...(o.stickyLabel ? { left: carColW + 8, marginLeft: 6 } : {}),
+            background: o.color.bg,
+            color: o.color.text,
+            borderRadius: 4,
+          }}
+        >
+          {o.labelIcon}
+          {o.labelText}
+        </span>
+      ) : null;
+    return (
+      <div
+        key={o.key}
+        role={o.role}
+        tabIndex={o.tabIndex}
+        {...(o.attrKind === 'bz' ? { 'data-bz-stripe': o.kind } : { 'data-bar': o.kind })}
+        {...(o.attrs || {})}
+        onClick={o.onClick}
+        onKeyDown={o.onKeyDown}
+        onMouseEnter={o.onMouseEnter}
+        onMouseLeave={o.onMouseLeave}
+        className={`absolute whitespace-nowrap flex items-center ${o.zClass || 'z-[1]'} ${o.cursor ? 'cursor-pointer' : ''}`}
+        style={{
+          left: o.left,
+          width: o.width,
+          top: lanes > 1 ? `calc(${(lane * 100) / lanes}% + 1px)` : 0,
+          height: lanes > 1 ? `calc(${100 / lanes}% - 2px)` : undefined,
+          bottom: lanes > 1 ? undefined : 0,
+          background: o.color.bg,
+          border: `1px solid ${o.color.border}`,
+          borderRadius: o.radius,
+          color: o.color.text,
+          ...(o.mask ? { WebkitMaskImage: o.mask, maskImage: o.mask } : {}),
+          ...(o.opacity != null ? { opacity: o.opacity } : {}),
+          ...(o.dashed === 'tb'
+            ? { borderTopStyle: 'dashed', borderBottomStyle: 'dashed' }
+            : o.dashed === 'all'
+              ? { borderStyle: 'dashed' }
+              : {}),
+          ...(o.style || {}),
+        }}
+        title={o.title}
+      >
+        {o.pre}
+        {labelEl}
+        {o.post}
+      </div>
+    );
+  };
+  /**
+   * НЕПРЕРЫВНАЯ полоса периода базы/ремонта: ОДИН элемент на период через
+   * общий компонент полосы (renderPeriodBar) — та же геометрия и подпись, что
+   * у полос рейса. Если период продолжается за видимую область — на краю обрыв
+   * без скругления с мягким градиентом. Клик и подсказка — на всей полосе.
    */
   const renderBzStripe = (s: BzStripe, keyPrefix: string, ov: RowOverlapResolution) => {
     const color = bzStripeColor(s);
@@ -1122,30 +1408,20 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     const isVyezd = s.kind === 'base-fact';
     const StatusIcon = isVyezd && s.status ? vyezdStatusIcon(s.status) : null;
     const showLabel = width >= (isVyezd ? 62 : 44) && (!isVyezd || !!StatusIcon);
-    // У ремонта и учёта выезда — подпись и даты, если помещаются; sticky внутри полосы.
-    const labelText =
-      (s.kind === 'repair' || isVyezd) && width >= 138 && s.dateLabel ? `${s.label} · ${s.dateLabel}` : s.label;
-    const labelEl = showLabel ? (
-      <span
-        data-bz-label="1"
-        className={`inline-flex items-center gap-0.5 max-w-full truncate px-1 text-[8px] leading-[10px] font-semibold ${
-          s.stickyLabel ? 'sticky' : 'absolute left-1 top-1/2 -translate-y-1/2'
-        }`}
-        style={{
-          ...(s.stickyLabel ? { left: 178, marginLeft: 6 } : {}),
-          background: color.bg,
-          color: color.text,
-          borderRadius: 4,
-        }}
-      >
-        {StatusIcon ? <StatusIcon className="w-2.5 h-2.5 shrink-0" style={{ color: color.text }} aria-hidden="true" /> : null}
-        {labelText}
-      </span>
-    ) : isVyezd && StatusIcon && width >= 16 ? (
-      <span data-bz-label="icon" className="w-full h-full flex items-center justify-center" aria-hidden="true">
-        <StatusIcon className="w-3 h-3 shrink-0" style={{ color: color.text }} />
-      </span>
-    ) : null;
+    // Подпись: полный текст, при датах — с датами; при нехватке места — короткая
+    // форма «Простой на базе»; полный текст всегда в подсказке (title).
+    const withDates = (txt: string): string => (s.dateLabel ? `${txt} · ${s.dateLabel}` : txt);
+    const variants: string[] = [];
+    if ((s.kind === 'repair' || isVyezd) && s.dateLabel) variants.push(withDates(s.label));
+    variants.push(s.label);
+    if (s.shortLabel && s.shortLabel !== s.label) variants.push(s.shortLabel);
+    let labelText = '';
+    for (const v of variants) {
+      if (v.length * 4.7 + 14 <= width) {
+        labelText = v;
+        break;
+      }
+    }
     // Подпись полосы дополняется стыком с рейсом (укорочение/день смены) — но
     // данные учёта в подсказке не подменяются: указываем и учётный конец.
     const adjLine =
@@ -1158,56 +1434,50 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               ? 'Плановый день смены разделён с полосой рейса (рейс и база видны).'
               : 'День смены разделён с полосой рейса (штатный переход, не расхождение).'
             : '';
-    return (
-      <div
-        key={`${keyPrefix}-${s.kind}-${s.periodKey || 'gap'}-${s.a}-${s.b}`}
-        role={s.periodKey ? 'button' : undefined}
-        tabIndex={s.periodKey ? 0 : undefined}
-        data-bz-stripe={s.kind}
-        data-bz-status={s.status || undefined}
-        data-bz-a={s.a}
-        data-bz-b={s.b}
-        data-bz-edge-l={s.edgeL}
-        data-bz-edge-r={s.edgeR}
-        data-bz-frac-a={adj && fracA !== 0 ? `${fracA}` : undefined}
-        data-bz-frac-b={adj && fracB !== 1 ? `${fracB}` : undefined}
-        data-bz-trunc={adj && adj.truncatedDays > 0 ? `${adj.truncatedDays}` : undefined}
-        data-period={s.periodKey || undefined}
-        onClick={open}
-        onKeyDown={
-          s.periodKey
-            ? (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onOpenBase(s.periodKey as string);
-                }
-              }
-            : undefined
-        }
-        className={`absolute z-[1] whitespace-nowrap flex items-center ${
-          s.periodKey ? 'cursor-pointer' : ''
-        }`}
-        style={{
-          left,
-          width,
-          top: s.lanes > 1 ? `calc(${(s.lane * 100) / s.lanes}% + 1px)` : 0,
-          height: s.lanes > 1 ? `calc(${100 / s.lanes}% - 2px)` : undefined,
-          bottom: s.lanes > 1 ? undefined : 0,
-          background: color.bg,
-          border: `1px solid ${color.border}`,
-          borderRadius: radius,
-          color: color.text,
-          ...(mask ? { WebkitMaskImage: mask, maskImage: mask } : {}),
-          ...(s.archived ? { opacity: 0.72 } : {}),
-          ...(s.kind === 'base-gap'
-            ? { borderTopStyle: 'dashed', borderBottomStyle: 'dashed' }
-            : {}),
-        }}
-        title={adjLine ? `${s.title}\n${adjLine}` : s.title}
-      >
-        {labelEl}
-      </div>
-    );
+    return renderPeriodBar({
+      key: `${keyPrefix}-${s.kind}-${s.periodKey || 'gap'}-${s.a}-${s.b}`,
+      attrKind: 'bz',
+      kind: s.kind,
+      color,
+      left,
+      width,
+      lane: s.lane,
+      lanes: s.lanes,
+      radius,
+      mask,
+      opacity: s.archived ? 0.72 : undefined,
+      dashed: s.kind === 'base-gap' ? 'tb' : undefined,
+      title: adjLine ? `${s.title}\n${adjLine}` : s.title,
+      role: s.periodKey ? 'button' : undefined,
+      tabIndex: s.periodKey ? 0 : undefined,
+      cursor: !!s.periodKey,
+      onClick: open,
+      onKeyDown: s.periodKey
+        ? (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onOpenBase(s.periodKey as string);
+            }
+          }
+        : undefined,
+      labelText: showLabel && labelText ? labelText : undefined,
+      labelIcon: StatusIcon ? (
+        <StatusIcon className="w-2.5 h-2.5 shrink-0" style={{ color: color.text }} aria-hidden="true" />
+      ) : undefined,
+      labelOnlyIcon: isVyezd && !!StatusIcon && width >= 16 && !(showLabel && labelText),
+      stickyLabel: s.stickyLabel && showLabel && !!labelText,
+      attrs: {
+        'data-bz-status': s.status || undefined,
+        'data-bz-a': s.a,
+        'data-bz-b': s.b,
+        'data-bz-edge-l': s.edgeL,
+        'data-bz-edge-r': s.edgeR,
+        'data-bz-frac-a': adj && fracA !== 0 ? `${fracA}` : undefined,
+        'data-bz-frac-b': adj && fracB !== 1 ? `${fracB}` : undefined,
+        'data-bz-trunc': adj && adj.truncatedDays > 0 ? `${adj.truncatedDays}` : undefined,
+        'data-period': s.periodKey || undefined,
+      },
+    });
   };
   /**
    * Однодневная отметка базы/ремонта («срок готовности» / «дата окончания
@@ -1229,7 +1499,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         : `${m.section === 0 ? r : '0px'} ${m.section === total - 1 ? r : '0px'} ${
             m.section === total - 1 ? r : '0px'
           } ${m.section === 0 ? r : '0px'}`;
-    const Icon = m.kind === 'ready' ? CalendarCheck2 : Wrench;
+    const Icon = m.kind === 'ready' ? CarFront : Wrench;
     return (
       <div
         key={`${keyPrefix}-${m.kind}-${m.periodKey}-${m.day}`}
@@ -1360,10 +1630,11 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         data-tl-row={row.carNumber}
         data-tl-car={row.carKey}
         data-tl-cell="plan"
+        data-tl-colcell="1"
         onMouseEnter={onRowEnter}
         onMouseLeave={onRowLeave}
-        className="sticky left-0 z-[3] border-r border-b px-2 w-[170px] min-w-[170px] overflow-hidden"
-        style={{ height: planH, background: cellBg, borderRightColor: 'var(--tl-col-edge)', borderBottomColor: 'var(--tl-hairline-faint)' }}
+        className="sticky left-0 z-[3] border-r border-b px-2 overflow-hidden"
+        style={{ height: planH, width: carColW, minWidth: carColW, background: cellBg, borderRightColor: 'var(--tl-col-edge)', borderBottomColor: 'var(--tl-hairline-faint)' }}
         title={cellTitle}
       >
         <div className="flex items-center justify-between gap-1.5 h-full">
@@ -1423,88 +1694,100 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             );
           }
           if (it.kind === 'plan') {
-            const st = it.statusKind === 'violated' || it.statusKind === 'missed' || it.statusKind === 'risk' ? STATUS_ICON[it.statusKind] : null;
-            // Направление: цветной акцент по краю, код-чип в начале полосы и
-            // (в режиме «Раскрасить по направлению») приглушённая заливка полосы.
+            // ПЛАН: вся полоса — ОДИН акцентный цвет приложения, БЕЗ индикации
+            // сроков (никаких зелёного/жёлтого/оранжевого/красного). Статусы
+            // срока остаются в подсказке полосы; данные не меняются.
             const chip = it.dir ? directionChipColors(it.dir.color) : null;
             const paint = paintByDirection && it.dir ? chip : null;
             // Срез дня смены и штриховка конфликта — из разрешения наложений.
             const adj = row.planOv.tripAdjust.get(it.tripKey) ?? null;
             const pr = adjRect(p, adj) ?? p;
-            return (
-              <div
-                key={`p${idx}`}
-                role="button"
-                tabIndex={0}
-                data-bar="plan"
-                data-trip={it.tripKey}
-                data-dir={it.dir ? it.dir.name : undefined}
-                data-bar-frac-a={adj && adj.fracA !== 0 ? `${adj.fracA}` : undefined}
-                data-bar-frac-b={adj && adj.fracB !== 1 ? `${adj.fracB}` : undefined}
-                data-overlap={adj?.overlap ? '1' : undefined}
-                {...hoverProps(it.tripKey)}
-                onClick={() => onOpenTrip(it.tripKey)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onOpenTrip(it.tripKey);
-                  }
-                }}
-                className="absolute overflow-hidden whitespace-nowrap text-[10px] z-[3] cursor-pointer flex items-center gap-1"
-                style={{
-                  left: pr.left,
-                  width: pr.width,
-                  top: planTopOf(idx),
-                  height: PLAN_BAR_H,
-                  background: paint ? paint.bg : it.archived ? CLR.planArchBg : planBarBg,
-                  border: `1px solid ${paint ? paint.border : it.archived ? CLR.planArchBorder : CLR.planBorder}`,
-                  color: paint ? paint.text : it.archived ? CLR.planArchText : CLR.planText,
-                  borderRadius: 'var(--tl-bar-r)',
-                  padding: it.dir ? '0 6px 0 10px' : '0 6px',
-                  ...link(it.tripKey),
-                }}
-                title={it.title}
-              >
-                {adj?.overlap ? (
-                  <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
-                ) : null}
-                {it.dir ? (
-                  <span
-                    aria-hidden="true"
-                    data-bar-dir-accent="1"
-                    className="absolute left-0 top-0 bottom-0"
-                    style={{ width: 3, background: it.dir.color, borderTopLeftRadius: 'var(--tl-bar-r)', borderBottomLeftRadius: 'var(--tl-bar-r)' }}
-                  />
-                ) : null}
-                {it.open ? (
-                  <>
-                    <CircleDashed className={BAR_ICON_CLS} style={{ color: CLR.warn }} aria-hidden="true" />
-                    {pr.width >= 118 ? <span className="truncate leading-[14px]">неполный план</span> : null}
-                  </>
-                ) : (
-                  <PlanBarLabel
-                    lead={st ? <st.Icon className={BAR_ICON_CLS} style={{ color: st.color }} aria-label={st.label} role="img" /> : null}
-                    parts={it.parts}
-                    width={pr.width}
-                  />
-                )}
-                {/* Код направления — только когда есть место; при мелком масштабе
-                    остаются цветной акцент и текст (без перегрузки). */}
-                {chip && pr.width >= 96 ? (
-                  <span
-                    data-bar-dir-chip="1"
-                    className="inline-flex items-center h-[13px] px-1 rounded-[4px] text-[8px] leading-[13px] font-semibold shrink-0"
-                    style={{ background: chip.bg, border: `1px solid ${chip.border}`, color: chip.text }}
-                    title={`Направление: ${it.dir?.name}`}
-                  >
-                    {it.dir?.code}
-                  </span>
-                ) : null}
-                {it.warn && !it.open ? (
-                  <TriangleAlert className={`${BAR_ICON_CLS} ml-auto`} style={{ color: CLR.warn }} aria-hidden="true" />
-                ) : null}
-              </div>
-            );
+            const col = paint
+              ? { bg: paint.bg, border: paint.border, text: paint.text }
+              : it.archived
+                ? PLAN_ACCENT_ARCH
+                : PLAN_ACCENT;
+            const lanes = planBarLanes.get(idx) || { lane: 0, lanes: 1 };
+            const labelText = it.open ? 'неполный план' : planBarLabelText(it.parts, pr.width, 8);
+            return renderPeriodBar({
+              key: `p${idx}`,
+              attrKind: 'bar',
+              kind: 'plan',
+              color: col,
+              left: pr.left,
+              width: pr.width,
+              lane: lanes.lane,
+              lanes: lanes.lanes,
+              radius: 'var(--tl-bar-r)',
+              zClass: 'z-[3]',
+              title: it.title,
+              role: 'button',
+              tabIndex: 0,
+              cursor: true,
+              onClick: () => onOpenTrip(it.tripKey),
+              onKeyDown: (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onOpenTrip(it.tripKey);
+                }
+              },
+              onMouseEnter: () => setHoverTrip(it.tripKey),
+              onMouseLeave: () => setHoverTrip((v) => (v === it.tripKey ? null : v)),
+              style: link(it.tripKey),
+              attrs: {
+                'data-trip': it.tripKey,
+                'data-dir': it.dir ? it.dir.name : undefined,
+                'data-bar-frac-a': adj && adj.fracA !== 0 ? `${adj.fracA}` : undefined,
+                'data-bar-frac-b': adj && adj.fracB !== 1 ? `${adj.fracB}` : undefined,
+                'data-overlap': adj?.overlap ? '1' : undefined,
+              },
+              pre: (
+                <>
+                  {adj?.overlap ? (
+                    <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
+                  ) : null}
+                  {it.dir ? (
+                    <span
+                      aria-hidden="true"
+                      data-bar-dir-accent="1"
+                      className="absolute left-0 top-0 bottom-0"
+                      style={{ width: 3, background: it.dir.color, borderTopLeftRadius: 'var(--tl-bar-r)', borderBottomLeftRadius: 'var(--tl-bar-r)' }}
+                    />
+                  ) : null}
+                  {/* Круг рейса — номер виден на любом масштабе (бейдж не сжимается). */}
+                  {it.circle ? (
+                    <span
+                      data-tl-circle-badge={it.circle.n}
+                      data-tl-circle-total={it.circle.total}
+                      data-tl-circle-ongoing={it.circle.ongoing ? '1' : undefined}
+                      className="inline-flex items-center justify-center shrink-0 w-[14px] h-[14px] rounded-full text-[8px] leading-none font-bold tabular-nums select-none ml-0.5"
+                      style={circleBadgeStyle(it.circle.total, it.circle.ongoing)}
+                      title={it.circle.title}
+                    >
+                      {it.circle.n}
+                    </span>
+                  ) : null}
+                </>
+              ),
+              labelIcon: it.open ? <CircleDashed className={BAR_ICON_CLS} style={{ color: CLR.warn }} aria-hidden="true" /> : undefined,
+              labelText,
+              post: (
+                <>
+                  {/* Код направления — только когда есть место; при мелком масштабе
+                      остаются цветной акцент и текст (без перегрузки). */}
+                  {chip && pr.width >= 96 ? (
+                    <span
+                      data-bar-dir-chip="1"
+                      className="inline-flex items-center h-[12px] px-1 rounded-[4px] text-[8px] leading-[12px] font-semibold shrink-0 ml-auto"
+                      style={{ background: chip.bg, border: `1px solid ${chip.border}`, color: chip.text }}
+                      title={`Направление: ${it.dir?.name}`}
+                    >
+                      {it.dir?.code}
+                    </span>
+                  ) : null}
+                </>
+              ),
+            });
           }
           if (it.kind === 'buffer') {
             return (
@@ -1520,7 +1803,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           return null;
         })}
         {row.planOv.waitGaps.map((g) => renderWaitGap(g, 'pw'))}
-        {row.planOv.warnings.map((w) => renderConflict(w, 'pc', planH))}
+        {row.planOv.warnings.map((w, wi) => renderConflict(w, 'pc', planH, wi))}
         {row.planOv.markers.map((m) => renderOvMarker(m, 'pm', planH))}
       </div>
 
@@ -1530,10 +1813,11 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       <div
         data-tl-car={row.carKey}
         data-tl-cell="fact"
+        data-tl-colcell="1"
         onMouseEnter={onRowEnter}
         onMouseLeave={onRowLeave}
-        className="sticky left-0 z-[3] border-r border-b px-2 w-[170px] min-w-[170px] overflow-hidden"
-        style={{ height: factH, background: cellBg, borderRightColor: 'var(--tl-col-edge)', borderBottomColor: 'var(--tl-hairline)' }}
+        className="sticky left-0 z-[3] border-r border-b px-2 overflow-hidden"
+        style={{ height: factH, width: carColW, minWidth: carColW, background: cellBg, borderRightColor: 'var(--tl-col-edge)', borderBottomColor: 'var(--tl-hairline)' }}
         title={cellTitle}
       >
         <div className="flex items-center justify-between gap-1.5 h-full">
@@ -1546,6 +1830,38 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               >
                 <span className="w-1 h-1 rounded-full" style={{ background: badge.dot }} aria-hidden="true" />
                 {badge.label}
+              </span>
+            ) : null}
+            {/* Круги машины (правило directions.circlesOf): у одного круга бейдж
+                приглушённый, у двух+ — заметный; незавершённый — «круг идёт»
+                (пунктирная обводка). Полный список с датами — в подсказке. */}
+            {row.circles.length ? (
+              <span
+                data-tl-circles={row.circles.length}
+                data-tl-circles-ongoing={row.circles.some((c) => c.ongoing) ? '1' : undefined}
+                className="inline-flex items-center gap-1 h-[14px] rounded-full px-1.5 text-[9px] leading-[14px] font-semibold whitespace-nowrap shrink-0 select-none"
+                style={
+                  row.circles.length > 1
+                    ? { background: 'var(--accent-10)', border: '1px solid var(--accent-40)', color: '#8A4A12' }
+                    : { background: '#F3F4F6', border: '1px solid #D7DBE1', color: '#5B6472' }
+                }
+                title={`Круги машины: ${row.circles.length} (круг = рейс на внешнем направлении; номер — порядок внутри периода учёта выезда)\n${row.circles
+                  .map((c) => `• Круг ${c.n} — ${c.dir ? c.dir.name : 'направление не определено'}${c.ongoing ? ' — круг идёт' : ''}`)
+                  .join('\n')}`}
+              >
+                <span
+                  className="inline-flex items-center justify-center w-[10px] h-[10px] rounded-full text-[7px] font-bold"
+                  style={
+                    row.circles.length > 1
+                      ? { border: `1px ${row.circles.some((c) => c.ongoing) ? 'dashed' : 'solid'} var(--accent-40)`, color: '#8A4A12' }
+                      : { border: `1px ${row.circles.some((c) => c.ongoing) ? 'dashed' : 'solid'} #C3C8CF`, color: '#5B6472' }
+                  }
+                  aria-hidden="true"
+                >
+                  {row.circles.length}
+                </span>
+                {row.circles.length} {plural(row.circles.length, 'круг', 'круга', 'кругов')}
+                {row.circles.some((c) => c.ongoing) ? ' · идёт' : ''}
               </span>
             ) : null}
             {/* Мини-чипы направлений машины (приглушённая палитра; полное имя — в подсказке) */}
@@ -1620,85 +1936,112 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               // Срез дня смены и штриховка конфликта — из разрешения наложений.
               const adjF = row.factOv.tripAdjust.get(it.tripKey) ?? null;
               const prF = adjRect(p, adjF) ?? p;
-              return (
-                <div
-                  key={`f${idx}`}
-                  role="button"
-                  tabIndex={0}
-                  data-bar="fact"
-                  data-trip={it.tripKey}
-                  data-bar-frac-a={adjF && adjF.fracA !== 0 ? `${adjF.fracA}` : undefined}
-                  data-bar-frac-b={adjF && adjF.fracB !== 1 ? `${adjF.fracB}` : undefined}
-                  data-overlap={adjF?.overlap ? '1' : undefined}
-                  {...hoverProps(it.tripKey)}
-                  onClick={() => onOpenTrip(it.tripKey)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onOpenTrip(it.tripKey);
-                    }
-                  }}
-                  className="absolute z-[3] cursor-pointer overflow-hidden"
-                  style={{
-                    left: prF.left,
-                    width: prF.width,
-                    top: factTopOf(idx),
-                    height: FACT_BAR_H,
-                    background: it.open ? hatchOpen : CLR.fact,
-                    opacity: it.open ? 1 : 0.8,
-                    border: it.open ? `1px dashed ${CLR.fact}` : undefined,
-                    borderRadius: 4,
-                    ...link(it.tripKey),
-                  }}
-                  title={it.title}
-                >
-                  {adjF?.overlap ? (
-                    <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
-                  ) : null}
-                </div>
-              );
+              const lanes = factBarLanes.get(idx) || { lane: 0, lanes: 1 };
+              // Цвет полосы-обёртки = цвет ПЕРВОГО сегмента (подпись читается на нём).
+              const firstColor = FACT_SEGMENT_COLORS[it.segments[0]?.color ?? 'neutral'];
+              // Продолжающийся край — без скругления, мягкий градиент-обрыв.
+              const fadePx = 22;
+              const mask = it.open ? `linear-gradient(to right, #000 calc(100% - ${fadePx}px), transparent 100%)` : undefined;
+              return renderPeriodBar({
+                key: `f${idx}`,
+                attrKind: 'bar',
+                kind: 'fact',
+                color: { bg: firstColor.bg, border: firstColor.border, text: firstColor.text },
+                left: prF.left,
+                width: prF.width,
+                lane: lanes.lane,
+                lanes: lanes.lanes,
+                // Скругление — только на краях полосы: открытый край — без скругления.
+                radius: it.open ? 'var(--tl-bar-r) 0px 0px var(--tl-bar-r)' : 'var(--tl-bar-r)',
+                zClass: 'z-[3]',
+                mask,
+                title: it.title,
+                role: 'button',
+                tabIndex: 0,
+                cursor: true,
+                onClick: () => onOpenTrip(it.tripKey),
+                onKeyDown: (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onOpenTrip(it.tripKey);
+                  }
+                },
+                onMouseEnter: () => setHoverTrip(it.tripKey),
+                onMouseLeave: () => setHoverTrip((v) => (v === it.tripKey ? null : v)),
+                style: { ...link(it.tripKey), overflow: 'hidden' },
+                attrs: {
+                  'data-trip': it.tripKey,
+                  'data-bar-frac-a': adjF && adjF.fracA !== 0 ? `${adjF.fracA}` : undefined,
+                  'data-bar-frac-b': adjF && adjF.fracB !== 1 ? `${adjF.fracB}` : undefined,
+                  'data-overlap': adjF?.overlap ? '1' : undefined,
+                  'data-fact-open': it.open ? '1' : undefined,
+                  'data-fact-segs': it.segments.length,
+                },
+                pre: (
+                  <>
+                    {factSegEls(it.segments, prF.left, prF.width)}
+                    {adjF?.overlap ? (
+                      <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
+                    ) : null}
+                    {hoverTrip === it.tripKey && selectedTripKey !== it.tripKey ? (
+                      <span
+                        aria-hidden="true"
+                        data-bar-hover-ring="1"
+                        className="absolute inset-0 pointer-events-none"
+                        style={{ boxShadow: 'inset 0 0 0 2px var(--accent)', borderRadius: 'inherit' }}
+                      />
+                    ) : null}
+                  </>
+                ),
+                // Подпись — как у базы: маршрут на фоне первого сегмента; у
+                // нейтральной полосы — «План не указан» (зелёного без плана нет).
+                labelText: it.noPlan
+                  ? 'Факт · план не указан'
+                  : planBarLabelText(it.parts, prF.width, 8),
+              });
             }
             case 'factNone': {
-              // «Факт не указан» — та же полоса до плановым датам, тоже режется днём смены.
+              // «Факт не указан» — та же полоса по плановым датам, тоже режется днём смены.
               const adjN = row.factOv.tripAdjust.get(it.tripKey) ?? null;
               const prN = adjRect(p, adjN) ?? p;
-              return (
-                <div
-                  key={`fn${idx}`}
-                  role="button"
-                  tabIndex={0}
-                  data-bar="fact-none"
-                  data-trip={it.tripKey}
-                  data-bar-frac-a={adjN && adjN.fracA !== 0 ? `${adjN.fracA}` : undefined}
-                  data-bar-frac-b={adjN && adjN.fracB !== 1 ? `${adjN.fracB}` : undefined}
-                  data-overlap={adjN?.overlap ? '1' : undefined}
-                  {...hoverProps(it.tripKey)}
-                  onClick={() => onOpenTrip(it.tripKey)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onOpenTrip(it.tripKey);
-                    }
-                  }}
-                  className="absolute z-[2] cursor-pointer text-[9px] leading-[14px] text-[var(--tl-text-dim)] overflow-hidden whitespace-nowrap text-ellipsis px-1.5 flex items-center"
-                  style={{
-                    left: prN.left,
-                    width: prN.width,
-                    top: factTopOf(idx),
-                    height: FACT_NONE_H,
-                    border: `1px dashed ${CLR.planNoneBorder}`,
-                    borderRadius: 4,
-                    background: CLR.planNoneBg,
-                    ...link(it.tripKey),
-                  }}
-                  title={it.title}
-                >
-                  {adjN?.overlap ? (
-                    <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
-                  ) : null}
-                  {prN.width > 90 ? 'Факт не указан' : ''}
-                </div>
-              );
+              const lanesN = factBarLanes.get(idx) || { lane: 0, lanes: 1 };
+              return renderPeriodBar({
+                key: `fn${idx}`,
+                attrKind: 'bar',
+                kind: 'fact-none',
+                color: { bg: CLR.planNoneBg, border: CLR.planNoneBorder, text: 'var(--tl-text-dim)' },
+                left: prN.left,
+                width: prN.width,
+                lane: lanesN.lane,
+                lanes: lanesN.lanes,
+                radius: 'var(--tl-bar-r)',
+                zClass: 'z-[2]',
+                dashed: 'all',
+                title: it.title,
+                role: 'button',
+                tabIndex: 0,
+                cursor: true,
+                onClick: () => onOpenTrip(it.tripKey),
+                onKeyDown: (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onOpenTrip(it.tripKey);
+                  }
+                },
+                onMouseEnter: () => setHoverTrip(it.tripKey),
+                onMouseLeave: () => setHoverTrip((v) => (v === it.tripKey ? null : v)),
+                style: link(it.tripKey),
+                attrs: {
+                  'data-trip': it.tripKey,
+                  'data-bar-frac-a': adjN && adjN.fracA !== 0 ? `${adjN.fracA}` : undefined,
+                  'data-bar-frac-b': adjN && adjN.fracB !== 1 ? `${adjN.fracB}` : undefined,
+                  'data-overlap': adjN?.overlap ? '1' : undefined,
+                },
+                pre: adjN?.overlap ? (
+                  <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
+                ) : null,
+                labelText: prN.width > 90 ? 'Факт не указан' : undefined,
+              });
             }
             case 'event': {
               // Компактный маркер события на РЕАЛЬНОЙ дате (не полоса): ромб —
@@ -1751,7 +2094,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           }
         })}
         {row.factOv.waitGaps.map((g) => renderWaitGap(g, 'fw'))}
-        {row.factOv.warnings.map((w) => renderConflict(w, 'fc', factH))}
+        {row.factOv.warnings.map((w, wi) => renderConflict(w, 'fc', factH, wi))}
         {row.factOv.markers.map((m) => renderOvMarker(m, 'fm', factH))}
       </div>
     </>
@@ -1773,11 +2116,13 @@ function VisibleRangeLabel({
   vs,
   vn,
   colW,
+  carColW,
 }: {
   scrollRef: React.RefObject<HTMLDivElement | null>;
   vs: number;
   vn: number;
   colW: number;
+  carColW: number;
 }) {
   const [text, setText] = useState('');
   useEffect(() => {
@@ -1786,7 +2131,7 @@ function VisibleRangeLabel({
     const compute = () => {
       const ve = vs + vn - 1;
       const startRaw = vs + Math.floor(el.scrollLeft / colW);
-      const endRaw = vs + Math.floor((el.scrollLeft + el.clientWidth - 1 - TIMELINE_COL_W) / colW);
+      const endRaw = vs + Math.floor((el.scrollLeft + el.clientWidth - 1 - carColW) / colW);
       const startD = Math.max(vs, Math.min(startRaw, ve));
       const endD = Math.max(startD, Math.min(ve, endRaw));
       setText(visibleRangeText(startD, endD));
@@ -1803,13 +2148,21 @@ function VisibleRangeLabel({
       window.removeEventListener('resize', compute);
       if (ro) ro.disconnect();
     };
-  }, [scrollRef, vs, vn, colW]);
+  }, [scrollRef, vs, vn, colW, carColW]);
   return (
     <span className="text-[11px] text-[#4B5563] tabular-nums" data-ui="visible-range">
       {text || '—'}
     </span>
   );
 }
+
+/** Ширина колонки «Автомобили»: дефолт и лимиты (регулируемая граница). */
+const CARCOL_STORAGE_KEY = 'ratipa_tl_carcolw';
+const CARCOL_DEFAULT = 288;
+const CARCOL_MIN = 200;
+const CARCOL_MAX = 520;
+/** Узкие экраны: колонка автосужается до минимума (номер + иконка статуса). */
+const CARCOL_NARROW = 176;
 
 export default function TimelineGrid({
   trips,
@@ -1849,6 +2202,62 @@ export default function TimelineGrid({
   const [dirFilter, setDirFilter] = useState<string[] | null>(null);
   /** Режим «Раскрасить по направлению»: цвет полосы рейса — приглушённый цвет направления. */
   const [paintByDirection, setPaintByDirection] = useState(false);
+  /**
+   * Ширина закреплённой колонки «Автомобили»: регулируется перетаскиванием
+   * границы (resize-handle), значение — в localStorage; двойной клик по границе
+   * возвращает дефолт. На узких экранах колонка автосужается до минимума.
+   */
+  const [carColPref, setCarColPref] = useState<number>(() => {
+    try {
+      const v = Number(localStorage.getItem(CARCOL_STORAGE_KEY));
+      return Number.isFinite(v) && v >= CARCOL_MIN && v <= CARCOL_MAX ? v : CARCOL_DEFAULT;
+    } catch {
+      return CARCOL_DEFAULT;
+    }
+  });
+  const [viewportW, setViewportW] = useState<number>(() => (typeof window === 'undefined' ? 1440 : window.innerWidth));
+  useEffect(() => {
+    const onResize = () => setViewportW(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const carColW = viewportW < 700 ? CARCOL_NARROW : viewportW < 1100 ? Math.min(carColPref, 240) : carColPref;
+  /** Перетаскивание границы колонки: 200–520 (ресайз), запись — по отпусканию. */
+  const onColHandleDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = carColW;
+      const move = (ev: PointerEvent) => {
+        setCarColPref(Math.max(CARCOL_MIN, Math.min(CARCOL_MAX, Math.round(startW + (ev.clientX - startX)))));
+      };
+      const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        document.body.style.removeProperty('cursor');
+        setCarColPref((w) => {
+          try {
+            localStorage.setItem(CARCOL_STORAGE_KEY, String(w));
+          } catch {
+            /* не критично */
+          }
+          return w;
+        });
+      };
+      document.body.style.cursor = 'col-resize';
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    },
+    [carColW],
+  );
+  const onColHandleReset = useCallback(() => {
+    setCarColPref(CARCOL_DEFAULT);
+    try {
+      localStorage.setItem(CARCOL_STORAGE_KEY, String(CARCOL_DEFAULT));
+    } catch {
+      /* не критично */
+    }
+  }, []);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   /** Первичная установка позиции прокрутки выполнена. */
   const didInitScroll = useRef(false);
@@ -1951,7 +2360,7 @@ export default function TimelineGrid({
     (day: number, frac: number) => {
       const el = scrollRef.current;
       if (!el) return;
-      const calW = Math.max(1, el.clientWidth - TIMELINE_COL_W);
+      const calW = Math.max(1, el.clientWidth - carColW);
       const target = (day - vs) * colW - frac * calW;
       const max = Math.max(0, el.scrollWidth - el.clientWidth);
       if (target > max + 1) {
@@ -1965,24 +2374,24 @@ export default function TimelineGrid({
       pendingAnchor.current = null;
       el.scrollLeft = Math.max(0, target);
     },
-    [vs, colW],
+    [vs, colW, carColW],
   );
 
   const dayAtViewportX = useCallback(
     (x: number): number => {
       const el = scrollRef.current;
       if (!el) return today;
-      return dayAtContentX(el.scrollLeft + x, vs, colW);
+      return dayAtContentX(el.scrollLeft + x, vs, colW, carColW);
     },
-    [vs, colW, today],
+    [vs, colW, today, carColW],
   );
 
   const persistScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     try {
-      const calW = Math.max(1, el.clientWidth - TIMELINE_COL_W);
-      const center = dayAtContentX(el.scrollLeft + TIMELINE_COL_W + calW / 2, vs, colW);
+      const calW = Math.max(1, el.clientWidth - carColW);
+      const center = dayAtContentX(el.scrollLeft + carColW + calW / 2, vs, colW, carColW);
       if (lastPersistDay.current === center) return;
       lastPersistDay.current = center;
       // Храним календарную дату-якорь, а не только пиксели: при смене масштаба
@@ -1991,7 +2400,7 @@ export default function TimelineGrid({
     } catch {
       /* не критично */
     }
-  }, [vs, colW]);
+  }, [vs, colW, carColW]);
 
   // Вход и кнопочная навигация: позиция задаётся по календарной дате.
   useLayoutEffect(() => {
@@ -2035,9 +2444,9 @@ export default function TimelineGrid({
     if (prevColW.current === colW) return;
     prevColW.current = colW;
     const el = scrollRef.current;
-    const calW = el ? Math.max(1, el.clientWidth - TIMELINE_COL_W) : 1;
+    const calW = el ? Math.max(1, el.clientWidth - carColW) : 1;
     const anchor = pendingAnchor.current ?? {
-      day: el ? dayAtContentX(el.scrollLeft + TIMELINE_COL_W + calW / 2, vs, colW) : today,
+      day: el ? dayAtContentX(el.scrollLeft + carColW + calW / 2, vs, colW, carColW) : today,
       frac: 0.5,
     };
     pendingAnchor.current = null;
@@ -2058,6 +2467,9 @@ export default function TimelineGrid({
     persistScroll();
     const el = scrollRef.current;
     if (!el) return;
+    // Тень у границы колонки — только когда лента сдвинута по горизонтали
+    // (атрибут на контейнере, без ре-рендера строк).
+    el.toggleAttribute('data-hscroll', el.scrollLeft > 2);
     const now = Date.now();
     if (now < lastExtend.current) return; // программная прокрутка — не расширяем
     if (el.scrollLeft < colW * 2 && extL < 400) {
@@ -2082,8 +2494,8 @@ export default function TimelineGrid({
   // Масштаб: кнопки/ползунок ставят якорь по центру видимой календарной области.
   const anchorFromCenter = useCallback((): { day: number; frac: number } => {
     const el = scrollRef.current;
-    const calW = el ? Math.max(1, el.clientWidth - TIMELINE_COL_W) : 1;
-    return { day: el ? dayAtContentX(el.scrollLeft + TIMELINE_COL_W + calW / 2, vs, colW) : today, frac: 0.5 };
+    const calW = el ? Math.max(1, el.clientWidth - carColW) : 1;
+    return { day: el ? dayAtContentX(el.scrollLeft + carColW + calW / 2, vs, colW, carColW) : today, frac: 0.5 };
   }, [vs, colW, today]);
 
   const setZoom = useCallback(
@@ -2109,15 +2521,15 @@ export default function TimelineGrid({
       if (next === zoom) return; // на пределе — отдаём жест браузеру
       e.preventDefault();
       const rect = el.getBoundingClientRect();
-      const calW = Math.max(1, rect.width - TIMELINE_COL_W);
-      const frac = Math.max(0, Math.min(1, (e.clientX - rect.left - TIMELINE_COL_W) / calW));
-      const day = dayAtContentX(el.scrollLeft + (e.clientX - rect.left), vs, colW);
+      const calW = Math.max(1, rect.width - carColW);
+      const frac = Math.max(0, Math.min(1, (e.clientX - rect.left - carColW) / calW));
+      const day = dayAtContentX(el.scrollLeft + (e.clientX - rect.left), vs, colW, carColW);
       pendingAnchor.current = { day, frac };
       setZoom(next);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [setZoom, zoom, vs, colW]);
+  }, [setZoom, zoom, vs, colW, carColW]);
 
   const goToday = useCallback(() => {
     if (navVs === today - 10) {
@@ -2167,23 +2579,52 @@ export default function TimelineGrid({
   const headH = colW >= 12 ? 48 : 42;
 
   /** Все обозначения легенды — один компактный попап (информация не удалена). */
+  const segSw = (c: FactSegColor, extra?: React.ReactNode): React.ReactNode => {
+    const st = FACT_SEGMENT_COLORS[c];
+    return (
+      <i
+        className="inline-flex items-center justify-center w-[18px] h-[14px]"
+        style={{
+          background: st.bg,
+          backgroundImage:
+            c === 'orange' || c === 'red'
+              ? c === 'red'
+                ? 'repeating-linear-gradient(45deg, rgba(159,18,57,0.16), rgba(159,18,57,0.16) 2px, transparent 2px, transparent 7px)'
+                : 'repeating-linear-gradient(45deg, rgba(138,58,10,0.16), rgba(138,58,10,0.16) 2px, transparent 2px, transparent 7px)'
+              : undefined,
+          border: `1px solid ${st.border}`,
+          borderRadius: 4,
+        }}
+      >
+        {extra}
+      </i>
+    );
+  };
   const legendItems: Array<{ swatch: React.ReactNode; label: string }> = [
-    { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: planBarBg, border: `1px solid ${CLR.planBorder}`, borderRadius: 4 }} />, label: 'рейс (план — из «Плана дохода»)' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: PLAN_ACCENT.bg, border: `1px solid ${PLAN_ACCENT.border}`, borderRadius: 4 }} />, label: 'рейс (ПЛАН): вся полоса — акцентный цвет приложения, без индикации сроков' },
     { swatch: <i className="inline-block w-[3px] h-[12px]" style={{ background: CLR.return, borderRadius: 2 }} />, label: 'плановое возвращение' },
-    { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: hatch45, border: '1px solid rgba(217,119,6,0.25)', borderRadius: 4 }} />, label: 'запас на риски' },
-    { swatch: <i className="inline-block w-[18px] h-[6px]" style={{ background: CLR.fact, opacity: 0.8, borderRadius: 3 }} />, label: 'факт (только заполненные даты)' },
-    { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: hatchOpen, border: `1px dashed ${CLR.fact}`, borderRadius: 4 }} />, label: 'факт продолжается' },
-    { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: CLR.planNoneBg, border: `1px dashed ${CLR.planNoneBorder}`, borderRadius: 4 }} />, label: '«Факт не указан» (не выполнен)' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-fact').bg, border: `1px solid ${bzKindColor('base-fact').border}`, borderRadius: 4 }} />, label: 'учёт выезда (период: приезд → выезд) — сплошная полоса, цвет = статус' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: hatch45, border: '1px solid rgba(217,119,6,0.25)', borderRadius: 4 }} />, label: 'запас на риски' },
+    // ФАКТ рейса — сегменты по отставанию (пороги в lib/factSegments):
+    { swatch: segSw('green'), label: 'факт: участок выполнен в срок или раньше плана' },
+    { swatch: segSw('yellow'), label: 'факт: опоздание 1–2 дня' },
+    { swatch: segSw('orange', <TriangleAlert className="w-2.5 h-2.5" style={{ color: FACT_SEGMENT_COLORS.orange.text }} aria-hidden="true" />), label: 'факт: опоздание больше 2 дней (штриховка и значок — вторичный признак)' },
+    { swatch: segSw('red', <TriangleAlert className="w-2.5 h-2.5" style={{ color: FACT_SEGMENT_COLORS.red.text }} aria-hidden="true" />), label: 'факт: критический дедлайн нарушен или просрочка (срок прошёл, этап не выполнен)' },
+    { swatch: segSw('neutral'), label: 'факт: план не указан — нейтральная полоса, зелёный не ставится' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: FACT_SEGMENT_COLORS.green.bg, border: `1px solid ${FACT_SEGMENT_COLORS.green.border}`, borderRight: 'none', borderRadius: '4px 0 0 4px' }} />, label: 'факт идёт: продолжающийся край без скругления — отставание считается до сегодня' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: CLR.planNoneBg, border: `1px dashed ${CLR.planNoneBorder}`, borderRadius: 4 }} />, label: '«Факт не указан» (не выполнен)' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-fact').bg, border: `1px solid ${bzKindColor('base-fact').border}`, borderRadius: 4 }} />, label: 'фактический простой на базе (период: приезд → выезд) — сплошная полоса, цвет = статус «Учёта выезда»' },
     { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: VYEZD_STATUS.active.bg, border: `1px solid ${VYEZD_STATUS.active.border}`, borderRadius: 4 }}><CircleDashed className="w-2.5 h-2.5" style={{ color: VYEZD_STATUS.active.text }} aria-hidden="true" /></i>, label: 'учёт выезда: учёт ведётся (период открыт)' },
     { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: VYEZD_STATUS.closed.bg, border: `1px solid ${VYEZD_STATUS.closed.border}`, borderRadius: 4 }}><CircleCheck className="w-2.5 h-2.5" style={{ color: VYEZD_STATUS.closed.text }} aria-hidden="true" /></i>, label: 'учёт выезда: период закрыт (фактический выезд указан)' },
-    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: VYEZD_STATUS['no-departure'].bg, border: `1px solid ${VYEZD_STATUS['no-departure'].border}`, borderRadius: 4 }}><Hourglass className="w-2.5 h-2.5" style={{ color: VYEZD_STATUS['no-departure'].text }} aria-hidden="true" /></i>, label: 'учёт выезда: выезд не зафиксирован (срок готовности прошёл)' },
+    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: VYEZD_STATUS['no-departure'].bg, border: `1px solid ${VYEZD_STATUS['no-departure'].border}`, borderRadius: 4 }}><Hourglass className="w-2.5 h-2.5" style={{ color: VYEZD_STATUS['no-departure'].text }} aria-hidden="true" /></i>, label: 'учёт выезда: выезд не зафиксирован (срок готовности прошёл) — «Готовится к выезду», дата выезда не указана' },
     { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: VYEZD_STATUS.conflict.bg, border: `1px solid ${VYEZD_STATUS.conflict.border}`, borderRadius: 4 }}><TriangleAlert className="w-2.5 h-2.5" style={{ color: VYEZD_STATUS.conflict.text }} aria-hidden="true" /></i>, label: 'учёт выезда: расхождение с рейсом (клик — окно периода)' },
     { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: VYEZD_STATUS['early-departure'].bg, border: `1px solid ${VYEZD_STATUS['early-departure'].border}`, borderRadius: 4 }}><CircleDashed className="w-2.5 h-2.5" style={{ color: VYEZD_STATUS['early-departure'].text }} aria-hidden="true" /></i>, label: 'учёт выезда: выезд раньше учётного срока — расхождение объяснено правилом «выехала раньше» (полоса нейтральна, маркер на стыке; в «Учёте выезда» статус не смягчается)' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-plan').bg, border: `1px solid ${bzKindColor('base-plan').border}`, borderRadius: 4 }} />, label: 'база: план (приезд → готовность) — сплошная полоса' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-plan').bg, border: `1px solid ${bzKindColor('base-plan').border}`, borderRadius: 4 }} />, label: 'плановый простой на базе (приезд → срок готовности) — сплошная полоса' },
     { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('repair').bg, border: `1px solid ${bzKindColor('repair').border}`, borderRadius: 4 }} />, label: 'ремонт (внутри базы) — сплошная полоса, подпись внутри' },
     { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: bzKindColor('repair-end').bg, border: `1px solid ${bzKindColor('repair-end').border}`, borderRadius: 4 }}><Wrench className="w-2.5 h-2.5" style={{ color: bzKindColor('repair-end').text }} aria-hidden="true" /></i>, label: 'дата окончания ремонта — вся ячейка дня (иконка)' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-gap').bg, border: `1px dashed ${bzKindColor('base-gap').border}`, borderRadius: 4 }} />, label: 'на базе между рейсами (записи учёта нет)' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-gap').bg, border: `1px dashed ${bzKindColor('base-gap').border}`, borderRadius: 4 }} />, label: 'простой на базе между рейсами (записи учёта нет)' },
+    // Круги машины (правило lib/directions.circlesOf):
+    { swatch: <i className="inline-flex items-center justify-center w-[14px] h-[14px] rounded-full text-[8px] font-bold" style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid #C3C8CF', color: '#5B6472' }}>1</i>, label: 'круг: один рейс машины на внешнем направлении; номер — порядок внутри периода учёта выезда (приезд→выезд); у одного круга бейдж приглушённый' },
+    { swatch: <i className="inline-flex items-center justify-center w-[14px] h-[14px] rounded-full text-[8px] font-bold" style={{ background: 'var(--accent-10)', border: '1px solid var(--accent-40)', color: '#8A4A12' }}>2</i>, label: 'два круга и больше — бейдж заметный: номер на начале полосы, счётчик в колонке; незавершённый рейс — пунктирный бейдж «круг идёт»' },
     // Направления — отдельная приглушённая палитра (сине-фиолетовые, бирюзовые):
     // не конфликтует со статусами; различие подкреплено кодом (CN, TR…).
     ...directions.map((d) => {
@@ -2213,17 +2654,17 @@ export default function TimelineGrid({
     { swatch: <i className="inline-flex items-center justify-center w-[16px] h-[16px] rounded-full" style={{ background: '#FFF4DE', border: '1px solid #E3B04B' }}><LogOut className="w-2.5 h-2.5" style={{ color: '#B45309' }} aria-hidden="true" /></i>, label: 'выехала раньше/позже учёта выезда — простой укорочен до дня выезда (клик — окно периода)' },
     { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: waitHatch, border: '1px dashed #94A3B8', borderRadius: 4 }} />, label: '«Ожидание выезда» — промежуток между простоем и рейсом (учёт не закрыт) с числом дней' },
     { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: conflictHatch, border: '1px solid #EFA3B1', borderRadius: 4 }}><TriangleAlert className="w-2.5 h-2.5" style={{ color: '#BE123C' }} aria-hidden="true" /></i>, label: 'конфликт данных — тонкая штриховка зоны и значок со ссылкой на источник (не маскируется)' },
-    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: bzKindColor('ready').bg, border: `1px solid ${bzKindColor('ready').border}`, borderRadius: 4 }}><CalendarCheck2 className="w-2.5 h-2.5" style={{ color: bzKindColor('ready').text }} aria-hidden="true" /></i>, label: 'срок готовности (плановая) — вся ячейка дня (иконка)' },
+    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: bzKindColor('ready').bg, border: `1px solid ${bzKindColor('ready').border}`, borderRadius: 4 }}><CarFront className="w-2.5 h-2.5" style={{ color: bzKindColor('ready').text }} aria-hidden="true" /></i>, label: 'плановое окончание базы (срок готовности, иконка выезда) — вся ячейка дня' },
     { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: CLR.planArchBg, border: `1px solid ${CLR.planArchBorder}`, borderRadius: 4 }} />, label: 'архивные данные (приглушённые)' },
     {
       swatch: (
         <span className="inline-flex items-center gap-1">
-          <OctagonX className={BAR_ICON_CLS} style={{ color: STATUS_ICON.violated.color }} aria-hidden="true" />
-          <Hourglass className={BAR_ICON_CLS} style={{ color: STATUS_ICON.missed.color }} aria-hidden="true" />
+          <OctagonX className={BAR_ICON_CLS} style={{ color: '#BE123C' }} aria-hidden="true" />
+          <Hourglass className={BAR_ICON_CLS} style={{ color: '#B45309' }} aria-hidden="true" />
           <TriangleAlert className={BAR_ICON_CLS} style={{ color: '#D97706' }} aria-hidden="true" />
         </span>
       ),
-      label: 'статусы рейса: срок нарушен / план прошёл без факта / срок под угрозой; оранжевый значок — предупреждения данных',
+      label: 'статусы критических сроков (в подсказках полос и в колонке): срок нарушен / план прошёл без факта / срок под угрозой; оранжевый значок — предупреждения данных',
     },
   ];
 
@@ -2231,7 +2672,7 @@ export default function TimelineGrid({
   const legendRowCls = 'flex items-center gap-2 min-w-0';
 
   return (
-    <div className={`tl-scope flex flex-col ${fullscreen ? 'flex-1 min-h-0' : ''}`}>
+    <div className={`tl-scope flex flex-col flex-1 min-h-0`}>
       {/* Панель управления: спокойные сегменты — навигация, масштаб, вид и легенда */}
       <div className="flex flex-wrap items-center gap-2 pb-3">
         <div className={barSegment}>
@@ -2307,7 +2748,7 @@ export default function TimelineGrid({
 
         <span className="flex items-center gap-1.5 text-[11px] text-[var(--tl-text-dim)] px-1" data-ui="visible-range-wrap">
           Видимый диапазон:
-          <VisibleRangeLabel scrollRef={scrollRef} vs={vs} vn={vn} colW={colW} />
+          <VisibleRangeLabel scrollRef={scrollRef} vs={vs} vn={vn} colW={colW} carColW={carColW} />
         </span>
 
         <div className="flex flex-wrap items-center gap-2 ml-auto">
@@ -2342,12 +2783,16 @@ export default function TimelineGrid({
                 </div>
                 <p className="mt-3 pt-2.5 border-t border-[var(--tl-hairline)] text-[10px] leading-[14px] text-[var(--tl-text-dim)]">
                   Клик по плановой или фактической полосе открывает модальное окно всего рейса; клик по названию машины — обзор её рейсов
-                  и периодов. База и ремонт — непрерывные полосы от первого до последнего дня периода (без делений на дни): план базы и
-                  срок готовности — в строке «План», факт базы, ремонт и окончание ремонта — в «Факт»; готовность и окончание ремонта
-                  заливают всю ячейку дня, при пересечении с этапами день делится на кликабельные секции — всё видно и открывается.
+                  и периодов. План рейса — один акцентный цвет; факт рейса — сегменты по отставанию (зелёный — в срок, жёлтый — 1–2 дня,
+                  оранжевый — больше 2 дней, красный — критический срок нарушен или этап просрочен; штриховка и значок — вторичный признак).
+                  База и ремонт — непрерывные полосы от первого до последнего дня периода (без делений на дни): плановый простой на базе и
+                  плановое окончание базы (срок готовности) — в строке «План», фактический простой на базе (открытый — «Готовится к выезду»),
+                  ремонт и окончание ремонта — в «Факт»; окончание базы и дата ремонта заливают всю ячейку дня, при пересечении с этапами день
+                  делится на кликабельные секции — всё видно и открывается. Круги машины: номер на полосе и счётчик в колонке (2+ — заметный,
+                  1 — приглушённый; пунктир — «круг идёт»).
                   Прокрутка — тачпад, Shift+колесо, полоса; масштаб — «−/+/ползунок» или Ctrl+колесо над календарём (дата под курсором
-                  остаётся на месте). Прокрутка догружает даты влево и вправо; выходные подсвечены фоном; значки статусов —
-                  «срок нарушен», «план прошёл без факта», «срок под угрозой».
+                  остаётся на месте). Прокрутка догружает даты влево и вправо; выходные подсвечены фоном. Границу колонки «Автомобили»
+                  можно перетаскивать (двойной клик — вернуть ширину по умолчанию).
                 </p>
               </div>
             ) : null}
@@ -2449,17 +2894,15 @@ export default function TimelineGrid({
         </div>
       </div>
 
-      {/* Сетка — ОДИН контейнер прокрутки для шапки, сетки и полос.
-          Монтируется всегда (даже без машин), чтобы позиция прокрутки не терялась
-          при загрузке данных и смене вкладки диспетчера. В полноэкранном режиме
-          тянется по высоте окна (max-h снимается, flex-1). */}
+      {/* Обёртка области календаря: сетка — ОДИН контейнер прокрутки, поверх —
+          регулируемая граница колонки «Автомобили» (resize-handle). Сетка
+          тянется по высоте (flex-1): внешней прокрутки страницы нет. */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
       <div
         ref={scrollRef}
         onScroll={handleScroll}
         data-ui="timeline-scroll"
-        className={`tl-scroll overflow-auto overscroll-x-contain border border-[var(--tl-hairline)] rounded-xl ${
-          fullscreen ? 'flex-1 min-h-0' : 'max-h-[68vh] min-h-[280px]'
-        }`}
+        className="tl-scroll overflow-auto overscroll-x-contain flex-1 min-h-0"
         style={{ background: 'var(--tl-canvas)', '--tl-head-h': `${headH}px` } as React.CSSProperties}
       >
         <style>{`.tl-scroll{scrollbar-width:thin;scrollbar-color:#B6BBC2 #F3F4F6;}
@@ -2467,17 +2910,18 @@ export default function TimelineGrid({
 .tl-scroll::-webkit-scrollbar-track{background:#F3F4F6;border-radius:8px;}
 .tl-scroll::-webkit-scrollbar-thumb{background:#C3C8CF;border-radius:8px;border:2px solid #F3F4F6;}
 .tl-scroll::-webkit-scrollbar-thumb:hover{background:#9CA3AF;}`}</style>
-        <div className="grid min-w-max" style={{ gridTemplateColumns: `170px ${W}px` }}>
+        <div className="grid min-w-max" style={{ gridTemplateColumns: `${carColW}px ${W}px` }}>
           {/* Шапка — закреплена сверху; левая ячейка — закреплена слева.
               Полоса месяцев и дни — в той же ленте, движутся синхронно с полосами. */}
           <div
-            className="sticky left-0 top-0 z-[6] border-b border-r border-[var(--tl-hairline)] px-2 h-[var(--tl-head-h)] flex items-center w-[170px] min-w-[170px]"
-            style={{ background: 'var(--tl-head-bg)', borderRightColor: 'var(--tl-col-edge)' }}
+            data-tl-colcell="1"
+            className="sticky left-0 top-0 z-[6] border-b border-r border-[var(--tl-hairline)] px-2 h-[var(--tl-head-h)] flex items-center"
+            style={{ background: 'var(--tl-head-bg)', borderRightColor: 'var(--tl-col-edge)', width: carColW, minWidth: carColW }}
           >
             <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--tl-text-dim)]">Автомобили</span>
           </div>
           <div className="sticky top-0 z-[5] border-b border-[var(--tl-hairline)]" style={{ width: W, background: 'var(--tl-head-bg)' }}>
-            <CalendarHeader vs={vs} vn={vn} colW={colW} today={today} pinLeft={178} />
+            <CalendarHeader vs={vs} vn={vn} colW={colW} today={today} pinLeft={carColW + 8} />
           </div>
 
           {/* Группы машин: «План» сверху, «Факт» снизу. Во вкладке «Все» — блоками
@@ -2492,7 +2936,7 @@ export default function TimelineGrid({
                 key={`blk-${blockKey}`}
                 data-ui={groupByDispatcher ? 'dispatcher-group-block' : undefined}
                 className="grid"
-                style={{ gridColumn: '1 / -1', gridTemplateColumns: `170px ${W}px` }}
+                style={{ gridColumn: '1 / -1', gridTemplateColumns: `${carColW}px ${W}px` }}
               >
                 {groupByDispatcher ? (
                   <>
@@ -2500,8 +2944,9 @@ export default function TimelineGrid({
                       data-ui="dispatcher-group"
                       data-dgroup={blockKey}
                       data-collapsed={collapsed ? '1' : undefined}
+                      data-tl-colcell="1"
                       className="sticky left-0 z-[4] border-r border-b border-[var(--tl-hairline)] px-2 h-[26px] min-w-0 flex items-center gap-1.5"
-                      style={{ top: 'var(--tl-head-h)', background: 'var(--tl-group-bg)', borderRightColor: 'var(--tl-col-edge)' }}
+                      style={{ top: 'var(--tl-head-h)', background: 'var(--tl-group-bg)', borderRightColor: 'var(--tl-col-edge)', width: carColW, minWidth: carColW }}
                     >
                       <button
                         type="button"
@@ -2546,6 +2991,7 @@ export default function TimelineGrid({
                         key={row.carKey}
                         row={row}
                         colW={colW}
+                        carColW={carColW}
                         vs={vs}
                         vn={vn}
                         bg={bg}
@@ -2571,6 +3017,25 @@ export default function TimelineGrid({
             </div>
           ) : null}
         </div>
+      </div>
+      {/* Регулируемая граница колонки «Автомобили»: тянется мышью, двойной
+          клик возвращает ширину по умолчанию (значение — в localStorage). */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Изменить ширину колонки «Автомобили» (двойной клик — по умолчанию)"
+        data-ui="carcol-resize"
+        title="Потяните, чтобы изменить ширину колонки; двойной клик — вернуть по умолчанию"
+        onPointerDown={onColHandleDown}
+        onDoubleClick={onColHandleReset}
+        className="absolute top-0 bottom-0 z-[30] w-[7px] cursor-col-resize group"
+        style={{ left: Math.max(0, carColW - 3) }}
+      >
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-0 left-[3px] w-px bg-transparent group-hover:bg-[var(--accent-40)]"
+        />
+      </div>
       </div>
     </div>
   );
