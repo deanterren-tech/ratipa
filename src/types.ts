@@ -349,6 +349,12 @@ export interface TimelineVehicleEvent {
   dateFrom: string;
   dateTo?: string;
   note?: string;
+  /** Явная связь с целым рейсом журнала (`pd:<planId>` | `tl:<id>`).
+   *  Заполняется при создании события в карточке рейса; старые события машины
+   *  без связи сохраняются как есть и не привязываются по совпадению дат. */
+  tripKey?: string;
+  /** Необязательная связь с этапом этого рейса (TimelineStage.id). */
+  stageId?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -358,6 +364,53 @@ export interface TimelineStageType {
   key: string;
   name: string;
   order: number;
+}
+
+// ---- Контроль плана этапов рейса (модуль tripTimeline) ----
+// Плановые даты промежуточных этапов блокируются после ЯВНОГО сохранения плана
+// («Сохранить план этапов»); разблокировка — только разовым разрешением
+// администратора (одно на пару «рейс + пользователь»). Ветки:
+// tripTimeline/planGuard/<tripKey> — состояние плана, версия и история;
+// tripTimeline/planPerms/<tripKey>/<uid> — действующее разовое разрешение.
+
+/** Запись истории плана этапов (кто/когда/что). */
+export interface TimelinePlanHistoryEntry {
+  at: string;
+  /** Имя пользователя. */
+  by: string;
+  /** uid пользователя, если известен. */
+  byId?: string;
+  action: 'initial' | 'update' | 'admin-update' | 'grant' | 'revoke';
+  note?: string;
+}
+
+/** Состояние плана этапов рейса: блокировка после сохранения + история. */
+export interface TimelinePlanGuard {
+  /** Версия плана: инкремент при каждом окончательном сохранении. */
+  version: number;
+  /** Рейс создан после включения контроля — план ещё черновик. */
+  draftCreated?: boolean;
+  /** Первичное окончательное сохранение (для исторических планов отсутствует). */
+  initialSavedAt?: string;
+  initialSavedBy?: string;
+  initialSavedById?: string;
+  /** План был заполнен до включения контроля: автор/дата неизвестны. */
+  legacy?: boolean;
+  updatedAt?: string;
+  updatedBy?: string;
+  updatedById?: string;
+  history?: TimelinePlanHistoryEntry[];
+}
+
+/** Разовое разрешение администратора: ровно одно на пару (рейс, пользователь). */
+export interface TimelinePlanPermission {
+  userId: string;
+  userName: string;
+  grantedAt: string;
+  grantedBy: string;
+  grantedById?: string;
+  /** Версия плана на момент выдачи — защита от молчаливой перезаписи. */
+  planVersion: number;
 }
 
 export interface Permit {

@@ -13,6 +13,7 @@ import {
   orderByChild,
   limitToLast,
   get as firebaseGet,
+  runTransaction,
 } from "firebase/database";
 import {
   UserProfile,
@@ -34,6 +35,8 @@ import {
   TimelineTrip,
   TimelineVehicleEvent,
   TimelineStageType,
+  TimelinePlanGuard,
+  TimelinePlanPermission,
 } from "./types";
 import { firebaseConfig } from "./firebaseConfig";
 import { registerRead, markRead, releaseRead } from "./db/moduleReadiness";
@@ -2011,6 +2014,239 @@ export const dbService = {
       setLocalStorageData("ratipa_timeline_events", local.filter((e) => e.id !== id));
     }
     dbService.logAction(user, role, "Удаление события машины", "TripTimeline", id, "Событие удалено");
+  },
+
+  /**
+   * Идемпотентный перенос старых сведений (причина/меры/этапные тексты) в событие
+   * журнала: событие и очистка источников пишутся ОДНОЙ атомарной записью
+   * (multi-path update). При сбое не меняется ничего — повторный перенос не создаёт
+   * дублей, старые тексты не теряются. `clearPaths` — пути от корня базы.
+   */
+  migrateLegacyToEvent: (ev: TimelineVehicleEvent, clearPaths: string[], user: string, role: string) => {
+    if (!ev || !ev.id) return;
+    const updates: Record<string, unknown> = {};
+    updates[`tripTimeline/vehicleEvents/${ev.id}`] = stripUndefinedDeep(ev);
+    (clearPaths || []).forEach((p) => {
+      if (p) updates[p] = null; // null стирает узел источника — дубля не остаётся
+    });
+    if (useFirebase) {
+      update(ref(database), updates).catch((err) =>
+        handleFailure('firebase', err, {
+          path: Object.keys(updates).join(', '),
+          userMessage: 'Не удалось перенести старые сведения в событие — текст не потерян, попробуйте ещё раз',
+        }),
+      );
+    } else {
+      const local = getLocalStorageData<TimelineVehicleEvent[]>("ratipa_timeline_events", []);
+      const idx = local.findIndex((e) => e.id === ev.id);
+      if (idx >= 0) local[idx] = ev;
+      else local.push(ev);
+      setLocalStorageData("ratipa_timeline_events", local);
+      // Локальный режим: чистим тексты этапов ручных рейсов (ветка tripStages
+      // в локальном режиме не хранится — там ничего чистить не нужно).
+      clearPaths.forEach((p) => {
+        const m = p.match(/^tripTimeline\/trips\/([^/]+)\/stages\/([^/]+)\/([A-Za-z]+)$/);
+        if (!m) return;
+        const trips = getLocalStorageData<TimelineTrip[]>("ratipa_timeline_trips", []);
+        const tIdx = trips.findIndex((t) => t.id === m[1]);
+        if (tIdx < 0) return;
+        const stages = Array.isArray(trips[tIdx].stages) ? trips[tIdx].stages : [];
+        trips[tIdx] = { ...trips[tIdx], stages: stages.map((s) => (s.id === m[2] ? { ...s, [m[3]]: '' } : s)) };
+        setLocalStorageData("ratipa_timeline_trips", trips);
+      });
+    }
+    dbService.logAction(user, role, "Событие рейса (перенос сведений)", "TripTimeline", ev.id, `${ev.carNumber}: старые сведения перенесены в журнал рейса`);
+  },
+
+  // ---- КОНТРОЛЬ ПЛАНА ЭТАПОВ (блокировка плановых дат после сохранения) ----
+  // tripTimeline/planGuard/<tripKey> — состояние плана (черновик/сохранён, версия,
+  // история); tripTimeline/planPerms/<tripKey>/<uid> — разовое разрешение (одно на
+  // пару «рейс + пользователь»). Погашение разрешения — RTDB-транзакция (ровно один
+  // раз, даже из двух вкладок), запись плана и погашение — ОДНИМ атомарным
+  // multi-path update: нельзя сохранить, не погасив, и нельзя погасить без записи.
+
+  /** Состояния планов всех рейсов (подписка; локальный режим — пусто). */
+  getTimelinePlanGuards: (callback: (store: Record<string, TimelinePlanGuard>) => void) => {
+    if (useFirebase) {
+      return onValue(
+        ref(database, "tripTimeline/planGuard"),
+        (snapshot) => callback((snapshot.val() || {}) as Record<string, TimelinePlanGuard>),
+        (err) => {
+          console.warn("Timeline plan guard read lock:", err);
+          callback({});
+        },
+      );
+    }
+    callback({});
+    return () => {};
+  },
+
+  /** Действующие разовые разрешения по рейсам (подписка). */
+  getTimelinePlanPerms: (callback: (store: Record<string, Record<string, TimelinePlanPermission>>) => void) => {
+    if (useFirebase) {
+      return onValue(
+        ref(database, "tripTimeline/planPerms"),
+        (snapshot) => callback((snapshot.val() || {}) as Record<string, Record<string, TimelinePlanPermission>>),
+        (err) => {
+          console.warn("Timeline plan perms read lock:", err);
+          callback({});
+        },
+      );
+    }
+    callback({});
+    return () => {};
+  },
+
+  /** Свежее чтение состояния плана (для проверки конфликта версий перед записью). */
+  getTimelinePlanGuardOnce: async (tripKey: string): Promise<TimelinePlanGuard | null> => {
+    if (!useFirebase || !tripKey) return null;
+    try {
+      const snap = await firebaseGet(ref(database, `tripTimeline/planGuard/${tripKey}`));
+      return (snap.val() || null) as TimelinePlanGuard | null;
+    } catch (err) {
+      console.warn("Timeline plan guard once read failed:", err);
+      return null;
+    }
+  },
+
+  /** Новый ручной рейс: помечаем план как черновик (контроль не блокирует первичное планирование). */
+  markTimelinePlanDraft: (tripKey: string) => {
+    if (!tripKey || !useFirebase) return;
+    update(ref(database, `tripTimeline/planGuard/${tripKey}`), {
+      version: 0,
+      draftCreated: true,
+      updatedAt: new Date().toISOString(),
+    }).catch((err) =>
+      handleFailure('firebase', err, { path: `tripTimeline/planGuard/${tripKey}`, userMessage: 'Не удалось пометить план как черновик' }),
+    );
+  },
+
+  /** Первичное окончательное сохранение плана: фиксирует автора/дату и включает блокировку. */
+  saveTimelinePlanInitial: async (
+    tripKey: string,
+    entry: { at: string; by: string; byId?: string; note?: string },
+    user: string,
+    role: string,
+  ) => {
+    if (!useFirebase || !tripKey) return;
+    const guard: Record<string, unknown> = {
+      version: 1,
+      draftCreated: null,
+      initialSavedAt: entry.at,
+      initialSavedBy: entry.by,
+      ...(entry.byId ? { initialSavedById: entry.byId } : {}),
+      updatedAt: entry.at,
+      updatedBy: entry.by,
+      ...(entry.byId ? { updatedById: entry.byId } : {}),
+      history: [{ at: entry.at, by: entry.by, ...(entry.byId ? { byId: entry.byId } : {}), action: 'initial', note: entry.note || 'Первичное сохранение плана этапов' }],
+    };
+    try {
+      await update(ref(database, `tripTimeline/planGuard/${tripKey}`), stripUndefinedDeep(guard));
+    } catch (err) {
+      handleFailure('firebase', err, { path: `tripTimeline/planGuard/${tripKey}`, userMessage: 'Не удалось сохранить план этапов' });
+      throw err;
+    }
+    dbService.logAction(user, role, 'Первичное сохранение плана этапов', 'TripTimeline', tripKey, entry.note || 'План этапов сохранён и заблокирован для изменений');
+  },
+
+  /**
+   * Погашение разового разрешения: RTDB-транзакция — ровно одно успешное
+   * погашение даже при одновременных попытках из двух вкладок.
+   * Возвращает снимок разрешения для восстановления при ошибке записи плана.
+   */
+  consumeTimelinePlanPermission: async (
+    tripKey: string,
+    uid: string,
+  ): Promise<{ ok: boolean; reason?: 'missing' | 'already-used'; snapshot?: TimelinePlanPermission }> => {
+    if (!useFirebase || !tripKey || !uid) return { ok: true };
+    let snapshot: TimelinePlanPermission | null = null;
+    try {
+      const res = await runTransaction(ref(database, `tripTimeline/planPerms/${tripKey}/${uid}`), (cur) => {
+        if (cur == null) return; // нет разрешения — транзакция отменяется
+        snapshot = cur as TimelinePlanPermission;
+        return null; // погашение
+      });
+      if (res.committed) return { ok: true, snapshot: snapshot || undefined };
+      return { ok: false, reason: 'already-used' };
+    } catch (err) {
+      console.warn('Timeline plan permission consume failed:', err);
+      return { ok: false, reason: 'missing' };
+    }
+  },
+
+  /** Возврат неиспользованного разрешения после ошибки записи плана. */
+  restoreTimelinePlanPermission: async (tripKey: string, uid: string, snapshot: unknown) => {
+    if (!useFirebase || !tripKey || !uid || snapshot == null) return;
+    try {
+      await set(ref(database, `tripTimeline/planPerms/${tripKey}/${uid}`), stripUndefinedDeep(snapshot));
+    } catch (err) {
+      console.warn('Timeline plan permission restore failed:', err);
+    }
+  },
+
+  /**
+   * Окончательная запись плана: один атомарный multi-path update — этапы плана,
+   * состояние плана (новая версия + история) и погашение разрешения вместе.
+   * При ошибке промис отклоняется — вызывающий возвращает разрешение и показывает
+   * ошибку (без ложного успеха).
+   */
+  saveTimelinePlanCommit: async (updates: Record<string, unknown>, user: string, role: string, details: string) => {
+    if (!useFirebase) return;
+    const clean: Record<string, unknown> = {};
+    Object.keys(updates).forEach((path) => {
+      const v = updates[path];
+      clean[path] = v === null ? null : stripUndefinedDeep(v);
+    });
+    try {
+      await update(ref(database), clean);
+    } catch (err) {
+      handleFailure('firebase', err, { path: Object.keys(clean).join(', '), userMessage: 'Не удалось сохранить план этапов — изменения остались черновиком' });
+      throw err;
+    }
+    dbService.logAction(user, role, 'Изменение плана этапов', 'TripTimeline', Object.keys(updates).find((p) => p.startsWith('tripTimeline/planGuard/'))?.split('/').pop() || '', details);
+  },
+
+  /** Выдача разового разрешения (одно на пару «рейс + пользователь»; повторная выдача заменяет его). */
+  grantTimelinePlanPermission: (
+    tripKey: string,
+    perm: TimelinePlanPermission,
+    history: unknown,
+    adminName: string,
+    adminRole: string,
+  ) => {
+    if (!useFirebase || !tripKey || !perm?.userId) return;
+    const entry = { at: perm.grantedAt, by: adminName, ...(perm.grantedById ? { byId: perm.grantedById } : {}), action: 'grant', note: `Разрешение выдано: ${perm.userName}` };
+    const updates: Record<string, unknown> = {
+      [`tripTimeline/planPerms/${tripKey}/${perm.userId}`]: stripUndefinedDeep(perm),
+    };
+    if (Array.isArray(history)) {
+      updates[`tripTimeline/planGuard/${tripKey}/history`] = stripUndefinedDeep([...history, entry]);
+      updates[`tripTimeline/planGuard/${tripKey}/updatedAt`] = perm.grantedAt;
+      updates[`tripTimeline/planGuard/${tripKey}/updatedBy`] = adminName;
+    }
+    update(ref(database), updates).catch((err) =>
+      handleFailure('firebase', err, { path: `tripTimeline/planPerms/${tripKey}/${perm.userId}`, userMessage: 'Не удалось выдать разрешение' }),
+    );
+    dbService.logAction(adminName, adminRole, 'Выдано разрешение на изменение плана', 'TripTimeline', tripKey, `${perm.userName}: разрешение на одно изменение плана (версия плана ${perm.planVersion})`);
+  },
+
+  /** Отзыв неиспользованного разрешения. */
+  revokeTimelinePlanPermission: (tripKey: string, uid: string, history: unknown, adminName: string, adminRole: string) => {
+    if (!useFirebase || !tripKey || !uid) return;
+    const at = new Date().toISOString();
+    const entry = { at, by: adminName, action: 'revoke', note: 'Разрешение отозвано администратором' };
+    const updates: Record<string, unknown> = {
+      [`tripTimeline/planPerms/${tripKey}/${uid}`]: null,
+    };
+    if (Array.isArray(history)) {
+      updates[`tripTimeline/planGuard/${tripKey}/history`] = stripUndefinedDeep([...history, entry]);
+      updates[`tripTimeline/planGuard/${tripKey}/updatedAt`] = at;
+      updates[`tripTimeline/planGuard/${tripKey}/updatedBy`] = adminName;
+    }
+    update(ref(database), updates).catch((err) =>
+      handleFailure('firebase', err, { path: `tripTimeline/planPerms/${tripKey}/${uid}`, userMessage: 'Не удалось отозвать разрешение' }),
+    );
+    dbService.logAction(adminName, adminRole, 'Отозвано разрешение на изменение плана', 'TripTimeline', tripKey, 'Разрешение отозвано до использования');
   },
 
   /** Расширяемый справочник типов этапов: tripTimeline/config/stageTypes.

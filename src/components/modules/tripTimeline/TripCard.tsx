@@ -2,10 +2,12 @@
  * МОДАЛЬНОЕ ОКНО ЦЕЛОГО РЕЙСА (ручного или связанного с «Планом дохода»).
  *
  * Внутри: основные сведения (авто, диспетчер, название/маршрут, статус, архив),
- * плановые и фактические границы со сравнением, отдельные многострочные поля
- * «Причина» и «Меры при просрочке» (по рейсу — здесь, по этапу — в раскрываемой
- * области этого этапа), плечи из плана дохода, таблица этапов, события машины и
- * встроенный таймлайн этой машины с фокусом на выбранном рейсе.
+ * плановые и фактические границы со сравнением, плечи из плана дохода, таблица
+ * этапов, ЕДИНЫЙ ЖУРНАЛ «События рейса» (добавление/правка/удаление событий
+ * внутри карточки; отдельные поля «Комментарий к рейсу», «Причина», «Меры при
+ * просрочке» и дублирующий блок «События машины за период рейса» убраны —
+ * прежние тексты показаны в журнале с исходным контекстом) и встроенный
+ * таймлайн этой машины с фокусом на выбранном рейсе.
  *
  * Плановые границы правится ЗДЕСЬ и сохраняются в ту же запись «Плана дохода»
  * (существующий pdService.updateTrip + существующий расчёт calculateTripFinances):
@@ -27,7 +29,7 @@ import {
   Trash2,
   TriangleAlert,
 } from 'lucide-react';
-import type { LegPlan, TimelineStage, TimelineStageType, TimelineVehicleEvent } from '../../../types';
+import type { LegPlan, TimelinePlanGuard, TimelinePlanHistoryEntry, TimelinePlanPermission, TimelineStage, TimelineStageType, TimelineVehicleEvent, UserProfile } from '../../../types';
 import { UI } from '../../../ui/kit';
 import { ModalShell } from '../../../ui/components';
 import { formatPlate } from '../../../utils/salaryAutofill';
@@ -38,6 +40,10 @@ import { useToast } from '../../ToastProvider';
 import type { DispatcherOption } from './useTimelineData';
 import { useDebouncedSaver } from './useDebouncedSaver';
 import DateInput from './DateInput';
+import TripEventsJournal from './TripEventsJournal';
+import { PlanBarLabel, planBarLabelParts } from './PlanBarLabel';
+import { eventMarkOf, groupEventMarks, type EventMark } from './lib/eventMarks';
+import { computePlanStageChanges, resolvePlanLock, type PlanStageChanges } from './lib/planLock';
 import {
   WEEKEND_HINT,
   ZOOM_LEVELS,
@@ -51,7 +57,6 @@ import {
   fmtFull,
   getDeadlineStatus,
   hasWeekendInRange,
-  isStageLate,
   isTripFactOngoing,
   isWeekendDay,
   stageDeviation,
@@ -80,52 +85,22 @@ const STATUS_TONE: Record<number, { dot: string; text: string }> = {
   0: { dot: 'bg-[#9CA3AF]', text: 'text-[#6B7280]' },
 };
 
-const TEXTAREA_CLS =
-  'w-full min-h-[68px] resize-y bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs leading-5 text-[#121316] outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-60 disabled:bg-[#F9FAFB]';
-
-/** Многострочное поле с автоматической высотой (абзацы и длинные тексты). */
-function AutoGrow({
-  value,
-  onChange,
-  placeholder,
-  disabled,
-  ariaLabel,
-  rows = 3,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  disabled?: boolean;
-  ariaLabel: string;
-  rows?: number;
-}) {
-  const ref = useRef<HTMLTextAreaElement | null>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.max(el.scrollHeight, rows * 22)}px`;
-  }, [value, rows]);
-  return (
-    <textarea
-      ref={ref}
-      rows={rows}
-      value={value}
-      disabled={disabled}
-      placeholder={placeholder}
-      aria-label={ariaLabel}
-      onChange={(e) => onChange(e.target.value)}
-      className={TEXTAREA_CLS}
-    />
-  );
-}
-
 const isoOf = (day: number | null): string => (day == null ? '' : dayStr(day));
 const money = (v?: number, cur = '€') => (v == null ? '—' : `${v.toLocaleString('ru-RU')} ${cur}`);
+
+/** Подписи записей истории плана этапов. */
+const PLAN_HISTORY_LABELS: Record<string, string> = {
+  initial: 'первичное сохранение',
+  update: 'изменение плана',
+  'admin-update': 'изменение плана (администратор)',
+  grant: 'разрешение выдано',
+  revoke: 'разрешение отозвано',
+};
 
 interface Meta {
   reason: string;
   measures: string;
+  comment: string;
 }
 
 interface Props {
@@ -136,9 +111,22 @@ interface Props {
   canWrite: boolean;
   /** Право на редактирование связанного плана дохода (как в самом модуле). */
   canEditPlan: boolean;
-  /** Общие тексты рейса (Причина / Меры) из tripTimeline/tripMeta. */
+  /** Текущий пользователь — для записи событий журнала от его имени. */
+  user: UserProfile;
+  /** Прежние общие тексты рейса из tripTimeline/tripMeta (показываются в журнале). */
   meta: Meta;
   onSaveMeta: (key: string, patch: Partial<Meta>) => void;
+  /** Переход с маркера события на таймлайне: id записи для журнала. */
+  focusEventId?: string | null;
+  onFocusEventDone?: () => void;
+  /** Клик по маркеру события другого рейса во встроенном таймлайне. */
+  onOpenEventTrip?: (tripKey: string, eventId: string) => void;
+  /** Состояние плана этапов рейса (tripTimeline/planGuard) — блокировка плановых дат. */
+  planGuard?: TimelinePlanGuard | null;
+  /** Действующие разовые разрешения рейса (tripTimeline/planPerms). */
+  planPerms?: Record<string, TimelinePlanPermission>;
+  /** Контроль плана этапов доступен только в облачном режиме. */
+  planControlEnabled?: boolean;
   /** Рейсы, периоды и события этой же машины — контекст встроенного таймлайна. */
   carTrips: WholeTrip[];
   carBases: BasePeriod[];
@@ -204,6 +192,7 @@ function CarMiniTimeline({
   stageTypes,
   today,
   onSelectTrip,
+  onOpenEventTrip,
   onFocusStage,
 }: {
   focusKey: string;
@@ -213,6 +202,8 @@ function CarMiniTimeline({
   stageTypes: TimelineStageType[];
   today: number;
   onSelectTrip: (tripKey: string) => void;
+  /** Клик по маркеру события связанного рейса — открыть рейс и показать запись. */
+  onOpenEventTrip?: (tripKey: string, eventId: string) => void;
   /** Клик по маркеру этапа — переход и подсветка этапа в верхнем блоке окна. */
   onFocusStage?: (stageId: string) => void;
 }) {
@@ -485,6 +476,7 @@ function CarMiniTimeline({
               const b = ov.pMax ?? sp.pMax ?? a;
               const q = pos(a, b);
               if (!q) return null;
+              const parts = planBarLabelParts(t);
               return (
                 <div
                   key={`p-${t.key}`}
@@ -505,9 +497,9 @@ function CarMiniTimeline({
                     borderRadius: 3,
                     ...link(t.key),
                   }}
-                  title={`${formatPlate(t.carNumber)} · ${t.route || 'без маршрута'}${t.archived ? ' · архив' : ''}${t.key === focusKey ? ' · выбранный рейс' : ' · соседний рейс (контекст)'}`}
+                  title={`${formatPlate(t.carNumber)} · ${parts.titleText}${t.archived ? ' · архив' : ''}${t.key === focusKey ? ' · выбранный рейс' : ' · соседний рейс (контекст)'}`}
                 >
-                  {q.width > 70 ? t.route || '' : ''}
+                  {q.width > 40 ? <PlanBarLabel parts={parts} width={q.width} fontPx={9} /> : ''}
                 </div>
               );
             })}
@@ -598,25 +590,51 @@ function CarMiniTimeline({
                 </React.Fragment>
               );
             })}
-            {carEvents.map((e) => {
-              const a = dayNum(e.dateFrom);
-              const b = dayNum(e.dateTo) || a;
-              if (a == null) return null;
-              const q = pos(a, b ?? a);
-              if (!q) return null;
-              const meta = eventTypeOf(e.kind);
-              return (
-                <div
-                  key={`ev-${e.id}`}
-                  data-bar="event"
-                  className="absolute z-[3] text-center text-[9px] leading-[14px] text-white px-1 overflow-hidden whitespace-nowrap"
-                  style={{ left: q.left, width: q.width, top: 16, height: 14, background: meta.color, opacity: 0.85, borderRadius: 3 }}
-                  title={`${meta.name} ${e.dateFrom} – ${e.dateTo || e.dateFrom}${e.note ? ` · ${e.note}` : ''}`}
-                >
-                  {q.width > 60 ? meta.name : ''}
-                </div>
-              );
-            })}
+            {(() => {
+              // Компактные маркеры событий на их реальных датах (не полосы);
+              // близкие события — один маркер со счётчиком.
+              const marks: EventMark[] = [];
+              carEvents.forEach((e) => {
+                const m = eventMarkOf(
+                  e,
+                  eventTypeOf(e.kind).name,
+                  eventTypeOf(e.kind).color,
+                  e.tripKey ? 'клик — открыть рейс и показать запись' : undefined,
+                );
+                if (m && pos(m.day, m.day)) marks.push(m);
+              });
+              return groupEventMarks(marks).map((g) => {
+                const q = pos(g.day, g.day);
+                if (!q) return null;
+                const gTrip = g.tripKey;
+                const gEv = g.eventId;
+                const linked = !!(gTrip && gEv);
+                const grouped = g.count > 1;
+                const left = grouped
+                  ? dayToX(g.day, renderVs, colW) + Math.round(colW * 0.45)
+                  : dayToX(g.day, renderVs, colW) + Math.round(colW * 0.62);
+                return (
+                  <div
+                    key={`ev-${gEv || g.day}-${g.count}`}
+                    role={linked ? 'button' : undefined}
+                    tabIndex={linked ? 0 : undefined}
+                    data-bar="event"
+                    data-event={gEv}
+                    data-trip={gTrip}
+                    onClick={gTrip && gEv ? () => onOpenEventTrip?.(gTrip, gEv) : undefined}
+                    className={`absolute z-[4] ${linked ? 'cursor-pointer' : ''}`}
+                    style={
+                      grouped
+                        ? { left, top: 10, height: 12, minWidth: 16, padding: '0 3px', background: '#7C3AED', borderRadius: 6, textAlign: 'center', opacity: 0.95 }
+                        : { left, top: 11, width: 9, height: 9, background: g.items[0].color, borderRadius: 2, transform: 'rotate(45deg)', opacity: 0.95 }
+                    }
+                    title={g.title}
+                  >
+                    {grouped ? <span className="text-[8px] leading-[12px] text-white font-semibold">{g.count}</span> : null}
+                  </div>
+                );
+              });
+            })()}
             {carTrips.map((t) => {
               const sp = tripSpan(t);
               if (sp.fMin == null) return null;
@@ -733,8 +751,14 @@ export default function TripCard({
   today,
   canWrite,
   canEditPlan,
+  user,
   meta,
-  onSaveMeta,
+  focusEventId,
+  onFocusEventDone,
+  onOpenEventTrip,
+  planGuard,
+  planPerms,
+  planControlEnabled,
   carTrips,
   carBases,
   carEvents,
@@ -751,7 +775,19 @@ export default function TripCard({
   const dirtyRef = useRef(false);
   const [dirty, setDirty] = useState(false);
   const [metaDraft, setMetaDraft] = useState<Meta>(meta);
-  const [expandedStage, setExpandedStage] = useState<string | null>(null);
+  /** Несохранённый текст журнала событий — общий запрос подтверждения при закрытии. */
+  const journalDirtyRef = useRef(false);
+  const [journalDirty, setJournalDirty] = useState(false);
+  /** Несохранённые правки плана этапов (записываются кнопкой «Сохранить план этапов»). */
+  const planDirtyRef = useRef(false);
+  const [planDirty, setPlanDirty] = useState(false);
+  const [planSaving, setPlanSaving] = useState(false);
+  const [planSaveError, setPlanSaveError] = useState('');
+  /** Выдача разового разрешения администратором: выбор пользователя. */
+  const [grantOpen, setGrantOpen] = useState(false);
+  const [grantUserId, setGrantUserId] = useState('');
+  /** Запрос из таблицы этапов: открыть форму события с предвыбранным этапом. */
+  const [eventFormRequest, setEventFormRequest] = useState<{ stageId?: string; nonce: number } | null>(null);
   /** Краткая подсветка этапа после клика по маркеру на встроенном таймлайне. */
   const [highlightStage, setHighlightStage] = useState<string | null>(null);
   const [planDatesError, setPlanDatesError] = useState('');
@@ -762,6 +798,23 @@ export default function TripCard({
   const planSourceId = trip.plan?.id || '';
   const archived = !!trip.archived;
   const readOnly = archived || !canWrite;
+
+  // ── Контроль плана этапов (блокировка плановых дат после сохранения) ────
+  const planEnabled = !!planControlEnabled;
+  const planUserId = String(user.uid || '');
+  const planLock = useMemo(
+    () => resolvePlanLock({ storedStages: trip.stages, guard: planGuard || null, perms: planPerms || {}, userId: planUserId }),
+    [trip.stages, planGuard, planPerms, planUserId],
+  );
+  const isRootAdmin = user.role === 'root_admin';
+  /** Итоговое состояние: вне облака контроль выключен (локальный режим). */
+  const planState = planEnabled ? planLock.state : 'draft';
+  /** Плановые даты и состав доступны правке в этом сеансе. */
+  const canEditPlanned = !readOnly && (planState === 'draft' || planState === 'permitted' || isRootAdmin);
+  /** Правки плана пишутся сразу (черновик); иначе — только кнопкой явного сохранения. */
+  const autoSavePlanned = !planEnabled || planState === 'draft';
+  /** Кнопка «Сохранить план этапов» (первичное сохранение / после разрешения / админ). */
+  const showSavePlanStages = planEnabled && !readOnly && (planState === 'draft' || planState === 'permitted' || isRootAdmin);
 
   useEffect(() => {
     if (!dirtyRef.current) setDraft(toDraft(trip));
@@ -795,14 +848,244 @@ export default function TripCard({
   };
 
   const requestClose = useCallback(() => {
-    if (dirtyRef.current) {
-      const ok = window.confirm('Есть несохранённые изменения. Сохранить и закрыть? «Отмена» — остаться в окне.');
+    if (dirtyRef.current || journalDirtyRef.current || planDirtyRef.current) {
+      const notes: string[] = [];
+      if (journalDirtyRef.current) notes.push('в журнале событий есть несохранённый текст');
+      if (planDirtyRef.current) notes.push('в плане этапов есть несохранённые изменения (записываются кнопкой «Сохранить план этапов»)');
+      const ok = window.confirm(
+        notes.length
+          ? `${notes.join('; ')}. При закрытии это будет потеряно. Закрыть окно? «Отмена» — остаться.`
+          : 'Есть несохранённые изменения. Сохранить и закрыть? «Отмена» — остаться в окне.',
+      );
       if (!ok) return;
-      flush();
+      if (dirtyRef.current) flush();
     }
     onClose();
   }, [flush, onClose]);
   requestCloseRef.current = requestClose;
+
+  /** Черновик журнала событий — часть несохранённых изменений карточки. */
+  const handleJournalDirty = useCallback((v: boolean) => {
+    journalDirtyRef.current = v;
+    setJournalDirty(v);
+  }, []);
+
+  /** Оптимистичная очистка прежних текстов после переноса в событие. */
+  const clearLegacyStage = useCallback((stageId: string, field: 'reason' | 'action') => {
+    setDraft((d) => ({ ...d, stages: d.stages.map((s) => (s.id === stageId ? { ...s, [field]: '' } : s)) }));
+  }, []);
+  const clearLegacyMeta = useCallback((field: 'reason' | 'measures' | 'comment') => {
+    setMetaDraft((m) => ({ ...m, [field]: '' }));
+  }, []);
+
+  /** «Добавить событие» из таблицы этапов: журнал открывает форму с этапом. */
+  const requestAddEvent = useCallback((stageId?: string) => {
+    setEventFormRequest({ stageId, nonce: Date.now() });
+    window.requestAnimationFrame(() => {
+      rootRef.current?.querySelector('[data-ui="trip-events"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }, []);
+
+  // ── Контроль плана этапов: явное сохранение и разовые разрешения ────────
+  const planTripKey = trip.key;
+  const draftMarkerRef = useRef(false);
+
+  /**
+   * Первое содержательное действие с планом БЕЗ записи состояния: фиксируем
+   * черновик явно, чтобы только что заполненный план не считался «историческим»
+   * (заполненым до включения контроля) и не блокировался сразу.
+   */
+  const ensureDraftMarker = useCallback(() => {
+    if (!planEnabled || draftMarkerRef.current || planGuard) return;
+    draftMarkerRef.current = true;
+    dbService.markTimelinePlanDraft(planTripKey);
+  }, [planEnabled, planGuard, planTripKey]);
+
+  const nextPlanHistory = useCallback(
+    (action: TimelinePlanHistoryEntry['action'], note: string): TimelinePlanHistoryEntry[] =>
+      [
+        ...planLock.history,
+        { at: new Date().toISOString(), by: user.name, ...(planUserId ? { byId: planUserId } : {}), action, note },
+      ].slice(-30),
+    [planLock.history, user.name, planUserId],
+  );
+
+  const describePlanChanges = useCallback(
+    (changes: PlanStageChanges): string => {
+      const parts: string[] = [];
+      changes.plannedUpdates.forEach((u) => {
+        const st = draft.stages.find((s) => s.id === u.id) || trip.stages.find((s) => s.id === u.id);
+        parts.push(
+          `${st ? stageFullName(stageTypes, st) : u.id}: план ${u.before ? fmtFull(u.before) : 'не указана'} → ${u.plannedDate ? fmtFull(u.plannedDate) : 'не указана'}`,
+        );
+      });
+      changes.adds.forEach((s) =>
+        parts.push(`добавлен этап «${stageFullName(stageTypes, s)}»${dayNum(s.plannedDate) != null ? ` (план ${fmtFull(s.plannedDate)})` : ''}`),
+      );
+      changes.removes.forEach((s) => parts.push(`удалён этап «${stageFullName(stageTypes, s)}»`));
+      return parts.join('; ') || 'без изменений';
+    },
+    [draft.stages, trip.stages, stageTypes],
+  );
+
+  /**
+   * «Сохранить план этапов»: первичное окончательное сохранение (черновик) или
+   * разовое разрешённое изменение. Разрешение гасится транзакцией и в той же
+   * атомарной записи вместе с планом; при ошибке записи — возвращается.
+   */
+  const savePlanStages = async () => {
+    if (!showSavePlanStages || planSaving) return;
+    setPlanSaveError('');
+    const changes = computePlanStageChanges(trip.stages, draft.stages);
+    if (planState === 'draft') {
+      const ok = await showConfirm(
+        'Сохранить план этапов? После сохранения изменение плановых дат этапов будет доступно только с разового разрешения администратора.',
+      );
+      if (!ok) return;
+      setPlanSaving(true);
+      try {
+        flush();
+        const fresh = await dbService.getTimelinePlanGuardOnce(planTripKey);
+        if (fresh && fresh.initialSavedAt) {
+          setPlanSaveError('План уже сохранён другим пользователем — ничего не записано. Обновите карточку (F5).');
+          return;
+        }
+        await dbService.saveTimelinePlanInitial(
+          planTripKey,
+          {
+            at: new Date().toISOString(),
+            by: user.name,
+            ...(planUserId ? { byId: planUserId } : {}),
+            note: `Первичное сохранение плана этапов (этапов: ${draft.stages.filter((s) => !String(s.id).endsWith('-fallback-load')).length})`,
+          },
+          user.name,
+          user.role,
+        );
+        planDirtyRef.current = false;
+        setPlanDirty(false);
+        toast('План этапов сохранён — плановые даты этапов заблокированы', 'success');
+      } catch (err) {
+        setPlanSaveError(`Не удалось сохранить план этапов: ${(err as Error).message}. Черновик остался в окне — повторите сохранение.`);
+      } finally {
+        setPlanSaving(false);
+      }
+      return;
+    }
+    // Разрешённое изменение: пустые изменения разрешение не расходуют.
+    if (changes.count === 0) {
+      toast('Изменений в плане нет — сохранять нечего; разрешение не расходуется', 'info');
+      return;
+    }
+    const perm = planLock.permission;
+    setPlanSaving(true);
+    let consumedSnapshot: unknown = null;
+    try {
+      flush();
+      const fresh = await dbService.getTimelinePlanGuardOnce(planTripKey);
+      const baseVersion = perm ? Number(perm.planVersion) : Number(planGuard?.version) || planLock.version || 1;
+      const freshVersion = Number(fresh?.version) || (fresh?.initialSavedAt ? 1 : baseVersion);
+      if (fresh && freshVersion !== baseVersion) {
+        setPlanSaveError(
+          `План изменился с момента открытия (версия ${freshVersion} вместо ${baseVersion}) — ничего не записано, чтобы не перезаписать чужие изменения. Обновите данные (F5)${perm ? ' и запросите новое разрешение' : ''}.`,
+        );
+        return;
+      }
+      if (perm) {
+        const consumed = await dbService.consumeTimelinePlanPermission(planTripKey, planUserId);
+        if (!consumed.ok) {
+          setPlanSaveError('Разрешение уже использовано другим сохранением или отозвано — обновите данные: повторное использование невозможно.');
+          return;
+        }
+        consumedSnapshot = consumed.snapshot ?? null;
+      }
+      const updates: Record<string, unknown> = {};
+      const base = isPlan ? `tripTimeline/tripStages/${planSourceId}` : `tripTimeline/trips/${trip.id}/stages`;
+      changes.adds.forEach((s) => {
+        updates[`${base}/${s.id}`] = { ...s };
+      });
+      changes.plannedUpdates.forEach((u) => {
+        updates[`${base}/${u.id}/plannedDate`] = u.plannedDate;
+      });
+      changes.removes.forEach((s) => {
+        updates[`${base}/${s.id}`] = null;
+      });
+      if (!isPlan) {
+        const range = computeStoredRange({ ...trip, stages: draft.stages });
+        updates[`tripTimeline/trips/${trip.id}/startDate`] = range.startDate || '';
+        updates[`tripTimeline/trips/${trip.id}/endDate`] = range.endDate || '';
+      }
+      const details = describePlanChanges(changes);
+      updates[`tripTimeline/planGuard/${planTripKey}`] = {
+        ...(planGuard || {}),
+        version: baseVersion + 1,
+        ...(planGuard?.initialSavedAt ? { initialSavedAt: planGuard.initialSavedAt } : {}),
+        ...(planGuard?.initialSavedBy ? { initialSavedBy: planGuard.initialSavedBy } : {}),
+        ...(planGuard?.initialSavedById ? { initialSavedById: planGuard.initialSavedById } : {}),
+        ...(planLock.legacy || planGuard?.legacy ? { legacy: true } : {}),
+        updatedAt: new Date().toISOString(),
+        updatedBy: user.name,
+        ...(planUserId ? { updatedById: planUserId } : {}),
+        history: nextPlanHistory(perm ? 'update' : 'admin-update', details),
+      };
+      if (perm) updates[`tripTimeline/planPerms/${planTripKey}/${planUserId}`] = null;
+      await dbService.saveTimelinePlanCommit(updates, user.name, user.role, details);
+      planDirtyRef.current = false;
+      setPlanDirty(false);
+      dirtyRef.current = false;
+      setDirty(false);
+      toast('План этапов сохранён — плановые даты снова заблокированы', 'success');
+    } catch (err) {
+      if (perm && consumedSnapshot) {
+        await dbService.restoreTimelinePlanPermission(planTripKey, planUserId, consumedSnapshot);
+      }
+      setPlanSaveError(
+        `Сохранение не удалось: ${(err as Error).message}. Черновик остался в окне${
+          perm ? ', разрешение не израсходовано — повторите попытку' : ''
+        }.`,
+      );
+    } finally {
+      setPlanSaving(false);
+    }
+  };
+
+  /** Выдача разового разрешения (администратор): пользователь + текущая версия плана. */
+  const grantPlanPermission = async () => {
+    if (!isRootAdmin) return;
+    const sel = dispatchers.find((d) => d.id === grantUserId);
+    if (!sel) {
+      toast('Выберите пользователя для разрешения', 'error');
+      return;
+    }
+    if (planLock.permissions[sel.id]) {
+      const ok = await showConfirm(`У ${sel.name} уже есть действующее разрешение на этот рейс. Заменить его новым?`);
+      if (!ok) return;
+    }
+    const version = Number(planGuard?.version) || planLock.version || 1;
+    dbService.grantTimelinePlanPermission(
+      planTripKey,
+      {
+        userId: sel.id,
+        userName: sel.name,
+        grantedAt: new Date().toISOString(),
+        grantedBy: user.name,
+        ...(planUserId ? { grantedById: planUserId } : {}),
+        planVersion: version,
+      },
+      planLock.history,
+      user.name,
+      user.role,
+    );
+    setGrantOpen(false);
+    toast(`Разрешено одно изменение плана: ${sel.name}`, 'success');
+  };
+
+  const revokePlanPermission = async (uid: string, name: string) => {
+    if (!isRootAdmin) return;
+    const ok = await showConfirm(`Отозвать неиспользованное разрешение для ${name}?`);
+    if (!ok) return;
+    dbService.revokeTimelinePlanPermission(planTripKey, uid, planLock.history, user.name, user.role);
+    toast('Разрешение отозвано', 'success');
+  };
 
   const draftTrip: WholeTrip = useMemo(
     () => ({
@@ -935,6 +1218,15 @@ export default function TripCard({
     markDirty();
     const nextStages = draft.stages.map((s) => (s.id === stageId ? { ...s, [field]: value } : s));
     setDraft((d) => ({ ...d, stages: d.stages.map((s) => (s.id === stageId ? { ...s, [field]: value } : s)) }));
+    // Плановые даты после сохранения плана: правки идут локально и записываются
+    // ТОЛЬКО кнопкой «Сохранить план этапов» (разовое разрешение/администратор).
+    if (field === 'plannedDate' && !autoSavePlanned) {
+      if (!canEditPlanned) return;
+      planDirtyRef.current = true;
+      setPlanDirty(true);
+      return;
+    }
+    if (autoSavePlanned) ensureDraftMarker();
     if (isPlan) {
       saver.queueAutoStage(planSourceId, stageId, { [field]: value });
     } else {
@@ -945,7 +1237,10 @@ export default function TripCard({
     }
   };
 
+  /** Кнопка «Добавить этап»: в черновике — сразу в базу; после сохранения плана —
+   *  локально, до явного сохранения с разовым разрешением. */
   const addStage = () => {
+    if (!canEditPlanned) return;
     markDirty();
     const sid = `s_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     const order = (draft.stages.length ? Math.max(...draft.stages.map((s) => s.order || 0)) : 0) + 1;
@@ -961,17 +1256,31 @@ export default function TripCard({
       order,
     };
     setDraft((d) => ({ ...d, stages: [...d.stages, stage] }));
+    if (!autoSavePlanned) {
+      planDirtyRef.current = true;
+      setPlanDirty(true);
+      return;
+    }
+    ensureDraftMarker();
     if (isPlan) dbService.addTimelineTripStage(planSourceId, { ...stage });
     else dbService.addTimelineStage(trip.id, { ...stage });
   };
 
+  /** Удаление этапа: в черновике — сразу; после сохранения плана — локально
+   *  (изменение сохранённого состава требует разового разрешения). */
   const removeStage = (stageId: string) => {
+    if (!canEditPlanned) return;
     flush();
     markDirty();
+    const rest = draft.stages.filter((s) => s.id !== stageId);
+    setDraft((d) => ({ ...d, stages: d.stages.filter((s) => s.id !== stageId) }));
+    if (!autoSavePlanned) {
+      planDirtyRef.current = true;
+      setPlanDirty(true);
+      return;
+    }
     if (isPlan) dbService.deleteTimelineTripStage(planSourceId, stageId);
     else dbService.deleteTimelineStage(trip.id, stageId);
-    const rest = draft.stages.filter((s) => s.id !== stageId);
-    setDraft((d) => ({ ...d, stages: rest }));
     if (!isPlan) saver.queueTrip(trip.id, computeStoredRange({ ...trip, stages: rest }));
   };
 
@@ -1009,11 +1318,6 @@ export default function TripCard({
   const plan = trip.plan;
   const title = `${formatPlate(trip.carNumber)} · ${draft.route || plan?.direction || 'маршрут не указан'}`;
 
-  const onMeta = (patch: Partial<Meta>) => {
-    setMetaDraft((m) => ({ ...m, ...patch }));
-    onSaveMeta(trip.key, patch);
-  };
-
   return (
     <ModalShell
       isOpen
@@ -1047,7 +1351,11 @@ export default function TripCard({
             </>
           ) : null}
           <span className="text-[10px] text-[#6B7280] min-h-[16px] ml-auto flex items-center gap-2">
-            {dirty ? <span className="text-amber-700 font-semibold">есть несохранённые изменения</span> : null}
+            {dirty || journalDirty ? (
+              <span className="text-amber-700 font-semibold">
+                {journalDirty && !dirty ? 'есть несохранённый текст в журнале событий' : 'есть несохранённые изменения'}
+              </span>
+            ) : null}
             <span className="text-emerald-600">{saver.status === 'saved' ? 'Сохранено ✓' : ''}</span>
             {!readOnly ? (
               <button
@@ -1132,6 +1440,136 @@ export default function TripCard({
           <span className={UI.sectionTitle}>Точки и этапы: план / факт</span>
           <span className="text-[10px] text-[#9CA3AF]">план и факт рядом; отсутствие факта не считается задержкой</span>
         </div>
+
+        {/* Состояние плана этапов: черновик / сохранён (заблокирован) / разовое разрешение */}
+        {planEnabled ? (
+          <div data-ui="plan-state" data-state={planState} className="border border-[#E5E7EB] rounded-xl px-3 py-2 flex flex-col gap-1.5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]">
+              <span
+                className={`inline-flex items-center gap-1.5 font-semibold ${
+                  planState === 'draft' ? 'text-amber-700' : planState === 'permitted' ? 'text-[var(--accent-ink)]' : 'text-[#4B5563]'
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${planState === 'draft' ? 'bg-amber-500' : planState === 'permitted' ? 'bg-[var(--accent)]' : 'bg-emerald-500'}`}
+                  aria-hidden="true"
+                />
+                {planState === 'draft'
+                  ? 'Черновик плана'
+                  : planState === 'permitted'
+                    ? 'Разрешено одно сохранение изменений'
+                    : 'План сохранён. Плановые даты этапов заблокированы'}
+              </span>
+              {planState === 'draft' ? (
+                <span className="text-[#6B7280]">перед первым сохранением: после сохранения изменение плановых дат этапов будет доступно только с разового разрешения администратора</span>
+              ) : null}
+              {planState === 'permitted' ? (
+                <span className="text-[#6B7280]">после успешного сохранения плановые даты снова будут заблокированы</span>
+              ) : null}
+              {planState === 'saved' && planLock.legacy ? (
+                <span className="text-[#6B7280]">автор и дата первоначального сохранения неизвестны — план существовал до включения контроля</span>
+              ) : null}
+              {planState === 'saved' && !planLock.legacy && planLock.initialSavedBy ? (
+                <span className="text-[#6B7280]">
+                  сохранён: {planLock.initialSavedBy}
+                  {planLock.initialSavedAt ? `, ${fmtFull(planLock.initialSavedAt.slice(0, 10))}` : ''}
+                </span>
+              ) : null}
+              {planState === 'saved' && !readOnly && !isRootAdmin ? (
+                <span className="text-[#6B7280]">изменение плановых дат — только с разового разрешения администратора</span>
+              ) : null}
+              {planState === 'saved' && isRootAdmin && !readOnly ? (
+                <span className="text-[#6B7280]">root-администратор может изменить план без разрешения</span>
+              ) : null}
+              {planDirty ? <span className="text-amber-700 font-semibold">изменения плана не сохранены</span> : null}
+              {showSavePlanStages ? (
+                <button
+                  type="button"
+                  data-ui="save-plan-stages"
+                  disabled={planSaving}
+                  onClick={savePlanStages}
+                  title={
+                    planState === 'draft'
+                      ? 'Зафиксировать план этапов; после этого плановые даты блокируются'
+                      : 'Записать изменения плана и вернуть блокировку (разовое разрешение будет использовано)'
+                  }
+                  className={`${UI.buttonPrimary} ml-auto`}
+                >
+                  {planSaving ? 'Сохраняется…' : 'Сохранить план этапов'}
+                </button>
+              ) : null}
+            </div>
+            {planSaveError ? (
+              <div className={UI.errorBox} role="alert">
+                <TriangleAlert className="w-4 h-4 shrink-0" aria-hidden="true" />
+                {planSaveError}
+              </div>
+            ) : null}
+            {isRootAdmin && !readOnly && planState !== 'draft' ? (
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <button type="button" data-ui="grant-plan-perm" onClick={() => setGrantOpen((v) => !v)} className={UI.buttonGhost}>
+                  Разрешить одно изменение плана
+                </button>
+                {grantOpen ? (
+                  <>
+                    <select
+                      data-ui="grant-plan-user"
+                      value={grantUserId}
+                      onChange={(e) => setGrantUserId(e.target.value)}
+                      className="bg-white border border-[#E5E7EB] rounded-lg px-2 py-1.5 text-[11px] text-[#121316] outline-none transition-colors cursor-pointer focus:border-[var(--accent)]"
+                    >
+                      <option value="">— выберите пользователя —</option>
+                      {dispatchers.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="button" data-ui="grant-plan-confirm" onClick={grantPlanPermission} className={UI.buttonPrimary}>
+                      Выдать разрешение
+                    </button>
+                    <span className="text-[10px] text-[#9CA3AF]">действует для одного рейса и одного пользователя; после успешного сохранения сгорает</span>
+                  </>
+                ) : null}
+                {Object.values(planLock.permissions).length ? (
+                  <span className="flex flex-wrap items-center gap-2">
+                    {Object.values(planLock.permissions).map((p) => (
+                      <span key={p.userId} data-ui="plan-perm-row" className="inline-flex items-center gap-2 border border-[#E5E7EB] rounded-lg px-2 py-1">
+                        <span className="text-[#4B5563]">
+                          действует: {p.userName} · выдано {fmtFull((p.grantedAt || '').slice(0, 10))} · {p.grantedBy}
+                        </span>
+                        <button
+                          type="button"
+                          data-ui="revoke-plan-perm"
+                          data-uid={p.userId}
+                          onClick={() => revokePlanPermission(p.userId, p.userName)}
+                          className="text-rose-600 hover:underline cursor-pointer"
+                        >
+                          Отозвать
+                        </button>
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            {planLock.history.length ? (
+              <details className="text-[11px] text-[#6B7280]">
+                <summary className="cursor-pointer select-none" data-ui="plan-history-toggle">
+                  История плана ({planLock.history.length})
+                </summary>
+                <div className="flex flex-col gap-0.5 pt-1">
+                  {[...planLock.history].reverse().map((h, i) => (
+                    <span key={`${h.at}-${i}`} data-ui="plan-history-row">
+                      {h.at ? fmtFull(h.at.slice(0, 10)) : '—'} · {PLAN_HISTORY_LABELS[h.action] || h.action} — {h.by}
+                      {h.note ? ` · ${h.note}` : ''}
+                    </span>
+                  ))}
+                </div>
+              </details>
+            ) : null}
+          </div>
+        ) : null}
 
         {/* План и факт: границы и сравнение */}
         <div data-ui="trip-bounds" className="border border-[#E5E7EB] rounded-xl overflow-hidden">
@@ -1234,19 +1672,18 @@ export default function TripCard({
                 <th className={UI.th}>Факт</th>
                 <th className={UI.th}>Отклонение / состояние</th>
                 <th className={UI.th}>Крит. срок</th>
-                <th className={UI.th}>Причина и меры</th>
+                <th className={UI.th}>События этапа</th>
                 <th className={UI.th}>{''}</th>
               </tr>
             </thead>
             <tbody>
               {draft.stages.map((s) => {
                 const dev = stageDeviation(s);
-                const late = isStageLate(s, today);
                 const pDay = dayNum(s.plannedDate);
                 const fDay = dayNum(s.actualDate);
                 const hasText = !!(s.reason || s.action);
                 const stState = stageStateOf(s, today);
-                const expanded = expandedStage === s.id;
+                const stageEvents = carEvents.filter((e) => e.tripKey === trip.key && e.stageId === s.id).length;
                 return (
                   <React.Fragment key={s.id}>
                     <tr data-stage={s.id} data-stage-highlighted={highlightStage === s.id ? '1' : undefined} className={`border-b border-[#E5E7EB] transition-colors ${highlightStage === s.id ? 'bg-[var(--accent-10)] ring-1 ring-inset ring-[var(--accent-30)]' : ''}`}>
@@ -1275,7 +1712,15 @@ export default function TripCard({
                       </td>
                       <td className="px-2 py-1.5 align-middle">
                         <div className="flex items-center gap-1">
-                          <DateInput value={s.plannedDate || ''} disabled={readOnly} ariaLabel="Плановая дата этапа" onChange={(v) => onStageField(s.id, 'plannedDate', v)} />
+                          <span
+                            title={
+                              readOnly || canEditPlanned
+                                ? undefined
+                                : 'Плановые даты этапов заблокированы после сохранения плана — разблокировка только с разового разрешения администратора'
+                            }
+                          >
+                            <DateInput value={s.plannedDate || ''} disabled={readOnly || !canEditPlanned} ariaLabel="Плановая дата этапа" onChange={(v) => onStageField(s.id, 'plannedDate', v)} />
+                          </span>
                           {pDay != null && isWeekendDay(pDay) ? (
                             <span title={WEEKEND_HINT} aria-label={WEEKEND_HINT} className="shrink-0">
                               <CalendarClock className="w-3.5 h-3.5 text-amber-600" aria-hidden="true" />
@@ -1328,22 +1773,33 @@ export default function TripCard({
                         </label>
                       </td>
                       <td className="px-2 py-1.5 align-middle">
-                        <button
-                          type="button"
-                          data-ui="stage-reason-toggle"
-                          aria-expanded={expanded}
-                          onClick={() => setExpandedStage(expanded ? null : s.id)}
-                          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] border transition-colors cursor-pointer ${
-                            expanded ? 'border-[var(--accent-30)] text-[var(--accent-ink)] bg-[var(--accent-10)]' : 'border-[#E5E7EB] text-[#6B7280] hover:text-[#121316]'
-                          }`}
-                          title="Причина и меры относятся именно к этому этапу"
-                        >
-                          {late ? 'просрочен · ' : ''}
-                          {hasText ? 'Причина и меры указаны' : 'Причина и меры'}
-                        </button>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {stageEvents > 0 ? (
+                            <span className={UI.chip} title="События, связанные с этим этапом">
+                              событий: {stageEvents}
+                            </span>
+                          ) : null}
+                          {hasText ? (
+                            <span className="text-[10px] text-[#6B7280]" title="Прежние «Причина» и «Меры» этапа сохранены и показаны в журнале событий">
+                              прежние сведения — в журнале
+                            </span>
+                          ) : null}
+                          {!readOnly ? (
+                            <button
+                              type="button"
+                              data-ui="stage-add-event"
+                              onClick={() => requestAddEvent(s.id)}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] border border-[#E5E7EB] text-[#6B7280] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                              title="Открыть форму события в журнале и заранее связать запись с этим этапом; даты этапа не меняются"
+                            >
+                              <Plus className="w-3 h-3" aria-hidden="true" />
+                              Добавить событие
+                            </button>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-2 py-1.5 align-middle">
-                        {!readOnly ? (
+                        {!readOnly && canEditPlanned ? (
                           <button
                             type="button"
                             onClick={() => removeStage(s.id)}
@@ -1356,47 +1812,6 @@ export default function TripCard({
                         ) : null}
                       </td>
                     </tr>
-                    {expanded ? (
-                      <tr data-ui="stage-reason-panel" className="border-b border-[#E5E7EB] bg-[#F9FAFB]">
-                        <td colSpan={8} className="px-3 py-3">
-                          <div className="flex flex-col gap-2">
-                            <span className="text-[10px] font-semibold text-[#6B7280]">
-                              Причина и меры — этап «{stageFullName(stageTypes, s)}»{s.plannedDate ? ` (план ${s.plannedDate})` : ''}
-                            </span>
-                            <label className="flex flex-col gap-1">
-                              <span className={UI.fieldLabel}>Причина</span>
-                              <AutoGrow
-                                value={s.reason || ''}
-                                onChange={(v) => onStageField(s.id, 'reason', v)}
-                                disabled={readOnly}
-                                ariaLabel={`Причина просрочки этапа ${stageFullName(stageTypes, s)}`}
-                                placeholder="Опишите причину отклонения от планового срока по этому этапу"
-                              />
-                            </label>
-                            <label className="flex flex-col gap-1">
-                              <span className={UI.fieldLabel}>Меры при просрочке</span>
-                              <AutoGrow
-                                value={s.action || ''}
-                                onChange={(v) => onStageField(s.id, 'action', v)}
-                                disabled={readOnly}
-                                ariaLabel={`Меры при просрочке этапа ${stageFullName(stageTypes, s)}`}
-                                placeholder="Укажите принятые или планируемые меры"
-                              />
-                            </label>
-                            {s.reason && !s.action ? (
-                              <div className="text-[10px] text-[#6B7280]">
-                                Ранее заполнена только причина — текст не разделён автоматически. При необходимости продублируйте его в «Меры»:
-                                {!readOnly ? (
-                                  <button type="button" className="ml-2 underline text-[var(--accent-ink)] cursor-pointer" onClick={() => onStageField(s.id, 'action', s.reason || '')}>
-                                    продублировать причину в меры
-                                  </button>
-                                ) : null}
-                              </div>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    ) : null}
                   </React.Fragment>
                 );
               })}
@@ -1410,7 +1825,7 @@ export default function TripCard({
             </tbody>
           </table>
         </div>
-        {!readOnly ? (
+        {!readOnly && canEditPlanned ? (
           <div>
             <button type="button" data-ui="add-stage" onClick={addStage} className={UI.buttonGhost}>
               <Plus className="w-4 h-4" aria-hidden="true" />
@@ -1419,33 +1834,26 @@ export default function TripCard({
           </div>
         ) : null}
 
-        {/* Причина и меры при просрочке — по рейсу */}
-        <div className="border border-[#E5E7EB] rounded-xl p-3 flex flex-col gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] font-semibold text-[#121316]">Комментарий к рейсу: причина и меры при просрочке</span>
-            <span className="text-[10px] text-[#9CA3AF]">это комментарий ко всему рейсу — отдельно от причин и мер этапов; не удаляется при изменении дат</span>
-          </div>
-          <label className="flex flex-col gap-1">
-            <span className={UI.fieldLabel}>Причина</span>
-            <AutoGrow
-              value={metaDraft.reason}
-              onChange={(v) => onMeta({ reason: v })}
-              disabled={readOnly}
-              ariaLabel="Причина просрочки по рейсу"
-              placeholder="Опишите причину отклонения от планового срока (по всему рейсу)"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className={UI.fieldLabel}>Меры при просрочке</span>
-            <AutoGrow
-              value={metaDraft.measures}
-              onChange={(v) => onMeta({ measures: v })}
-              disabled={readOnly}
-              ariaLabel="Меры при просрочке по рейсу"
-              placeholder="Укажите принятые или планируемые меры"
-            />
-          </label>
-        </div>
+        {/* ЕДИНЫЙ ЖУРНАЛ «События рейса» — после точек и этапов, до плана дохода.
+            Замена отдельных полей «Комментарий к рейсу» / «Причина» / «Меры» и
+            дублирующего блока «События машины за период рейса». */}
+        <TripEventsJournal
+          trip={draftTrip}
+          stageTypes={stageTypes}
+          stages={draft.stages}
+          events={carEvents}
+          meta={metaDraft}
+          canWrite={canWrite}
+          readOnly={readOnly}
+          user={user}
+          focusEventId={focusEventId}
+          onFocusEventDone={onFocusEventDone}
+          formRequest={eventFormRequest}
+          onFormRequestHandled={() => setEventFormRequest(null)}
+          onDirtyChange={handleJournalDirty}
+          onClearLegacyStage={clearLegacyStage}
+          onClearLegacyMeta={clearLegacyMeta}
+        />
 
         {/* Блок В: План дохода — ниже блока дат и этапов */}
         {/* План дохода: сведения и плечи */}
@@ -1527,29 +1935,6 @@ export default function TripCard({
           </div>
         )}
 
-        {/* События машины за период рейса */}
-        <div className="flex flex-col gap-1.5">
-          <span className={UI.sectionTitle}>События машины за период рейса</span>
-          {carEvents.length ? (
-            <div className="border border-[#E5E7EB] rounded-xl divide-y divide-[#E5E7EB]">
-              {carEvents.map((e) => {
-                const em = eventTypeOf(e.kind);
-                return (
-                  <div key={e.id} className="px-3 py-2 text-[11px] flex flex-wrap gap-x-3 gap-y-1">
-                    <span className="font-semibold text-[#121316]">{em.name}</span>
-                    <span className="text-[#6B7280]">
-                      {fmtFull(e.dateFrom)} – {fmtFull(e.dateTo || e.dateFrom)}
-                    </span>
-                    {e.note ? <span className="text-[#6B7280]">{e.note}</span> : null}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className={UI.hint}>События машины за этот период не зафиксированы.</div>
-          )}
-        </div>
-
         {/* Встроенный таймлайн этой машины */}
         <div className="flex flex-col gap-2">
           <span className={UI.sectionTitle}>Таймлайн машины {formatPlate(trip.carNumber)} — план и факт выбранного рейса</span>
@@ -1561,6 +1946,7 @@ export default function TripCard({
             stageTypes={stageTypes}
             today={today}
             onSelectTrip={onSelectTrip}
+            onOpenEventTrip={onOpenEventTrip}
             onFocusStage={readOnly ? undefined : focusStage}
           />
         </div>

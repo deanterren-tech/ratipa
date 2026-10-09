@@ -8,6 +8,7 @@ import { ModalShell } from '../../../ui/components';
 import { UI } from '../../../ui/kit';
 import { formatPlate } from '../../../utils/salaryAutofill';
 import { dayStr, fmtFull, tripSpan } from './lib/timeline';
+import { planBarLabelParts } from './PlanBarLabel';
 import type { BasePeriod, WholeTrip } from './lib/sources';
 
 interface Props {
@@ -60,15 +61,20 @@ export default function CarOverviewModal({
                 const sp = tripSpan(t);
                 const start = t.spanOverride?.pMin ?? sp.pMin ?? sp.fMin ?? null;
                 const end = t.spanOverride?.pMax ?? sp.pMax ?? sp.fMax ?? null;
+                const parts = planBarLabelParts(t);
                 return (
                   <button
                     key={t.key}
                     type="button"
                     data-cov-trip={t.key}
                     onClick={() => onSelectTrip(t.key)}
+                    title={parts.titleText}
                     className="w-full text-left px-3 py-2.5 hover:bg-[#F9FAFB] transition-colors cursor-pointer flex flex-wrap items-center gap-x-3 gap-y-1"
                   >
-                    <span className="text-[11px] font-semibold text-[#121316]">{t.route || 'без маршрута'}</span>
+                    <span className="text-[11px] font-semibold text-[#121316]">
+                      {parts.main}
+                      {parts.meta ? <span className="text-[#6B7280] font-medium">{parts.meta}</span> : null}
+                    </span>
                     {t.kind === 'plan' ? <span className={UI.chip}>из Плана дохода</span> : <span className={UI.chip}>ручной рейс</span>}
                     {t.archived ? <span className={UI.chip}>архив</span> : null}
                     <span className="text-[11px] text-[#6B7280]">

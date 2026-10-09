@@ -36,6 +36,8 @@ import {
   zoomLabel,
 } from './lib/timeline';
 import { eventTypeOf, stageFullName } from './lib/catalog';
+import { PlanBarLabel, planBarLabelParts, type PlanBarParts } from './PlanBarLabel';
+import { eventMarkOf, groupEventMarks, type EventMark } from './lib/eventMarks';
 import {
   baseBarRange,
   baseDeviation,
@@ -91,7 +93,7 @@ const hatchOpen = `repeating-linear-gradient(45deg, ${CLR.factOpenA}, ${CLR.fact
 // ---------------------------------------------------------------------------
 
 type PlanItem =
-  | { kind: 'plan'; a: number; b: number; tripKey: string; label: string; archived: boolean; statusKind: DeadlineStatusKind; open: boolean; title: string }
+  | { kind: 'plan'; a: number; b: number; tripKey: string; parts: PlanBarParts; archived: boolean; statusKind: DeadlineStatusKind; open: boolean; title: string }
   | { kind: 'buffer'; a: number; b: number; days: number }
   | { kind: 'markPlan'; day: number; critical: boolean; title: string; tripKey: string; weekend: boolean }
   | { kind: 'markReturn'; day: number; title: string; tripKey: string }
@@ -104,7 +106,7 @@ type FactItem =
   | { kind: 'factNone'; a: number; b: number; tripKey: string; title: string }
   | { kind: 'base'; a: number; b: number; open: boolean; label: string; periodKey: string; title: string; archived: boolean }
   | { kind: 'repair'; a: number; b: number; open: boolean; capped: boolean; periodKey: string; title: string; archived: boolean }
-  | { kind: 'event'; a: number; b: number; color: string; label: string; title: string }
+  | { kind: 'event'; day: number; lastDay: number; count: number; color: string; title: string; tripKey?: string; eventId?: string }
   | { kind: 'gap'; a: number; b: number; days: number }
   | { kind: 'markFact'; day: number; late: boolean; title: string; tripKey: string; weekend: boolean }
   | { kind: 'markReady'; day: number; title: string; periodKey: string; archived: boolean };
@@ -163,6 +165,8 @@ interface Props {
   /** Ключ рейса, открытого в карточке — выделяется на полотне. */
   selectedTripKey?: string | null;
   onOpenTrip: (tripKey: string) => void;
+  /** Клик по маркеру события: открыть связанный рейс и выделить запись в журнале. */
+  onOpenTripEvent: (tripKey: string, eventId: string) => void;
   onOpenBase: (periodKey: string) => void;
   onOpenCar: (carKey: string) => void;
 }
@@ -257,16 +261,18 @@ const buildRows = (
       const planEnd = pMax ?? pMin;
       const deadline = getDeadlineStatus(t, today, (s) => stageFullName(stageTypes, s));
       if (visible(pMin, planEnd)) {
+        const parts = planBarLabelParts(t);
+        const shown: PlanBarParts = openPlan ? { ...parts, main: 'неполный план', meta: '' } : parts;
         planItems.push({
           kind: 'plan',
           a: pMin,
           b: planEnd,
           tripKey: t.key,
-          label: t.route || t.carNumber,
+          parts: shown,
           archived: !!t.archived,
           statusKind: deadline.kind,
           open: openPlan,
-          title: `${formatPlate(car.carNumber)} · ${t.route || 'без маршрута'} · ${t.dispatcherName || 'без диспетчера'}${t.kind === 'plan' ? ' · из плана дохода' : ''}${t.archived ? ' · архив' : ''}${openPlan ? ' · неполный план (нет даты возвращения)' : ''} · ${deadline.label}`,
+          title: `${formatPlate(car.carNumber)} · ${parts.titleText} · ${t.dispatcherName || 'без диспетчера'}${t.kind === 'plan' ? ' · из плана дохода' : ''}${t.archived ? ' · архив' : ''}${openPlan ? ' · неполный план (нет даты возвращения)' : ''} · ${deadline.label}`,
         });
       }
       // Плановое возвращение — отдельный аккуратный маркер в конце плановой полосы
@@ -435,45 +441,30 @@ const buildRows = (
       });
     }
 
-    // ── События машины (ручные, ветка модуля) — на подстроке «Факт» ──
-    // Пересекающиеся по времени события группируются в один компактный маркер
-    // («события · N») — без наложений; подробности — в подсказке.
-    const evItems: Array<{ a: number; b: number; color: string; label: string; title: string }> = [];
+    // ── События (журнал рейса и старые события машины) — КОМПАКТНЫЕ маркеры ──
+    // Не полосы: маркер стоит на РЕАЛЬНОЙ дате события; близкие события
+    // группируются в один маркер со счётчиком, каждая запись доступна в
+    // подсказке и в журнале рейса (клик — открыть рейс и показать запись).
+    const evMarks: EventMark[] = [];
     myEvents.forEach((e) => {
+      // Событие архивного рейса подчиняется общей галочке «Показывать архивные данные».
+      const linkedTrip = e.tripKey ? trips.find((t) => t.key === e.tripKey) : undefined;
+      if (e.tripKey && !showArchived && linkedTrip?.archived) return;
       const meta = eventTypeOf(e.kind);
-      const a = dayNum(e.dateFrom);
-      const b = dayNum(e.dateTo) ?? a;
-      if (a == null || b == null || !visible(a, b)) return;
-      evItems.push({
-        a,
-        b: Math.max(a, b),
-        color: meta.color,
-        label: e.note ? `${meta.name}: ${e.note}` : meta.name,
-        title: `${meta.name} ${e.dateFrom} – ${e.dateTo || e.dateFrom}${e.note ? ` · ${e.note}` : ''}`,
+      const mark = eventMarkOf(e, meta.name, meta.color, e.tripKey ? 'клик — открыть рейс и показать запись' : undefined);
+      if (mark && visible(mark.day, mark.day)) evMarks.push(mark);
+    });
+    groupEventMarks(evMarks).forEach((g) => {
+      factItems.push({
+        kind: 'event',
+        day: g.day,
+        lastDay: g.lastDay,
+        count: g.count,
+        color: g.items[0].color,
+        title: g.title,
+        tripKey: g.tripKey,
+        eventId: g.eventId,
       });
-    });
-    evItems.sort((x, y) => x.a - y.a || x.b - y.b);
-    const evGroups: Array<Array<(typeof evItems)[number]>> = [];
-    evItems.forEach((ev) => {
-      const last = evGroups[evGroups.length - 1];
-      if (last && ev.a <= last[last.length - 1].b) last.push(ev);
-      else evGroups.push([ev]);
-    });
-    evGroups.forEach((group) => {
-      const a = group[0].a;
-      const b = Math.max(...group.map((g) => g.b));
-      if (group.length === 1) {
-        factItems.push({ kind: 'event', a, b, color: group[0].color, label: group[0].label, title: group[0].title });
-      } else {
-        factItems.push({
-          kind: 'event',
-          a,
-          b,
-          color: '#7C3AED',
-          label: `события · ${group.length}`,
-          title: `События (${group.length}):\n${group.map((g) => `• ${g.title}`).join('\n')}`,
-        });
-      }
     });
 
     // Пересечения рейс↔база и этапы вне границ (не исправляем — предупреждаем)
@@ -532,6 +523,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   bg,
   selectedTripKey,
   onOpenTrip,
+  onOpenTripEvent,
   onOpenBase,
   onOpenCar,
 }: {
@@ -542,6 +534,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   bg: BgSeg[];
   selectedTripKey?: string | null;
   onOpenTrip: (key: string) => void;
+  onOpenTripEvent: (tripKey: string, eventId: string) => void;
   onOpenBase: (key: string) => void;
   onOpenCar: (key: string) => void;
 }) {
@@ -699,8 +692,14 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 }}
                 title={it.title}
               >
-                {prefix}
-                {it.open ? 'неполный план' : it.label}
+                {it.open ? (
+                  <>
+                    {prefix}
+                    неполный план
+                  </>
+                ) : (
+                  <PlanBarLabel parts={it.parts} prefix={prefix} width={p.width} />
+                )}
               </div>
             );
           }
@@ -751,7 +750,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       <div data-lane="fact" className="relative z-0 border-b border-[#E5E7EB]" style={{ width: W, height: FACT_H, ...laneBg }}>
         {bgPlane('fbg', 0.6)}
         {row.factItems.map((it, idx) => {
-          const p = pos(it.kind === 'markFact' || it.kind === 'markReady' ? it.day : it.a, it.kind === 'markFact' || it.kind === 'markReady' ? it.day : it.b);
+          const p =
+            it.kind === 'event' || it.kind === 'markFact' || it.kind === 'markReady'
+              ? pos(it.day, it.day)
+              : pos(it.a, it.b);
           if (!p) return null;
           switch (it.kind) {
             case 'fact':
@@ -861,18 +863,47 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   {p.width > 60 ? `ремонт${it.archived ? ' · архив' : ''}` : ''}
                 </div>
               );
-            case 'event':
+            case 'event': {
+              // Компактный маркер события на РЕАЛЬНОЙ дате (не полоса): ромб —
+              // одиночное событие, плашка со счётчиком — группа близких событий.
+              const evTripKey = it.tripKey;
+              const evId = it.eventId;
+              const linked = !!(evTripKey && evId);
+              const grouped = it.count > 1;
+              const left = grouped
+                ? dayToX(it.day, vs, colW) + Math.round(colW * 0.45)
+                : dayToX(it.day, vs, colW) + Math.round(colW * 0.62);
               return (
                 <div
                   key={`e${idx}`}
+                  role={linked ? 'button' : undefined}
+                  tabIndex={linked ? 0 : undefined}
                   data-bar="event"
-                  className="absolute overflow-hidden whitespace-nowrap text-[9px] leading-[14px] text-white z-[3] px-1 text-center"
-                  style={{ left: p.left, width: p.width, top: 16, height: 14, background: it.color, opacity: 0.85, borderRadius: 3 }}
+                  data-event={evId}
+                  data-trip={evTripKey}
+                  onClick={evTripKey && evId ? () => onOpenTripEvent(evTripKey, evId) : undefined}
+                  onKeyDown={
+                    evTripKey && evId
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            onOpenTripEvent(evTripKey, evId);
+                          }
+                        }
+                      : undefined
+                  }
+                  className={`absolute z-[4] ${linked ? 'cursor-pointer' : ''}`}
+                  style={
+                    grouped
+                      ? { left, top: 10, height: 12, minWidth: 16, padding: '0 3px', background: '#7C3AED', borderRadius: 6, textAlign: 'center', opacity: 0.95 }
+                      : { left, top: 11, width: 9, height: 9, background: it.color, borderRadius: 2, transform: 'rotate(45deg)', opacity: 0.95 }
+                  }
                   title={it.title}
                 >
-                  {p.width > 60 ? it.label : ''}
+                  {grouped ? <span className="text-[8px] leading-[12px] text-white font-semibold">{it.count}</span> : null}
                 </div>
               );
+            }
             case 'gap':
               return (
                 <div
@@ -1009,6 +1040,7 @@ export default function TimelineGrid({
   onShowArchivedChange,
   selectedTripKey,
   onOpenTrip,
+  onOpenTripEvent,
   onOpenBase,
   onOpenCar,
 }: Props) {
@@ -1363,6 +1395,7 @@ export default function TimelineGrid({
               bg={bg}
               selectedTripKey={selectedTripKey}
               onOpenTrip={onOpenTrip}
+              onOpenTripEvent={onOpenTripEvent}
               onOpenBase={onOpenBase}
               onOpenCar={onOpenCar}
             />
@@ -1414,8 +1447,8 @@ export default function TimelineGrid({
           ремонт (внутри базы)
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: '#7C3AED', opacity: 0.85 }} />
-          событие машины
+          <i className="inline-block w-[9px] h-[9px] rotate-45 rounded-[2px]" style={{ background: '#7C3AED', opacity: 0.95 }} />
+          событие машины / журнала рейса (клик — к записи)
         </span>
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block w-[3px] h-[12px]" style={{ background: CLR.markCritical }} />

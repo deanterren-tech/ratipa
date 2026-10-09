@@ -19,7 +19,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
-import type { AppSettings, TimelineTrip, UserProfile } from '../../types';
+import type { AppSettings, TimelinePlanGuard, TimelinePlanPermission, TimelineTrip, UserProfile } from '../../types';
 import { dbService } from '../../api';
 import { resolvePermission } from '../../utils/permissions';
 import { buildDispatcherDirectory } from '../../utils/dispatcher';
@@ -30,7 +30,6 @@ import { useHashRoute } from '../../hooks/useHashRoute';
 import TimelineGrid from './tripTimeline/TimelineGrid';
 import TripCard from './tripTimeline/TripCard';
 import NewTripForm, { type NewTripDraft } from './tripTimeline/NewTripForm';
-import EventsBlock from './tripTimeline/EventsBlock';
 import StatsBlock from './tripTimeline/StatsBlock';
 import PeriodModal from './tripTimeline/PeriodModal';
 import CarOverviewModal from './tripTimeline/CarOverviewModal';
@@ -38,11 +37,10 @@ import { useTimelineData } from './tripTimeline/useTimelineData';
 import { computeStoredRange, sortMonthLabelsDesc, todayNum, zoomColW, zoomIndexOf } from './tripTimeline/lib/timeline';
 import { plateKeyOf } from './tripTimeline/lib/sources';
 
-type TabId = 'timeline' | 'events' | 'stats';
+type TabId = 'timeline' | 'stats';
 
 const TAB_SLUGS: Record<TabId, string> = {
   timeline: 'timeline',
-  events: 'events',
   stats: 'stats',
 };
 const SLUG_TO_TAB: Record<string, TabId> = Object.fromEntries(
@@ -273,8 +271,26 @@ export default function TripTimelineModule({ user, settings }: Props) {
     metaTimers.current.set(key, t);
   }, []);
 
+  // ── Контроль плана этапов: состояние планов и разовые разрешения ────────
+  const [planGuardStore, setPlanGuardStore] = useState<Record<string, TimelinePlanGuard>>({});
+  const [planPermsStore, setPlanPermsStore] = useState<Record<string, Record<string, TimelinePlanPermission>>>({});
+  useEffect(() => {
+    const unsub = dbService.getTimelinePlanGuards((store) => setPlanGuardStore(store || {}));
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
+  }, []);
+  useEffect(() => {
+    const unsub = dbService.getTimelinePlanPerms((store) => setPlanPermsStore(store || {}));
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
+  }, []);
+
   // ── Карточки и модалки ─────────────────────────────────────────────────
   const [openTripKey, setOpenTripKey] = useState<string | null>(null);
+  /** Событие, к которому нужно перейти в журнале карточки (с маркера таймлайна). */
+  const [focusEventId, setFocusEventId] = useState<string | null>(null);
   const [periodKey, setPeriodKey] = useState<string | null>(null);
   const [overviewCarKey, setOverviewCarKey] = useState<string | null>(null);
   const [showNewTrip, setShowNewTrip] = useState(false);
@@ -282,6 +298,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
   const openTrip = useCallback((tripKey: string) => {
     setOverviewCarKey(null);
     setOpenTripKey(tripKey);
+    setFocusEventId(null);
     try {
       // адресуемая ссылка на окно рейса (переживает F5 и открытие в новой вкладке)
       window.history.replaceState(null, '', `#tripTimeline/trip/${encodeURIComponent(tripKey)}`);
@@ -289,6 +306,15 @@ export default function TripTimelineModule({ user, settings }: Props) {
       /* не критично */
     }
   }, []);
+
+  /** Клик по маркеру события: открыть связанный рейс и выделить запись в журнале. */
+  const openTripAtEvent = useCallback(
+    (tripKey: string, eventId: string) => {
+      openTrip(tripKey);
+      setFocusEventId(eventId);
+    },
+    [openTrip],
+  );
 
   // Прямые ссылки: #tripTimeline/trip/<key>; старый маршрут #tripTimeline/trips → таймлайн
   useEffect(() => {
@@ -301,6 +327,13 @@ export default function TripTimelineModule({ user, settings }: Props) {
         } catch {
           /* не критично */
         }
+        return;
+      }
+      if (h.startsWith('#tripTimeline/events')) {
+        // Старые ссылки на вкладку «События»: вкладки больше нет, функции
+        // перенесены в журнал карточки рейса — безопасный переход на таймлайн,
+        // данные и записи не удаляются.
+        navigate(DEFAULT_TAB, undefined, { replace: true });
         return;
       }
       if (h.startsWith('#tripTimeline/trips')) {
@@ -324,6 +357,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
 
   const closeTrip = useCallback(() => {
     setOpenTripKey(null);
+    setFocusEventId(null);
     try {
       const h = window.location.hash || '';
       const clean = h.replace(/\/trip\/[^/]*$/, '');
@@ -398,6 +432,8 @@ export default function TripTimelineModule({ user, settings }: Props) {
       };
       const range = computeStoredRange(trip);
       dbService.createTimelineTrip({ ...trip, ...range }, user.name, user.role);
+      // Новый рейс — план этапов в состоянии черновика (первичное планирование).
+      dbService.markTimelinePlanDraft(`tl:${id}`);
       toast('Рейс добавлен', 'success');
       setShowNewTrip(false);
       setOpenTripKey(`tl:${id}`);
@@ -457,7 +493,6 @@ export default function TripTimelineModule({ user, settings }: Props) {
 
   const tabs = [
     { key: 'timeline', label: 'Таймлайн' },
-    { key: 'events', label: 'События', count: filteredEvents.length },
     { key: 'stats', label: 'Статистика' },
   ];
 
@@ -478,6 +513,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
   const openTripMeta = {
     reason: String(openTripMetaRaw.reason || ''),
     measures: String(openTripMetaRaw.measures || ''),
+    comment: String(openTripMetaRaw.comment || ''),
   };
   const carTripsForModal = openTripObj ? data.trips.filter((t) => t.carKey === openTripObj.carKey) : [];
   const carBasesForModal = openTripObj ? data.bases.filter((p) => p.carKey === openTripObj.carKey) : [];
@@ -600,13 +636,10 @@ export default function TripTimelineModule({ user, settings }: Props) {
           onShowArchivedChange={setShowArchived}
           selectedTripKey={openTripKey}
           onOpenTrip={openTrip}
+          onOpenTripEvent={openTripAtEvent}
           onOpenBase={openPeriod}
           onOpenCar={openCar}
         />
-      </div>
-
-      <div className={activeTab === 'events' ? '' : 'hidden'}>
-        <EventsBlock events={filteredEvents} user={user} canWrite={canWrite} />
       </div>
 
       <div className={activeTab === 'stats' ? '' : 'hidden'}>
@@ -631,8 +664,15 @@ export default function TripTimelineModule({ user, settings }: Props) {
           today={today}
           canWrite={canWrite}
           canEditPlan={canEditPlan}
+          user={user}
           meta={openTripMeta}
           onSaveMeta={(key, patch) => saveMeta(key, patch as Record<string, unknown>)}
+          focusEventId={focusEventId}
+          onFocusEventDone={() => setFocusEventId(null)}
+          onOpenEventTrip={openTripAtEvent}
+          planGuard={openTripKey ? planGuardStore[openTripKey] || null : null}
+          planPerms={openTripKey ? planPermsStore[openTripKey] || {} : {}}
+          planControlEnabled={dbService.isOnline()}
           carTrips={carTripsForModal}
           carBases={carBasesForModal}
           carEvents={carEventsForModal}
