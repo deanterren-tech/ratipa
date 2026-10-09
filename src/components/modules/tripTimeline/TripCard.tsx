@@ -21,6 +21,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
+  CalendarCheck2,
   CalendarClock,
   ClipboardCopy,
   ExternalLink,
@@ -28,6 +29,7 @@ import {
   Plus,
   Trash2,
   TriangleAlert,
+  Wrench,
 } from 'lucide-react';
 import type { LegPlan, TimelinePlanGuard, TimelinePlanHistoryEntry, TimelinePlanPermission, TimelinePlanRequest, TimelineStage, TimelineStageType, TimelineVehicleEvent, UserProfile } from '../../../types';
 import { UI } from '../../../ui/kit';
@@ -89,7 +91,8 @@ import {
 import {
   bzKindColor,
   layoutBzFills,
-  type BzFillSection,
+  type BzMark,
+  type BzStripe,
 } from './lib/bzFills';
 
 const STATUS_TONE: Record<number, { dot: string; text: string }> = {
@@ -514,14 +517,38 @@ export function CarMiniTimeline({
   const miniFactH = Math.max(MINI_FACT_H, miniFactTrack.layout.laneH);
   const miniFactZone0 = miniFactTrack.layout.zones.find((z) => z.key === 0) ?? null;
 
-  // Заливки этапов (та же модель отображения, что в основном таймлайне):
-  // план — в подстроке «План», факт — в «Факт»; клик выделяет этап в таблице.
+  // Заливки этапов и полосы базы/ремонта (та же модель отображения, что в
+  // основном таймлайне): план — в подстроке «План», факт — в «Факт»; клик
+  // выделяет этап в таблице. База и ремонт — непрерывные полосы периода;
+  // готовность и окончание ремонта — отметки на всю ячейку дня.
+  const miniBzInputs = useMemo(() => carBases.map((p) => ({ period: p })), [carBases]);
+  const miniPlanBz = useMemo(
+    () => layoutBzFills(miniBzInputs, [], 'plan', renderVs, ve, today),
+    [miniBzInputs, renderVs, ve, today],
+  );
+  const miniFactBz = useMemo(
+    () => layoutBzFills(miniBzInputs, [], 'fact', renderVs, ve, today),
+    [miniBzInputs, renderVs, ve, today],
+  );
   const miniFillInputs = useMemo<StageFillInput[]>(
     () => carTrips.flatMap((t) => (t.stages || []).map((s) => ({ tripKey: t.key, stage: s, archived: !!t.archived }))),
     [carTrips],
   );
-  const miniPlanFills = useMemo(() => layoutStageFills(miniFillInputs, 'plan', renderVs, ve), [miniFillInputs, renderVs, ve]);
-  const miniFactFills = useMemo(() => layoutStageFills(miniFillInputs, 'fact', renderVs, ve), [miniFillInputs, renderVs, ve]);
+  const miniPlanFills = useMemo(
+    () => layoutStageFills(miniFillInputs, 'plan', renderVs, ve, miniPlanBz.dayClaims),
+    [miniFillInputs, renderVs, ve, miniPlanBz.dayClaims],
+  );
+  const miniFactFills = useMemo(
+    () => layoutStageFills(miniFillInputs, 'fact', renderVs, ve, miniFactBz.dayClaims),
+    [miniFillInputs, renderVs, ve, miniFactBz.dayClaims],
+  );
+  const miniStageDaysOf = (fills: StageFillSection[]): Map<number, number> => {
+    const m = new Map<number, number>();
+    fills.forEach((f) => m.set(f.day, (m.get(f.day) || 0) + 1));
+    return m;
+  };
+  const miniPlanStageDays = useMemo(() => miniStageDaysOf(miniPlanFills), [miniPlanFills]);
+  const miniFactStageDays = useMemo(() => miniStageDaysOf(miniFactFills), [miniFactFills]);
   const renderMiniFill = (f: StageFillSection, keyPrefix: string) => {
     const color = stageColorOf(f.stage.type);
     const left = dayToX(f.day, renderVs, colW) + Math.round((f.section * colW) / f.sections);
@@ -529,6 +556,9 @@ export function CarMiniTimeline({
     const width = Math.max(1, right - left);
     const clickable = !!onFocusStage;
     const open = clickable ? () => onFocusStage?.(f.stage.id) : undefined;
+    const radius = `${f.section === 0 ? '4px' : '0px'} ${f.section === f.sections - 1 ? '4px' : '0px'} ${
+      f.section === f.sections - 1 ? '4px' : '0px'
+    } ${f.section === 0 ? '4px' : '0px'}`;
     return (
       <div
         key={`${keyPrefix}-${f.tripKey}-${f.stage.id}-${f.day}`}
@@ -548,13 +578,14 @@ export function CarMiniTimeline({
               }
             : undefined
         }
-        className={`absolute top-0 bottom-0 z-[4] overflow-hidden whitespace-nowrap flex items-center justify-center px-0.5 ${clickable ? 'cursor-pointer' : ''}`}
+        className={`absolute top-0 bottom-0 z-[2] overflow-hidden whitespace-nowrap flex items-center justify-center px-0.5 ${clickable ? 'cursor-pointer' : ''}`}
         style={{
           left,
           width,
           background: color.bg,
           borderLeft: `1px solid ${color.border}`,
           borderRight: f.section === f.sections - 1 ? `1px solid ${color.border}` : undefined,
+          borderRadius: radius,
           color: color.text,
           ...(f.stage.isCritical ? { outline: '1px dashed #DC2626', outlineOffset: '-1px' } : {}),
           ...(f.archived ? { opacity: 0.72 } : {}),
@@ -565,64 +596,143 @@ export function CarMiniTimeline({
       </div>
     );
   };
-  // Заливки базы/ремонта (тот же механизм и палитра, что в основном таймлайне):
-  // план базы и срок готовности — в подстроке «План»; факт базы, ремонт и дата
-  // окончания ремонта — в «Факт». Клик открывает карточку периода (если доступно).
-  const miniBzInputs = useMemo(() => carBases.map((p) => ({ period: p })), [carBases]);
-  const miniPlanBzFills = useMemo(
-    () => layoutBzFills(miniBzInputs, [], 'plan', renderVs, ve, today),
-    [miniBzInputs, renderVs, ve, today],
-  );
-  const miniFactBzFills = useMemo(
-    () => layoutBzFills(miniBzInputs, [], 'fact', renderVs, ve, today),
-    [miniBzInputs, renderVs, ve, today],
-  );
-  const renderMiniBzFill = (f: BzFillSection, keyPrefix: string) => {
-    const color = bzKindColor(f.kind);
-    const left = dayToX(f.day, renderVs, colW) + Math.round((f.section * colW) / f.sections);
-    const right = dayToX(f.day, renderVs, colW) + Math.round(((f.section + 1) * colW) / f.sections);
+  /**
+   * Непрерывная полоса периода (один элемент на период) — та же модель, что в
+   * основном таймлайне: на всю высоту подстроки, скругление только на реальных
+   * концах, «продолжающийся» край — обрыв с мягким градиентом.
+   */
+  const renderMiniBzStripe = (s: BzStripe, keyPrefix: string) => {
+    const color = bzKindColor(s.kind);
+    const clipA = Math.max(s.a, renderVs);
+    const clipB = Math.min(s.b, ve);
+    const left = dayToX(clipA, renderVs, colW);
+    const right = dayToX(clipB, renderVs, colW) + colW;
     const width = Math.max(1, right - left);
-    const clickable = !!(f.periodKey && onOpenBasePeriod);
-    const open = clickable && f.periodKey ? () => onOpenBasePeriod?.(f.periodKey as string) : undefined;
+    const r = 'var(--tl-bar-r)';
+    const radius = `${s.edgeL === 'round' ? r : '0px'} ${s.edgeR === 'round' ? r : '0px'} ${
+      s.edgeR === 'round' ? r : '0px'
+    } ${s.edgeL === 'round' ? r : '0px'}`;
+    const fadePx = 18;
+    const fadeL = s.edgeL !== 'round';
+    const fadeR = s.edgeR !== 'round';
+    const mask = fadeL
+      ? fadeR
+        ? `linear-gradient(to right, transparent 0, #000 ${fadePx}px, #000 calc(100% - ${fadePx}px), transparent 100%)`
+        : `linear-gradient(to right, transparent 0, #000 ${fadePx}px)`
+      : fadeR
+        ? `linear-gradient(to right, #000 calc(100% - ${fadePx}px), transparent 100%)`
+        : undefined;
+    const clickable = !!(s.periodKey && onOpenBasePeriod);
+    const open = clickable && s.periodKey ? () => onOpenBasePeriod?.(s.periodKey as string) : undefined;
+    const showLabel = width >= 40;
+    const labelText =
+      s.kind === 'repair' && width >= 120 && s.dateLabel ? `${s.label} · ${s.dateLabel}` : s.label;
+    const labelEl = showLabel ? (
+      <span
+        data-bz-label="1"
+        className={`inline-block max-w-full truncate px-1 text-[8px] leading-[10px] font-semibold ${
+          s.stickyLabel ? 'sticky' : 'absolute left-1 top-1/2 -translate-y-1/2'
+        }`}
+        style={{ ...(s.stickyLabel ? { left: 104 } : {}), background: color.bg, color: color.text, borderRadius: 4 }}
+      >
+        {labelText}
+      </span>
+    ) : null;
     return (
       <div
-        key={`${keyPrefix}-${f.kind}-${f.periodKey || 'gap'}-${f.day}`}
+        key={`${keyPrefix}-${s.kind}-${s.periodKey || 'gap'}-${s.a}-${s.b}`}
         role={clickable ? 'button' : undefined}
         tabIndex={clickable ? 0 : undefined}
-        data-bz-fill={f.kind}
-        data-bz-day={f.day}
-        data-bz-section={f.section}
-        data-bz-sections={f.sections}
-        data-period={f.periodKey || undefined}
+        data-bz-stripe={s.kind}
+        data-bz-a={s.a}
+        data-bz-b={s.b}
+        data-bz-edge-l={s.edgeL}
+        data-bz-edge-r={s.edgeR}
+        data-period={s.periodKey || undefined}
         onClick={open}
         onKeyDown={
-          clickable && f.periodKey
+          clickable && s.periodKey
             ? (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
-                  onOpenBasePeriod?.(f.periodKey as string);
+                  onOpenBasePeriod?.(s.periodKey as string);
                 }
               }
             : undefined
         }
-        className={`absolute top-0 bottom-0 z-[2] overflow-hidden whitespace-nowrap flex items-center justify-center ${clickable ? 'cursor-pointer' : ''}`}
+        className={`absolute z-[1] whitespace-nowrap flex items-center ${clickable ? 'cursor-pointer' : ''}`}
+        style={{
+          left,
+          width,
+          top: s.lanes > 1 ? `calc(${(s.lane * 100) / s.lanes}% + 1px)` : 0,
+          height: s.lanes > 1 ? `calc(${100 / s.lanes}% - 2px)` : undefined,
+          bottom: s.lanes > 1 ? undefined : 0,
+          background: color.bg,
+          border: `1px solid ${color.border}`,
+          borderRadius: radius,
+          color: color.text,
+          ...(mask ? { WebkitMaskImage: mask, maskImage: mask } : {}),
+          ...(s.archived ? { opacity: 0.72 } : {}),
+          ...(s.kind === 'base-gap' ? { borderTopStyle: 'dashed', borderBottomStyle: 'dashed' } : {}),
+        }}
+        title={`${s.title}${clickable ? '' : ' · (только просмотр)'}`}
+      >
+        {labelEl}
+      </div>
+    );
+  };
+  /** Однодневная отметка на всю ячейку (готовность / окончание ремонта) с иконкой. */
+  const renderMiniBzMark = (m: BzMark, keyPrefix: string, stageDays: Map<number, number>) => {
+    const color = bzKindColor(m.kind);
+    const stages = stageDays.get(m.day) || 0;
+    const total = m.sections + stages;
+    const left = dayToX(m.day, renderVs, colW) + Math.round((m.section * colW) / total);
+    const right = dayToX(m.day, renderVs, colW) + Math.round(((m.section + 1) * colW) / total);
+    const width = Math.max(1, right - left);
+    const r = 'var(--tl-bar-r)';
+    const radius =
+      total === 1
+        ? r
+        : `${m.section === 0 ? r : '0px'} ${m.section === total - 1 ? r : '0px'} ${
+            m.section === total - 1 ? r : '0px'
+          } ${m.section === 0 ? r : '0px'}`;
+    const Icon = m.kind === 'ready' ? CalendarCheck2 : Wrench;
+    const clickable = !!onOpenBasePeriod;
+    const open = clickable ? () => onOpenBasePeriod?.(m.periodKey) : undefined;
+    return (
+      <div
+        key={`${keyPrefix}-${m.kind}-${m.periodKey}-${m.day}`}
+        role={clickable ? 'button' : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        data-bz-mark={m.kind}
+        data-bz-day={m.day}
+        data-bz-section={m.section}
+        data-bz-sections={total}
+        data-period={m.periodKey}
+        onClick={open}
+        onKeyDown={
+          clickable
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onOpenBasePeriod?.(m.periodKey);
+                }
+              }
+            : undefined
+        }
+        className={`absolute top-0 bottom-0 z-[2] overflow-hidden flex items-center justify-center ${clickable ? 'cursor-pointer' : ''}`}
         style={{
           left,
           width,
           background: color.bg,
-          // Разделители секций — inset-тень: не участвует в box-sizing и не
-          // расширяет узкие секции на мелком масштабе.
-          boxShadow:
-            f.section === f.sections - 1
-              ? `inset 1px 0 0 ${color.border}, inset -1px 0 0 ${color.border}`
-              : `inset 1px 0 0 ${color.border}`,
+          border: `1px solid ${color.border}`,
+          borderRadius: radius,
           color: color.text,
-          ...(f.archived ? { opacity: 0.72 } : {}),
-          ...(f.kind === 'base-gap' ? { borderTopStyle: 'dashed', borderBottomStyle: 'dashed', borderTopColor: color.border, borderBottomColor: color.border, borderTopWidth: 1, borderBottomWidth: 1 } : {}),
+          ...(m.archived ? { opacity: 0.72 } : {}),
         }}
-        title={`${f.title}${clickable ? '' : ' · (только просмотр)'}`}
+        title={`${m.title}${clickable ? '' : ' · (только просмотр)'}`}
       >
-        {width >= 40 ? <span className="px-0.5 text-[8px] leading-[10px] truncate max-w-full">{f.label}</span> : null}
+        {width >= 14 ? <Icon className="w-3 h-3 shrink-0" style={{ color: color.text }} aria-hidden="true" /> : null}
       </div>
     );
   };
@@ -725,7 +835,8 @@ export function CarMiniTimeline({
                 style={{ left: s.left, width: s.width, background: '#F1F2F4', opacity: 0.7, pointerEvents: 'none' }}
               />
             ))}
-            {miniPlanBzFills.map((f) => renderMiniBzFill(f, 'mpbz'))}
+            {miniPlanBz.stripes.map((s) => renderMiniBzStripe(s, 'mpbz'))}
+            {miniPlanBz.marks.map((m) => renderMiniBzMark(m, 'mpbm', miniPlanStageDays))}
             {miniPlanFills.map((f) => renderMiniFill(f, 'mpf'))}
             {bgSegs.filter((s) => s.today).map((s, i) => (
               <div
@@ -804,7 +915,8 @@ export function CarMiniTimeline({
                 style={{ left: s.left, width: s.width, background: '#F1F2F4', opacity: 0.6, pointerEvents: 'none' }}
               />
             ))}
-            {miniFactBzFills.map((f) => renderMiniBzFill(f, 'mfbz'))}
+            {miniFactBz.stripes.map((s) => renderMiniBzStripe(s, 'mfbz'))}
+            {miniFactBz.marks.map((m) => renderMiniBzMark(m, 'mfbm', miniFactStageDays))}
             {miniFactFills.map((f) => renderMiniFill(f, 'mff'))}
             {bgSegs.filter((s) => s.today).map((s, i) => (
               <div

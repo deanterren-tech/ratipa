@@ -53,7 +53,8 @@ import {
   layoutBzFills,
   type BzFillGap,
   type BzFillInput,
-  type BzFillSection,
+  type BzMark,
+  type BzStripe,
 } from './lib/bzFills';
 import {
   baseBarRange,
@@ -66,7 +67,7 @@ import {
 } from './lib/sources';
 import DateInput from './DateInput';
 import CalendarHeader from './CalendarHeader';
-import { AlertTriangle, ArrowRightLeft, ChevronDown, ChevronLeft, ChevronRight, CircleDashed, Hourglass, Maximize2, Minimize2, OctagonX, Palette, TriangleAlert } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, CalendarCheck2, ChevronDown, ChevronLeft, ChevronRight, CircleDashed, Hourglass, Maximize2, Minimize2, OctagonX, Palette, TriangleAlert, Wrench } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Палитра полос (визуальная логика прототипа; цвета — единая семья заливок
@@ -759,40 +760,64 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   /** Дорожка «факта рейса» (группа 0) — над ней стоят маркеры событий. */
   const factZone0 = factTrack.layout.zones.find((z) => z.key === 0) ?? null;
   /**
-   * Заливки этапов: план — в подстроке «План», факт — в «Факт». Этап с одной
-   * датой закрашивает всю ячейку своего дня; несколько этапов в одном дне
-   * делят ячейку на цветные секции (клик — открыть рейс и выделить этап).
+   * Полосы и отметки базы/ремонта: НЕПРЕРЫВНЫЕ полосы периодов (один элемент на
+   * период — не по элементу на день) и однодневные отметки «срок готовности» /
+   * «дата окончания ремонта» на всю ячейку. План базы и готовность — в подстроке
+   * «План»; факт базы, ремонт, окончание ремонта и промежутки «на базе» — в
+   * «Факт». Открытые периоды обрезаются теми же функциями источников, что и
+   * раньше (границы не меняются).
    */
-  const planFills = useMemo(() => layoutStageFills(row.stageInputs, 'plan', vs, ve), [row.stageInputs, vs, ve]);
-  const factFills = useMemo(() => layoutStageFills(row.stageInputs, 'fact', vs, ve), [row.stageInputs, vs, ve]);
-  /**
-   * Заливки базы/ремонта (тот же механизм секций, что у этапов): план базы и
-   * срок готовности — в подстроке «План»; факт базы, ремонт, дата окончания
-   * ремонта и промежутки «на базе» — в «Факт». Каждая секция кликабельна и
-   * ведёт к своей записи периода; открытые периоды обрезаются теми же
-   * функциями источников, что и раньше (границы не меняются).
-   */
-  const planBzFills = useMemo(
+  const planBz = useMemo(
     () => layoutBzFills(row.bzInputs, [], 'plan', vs, ve, today),
     [row.bzInputs, vs, ve, today],
   );
-  const factBzFills = useMemo(
+  const factBz = useMemo(
     () => layoutBzFills(row.bzInputs, row.bzGaps, 'fact', vs, ve, today),
     [row.bzInputs, row.bzGaps, vs, ve, today],
   );
+  /**
+   * Заливки этапов: план — в подстроке «План», факт — в «Факт». Этап с одной
+   * датой закрашивает день; несколько этапов в одном дне делят ячейку на
+   * цветные секции. Пересечение с полосами/отметками базы и ремонта разводится
+   * по секциям дня (dayClaims из layoutBzFills): этапы не перекрывают базу и
+   * ремонт — всё остаётся видимым и кликабельным.
+   */
+  const planFills = useMemo(
+    () => layoutStageFills(row.stageInputs, 'plan', vs, ve, planBz.dayClaims),
+    [row.stageInputs, vs, ve, planBz.dayClaims],
+  );
+  const factFills = useMemo(
+    () => layoutStageFills(row.stageInputs, 'fact', vs, ve, factBz.dayClaims),
+    [row.stageInputs, vs, ve, factBz.dayClaims],
+  );
+  /** Число этапов по дням — для разрезки однодневных отметок (готовность/окончание). */
+  const stageDaysOf = (fills: StageFillSection[]): Map<number, number> => {
+    const m = new Map<number, number>();
+    fills.forEach((f) => m.set(f.day, (m.get(f.day) || 0) + 1));
+    return m;
+  };
+  const planStageDays = useMemo(() => stageDaysOf(planFills), [planFills]);
+  const factStageDays = useMemo(() => stageDaysOf(factFills), [factFills]);
   /** Спокойная сетка: слабые вертикальные деления дней на читаемых масштабах. */
   const laneBg = colW >= 12
     ? {
         backgroundImage: `repeating-linear-gradient(to right, #F1F2F4 0px, #F1F2F4 1px, transparent 1px, transparent ${colW}px)`,
       }
     : {};
-  /** Секции заливок этапов — на всю высоту подстроки, кликабельны. */
+  /** Секции заливок этапов — на всю высоту подстроки, кликабельны, в новом стиле
+   *  (единое скругление, заливка, hover/focus). Ниже полос рейсов — этапы не
+   *  перекрывают рейсы. */
   const renderStageFill = (f: StageFillSection, keyPrefix: string) => {
     const color = stageColorOf(f.stage.type);
     const left = dayToX(f.day, vs, colW) + Math.round((f.section * colW) / f.sections);
     const right = dayToX(f.day, vs, colW) + Math.round(((f.section + 1) * colW) / f.sections);
     const width = Math.max(1, right - left);
     const open = () => onOpenTripStage(f.tripKey, f.stage.id);
+    // Скругление — как у полос: у секций дня скругляются только внешние края.
+    const r = 4;
+    const radius = `${f.section === 0 ? `${r}px` : '0px'} ${f.section === f.sections - 1 ? `${r}px` : '0px'} ${
+      f.section === f.sections - 1 ? `${r}px` : '0px'
+    } ${f.section === 0 ? `${r}px` : '0px'}`;
     return (
       <div
         key={`${keyPrefix}-${f.tripKey}-${f.stage.id}-${f.day}`}
@@ -808,13 +833,14 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             open();
           }
         }}
-        className="absolute top-0 bottom-0 z-[4] cursor-pointer overflow-hidden whitespace-nowrap flex items-center justify-center px-0.5"
+        className="absolute top-0 bottom-0 z-[2] cursor-pointer overflow-hidden whitespace-nowrap flex items-center justify-center px-0.5"
         style={{
           left,
           width,
           background: color.bg,
           borderLeft: `1px solid ${color.border}`,
           borderRight: f.section === f.sections - 1 ? `1px solid ${color.border}` : undefined,
+          borderRadius: radius,
           color: color.text,
           ...(f.stage.isCritical ? { outline: '1px dashed #DC2626', outlineOffset: '-1px' } : {}),
           ...(f.archived ? { opacity: 0.72 } : {}),
@@ -828,56 +854,153 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     );
   };
   /**
-   * Секция заливки отметки базы/ремонта — на всю высоту своей подстроки;
-   * кликабельна (открывает карточку периода), несколько секций в дне не
-   * скрывают друг друга, у промежутка «на базе» без записи клика нет.
+   * НЕПРЕРЫВНАЯ полоса периода базы/ремонта: ОДИН элемент на период (не по
+   * элементу на день) — от первого до последнего дня, без внутренних
+   * разделителей и зазоров, на всю высоту подстроки. Скругление — только на
+   * реальном начале/конце; если период продолжается за видимую область, на краю
+   * обрыв без скругления с мягким градиентом. Клик и подсказка — на всей полосе.
    */
-  const renderBzFill = (f: BzFillSection, keyPrefix: string) => {
-    const color = bzKindColor(f.kind);
-    const left = dayToX(f.day, vs, colW) + Math.round((f.section * colW) / f.sections);
-    const right = dayToX(f.day, vs, colW) + Math.round(((f.section + 1) * colW) / f.sections);
+  const renderBzStripe = (s: BzStripe, keyPrefix: string) => {
+    const color = bzKindColor(s.kind);
+    const clipA = Math.max(s.a, vs);
+    const clipB = Math.min(s.b, ve);
+    const left = dayToX(clipA, vs, colW);
+    const right = dayToX(clipB, vs, colW) + colW;
     const width = Math.max(1, right - left);
-    const periodKey = f.periodKey;
-    const open = periodKey ? () => onOpenBase(periodKey) : undefined;
+    const r = 'var(--tl-bar-r)';
+    const radius = `${s.edgeL === 'round' ? r : '0px'} ${s.edgeR === 'round' ? r : '0px'} ${
+      s.edgeR === 'round' ? r : '0px'
+    } ${s.edgeL === 'round' ? r : '0px'}`;
+    // Мягкий градиент на «продолжающемся» краю (обрыв за окно или открытый период).
+    const fadePx = 22;
+    const fadeL = s.edgeL !== 'round';
+    const fadeR = s.edgeR !== 'round';
+    const mask = fadeL
+      ? fadeR
+        ? `linear-gradient(to right, transparent 0, #000 ${fadePx}px, #000 calc(100% - ${fadePx}px), transparent 100%)`
+        : `linear-gradient(to right, transparent 0, #000 ${fadePx}px)`
+      : fadeR
+        ? `linear-gradient(to right, #000 calc(100% - ${fadePx}px), transparent 100%)`
+        : undefined;
+    const open = s.periodKey ? () => onOpenBase(s.periodKey as string) : undefined;
+    const showLabel = width >= 44;
+    // У ремонта — подпись «Ремонт» и даты, если помещаются; sticky внутри полосы.
+    const labelText =
+      s.kind === 'repair' && width >= 130 && s.dateLabel ? `${s.label} · ${s.dateLabel}` : s.label;
+    const labelEl = showLabel ? (
+      <span
+        data-bz-label="1"
+        className={`inline-block max-w-full truncate px-1 text-[8px] leading-[10px] font-semibold ${
+          s.stickyLabel ? 'sticky' : 'absolute left-1 top-1/2 -translate-y-1/2'
+        }`}
+        style={{
+          ...(s.stickyLabel ? { left: 178, marginLeft: 6 } : {}),
+          background: color.bg,
+          color: color.text,
+          borderRadius: 4,
+        }}
+      >
+        {labelText}
+      </span>
+    ) : null;
     return (
       <div
-        key={`${keyPrefix}-${f.kind}-${periodKey || 'gap'}-${f.day}`}
-        role={periodKey ? 'button' : undefined}
-        tabIndex={periodKey ? 0 : undefined}
-        data-bz-fill={f.kind}
-        data-bz-day={f.day}
-        data-bz-section={f.section}
-        data-bz-sections={f.sections}
-        data-period={periodKey || undefined}
+        key={`${keyPrefix}-${s.kind}-${s.periodKey || 'gap'}-${s.a}-${s.b}`}
+        role={s.periodKey ? 'button' : undefined}
+        tabIndex={s.periodKey ? 0 : undefined}
+        data-bz-stripe={s.kind}
+        data-bz-a={s.a}
+        data-bz-b={s.b}
+        data-bz-edge-l={s.edgeL}
+        data-bz-edge-r={s.edgeR}
+        data-period={s.periodKey || undefined}
         onClick={open}
         onKeyDown={
-          periodKey
+          s.periodKey
             ? (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
-                  onOpenBase(periodKey);
+                  onOpenBase(s.periodKey as string);
                 }
               }
             : undefined
         }
-        className={`absolute top-0 bottom-0 z-[2] overflow-hidden whitespace-nowrap flex items-center justify-center ${periodKey ? 'cursor-pointer' : ''}`}
+        className={`absolute z-[1] whitespace-nowrap flex items-center ${
+          s.periodKey ? 'cursor-pointer' : ''
+        }`}
+        style={{
+          left,
+          width,
+          top: s.lanes > 1 ? `calc(${(s.lane * 100) / s.lanes}% + 1px)` : 0,
+          height: s.lanes > 1 ? `calc(${100 / s.lanes}% - 2px)` : undefined,
+          bottom: s.lanes > 1 ? undefined : 0,
+          background: color.bg,
+          border: `1px solid ${color.border}`,
+          borderRadius: radius,
+          color: color.text,
+          ...(mask ? { WebkitMaskImage: mask, maskImage: mask } : {}),
+          ...(s.archived ? { opacity: 0.72 } : {}),
+          ...(s.kind === 'base-gap'
+            ? { borderTopStyle: 'dashed', borderBottomStyle: 'dashed' }
+            : {}),
+        }}
+        title={s.title}
+      >
+        {labelEl}
+      </div>
+    );
+  };
+  /**
+   * Однодневная отметка базы/ремонта («срок готовности» / «дата окончания
+   * ремонта») — заливка ВСЕЙ ячейки дня по ширине и высоте строки с аккуратной
+   * SVG-иконкой по центру. Если день делится с этапами — отметка занимает свою
+   * секцию (каждая секция кликабельна), обе отметки не перекрываются.
+   */
+  const renderBzMark = (m: BzMark, keyPrefix: string, stageDays: Map<number, number>) => {
+    const color = bzKindColor(m.kind);
+    const stages = stageDays.get(m.day) || 0;
+    const total = m.sections + stages;
+    const left = dayToX(m.day, vs, colW) + Math.round((m.section * colW) / total);
+    const right = dayToX(m.day, vs, colW) + Math.round(((m.section + 1) * colW) / total);
+    const width = Math.max(1, right - left);
+    const r = 'var(--tl-bar-r)';
+    const radius =
+      total === 1
+        ? r
+        : `${m.section === 0 ? r : '0px'} ${m.section === total - 1 ? r : '0px'} ${
+            m.section === total - 1 ? r : '0px'
+          } ${m.section === 0 ? r : '0px'}`;
+    const Icon = m.kind === 'ready' ? CalendarCheck2 : Wrench;
+    return (
+      <div
+        key={`${keyPrefix}-${m.kind}-${m.periodKey}-${m.day}`}
+        role="button"
+        tabIndex={0}
+        data-bz-mark={m.kind}
+        data-bz-day={m.day}
+        data-bz-section={m.section}
+        data-bz-sections={total}
+        data-period={m.periodKey}
+        onClick={() => onOpenBase(m.periodKey)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onOpenBase(m.periodKey);
+          }
+        }}
+        className="absolute top-0 bottom-0 z-[2] overflow-hidden flex items-center justify-center cursor-pointer"
         style={{
           left,
           width,
           background: color.bg,
-          // Разделители секций — inset-тень: не участвует в box-sizing и не
-          // расширяет узкие секции на мелком масштабе (границы не выезжают за день).
-          boxShadow:
-            f.section === f.sections - 1
-              ? `inset 1px 0 0 ${color.border}, inset -1px 0 0 ${color.border}`
-              : `inset 1px 0 0 ${color.border}`,
+          border: `1px solid ${color.border}`,
+          borderRadius: radius,
           color: color.text,
-          ...(f.archived ? { opacity: 0.72 } : {}),
-          ...(f.kind === 'base-gap' ? { borderTopStyle: 'dashed', borderBottomStyle: 'dashed', borderTopColor: color.border, borderBottomColor: color.border, borderTopWidth: 1, borderBottomWidth: 1 } : {}),
+          ...(m.archived ? { opacity: 0.72 } : {}),
         }}
-        title={f.title}
+        title={m.title}
       >
-        {width >= 44 ? <span className="px-0.5 text-[8px] leading-[10px] truncate max-w-full">{f.label}</span> : null}
+        {width >= 14 ? <Icon className="w-3 h-3 shrink-0" style={{ color: color.text }} aria-hidden="true" /> : null}
       </div>
     );
   };
@@ -1000,7 +1123,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         style={{ width: W, height: planH, backgroundColor: laneRowBg, ...laneBg }}
       >
         {bgPlane('bg', 0.75)}
-        {planBzFills.map((f) => renderBzFill(f, 'pb'))}
+        {planBz.stripes.map((s) => renderBzStripe(s, 'pb'))}
+        {planBz.marks.map((m) => renderBzMark(m, 'pbm', planStageDays))}
         {planFills.map((f) => renderStageFill(f, 'pf'))}
         {todayStrip('t', 0.1)}
         {row.planItems.map((it, idx) => {
@@ -1143,7 +1267,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         style={{ width: W, height: factH, backgroundColor: laneRowBg, ...laneBg }}
       >
         {bgPlane('fbg', 0.6)}
-        {factBzFills.map((f) => renderBzFill(f, 'fb'))}
+        {factBz.stripes.map((s) => renderBzStripe(s, 'fb'))}
+        {factBz.marks.map((m) => renderBzMark(m, 'fbm', factStageDays))}
         {factFills.map((f) => renderStageFill(f, 'ff'))}
         {todayStrip('ft', 0.1)}
         {row.factItems.map((it, idx) => {
@@ -1679,16 +1804,16 @@ export default function TimelineGrid({
     { swatch: <i className="inline-block w-[18px] h-[6px]" style={{ background: CLR.fact, opacity: 0.8, borderRadius: 3 }} />, label: 'факт (только заполненные даты)' },
     { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: hatchOpen, border: `1px dashed ${CLR.fact}`, borderRadius: 4 }} />, label: 'факт продолжается' },
     { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: CLR.planNoneBg, border: `1px dashed ${CLR.planNoneBorder}`, borderRadius: 4 }} />, label: '«Факт не указан» (не выполнен)' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-fact').bg, border: `1px solid ${bzKindColor('base-fact').border}`, borderRadius: 4 }} />, label: 'база: факт (приезд → выезд) — заливка дней' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-plan').bg, border: `1px solid ${bzKindColor('base-plan').border}`, borderRadius: 4 }} />, label: 'база: план (приезд → готовность)' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('repair').bg, border: `1px solid ${bzKindColor('repair').border}`, borderRadius: 4 }} />, label: 'ремонт (внутри базы) — заливка дней' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('repair-end').bg, border: `1px solid ${bzKindColor('repair-end').border}`, borderRadius: 4 }} />, label: 'дата окончания ремонта' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-fact').bg, border: `1px solid ${bzKindColor('base-fact').border}`, borderRadius: 4 }} />, label: 'база: факт (приезд → выезд) — сплошная полоса' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-plan').bg, border: `1px solid ${bzKindColor('base-plan').border}`, borderRadius: 4 }} />, label: 'база: план (приезд → готовность) — сплошная полоса' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('repair').bg, border: `1px solid ${bzKindColor('repair').border}`, borderRadius: 4 }} />, label: 'ремонт (внутри базы) — сплошная полоса, подпись внутри' },
+    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: bzKindColor('repair-end').bg, border: `1px solid ${bzKindColor('repair-end').border}`, borderRadius: 4 }}><Wrench className="w-2.5 h-2.5" style={{ color: bzKindColor('repair-end').text }} aria-hidden="true" /></i>, label: 'дата окончания ремонта — вся ячейка дня (иконка)' },
     { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-gap').bg, border: `1px dashed ${bzKindColor('base-gap').border}`, borderRadius: 4 }} />, label: 'на базе между рейсами (записи учёта нет)' },
     { swatch: <i className="inline-block w-[9px] h-[9px] rotate-45" style={{ background: '#7C3AED', opacity: 0.95, borderRadius: 2 }} />, label: 'событие машины / журнала рейса (клик — к записи)' },
-    { swatch: <i className="inline-block w-[14px] h-[10px]" style={{ background: '#DFEAFD', border: '1px solid #8FBBF7', borderRadius: 4 }} />, label: 'этап: заливка дня — цвет по типу (клик — этап в карточке)' },
+    { swatch: <i className="inline-block w-[14px] h-[10px]" style={{ background: '#DFEAFD', border: '1px solid #8FBBF7', borderRadius: 4 }} />, label: 'этап: заливка/секция дня — цвет по типу (клик — этап в карточке)' },
     { swatch: <i className="inline-block w-[3px] h-[12px]" style={{ background: 'repeating-linear-gradient(to bottom, #6B7280 0 3px, transparent 3px 6px)' }} />, label: 'передача диспетчера (дата не указана — стык между рейсами)' },
     { swatch: <i className="inline-block w-[12px] h-[10px]" style={{ background: '#F7F8FA', border: '1px dashed #DC2626', borderRadius: 3 }} />, label: 'критический срок этапа' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('ready').bg, border: `1px solid ${bzKindColor('ready').border}`, borderRadius: 4 }} />, label: 'срок готовности (плановая) — заливка дня' },
+    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: bzKindColor('ready').bg, border: `1px solid ${bzKindColor('ready').border}`, borderRadius: 4 }}><CalendarCheck2 className="w-2.5 h-2.5" style={{ color: bzKindColor('ready').text }} aria-hidden="true" /></i>, label: 'срок готовности (плановая) — вся ячейка дня (иконка)' },
     { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: CLR.planArchBg, border: `1px solid ${CLR.planArchBorder}`, borderRadius: 4 }} />, label: 'архивные данные (приглушённые)' },
     {
       swatch: (
@@ -1817,8 +1942,9 @@ export default function TimelineGrid({
                 </div>
                 <p className="mt-3 pt-2.5 border-t border-[var(--tl-hairline)] text-[10px] leading-[14px] text-[var(--tl-text-dim)]">
                   Клик по плановой или фактической полосе открывает модальное окно всего рейса; клик по названию машины — обзор её рейсов
-                  и периодов. База и ремонт — заливка ячейки дня: план базы и срок готовности в строке «План», факт базы, ремонт и окончание
-                  ремонта в «Факт»; несколько отметок в одном дне делят ячейку на цветные секции, каждая открывает свою запись периода.
+                  и периодов. База и ремонт — непрерывные полосы от первого до последнего дня периода (без делений на дни): план базы и
+                  срок готовности — в строке «План», факт базы, ремонт и окончание ремонта — в «Факт»; готовность и окончание ремонта
+                  заливают всю ячейку дня, при пересечении с этапами день делится на кликабельные секции — всё видно и открывается.
                   Прокрутка — тачпад, Shift+колесо, полоса; масштаб — «−/+/ползунок» или Ctrl+колесо над календарём (дата под курсором
                   остаётся на месте). Прокрутка догружает даты влево и вправо; выходные подсвечены фоном; значки статусов —
                   «срок нарушен», «план прошёл без факта», «срок под угрозой».

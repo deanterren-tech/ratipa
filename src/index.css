@@ -526,7 +526,8 @@ input:focus, select:focus, textarea:focus, button:focus {
 /* Полосы: доступный фокус с клавиатуры (единый контур по бренду) */
 .tl-scope [data-bar]:focus-visible,
 .tl-scope [data-stage-fill]:focus-visible,
-.tl-scope [data-bz-fill]:focus-visible {
+.tl-scope [data-bz-stripe]:focus-visible,
+.tl-scope [data-bz-mark]:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -542,5 +543,17 @@ input:focus, select:focus, textarea:focus, button:focus {
 .tl-scope [data-bar="fact"]:hover {
   filter: brightness(1.03) saturate(1.04);
   transform: translateY(-1px);
+}
+
+/* Этапы и отметки базы/ремонта: единый мягкий hover (compositor-only). */
+.tl-scope [data-stage-fill],
+.tl-scope [data-bz-stripe],
+.tl-scope [data-bz-mark] {
+  transition: filter 120ms ease;
+}
+.tl-scope [data-stage-fill]:hover,
+.tl-scope [data-bz-stripe]:hover,
+.tl-scope [data-bz-mark]:hover {
+  filter: brightness(0.97) saturate(1.05);
 }
 

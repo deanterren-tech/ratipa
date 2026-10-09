@@ -157,12 +157,18 @@ export interface StageFillSection {
  * Раскладка заливок этапов по дням окна (общий механизм layoutDaySections):
  * каждая секция — (день × этап); несколько этапов в одном дне делят ячейку на
  * цветные секции, порядок стабилен (по order этапа, затем по id).
+ *
+ * `claimsByDay` — число «заявок» дня от полос/отметок базы и ремонта
+ * (layoutBzFills): этапы не перекрывают базу и ремонт — при пересечении в один
+ * день день делится на секции: слева заявки (база/ремонт/готовность), справа
+ * этапы. Без параметра раскладка — только среди этапов (как раньше).
  */
 export const layoutStageFills = (
   inputs: StageFillInput[],
   kind: 'plan' | 'fact',
   vs: number,
   ve: number,
+  claimsByDay?: Record<number, number>,
 ): StageFillSection[] => {
   const spans = inputs
     .map((it) => {
@@ -179,15 +185,18 @@ export const layoutStageFills = (
       };
     })
     .filter((sp): sp is NonNullable<typeof sp> => sp != null);
-  return layoutDaySections(spans, vs, ve).map((p) => ({
-    day: p.day,
-    tripKey: p.span.tripKey,
-    stage: p.span.stage,
-    archived: p.span.archived,
-    section: p.section,
-    sections: p.sections,
-    order: p.span.order,
-  }));
+  return layoutDaySections(spans, vs, ve).map((p) => {
+    const claims = claimsByDay?.[p.day] ?? 0;
+    return {
+      day: p.day,
+      tripKey: p.span.tripKey,
+      stage: p.span.stage,
+      archived: p.span.archived,
+      section: claims + p.section,
+      sections: claims + p.sections,
+      order: p.span.order,
+    };
+  });
 };
 
 /** Краткое имя этапа для текста внутри секции (тип + место, если есть место). */
