@@ -1265,7 +1265,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         <div className="flex items-center gap-1.5 md:gap-3 shrink-0">
           
           {/* Avatar overlap stack */}
-          <div className="hidden md:flex items-center -space-x-2 mr-1 relative group cursor-pointer">
+          <div className="hidden md:flex items-center space-x-1 mr-1 relative group cursor-pointer">
             {onlineUsers.slice(0, 3).map((u) => {
                // Тот же аватар и тот же профиль, что и в остальных местах портала:
                // фотография, если выбрана, иначе настроенная цветная иконка.
