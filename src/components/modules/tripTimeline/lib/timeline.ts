@@ -63,6 +63,10 @@ export const normPlate = (s?: string | null): string =>
   String(s || '').toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '');
 
 export const MONTHS_RU = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+export const MONTHS_RU_FULL = [
+  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+];
 export const WEEKDAYS_RU = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
 /** Метка дня в шапке таймлайна: «1 сен» для первого числа, иначе день. */
@@ -72,6 +76,181 @@ export const dayHeaderLabel = (n: number): string => {
   if (day === 1) return `1 ${MONTHS_RU[d.getUTCMonth()]}`;
   return String(day);
 };
+
+// ---------------------------------------------------------------------------
+// Единая геометрия календаря: «дата → координата»
+// ---------------------------------------------------------------------------
+
+/**
+ * ЕДИНАЯ функция преобразования даты в X внутри ленты календаря.
+ * Общий origin для шапки, сетки и полос: номер дня vs ≡ X = 0.
+ * Ширина дня = colW. Используется и основным таймлайном, и встроенным.
+ */
+export const dayToX = (day: number, vs: number, colW: number): number => Math.round((day - vs) * colW);
+
+/** Видимый отрезок [a, b] в окне [vs, ve]; конечная дата включается. null — вне окна. */
+export const clampSpanToWindow = (
+  a: number,
+  b: number,
+  vs: number,
+  ve: number,
+): { a: number; b: number } | null => {
+  if (b < vs || a > ve) return null;
+  return { a: Math.max(a, vs), b: Math.min(b, ve) };
+};
+
+/**
+ * Прямоугольник полосы в пикселях по её РЕАЛЬНЫМ датам.
+ * Одинаковое включение конечной даты: [a, b] занимает (b − a + 1) дней
+ * (полоса одного дня имеет ширину одного дня). Частично выходящая за окно
+ * полоса обрезается по краям окна без изменения исходных дат.
+ */
+export const barRectInWindow = (
+  a: number,
+  b: number,
+  vs: number,
+  ve: number,
+  colW: number,
+): { left: number; width: number } | null => {
+  const v = clampSpanToWindow(a, b, vs, ve);
+  if (!v) return null;
+  return { left: dayToX(v.a, vs, colW), width: Math.round((v.b - v.a + 1) * colW) };
+};
+
+export interface MonthSegment {
+  /** Ключ сегмента (год-месяц). */
+  key: string;
+  /** «Октябрь 2026» — подпись верхнего уровня шапки. */
+  label: string;
+  /** Первый день сегмента в окне (номер дня). */
+  start: number;
+  /** Последний день сегмента в окне. */
+  end: number;
+  /** Количество дней сегмента в окне (ширина сегмента = days × colW). */
+  days: number;
+}
+
+/** Сегменты месяцев видимого окна: каждый — точно по ширине своих дней. */
+export const monthSegments = (vs: number, vn: number): MonthSegment[] => {
+  const ve = vs + vn - 1;
+  const segs: MonthSegment[] = [];
+  let cur = vs;
+  while (cur <= ve) {
+    const d = new Date(cur * DAY_MS);
+    const y = d.getUTCFullYear();
+    const m = d.getUTCMonth();
+    const monthStart = Math.round(Date.UTC(y, m, 1) / DAY_MS);
+    const nextStart = Math.round(Date.UTC(y, m + 1, 1) / DAY_MS);
+    const start = Math.max(cur, monthStart);
+    const end = Math.min(ve, nextStart - 1);
+    segs.push({ key: `${y}-${m}`, label: `${MONTHS_RU_FULL[m]} ${y}`, start, end, days: end - start + 1 });
+    cur = end + 1;
+  }
+  return segs;
+};
+
+/** Русские названия месяцев (нижний регистр) → номер месяца 0..11. */
+const MONTH_LABEL_INDEX: Record<string, number> = Object.fromEntries(
+  MONTHS_RU_FULL.map((name, i) => [name.toLowerCase(), i]),
+);
+
+/** «Месяц Год» → числовой ключ (год × 12 + месяц); null — формат не распознан. */
+export const monthLabelKey = (label: string): number | null => {
+  const m = /^\s*([А-Яа-яЁё]+)\s+(\d{4})\s*$/.exec(String(label || ''));
+  if (!m) return null;
+  const idx = MONTH_LABEL_INDEX[m[1].toLowerCase()];
+  if (idx == null) return null;
+  return Number(m[2]) * 12 + idx;
+};
+
+/**
+ * Хронологический порядок месячных вкладок архива: новые месяцы первыми,
+ * далее последовательно более старые (Январь 2027 → Декабрь 2026 → Ноябрь 2026 …).
+ * Сортировка строго по числовому году и месяцу — не по алфавиту и не по строкам.
+ */
+export const sortMonthLabelsDesc = (labels: string[]): string[] =>
+  [...labels].sort((a, b) => {
+    const ka = monthLabelKey(a);
+    const kb = monthLabelKey(b);
+    if (ka == null && kb == null) return a.localeCompare(b, 'ru');
+    if (ka == null) return 1;
+    if (kb == null) return -1;
+    return kb - ka;
+  });
+
+// ---------------------------------------------------------------------------
+// Масштаб календаря (ширина дня) и видимый диапазон
+// ---------------------------------------------------------------------------
+
+/**
+ * Уровни масштаба — ширина дня в px. Единый параметр масштаба для сетки,
+ * полос, маркеров и шапки. От 6px (обзор: несколько месяцев) до 48px
+ * (подробно: отдельные дни и события). Ноль/отрицательная ширина невозможны.
+ */
+export const ZOOM_LEVELS: number[] = [6, 8, 10, 12, 16, 20, 24, 30, 36, 42, 48];
+export const DEFAULT_ZOOM = 30;
+export const MIN_ZOOM = ZOOM_LEVELS[0];
+export const MAX_ZOOM = ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
+
+/** Индекс уровня по ширине дня (ближайший допустимый). */
+export const zoomIndexOf = (colW: number): number => {
+  let best = 0;
+  let bestD = Infinity;
+  ZOOM_LEVELS.forEach((w, i) => {
+    const d = Math.abs(w - colW);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  });
+  return best;
+};
+
+/** Ширина дня по индексу уровня (с защитой от выхода за границы). */
+export const zoomColW = (index: number): number =>
+  ZOOM_LEVELS[Math.max(0, Math.min(ZOOM_LEVELS.length - 1, Math.round(index)))];
+
+/** Сегодня-независимая подпись уровня для подсказок ползунка. */
+export const zoomLabel = (index: number): string => {
+  const w = zoomColW(index);
+  if (w >= 30) return 'подробно: дни и события';
+  if (w >= 16) return 'обычный: недели и дни';
+  return 'обзорно: месяцы и недели';
+};
+
+/** Родительный падеж месяцев: «9 октября». */
+export const MONTHS_RU_GEN = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+];
+
+/** «9 октября» без года. */
+export const fmtDayMonthGen = (n: number): string => {
+  const d = new Date(n * DAY_MS);
+  return `${d.getUTCDate()} ${MONTHS_RU_GEN[d.getUTCMonth()]}`;
+};
+
+/**
+ * Фактический видимый диапазон: «9 октября — 24 ноября 2026».
+ * Если год у концов разный — год указывается у обеих дат.
+ */
+export const visibleRangeText = (startDay: number, endDay: number): string => {
+  const a = new Date(startDay * DAY_MS);
+  const b = new Date(endDay * DAY_MS);
+  const sameYear = a.getUTCFullYear() === b.getUTCFullYear();
+  const left = `${fmtDayMonthGen(startDay)}${sameYear ? '' : ` ${a.getUTCFullYear()}`}`;
+  const right = `${fmtDayMonthGen(endDay)} ${b.getUTCFullYear()}`;
+  return `${left} — ${right}`;
+};
+
+/** День (номер дня) в контентной координате X ленты (0 = начало ленты до колонки). */
+export const dayAtContentX = (x: number, vs: number, colW: number): number =>
+  vs + Math.floor((x - TIMELINE_COL_W) / colW);
+
+/** Ширина закреплённой колонки автомобилей (px) — общая константа раскладки. */
+export const TIMELINE_COL_W = 170;
+/** Ширина колонки встроенного (мини) таймлайна. */
+export const TIMELINE_MINI_COL_W = 96;
 
 // ---------------------------------------------------------------------------
 // Этапы и статус дедлайнов
@@ -136,6 +315,8 @@ export interface DeadlineStatus {
   /** 0 — критических этапов нет; 1 — в норме; 2 — под угрозой; 3 — нарушен. */
   level: 0 | 1 | 2 | 3;
   label: string;
+  /** Точная природа статуса: подтверждённое опоздание отличается от «план прошёл, факта нет». */
+  kind: 'none' | 'ok' | 'risk' | 'violated' | 'missed';
 }
 
 /**
@@ -151,17 +332,19 @@ export const getDeadlineStatus = (
 ): DeadlineStatus => {
   const nameOf = (s: TimelineStage): string => (stageName ? stageName(s) : s.label || s.type || 'этап');
   const dls = criticalStages(trip);
-  if (!dls.length) return { level: 0, label: 'нет крит. срока' };
-  let out: DeadlineStatus = { level: 1, label: 'в норме' };
+  if (!dls.length) return { level: 0, label: 'нет крит. срока', kind: 'none' };
+  let out: DeadlineStatus = { level: 1, label: 'в норме', kind: 'ok' };
   dls.forEach((s) => {
     const p = dayNum(s.plannedDate);
     const f = dayNum(s.actualDate);
     if (f != null) {
-      if (p != null && f > p) out = { level: 3, label: `срок нарушен: ${nameOf(s)}` };
+      if (p != null && f > p) {
+        out = { level: 3, label: `срок нарушен (подтверждён фактом): ${nameOf(s)}`, kind: 'violated' };
+      }
     } else if (p != null && today > p) {
-      out = { level: 3, label: `срок нарушен: ${nameOf(s)}` };
+      out = { level: 3, label: `плановая дата прошла, факт не указан: ${nameOf(s)}`, kind: 'missed' };
     } else if (p != null && p - today <= 1) {
-      if (out.level < 2) out = { level: 2, label: `под угрозой: ${nameOf(s)}` };
+      if (out.level < 2) out = { level: 2, label: `под угрозой: ${nameOf(s)}`, kind: 'risk' };
     }
   });
   return out;
@@ -474,6 +657,36 @@ export const comparePlanFact = (planDay: number | null, factDay: number | null):
   const diff = factDay - planDay;
   if (diff === 0) return { label: 'По плану', diffDays: 0 };
   return { label: diff < 0 ? 'Раньше плана' : 'Позже плана', diffDays: diff };
+};
+
+/**
+ * Состояние этапа словами (спецификация окна рейса):
+ * «по плану» / «раньше плана» / «позже плана» / «запланировано, факт не указан» /
+ * «плановая дата прошла, факт не указан» / «недостаточно данных для сравнения».
+ * Отсутствие факта НЕ считается подтверждённой задержкой; плановая дата в факт
+ * не подставляется. Точность — календарные дни (в модели хранятся только даты).
+ */
+export interface StageState {
+  code: 'on' | 'early' | 'late' | 'planned' | 'missed' | 'nodata';
+  label: string;
+}
+
+export const stageStateOf = (s: TimelineStage, today: number): StageState => {
+  const p = dayNum(s.plannedDate);
+  const f = dayNum(s.actualDate);
+  if (p != null && f != null) {
+    const dev = f - p;
+    if (dev === 0) return { code: 'on', label: 'по плану' };
+    if (dev < 0) return { code: 'early', label: `раньше плана на ${-dev} дн` };
+    return { code: 'late', label: `позже плана на ${dev} дн` };
+  }
+  if (p != null) {
+    return p < today
+      ? { code: 'missed', label: 'плановая дата прошла, факт не указан' }
+      : { code: 'planned', label: 'запланировано, факт не указан' };
+  }
+  if (f != null) return { code: 'nodata', label: 'факт без плановой даты — недостаточно данных' };
+  return { code: 'nodata', label: 'недостаточно данных для сравнения' };
 };
 
 /** Отклонение этапа для ячейки таблицы: «+2 дн» красным / «−1 дн» зелёным. */

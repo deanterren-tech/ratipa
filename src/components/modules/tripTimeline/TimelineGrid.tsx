@@ -13,23 +13,27 @@
  * локальное состояние внутри строки машины. Позиция прокрутки сохраняется между
  * возвратами (sessionStorage + вкладки не размонтируются).
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TimelineStageType, TimelineVehicleEvent } from '../../../types';
 import { formatPlate } from '../../../utils/salaryAutofill';
 import {
-  PERIOD_PRESETS,
-  WEEKDAYS_RU,
+  TIMELINE_COL_W,
+  ZOOM_LEVELS,
   addMonthsIso,
-  dayHeaderLabel,
+  barRectInWindow,
+  dayAtContentX,
   dayNum,
   dayStr,
+  dayToX,
   fmtDM,
   getDeadlineStatus,
   isWeekendDay,
   stageDeviation,
   tripFactEnd,
   tripSpan,
-  type PeriodPreset,
+  visibleRangeText,
+  zoomColW,
+  zoomLabel,
 } from './lib/timeline';
 import { eventTypeOf, stageFullName } from './lib/catalog';
 import {
@@ -43,6 +47,7 @@ import {
   type WholeTrip,
 } from './lib/sources';
 import DateInput from './DateInput';
+import CalendarHeader from './CalendarHeader';
 import { AlertTriangle } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -86,20 +91,23 @@ const hatchOpen = `repeating-linear-gradient(45deg, ${CLR.factOpenA}, ${CLR.fact
 // ---------------------------------------------------------------------------
 
 type PlanItem =
-  | { kind: 'plan'; a: number; b: number; tripKey: string; label: string; archived: boolean; level: number; open: boolean; title: string }
+  | { kind: 'plan'; a: number; b: number; tripKey: string; label: string; archived: boolean; statusKind: DeadlineStatusKind; open: boolean; title: string }
   | { kind: 'buffer'; a: number; b: number; days: number }
   | { kind: 'markPlan'; day: number; critical: boolean; title: string; tripKey: string; weekend: boolean }
-  | { kind: 'ready'; a: number; b: number; periodKey: string; title: string; deviation: string };
+  | { kind: 'markReturn'; day: number; title: string; tripKey: string }
+  | { kind: 'ready'; a: number; b: number; periodKey: string; title: string; deviation: string; archived: boolean };
+
+type DeadlineStatusKind = 'none' | 'ok' | 'risk' | 'violated' | 'missed';
 
 type FactItem =
   | { kind: 'fact'; a: number; b: number; open: boolean; tripKey: string; title: string }
   | { kind: 'factNone'; a: number; b: number; tripKey: string; title: string }
-  | { kind: 'base'; a: number; b: number; open: boolean; label: string; periodKey: string; title: string }
-  | { kind: 'repair'; a: number; b: number; open: boolean; capped: boolean; periodKey: string; title: string }
+  | { kind: 'base'; a: number; b: number; open: boolean; label: string; periodKey: string; title: string; archived: boolean }
+  | { kind: 'repair'; a: number; b: number; open: boolean; capped: boolean; periodKey: string; title: string; archived: boolean }
   | { kind: 'event'; a: number; b: number; color: string; label: string; title: string }
   | { kind: 'gap'; a: number; b: number; days: number }
   | { kind: 'markFact'; day: number; late: boolean; title: string; tripKey: string; weekend: boolean }
-  | { kind: 'markReady'; day: number; title: string; periodKey: string };
+  | { kind: 'markReady'; day: number; title: string; periodKey: string; archived: boolean };
 
 interface CarRowModel {
   carKey: string;
@@ -139,16 +147,21 @@ interface Props {
   vn: number;
   /** Дней, догруженных слева прокруткой (для сохранения видимой области). */
   extL: number;
+  /** Дней, догруженных справа прокруткой. */
+  extR: number;
   /** Начало базового диапазона для кнопочной навигации (без догрузки прокруткой). */
   navVs: number;
-  preset: PeriodPreset;
-  onPresetChange: (p: PeriodPreset) => void;
+  /** Индекс уровня масштаба (см. ZOOM_LEVELS) — единый параметр ширины дня. */
+  zoom: number;
+  onZoomChange: (index: number) => void;
   /** Кнопки/дата двигают базовый диапазон; прокрутка — отдельный механизм. */
   onNavigate: (n: number) => void;
   /** Пользователь доскроллил до края — расширяем диапазон (без пустоты). */
   onRangeExtend: (dir: 'left' | 'right') => void;
   showArchived: boolean;
   onShowArchivedChange: (v: boolean) => void;
+  /** Ключ рейса, открытого в карточке — выделяется на полотне. */
+  selectedTripKey?: string | null;
   onOpenTrip: (tripKey: string) => void;
   onOpenBase: (periodKey: string) => void;
   onOpenCar: (carKey: string) => void;
@@ -160,8 +173,6 @@ const WINDOW_MARGIN = 60;
 
 const PLAN_H = 26;
 const FACT_H = 32;
-
-const colWidthFor = (vn: number): number => (vn > 120 ? 10 : vn > 60 ? 16 : vn > 30 ? 24 : 30);
 
 const navBtn =
   'inline-flex items-center justify-center px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-white border border-[#E5E7EB] text-[#4B5563] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer';
@@ -196,6 +207,7 @@ const buildRows = (
   });
 
   const baseCandidates = bases.filter((p) => {
+    if (!showArchived && p.archived) return false; // архивные данные скрыты полностью
     const rb = baseBarRange(p, today);
     const rr = repairBarRange(p, today);
     return (rb && intersects(rb.a, rb.b, from, to)) || (rr && intersects(rr.a, rr.b, from, to));
@@ -252,9 +264,19 @@ const buildRows = (
           tripKey: t.key,
           label: t.route || t.carNumber,
           archived: !!t.archived,
-          level: deadline.level,
+          statusKind: deadline.kind,
           open: openPlan,
           title: `${formatPlate(car.carNumber)} · ${t.route || 'без маршрута'} · ${t.dispatcherName || 'без диспетчера'}${t.kind === 'plan' ? ' · из плана дохода' : ''}${t.archived ? ' · архив' : ''}${openPlan ? ' · неполный план (нет даты возвращения)' : ''} · ${deadline.label}`,
+        });
+      }
+      // Плановое возвращение — отдельный аккуратный маркер в конце плановой полосы
+      // (подробности по наведению), без постоянных подписей.
+      if (pMax != null && !openPlan && pMax > pMin && visible(pMax, pMax)) {
+        planItems.push({
+          kind: 'markReturn',
+          day: pMax,
+          tripKey: t.key,
+          title: `плановое возвращение: ${fmtDM(pMax)}${t.archived ? ' · архив' : ''} · клик — открыть рейс`,
         });
       }
       if (t.kind === 'manual' && pMax != null && t.bufferDays > 0 && visible(pMax + 1, pMax + t.bufferDays)) {
@@ -316,8 +338,12 @@ const buildRows = (
     });
 
     // ── Периоды «Учёта выезда»: ПЛАН приезд→срок готовности, ФАКТ приезд→выезд ──
+    // Архивность — из СВОЕЙ записи учёта выезда (не по датам и не по соседям);
+    // архивные периоды показываются только при включённой галочке и с пометкой.
     const baseRanges: Array<{ a: number; b: number }> = [];
     myBases.forEach((p) => {
+      const isArch = p.archived;
+      const archMark = isArch ? ' · архив' : '';
       p.warnings.forEach((w) => warnings.add(w));
       const dev = baseDeviation(p, today);
       const readyDay = p.plannedReadyDay;
@@ -325,14 +351,16 @@ const buildRows = (
       const rb = baseBarRange(p, today);
       if (rb && visible(rb.a, rb.b)) {
         baseRanges.push({ a: rb.a, b: rb.b });
+        const baseLabel = rb.open ? `${p.causeLabel} · выезд не указан` : dev.short ? `${p.causeLabel} · ${dev.short}` : p.causeLabel;
         factItems.push({
           kind: 'base',
           a: rb.a,
           b: rb.b,
           open: rb.open,
-          label: rb.open ? `${p.causeLabel} · выезд не указан` : dev.short ? `${p.causeLabel} · ${dev.short}` : p.causeLabel,
+          label: `${baseLabel}${isArch ? ' · архив' : ''}`,
           periodKey: p.key,
-          title: `База (факт): приезд ${fmtDM(rb.a)} – ${rb.open ? 'выезд не указан (период продолжается)' : fmtDM(rb.b)} · срок готовности ${readyTxt} · ${dev.label}${p.comment ? ` · ${p.comment}` : ''}`,
+          archived: isArch,
+          title: `База (факт)${archMark}: приезд ${fmtDM(rb.a)} – ${rb.open ? 'выезд не указан (период продолжается)' : fmtDM(rb.b)} · срок готовности ${readyTxt} · ${dev.label}${p.comment ? ` · ${p.comment}` : ''}`,
         });
       }
       // Плановая полоса базы: приезд → срок готовности (это НЕ окончание ремонта)
@@ -344,7 +372,8 @@ const buildRows = (
           b: rdy.b,
           periodKey: p.key,
           deviation: dev.short,
-          title: `План базы: приезд ${fmtDM(rdy.a)} → срок готовности ${fmtDM(rdy.b)}${dev.short ? ` · ${dev.label}` : ''}`,
+          archived: isArch,
+          title: `План базы${archMark}: приезд ${fmtDM(rdy.a)} → срок готовности ${fmtDM(rdy.b)}${dev.short ? ` · ${dev.label}` : ''}`,
         });
       }
       // Отметка срока готовности на подстроке «Факт» — для сравнения с выездом
@@ -353,7 +382,8 @@ const buildRows = (
           kind: 'markReady',
           day: readyDay,
           periodKey: p.key,
-          title: `Срок готовности: ${fmtDM(readyDay)} — ${dev.label}`,
+          archived: isArch,
+          title: `Срок готовности${archMark}: ${fmtDM(readyDay)} — ${dev.label}`,
         });
       }
       const rr = repairBarRange(p, today);
@@ -365,7 +395,8 @@ const buildRows = (
           open: rr.open,
           capped: rr.capped,
           periodKey: p.key,
-          title: `Ремонт: ${fmtDM(rr.a)} – ${rr.open ? 'продолжается (окончание не указано)' : fmtDM(rr.b)}${rr.capped ? ' · показан до фактического выезда (ремонт не закрыт)' : ''}`,
+          archived: isArch,
+          title: `Ремонт${archMark}: ${fmtDM(rr.a)} – ${rr.open ? 'продолжается (окончание не указано)' : fmtDM(rr.b)}${rr.capped ? ' · показан до фактического выезда (ремонт не закрыт)' : ''}`,
         });
       }
     });
@@ -405,19 +436,44 @@ const buildRows = (
     }
 
     // ── События машины (ручные, ветка модуля) — на подстроке «Факт» ──
+    // Пересекающиеся по времени события группируются в один компактный маркер
+    // («события · N») — без наложений; подробности — в подсказке.
+    const evItems: Array<{ a: number; b: number; color: string; label: string; title: string }> = [];
     myEvents.forEach((e) => {
       const meta = eventTypeOf(e.kind);
       const a = dayNum(e.dateFrom);
       const b = dayNum(e.dateTo) ?? a;
       if (a == null || b == null || !visible(a, b)) return;
-      factItems.push({
-        kind: 'event',
+      evItems.push({
         a,
-        b,
+        b: Math.max(a, b),
         color: meta.color,
         label: e.note ? `${meta.name}: ${e.note}` : meta.name,
         title: `${meta.name} ${e.dateFrom} – ${e.dateTo || e.dateFrom}${e.note ? ` · ${e.note}` : ''}`,
       });
+    });
+    evItems.sort((x, y) => x.a - y.a || x.b - y.b);
+    const evGroups: Array<Array<(typeof evItems)[number]>> = [];
+    evItems.forEach((ev) => {
+      const last = evGroups[evGroups.length - 1];
+      if (last && ev.a <= last[last.length - 1].b) last.push(ev);
+      else evGroups.push([ev]);
+    });
+    evGroups.forEach((group) => {
+      const a = group[0].a;
+      const b = Math.max(...group.map((g) => g.b));
+      if (group.length === 1) {
+        factItems.push({ kind: 'event', a, b, color: group[0].color, label: group[0].label, title: group[0].title });
+      } else {
+        factItems.push({
+          kind: 'event',
+          a,
+          b,
+          color: '#7C3AED',
+          label: `события · ${group.length}`,
+          title: `События (${group.length}):\n${group.map((g) => `• ${g.title}`).join('\n')}`,
+        });
+      }
     });
 
     // Пересечения рейс↔база и этапы вне границ (не исправляем — предупреждаем)
@@ -474,6 +530,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   vs,
   vn,
   bg,
+  selectedTripKey,
   onOpenTrip,
   onOpenBase,
   onOpenCar,
@@ -483,30 +540,38 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   vs: number;
   vn: number;
   bg: BgSeg[];
+  selectedTripKey?: string | null;
   onOpenTrip: (key: string) => void;
   onOpenBase: (key: string) => void;
   onOpenCar: (key: string) => void;
 }) {
   const [hoverTrip, setHoverTrip] = useState<string | null>(null);
   const W = vn * colW;
-  const pos = (a: number, b: number): { left: number; width: number } | null => {
-    if (b < vs || a > vs + vn - 1) return null;
-    const A = Math.max(a, vs);
-    const B = Math.min(b, vs + vn - 1);
-    return { left: Math.round((A - vs) * colW), width: Math.round((B - A + 1) * colW) };
+  const ve = vs + vn - 1;
+  /** Та же единая функция «дата → координата», что у шапки и сетки. */
+  const pos = (a: number, b: number): { left: number; width: number } | null => barRectInWindow(a, b, vs, ve, colW);
+  /** Единая визуальная система: выбранный (открытый) рейс — тёмное кольцо,
+   *  наведённый — акцентное, соседние при наведении — контур (не только цветом). */
+  const link = (tripKey: string): React.CSSProperties => {
+    if (selectedTripKey && selectedTripKey === tripKey) {
+      return { boxShadow: hoverTrip === tripKey ? 'inset 0 0 0 2px var(--accent), 0 0 0 2px rgba(18,19,22,0.55)' : '0 0 0 2px rgba(18,19,22,0.55)' };
+    }
+    if (!hoverTrip) return {};
+    if (hoverTrip === tripKey) return { boxShadow: 'inset 0 0 0 2px var(--accent)' };
+    return { boxShadow: 'inset 0 0 0 1px rgba(18,19,22,0.25)' };
   };
-  const link = (tripKey: string): React.CSSProperties =>
-    hoverTrip
-      ? hoverTrip === tripKey
-        ? { boxShadow: 'inset 0 0 0 2px var(--accent)' }
-        : { boxShadow: 'inset 0 0 0 1px rgba(18,19,22,0.25)' }
-      : {};
   const hoverProps = (tripKey: string) => ({
     onMouseEnter: () => setHoverTrip(tripKey),
     onMouseLeave: () => setHoverTrip((v) => (v === tripKey ? null : v)),
   });
 
   const warnTitle = row.warnings.join('\n');
+  /** Спокойная сетка: слабые вертикальные деления дней на читаемых масштабах. */
+  const laneBg = colW >= 12
+    ? {
+        backgroundImage: `repeating-linear-gradient(to right, #F1F2F4 0px, #F1F2F4 1px, transparent 1px, transparent ${colW}px)`,
+      }
+    : {};
   const bgPlane = (keyPrefix: string, opacity: number) =>
     bg.map((seg, i) => (
       <div
@@ -523,25 +588,26 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
 
   return (
     <>
-      {/* Подстрока «План» */}
+      {/* Подстрока «План» — закреплена слева, непрозрачный фон, ровно PLAN_H */}
       <div
         data-tl-row={row.carNumber}
         data-tl-car={row.carKey}
-        className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2.5 pt-1.5 w-[170px] min-w-[170px] overflow-hidden"
+        className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2.5 w-[170px] min-w-[170px] overflow-hidden"
+        style={{ height: PLAN_H, borderRightColor: '#D1D5DB' }}
       >
         <div className="flex items-start justify-between gap-1">
           <button
             type="button"
             onClick={() => onOpenCar(row.carKey)}
             title="Обзор рейсов и периодов машины"
-            className="text-[11px] font-semibold text-[#121316] leading-tight truncate text-left hover:text-[var(--accent-ink)] cursor-pointer"
+            className="text-[11px] leading-[13px] font-semibold text-[#121316] truncate text-left hover:text-[var(--accent-ink)] cursor-pointer"
           >
             {formatPlate(row.carNumber)}
           </button>
-          <span className="text-[8px] font-semibold uppercase tracking-wider text-[#9CA3AF] shrink-0 pt-0.5">План</span>
+          <span className="text-[8px] leading-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] shrink-0 pt-0.5">План</span>
         </div>
-        <div className="flex items-center gap-1 mt-0.5">
-          <span className="text-[10px] text-[#6B7280] truncate">
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] leading-[12px] text-[#6B7280] truncate">
             {row.dispatcherName || 'без диспетчера'} · рейсов: {row.tripsCount}
           </span>
           {row.warnings.length ? (
@@ -551,10 +617,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           ) : null}
         </div>
       </div>
-      <div data-lane="plan" className="relative border-b border-[#EEF0F3]" style={{ width: W, height: PLAN_H }}>
+      <div data-lane="plan" className="relative z-0 border-b border-[#EEF0F3]" style={{ width: W, height: PLAN_H, ...laneBg }}>
         {bgPlane('bg', 0.75)}
         {row.planItems.map((it, idx) => {
-          const p = pos(it.kind === 'markPlan' ? it.day : it.a, it.kind === 'markPlan' ? it.day : it.b);
+          const p = pos(it.kind === 'markPlan' || it.kind === 'markReturn' ? it.day : it.a, it.kind === 'markPlan' || it.kind === 'markReturn' ? it.day : it.b);
           if (!p) return null;
           if (it.kind === 'ready') {
             return (
@@ -572,14 +638,37 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   }
                 }}
                 className="absolute overflow-hidden whitespace-nowrap text-[9px] leading-[16px] z-[2] cursor-pointer px-1 text-[#92400E]"
-                style={{ left: p.left, width: p.width, top: 5, height: 16, background: hatchReady, border: `1px solid #F59E0B`, borderRadius: 3 }}
+                style={{ left: p.left, width: p.width, top: 5, height: 16, background: hatchReady, border: `1px solid #F59E0B`, borderRadius: 3, ...(it.archived ? { filter: 'saturate(0.45)' } : {}) }}
                 title={it.title}
               >
-                {p.width > 80 ? `готовность${it.deviation ? ` · ${it.deviation}` : ''}` : ''}
+                {p.width > 80 ? `готовность${it.deviation ? ` · ${it.deviation}` : ''}${it.archived ? ' · архив' : ''}` : ''}
               </div>
             );
           }
+          if (it.kind === 'markReturn') {
+            // Аккуратный маркер планового возвращения: линия в конце рейса + клик
+            return (
+              <div
+                key={`mr${idx}`}
+                role="button"
+                tabIndex={0}
+                data-bar="mark-return"
+                data-trip={it.tripKey}
+                onClick={() => onOpenTrip(it.tripKey)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onOpenTrip(it.tripKey);
+                  }
+                }}
+                className="absolute z-[2] cursor-pointer"
+                style={{ left: Math.max(0, dayToX(it.day, vs, colW) + colW - 2), top: 3, height: PLAN_H - 6, width: 2, background: '#1D4ED8', borderRadius: 1 }}
+                title={it.title}
+              />
+            );
+          }
           if (it.kind === 'plan') {
+            const prefix = it.statusKind === 'violated' ? '⛔ ' : it.statusKind === 'missed' ? '⌛ ' : it.statusKind === 'risk' ? '⚠ ' : '';
             return (
               <div
                 key={`p${idx}`}
@@ -610,7 +699,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 }}
                 title={it.title}
               >
-                {it.level === 3 ? '⛔ ' : it.level === 2 ? '⚠ ' : ''}
+                {prefix}
                 {it.open ? 'неполный план' : it.label}
               </div>
             );
@@ -632,9 +721,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               data-bar={it.critical ? 'mark-critical' : 'mark-plan'}
               className="absolute z-[4]"
               style={{
-                left: Math.round((it.day - vs) * colW + colW * 0.3),
+                left: dayToX(it.day, vs, colW) + Math.round(colW * 0.3),
                 top: 2,
-                height: 22,
+                height: PLAN_H - 4,
                 width: it.critical ? 3 : 2,
                 background: it.critical ? CLR.markCritical : CLR.markPlan,
               }}
@@ -644,19 +733,22 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         })}
       </div>
 
-      {/* Подстрока «Факт» */}
-      <div className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2.5 pb-1.5 w-[170px] min-w-[170px] overflow-hidden">
+      {/* Подстрока «Факт» — та же закреплённая колонка, ровно FACT_H */}
+      <div
+        className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2.5 w-[170px] min-w-[170px] overflow-hidden"
+        style={{ height: FACT_H, borderRightColor: '#D1D5DB' }}
+      >
         <div className="flex items-center justify-between gap-1">
-          <span className="text-[8px] font-semibold uppercase tracking-wider text-[#9CA3AF] pt-0.5">Факт</span>
-          <span className="text-[9px] text-[#9CA3AF] tabular-nums">
+          <span className="text-[8px] leading-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] pt-0.5">Факт</span>
+          <span className="text-[9px] leading-[11px] text-[#9CA3AF] tabular-nums">
             {row.basesCount ? `база: ${row.basesCount}` : ''}
             {row.basesCount && row.repairsCount ? ' · ' : ''}
             {row.repairsCount ? `ремонт: ${row.repairsCount}` : ''}
           </span>
         </div>
-        {row.empty ? <div className="text-[10px] text-[#9CA3AF] mt-0.5">Нет рейсов в выбранном периоде</div> : null}
+        {row.empty ? <div className="text-[9px] leading-[10px] text-[#9CA3AF]">Нет рейсов в выбранном периоде</div> : null}
       </div>
-      <div data-lane="fact" className="relative border-b border-[#E5E7EB]" style={{ width: W, height: FACT_H }}>
+      <div data-lane="fact" className="relative z-0 border-b border-[#E5E7EB]" style={{ width: W, height: FACT_H, ...laneBg }}>
         {bgPlane('fbg', 0.6)}
         {row.factItems.map((it, idx) => {
           const p = pos(it.kind === 'markFact' || it.kind === 'markReady' ? it.day : it.a, it.kind === 'markFact' || it.kind === 'markReady' ? it.day : it.b);
@@ -741,7 +833,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                     }
                   }}
                   className="absolute overflow-hidden whitespace-nowrap text-[9px] leading-[14px] z-[2] cursor-pointer px-1"
-                  style={{ left: p.left, width: p.width, top: 16, height: 14, background: hatchBase, border: `1px solid ${CLR.baseBorder}`, borderRadius: 3, color: CLR.baseText }}
+                  style={{ left: p.left, width: p.width, top: 16, height: 14, background: hatchBase, border: `1px ${it.archived ? 'dashed' : 'solid'} ${CLR.baseBorder}`, borderRadius: 3, color: CLR.baseText, ...(it.archived ? { filter: 'saturate(0.45)' } : {}) }}
                   title={it.title}
                 >
                   {p.width > 70 ? it.label : ''}
@@ -763,10 +855,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                     }
                   }}
                   className="absolute overflow-hidden whitespace-nowrap text-[9px] leading-[10px] text-white z-[3] cursor-pointer px-1 text-center"
-                  style={{ left: p.left, width: p.width, top: 18, height: 10, background: CLR.repair, opacity: 0.92, borderRadius: 2 }}
+                  style={{ left: p.left, width: p.width, top: 18, height: 10, background: CLR.repair, opacity: 0.92, borderRadius: 2, ...(it.archived ? { filter: 'saturate(0.45)' } : {}) }}
                   title={it.title}
                 >
-                  {p.width > 60 ? 'ремонт' : ''}
+                  {p.width > 60 ? `ремонт${it.archived ? ' · архив' : ''}` : ''}
                 </div>
               );
             case 'event':
@@ -804,7 +896,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   onClick={() => onOpenBase(it.periodKey)}
                   className="absolute z-[4] cursor-pointer"
                   style={{
-                    left: Math.round((it.day - vs) * colW + colW * 0.45),
+                    left: dayToX(it.day, vs, colW) + Math.round(colW * 0.45),
                     top: 2,
                     height: FACT_H - 4,
                     width: 3,
@@ -825,7 +917,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   onClick={() => onOpenTrip(it.tripKey)}
                   className="absolute z-[4] cursor-pointer"
                   style={{
-                    left: Math.round((it.day - vs) * colW + colW * 0.6),
+                    left: dayToX(it.day, vs, colW) + Math.round(colW * 0.6),
                     top: 2,
                     height: FACT_H - 4,
                     width: 2,
@@ -848,6 +940,55 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
 // Таймлайн
 // ---------------------------------------------------------------------------
 
+/**
+ * Фактический видимый диапазон календаря («9 октября — 24 ноября 2026»):
+ * считается по датам, видимым правее закреплённой колонки, и обновляется
+ * при прокрутке, масштабировании и изменении ширины окна. Живёт отдельным
+ * компонентом — прокрутка не перерисовывает строки машин.
+ */
+function VisibleRangeLabel({
+  scrollRef,
+  vs,
+  vn,
+  colW,
+}: {
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+  vs: number;
+  vn: number;
+  colW: number;
+}) {
+  const [text, setText] = useState('');
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const compute = () => {
+      const ve = vs + vn - 1;
+      const startRaw = vs + Math.floor(el.scrollLeft / colW);
+      const endRaw = vs + Math.floor((el.scrollLeft + el.clientWidth - 1 - TIMELINE_COL_W) / colW);
+      const startD = Math.max(vs, Math.min(startRaw, ve));
+      const endD = Math.max(startD, Math.min(ve, endRaw));
+      setText(visibleRangeText(startD, endD));
+    };
+    compute();
+    const rafId = window.requestAnimationFrame(compute);
+    el.addEventListener('scroll', compute);
+    window.addEventListener('resize', compute);
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(compute) : null;
+    if (ro) ro.observe(el);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      el.removeEventListener('scroll', compute);
+      window.removeEventListener('resize', compute);
+      if (ro) ro.disconnect();
+    };
+  }, [scrollRef, vs, vn, colW]);
+  return (
+    <span className="text-[11px] text-[#4B5563] tabular-nums" data-ui="visible-range">
+      {text || '—'}
+    </span>
+  );
+}
+
 export default function TimelineGrid({
   trips,
   bases,
@@ -858,24 +999,36 @@ export default function TimelineGrid({
   vs,
   vn,
   extL,
+  extR,
   navVs,
-  preset,
-  onPresetChange,
+  zoom,
+  onZoomChange,
   onNavigate,
   onRangeExtend,
   showArchived,
   onShowArchivedChange,
+  selectedTripKey,
   onOpenTrip,
   onOpenBase,
   onOpenCar,
 }: Props) {
   const ve = vs + vn - 1;
-  const colW = colWidthFor(vn);
+  const colW = zoomColW(zoom);
   const W = vn * colW;
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const wantTodayScroll = useRef(true);
+  /** Первичная установка позиции прокрутки выполнена. */
+  const didInitScroll = useRef(false);
+  /** Кнопка «Сегодня» попросила прокрутку к today при следующей навигации. */
+  const wantTodayScroll = useRef(false);
+  /** Предыдущее значение navVs — навигация отличается от повторного запуска эффекта. */
+  const prevNavVs = useRef(navVs);
   const prevExtL = useRef(extL);
+  const prevColW = useRef(colW);
+  /** До этого времени программные изменения scrollLeft не считаются «скроллом к краю». */
   const lastExtend = useRef(0);
+  const lastPersistDay = useRef<number | null>(null);
+  /** Дата-якорь для пересчёта прокрутки при смене масштаба (центр или указатель). */
+  const pendingAnchor = useRef<{ day: number; frac: number } | null>(null);
 
   const rows = useMemo(
     () => buildRows(trips, bases, events, fleetCars, stageTypes, showArchived, vs, ve, today),
@@ -893,58 +1046,137 @@ export default function TimelineGrid({
     return segs;
   }, [vs, ve, colW, today]);
 
-  // Прокрутка: при входе — к сегодняшнему дню; при возврате — сохранённая позиция
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    try {
-      const saved = JSON.parse(sessionStorage.getItem('ratipa_timeline_scroll') || 'null') as { vs: number; left: number } | null;
-      if (saved && saved.vs === vs && !wantTodayScroll.current) {
-        el.scrollLeft = saved.left || 0;
+  /**
+   * ЕДИНАЯ формула позиции: горизонтальная прокрутка считается из календарной
+   * даты-якоря (не из пикселей), поэтому смена масштаба не сбрасывает точку
+   * просмотра. frac — доля видимой календарной области (правее закреплённой
+   * колонки), на которой стоит day: 0 — у колонки, 0.5 — середина, 1 — правый край.
+   */
+  const applyAnchor = useCallback(
+    (day: number, frac: number) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const calW = Math.max(1, el.clientWidth - TIMELINE_COL_W);
+      const target = (day - vs) * colW - frac * calW;
+      const max = Math.max(0, el.scrollWidth - el.clientWidth);
+      if (target > max + 1) {
+        // Загруженного диапазона не хватает — тянемся к краю (догрузка добавит
+        // даты) и запоминаем якорь, чтобы довести его после расширения.
+        pendingAnchor.current = { day, frac };
+        lastExtend.current = 0;
+        el.scrollLeft = max;
+        return;
       }
-    } catch {
-      /* не критично */
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      pendingAnchor.current = null;
+      el.scrollLeft = Math.max(0, target);
+    },
+    [vs, colW],
+  );
 
-  useEffect(() => {
-    if (!wantTodayScroll.current) return;
-    wantTodayScroll.current = false;
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollLeft = Math.max(0, (today - vs) * colW - 60);
-  }, [vs, today, colW]);
+  const dayAtViewportX = useCallback(
+    (x: number): number => {
+      const el = scrollRef.current;
+      if (!el) return today;
+      return dayAtContentX(el.scrollLeft + x, vs, colW);
+    },
+    [vs, colW, today],
+  );
 
   const persistScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     try {
-      sessionStorage.setItem('ratipa_timeline_scroll', JSON.stringify({ vs: vs - extL, left: el.scrollLeft }));
+      const calW = Math.max(1, el.clientWidth - TIMELINE_COL_W);
+      const center = dayAtContentX(el.scrollLeft + TIMELINE_COL_W + calW / 2, vs, colW);
+      if (lastPersistDay.current === center) return;
+      lastPersistDay.current = center;
+      // Храним календарную дату-якорь, а не только пиксели: при смене масштаба
+      // старый scrollLeft не применяется — позиция пересчитывается по дате.
+      sessionStorage.setItem('ratipa_timeline_scroll', JSON.stringify({ day: center, frac: 0.5 }));
     } catch {
       /* не критично */
     }
-  }, [vs, extL]);
+  }, [vs, colW]);
 
-  // Догрузка дней по краям прокрутки: без пустоты и без скачка видимой области
+  // Вход и кнопочная навигация: позиция задаётся по календарной дате.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (!didInitScroll.current) {
+      didInitScroll.current = true;
+      try {
+        const saved = JSON.parse(sessionStorage.getItem('ratipa_timeline_scroll') || 'null') as
+          | { day?: number; frac?: number }
+          | null;
+        if (saved && typeof saved.day === 'number' && Number.isFinite(saved.day)) {
+          applyAnchor(saved.day, typeof saved.frac === 'number' ? saved.frac : 0.5);
+          lastExtend.current = Date.now() + 600;
+          return;
+        }
+      } catch {
+        /* не критично */
+      }
+      applyAnchor(today, 0.35);
+      prevNavVs.current = navVs;
+      lastExtend.current = Date.now() + 600;
+      return;
+    }
+    // Повторный запуск эффекта без навигации (StrictMode/ре-рендер) позицию не трогает.
+    if (prevNavVs.current === navVs) return;
+    prevNavVs.current = navVs;
+    if (wantTodayScroll.current) {
+      wantTodayScroll.current = false;
+      applyAnchor(today, 0.35);
+    } else {
+      applyAnchor(navVs, 0);
+    }
+    lastExtend.current = Date.now() + 600;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navVs]);
+
+  // Смена масштаба: держим дату-якорь на месте (центр области или точка под
+  // указателем для жеста/колеса). Старый scrollLeft без пересчёта не применяется.
+  useLayoutEffect(() => {
+    if (prevColW.current === colW) return;
+    prevColW.current = colW;
+    const el = scrollRef.current;
+    const calW = el ? Math.max(1, el.clientWidth - TIMELINE_COL_W) : 1;
+    const anchor = pendingAnchor.current ?? {
+      day: el ? dayAtContentX(el.scrollLeft + TIMELINE_COL_W + calW / 2, vs, colW) : today,
+      frac: 0.5,
+    };
+    pendingAnchor.current = null;
+    lastExtend.current = 0; // возможная догрузка диапазона — не скачок, якорь вернём
+    applyAnchor(anchor.day, anchor.frac);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colW]);
+
+  // Диапазон догрузился — если якорь ждал места, доводим его точно.
+  useLayoutEffect(() => {
+    if (!pendingAnchor.current) return;
+    applyAnchor(pendingAnchor.current.day, pendingAnchor.current.frac);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extL, extR, vn]);
+
+  // Догрузка дней по краям прокрутки: без пустоты и без скачка видимой области.
   const handleScroll = useCallback(() => {
     persistScroll();
     const el = scrollRef.current;
     if (!el) return;
     const now = Date.now();
-    if (now - lastExtend.current < 250) return;
+    if (now < lastExtend.current) return; // программная прокрутка — не расширяем
     if (el.scrollLeft < colW * 2 && extL < 400) {
-      lastExtend.current = now;
+      lastExtend.current = now + 250;
       onRangeExtend('left');
-    } else if (el.scrollLeft + el.clientWidth > el.scrollWidth - colW * 2 && extL < 400) {
-      lastExtend.current = now;
+    } else if (el.scrollLeft + el.clientWidth > el.scrollWidth - colW * 2 && extR < 400) {
+      lastExtend.current = now + 250;
       onRangeExtend('right');
     }
-  }, [persistScroll, colW, extL, onRangeExtend]);
+  }, [persistScroll, colW, extL, extR, onRangeExtend]);
 
-  // Расширение слева сдвигает начало диапазона — компенсируем прокрутку,
-  // чтобы видимая область осталась той же (без скачка).
-  useEffect(() => {
+  // Расширение влево сдвигает контент — компенсируем прокрутку ДО отрисовки
+  // кадра, чтобы видимая дата (календарный якорь) не сместилась ни на пиксель.
+  useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const d = extL - prevExtL.current;
@@ -952,16 +1184,56 @@ export default function TimelineGrid({
     if (d > 0) el.scrollLeft = el.scrollLeft + d * colW;
   }, [extL, colW]);
 
-  // После кнопочной навигации не догружаем даты мгновенно: пользователь ещё не
-  // скроллил, а программное изменение scrollLeft не должно вызывать расширение.
+  // Масштаб: кнопки/ползунок ставят якорь по центру видимой календарной области.
+  const anchorFromCenter = useCallback((): { day: number; frac: number } => {
+    const el = scrollRef.current;
+    const calW = el ? Math.max(1, el.clientWidth - TIMELINE_COL_W) : 1;
+    return { day: el ? dayAtContentX(el.scrollLeft + TIMELINE_COL_W + calW / 2, vs, colW) : today, frac: 0.5 };
+  }, [vs, colW, today]);
+
+  const setZoom = useCallback(
+    (next: number) => {
+      const clamped = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, next));
+      if (clamped === zoom) return;
+      pendingAnchor.current = anchorFromCenter();
+      onZoomChange(clamped);
+    },
+    [zoom, onZoomChange, anchorFromCenter],
+  );
+
+  // Модифицированное колесо / пинч тачпада (Ctrl+wheel): масштаб под указателем.
+  // Обычная вертикальная прокрутка не перехватывается; у границ масштаба жест
+  // не блокируется (стандартное масштабирование браузера не ломаем).
   useEffect(() => {
-    lastExtend.current = Date.now() + 800;
-  }, [navVs, preset]);
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey || e.metaKey) return;
+      const dir = e.deltaY < 0 ? 1 : -1;
+      const next = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, zoom + dir));
+      if (next === zoom) return; // на пределе — отдаём жест браузеру
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const calW = Math.max(1, rect.width - TIMELINE_COL_W);
+      const frac = Math.max(0, Math.min(1, (e.clientX - rect.left - TIMELINE_COL_W) / calW));
+      const day = dayAtContentX(el.scrollLeft + (e.clientX - rect.left), vs, colW);
+      pendingAnchor.current = { day, frac };
+      setZoom(next);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [setZoom, zoom, vs, colW]);
 
   const goToday = useCallback(() => {
+    if (navVs === today - 10) {
+      // Диапазон уже сегодняшний — просто возвращаем прокрутку к today.
+      applyAnchor(today, 0.35);
+      lastExtend.current = Date.now() + 600;
+      return;
+    }
     wantTodayScroll.current = true;
     onNavigate(today - 10);
-  }, [onNavigate, today]);
+  }, [onNavigate, today, navVs, applyAnchor]);
 
   const shiftMonth = useCallback(
     (dir: 1 | -1) => {
@@ -999,23 +1271,49 @@ export default function TimelineGrid({
             }}
           />
         </label>
-        <label className="flex items-center gap-1.5 text-[11px] text-[#6B7280]">
-          Период
-          <select
-            data-ui="period"
-            value={preset}
-            onChange={(e) => onPresetChange(e.target.value as PeriodPreset)}
-            className="bg-white border border-[#E5E7EB] rounded-lg px-2 py-1.5 text-[11px] text-[#121316] outline-none cursor-pointer focus:border-[var(--accent)]"
+        {/* Масштаб календаря: «−» / ползунок / «+». Ширина дня — единый параметр
+            для сетки, полос и шапки; интерфейс вне календаря не масштабируется. */}
+        <div className="flex items-center gap-1.5" role="group" aria-label="Масштаб календаря" data-ui="zoom-control">
+          <button
+            type="button"
+            data-zoom="out"
+            className={`${navBtn} ${zoom <= 0 ? 'opacity-40 cursor-default' : ''}`}
+            title="Уменьшить масштаб: ширина дня меньше, дат на экране больше"
+            aria-label="Уменьшить масштаб"
+            disabled={zoom <= 0}
+            onClick={() => setZoom(zoom - 1)}
           >
-            {PERIOD_PRESETS.map((p) => (
-              <option key={p.key} value={p.key}>{p.label}</option>
-            ))}
-          </select>
-        </label>
-        <span className="text-[11px] text-[#6B7280] tabular-nums" data-ui="range-label">
-          {fmtDM(vs)} – {fmtDM(ve)} · {vn} дн
+            −
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={ZOOM_LEVELS.length - 1}
+            step={1}
+            value={zoom}
+            data-ui="zoom-slider"
+            aria-label="Масштаб календаря"
+            title={`Масштаб: ${zoomLabel(zoom)} (${colW}px на день) — или Ctrl+колесо над календарём`}
+            onChange={(e) => setZoom(Number(e.target.value))}
+            className="w-24 md:w-32 accent-[var(--accent)] cursor-pointer"
+          />
+          <button
+            type="button"
+            data-zoom="in"
+            className={`${navBtn} ${zoom >= ZOOM_LEVELS.length - 1 ? 'opacity-40 cursor-default' : ''}`}
+            title="Увеличить масштаб: деталей больше — до отдельных дней и событий"
+            aria-label="Увеличить масштаб"
+            disabled={zoom >= ZOOM_LEVELS.length - 1}
+            onClick={() => setZoom(zoom + 1)}
+          >
+            +
+          </button>
+        </div>
+        <span className="flex items-center gap-1.5 text-[11px] text-[#6B7280]">
+          Видимый диапазон:
+          <VisibleRangeLabel scrollRef={scrollRef} vs={vs} vn={vn} colW={colW} />
         </span>
-        <label className="flex items-center gap-1.5 text-[11px] text-[#6B7280] cursor-pointer select-none py-1">
+        <label className="flex items-center gap-1.5 text-[11px] text-[#6B7280] cursor-pointer select-none py-1" title="Единый переключатель: архивные рейсы плана дохода и архивные записи учёта выезда (база, ремонт)">
           <input
             type="checkbox"
             data-ui="show-archived"
@@ -1023,88 +1321,69 @@ export default function TimelineGrid({
             onChange={(e) => onShowArchivedChange(e.target.checked)}
             className="w-3.5 h-3.5 rounded border-[#D1D5DB] accent-[var(--accent)] cursor-pointer"
           />
-          показывать архивные рейсы
+          Показывать архивные данные
         </label>
       </div>
 
-      {/* Сетка */}
-      {rows.length === 0 ? (
-        <div className="py-10 text-center text-xs text-[#6B7280]">
-          В выбранной вкладке нет машин. Проверьте вкладку диспетчера или добавьте рейс кнопкой «Новый рейс».
-        </div>
-      ) : (
-        <div
-          ref={scrollRef}
-          onScroll={handleScroll}
-          data-ui="timeline-scroll"
-          className="tl-scroll overflow-auto overscroll-x-contain border border-[#E5E7EB] rounded-xl bg-[#F9FAFB] max-h-[68vh] min-h-[280px]"
-        >
-          <style>{`.tl-scroll{scrollbar-width:thin;scrollbar-color:#B6BBC2 #F3F4F6;}
+      {/* Сетка — ОДИН контейнер прокрутки для шапки, сетки и полос.
+          Монтируется всегда (даже без машин), чтобы позиция прокрутки не терялась
+          при загрузке данных и смене вкладки диспетчера. */}
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        data-ui="timeline-scroll"
+        className="tl-scroll overflow-auto overscroll-x-contain border border-[#E5E7EB] rounded-xl bg-[#F9FAFB] max-h-[68vh] min-h-[280px]"
+      >
+        <style>{`.tl-scroll{scrollbar-width:thin;scrollbar-color:#B6BBC2 #F3F4F6;}
 .tl-scroll::-webkit-scrollbar{height:12px;width:12px;}
 .tl-scroll::-webkit-scrollbar-track{background:#F3F4F6;border-radius:8px;}
 .tl-scroll::-webkit-scrollbar-thumb{background:#C3C8CF;border-radius:8px;border:2px solid #F3F4F6;}
 .tl-scroll::-webkit-scrollbar-thumb:hover{background:#9CA3AF;}`}</style>
-          <div className="grid min-w-max" style={{ gridTemplateColumns: `170px ${W}px` }}>
-            {/* Шапка — закреплена и прокручивается синхронно с полосами */}
-            <div className="sticky left-0 top-0 z-[6] bg-[#F9FAFB] border-b border-r border-[#E5E7EB] px-2.5 py-1.5 w-[170px] min-w-[170px]">
-              <span className="text-[10px] text-[#6B7280] tabular-nums">
-                {fmtDM(vs)} – {fmtDM(ve)}
-              </span>
-            </div>
-            <div className="sticky top-0 z-[5] bg-[#F9FAFB] border-b border-[#E5E7EB] flex" style={{ width: W }}>
-              {Array.from({ length: vn }, (_, i) => vs + i).map((d) => {
-                const wd = new Date(d * 86400000).getUTCDay();
-                const isWeekend = wd === 0 || wd === 6;
-                const isToday = d === today;
-                const wide = colW >= 24;
-                const showNarrow = colW < 24 && (d === vs || new Date(d * 86400000).getUTCDate() === 1 || wd === 1);
-                return (
-                  <div
-                    key={d}
-                    className="flex-none text-center text-[9px] leading-tight pt-1 overflow-hidden"
-                    style={{
-                      width: colW,
-                      background: isWeekend ? CLR.weekend : undefined,
-                      color: isToday ? CLR.today : '#6B7280',
-                      boxShadow: isToday ? `inset 0 -2px 0 ${CLR.today}` : undefined,
-                    }}
-                  >
-                    {wide ? (
-                      <>
-                        <b className="block text-[10px] text-[#121316] font-semibold">{dayHeaderLabel(d)}</b>
-                        <span>{WEEKDAYS_RU[wd]}</span>
-                      </>
-                    ) : showNarrow ? (
-                      <b className="text-[8px]">{dayHeaderLabel(d)}</b>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Группы машин: «План» сверху, «Факт» снизу */}
-            {rows.map((row) => (
-              <TimelineCarRow
-                key={row.carKey}
-                row={row}
-                colW={colW}
-                vs={vs}
-                vn={vn}
-                bg={bg}
-                onOpenTrip={onOpenTrip}
-                onOpenBase={onOpenBase}
-                onOpenCar={onOpenCar}
-              />
-            ))}
+        <div className="grid min-w-max" style={{ gridTemplateColumns: `170px ${W}px` }}>
+          {/* Шапка — закреплена сверху; левая ячейка — закреплена слева.
+              Полоса месяцев и дни — в той же ленте, движутся синхронно с полосами. */}
+          <div
+            className="sticky left-0 top-0 z-[6] bg-[#F9FAFB] border-b border-r border-[#E5E7EB] px-2.5 py-1.5 w-[170px] min-w-[170px]"
+            style={{ borderRightColor: '#D1D5DB' }}
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">Автомобили</span>
           </div>
-        </div>
-      )}
+          <div className="sticky top-0 z-[5] bg-[#F9FAFB] border-b border-[#E5E7EB]" style={{ width: W }}>
+            <CalendarHeader vs={vs} vn={vn} colW={colW} today={today} pinLeft={178} />
+          </div>
 
-      {/* Легенда */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[#6B7280] mt-3">
+          {/* Группы машин: «План» сверху, «Факт» снизу */}
+          {rows.map((row) => (
+            <TimelineCarRow
+              key={row.carKey}
+              row={row}
+              colW={colW}
+              vs={vs}
+              vn={vn}
+              bg={bg}
+              selectedTripKey={selectedTripKey}
+              onOpenTrip={onOpenTrip}
+              onOpenBase={onOpenBase}
+              onOpenCar={onOpenCar}
+            />
+          ))}
+          {rows.length === 0 ? (
+            <div className="col-span-2 py-10 text-center text-xs text-[#6B7280]">
+              В выбранной вкладке нет машин. Проверьте вкладку диспетчера или добавьте рейс кнопкой «Новый рейс».
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Легенда — компактная единая визуальная система (цвет + форма + штриховка) */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[#6B7280] mt-3">
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: CLR.planBg, border: `1px solid ${CLR.planBorder}` }} />
           рейс (план — из «Плана дохода»)
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <i className="inline-block w-[2px] h-[12px]" style={{ background: '#1D4ED8' }} />
+          плановое возвращение
         </span>
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: hatch45 }} />
@@ -1112,15 +1391,15 @@ export default function TimelineGrid({
         </span>
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block w-[18px] h-[6px] rounded-[2px]" style={{ background: CLR.fact, opacity: 0.65 }} />
-          факт (только заполненные фактические даты)
+          факт (только заполненные даты)
         </span>
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: hatchOpen, border: `1px dashed ${CLR.fact}` }} />
-          факт продолжается (окончание не указано)
+          факт продолжается
         </span>
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: CLR.planNoneBg, border: `1px dashed ${CLR.planNoneBorder}` }} />
-          «Факт не указан»
+          «Факт не указан» (не выполнен)
         </span>
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: hatchBase, border: `1px solid ${CLR.baseBorder}` }} />
@@ -1128,7 +1407,7 @@ export default function TimelineGrid({
         </span>
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: hatchReady, border: '1px solid #F59E0B' }} />
-          база: план (приезд → срок готовности)
+          база: план (приезд → готовность)
         </span>
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block w-[18px] h-[8px] rounded-[2px]" style={{ background: CLR.repair }} />
@@ -1144,13 +1423,17 @@ export default function TimelineGrid({
         </span>
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block w-[3px] h-[12px]" style={{ background: CLR.warn, opacity: 0.7 }} />
-          плановая готовность (учёт выезда)
+          плановая готовность
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: CLR.planArchBg, border: `1px solid ${CLR.planArchBorder}` }} />
+          архивные данные (приглушённые)
         </span>
       </div>
       <p className="text-[10px] text-[#9CA3AF] mt-2">
         Клик по плановой или фактической полосе открывает модальное окно всего рейса; клик по названию машины — обзор её рейсов и периодов.
-        Периоды базы и ремонта открываются кликом по полосе. Календарь прокручивается по горизонтали (тачпад, колесо с Shift, полоса прокрутки) —
-        прокрутка догружает даты влево и вправо; выходные подсвечены фоном.
+        Периоды базы и ремонта открываются кликом по полосе. Прокрутка — тачпад, Shift+колесо, полоса; масштаб — «−/+/ползунок» или Ctrl+колесо над календарём (дата под курсором остаётся на месте).
+        Прокрутка догружает даты влево и вправо; выходные подсвечены фоном; «⌛» — плановая дата прошла, факт не указан, «⛔» — опоздание подтверждено фактом.
       </p>
     </div>
   );

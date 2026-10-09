@@ -35,7 +35,7 @@ import StatsBlock from './tripTimeline/StatsBlock';
 import PeriodModal from './tripTimeline/PeriodModal';
 import CarOverviewModal from './tripTimeline/CarOverviewModal';
 import { useTimelineData } from './tripTimeline/useTimelineData';
-import { computeStoredRange, rangeDaysForPreset, todayNum, type PeriodPreset } from './tripTimeline/lib/timeline';
+import { computeStoredRange, sortMonthLabelsDesc, todayNum, zoomColW, zoomIndexOf } from './tripTimeline/lib/timeline';
 import { plateKeyOf } from './tripTimeline/lib/sources';
 
 type TabId = 'timeline' | 'events' | 'stats';
@@ -80,26 +80,56 @@ export default function TripTimelineModule({ user, settings }: Props) {
     try {
       return (JSON.parse(sessionStorage.getItem(VIEW_KEY) || 'null') || {}) as {
         vs?: number;
-        preset?: string;
         dtab?: string;
         amonth?: string | null;
+        extL?: number;
+        extR?: number;
       };
     } catch {
       return {};
     }
   }, []);
-  const [vs, setVs] = useState<number>(() => (typeof savedView.vs === 'number' ? savedView.vs : todayNum() - 10));
-  const [preset, setPreset] = useState<PeriodPreset>(() => {
-    const p = savedView.preset;
-    if (p === '1m' || p === '45' || p === '2m' || p === '3m' || p === '6m') return p;
-    return '1m';
+  // Масштаб (ширина дня) — между посещениями через тот же механизм пользовательских
+  // настроек, что и zoom листов модулей (localStorage ratipa_*).
+  const zoomKey = `ratipa_timeline_zoom_${user.uid || user.name || 'default'}`;
+  const [zoom, setZoom] = useState<number>(() => {
+    try {
+      const saved = Number(localStorage.getItem(zoomKey));
+      if (Number.isFinite(saved) && saved > 0) return zoomIndexOf(saved);
+    } catch {
+      /* не критично */
+    }
+    return zoomIndexOf(30);
   });
-  const [extL, setExtL] = useState(0);
-  const [extR, setExtR] = useState(0);
+  const changeZoom = useCallback(
+    (index: number) => {
+      setZoom(index);
+      try {
+        localStorage.setItem(zoomKey, String(zoomColW(index)));
+      } catch {
+        /* не критично */
+      }
+    },
+    [zoomKey],
+  );
+  const [vs, setVs] = useState<number>(() => (typeof savedView.vs === 'number' ? savedView.vs : todayNum() - 45));
+  // Догруженные прокруткой дни хранятся вместе с видом: при возврате позиция
+  // прокрутки восстанавливается по календарной дате-якорю (без скачка).
+  const [extL, setExtL] = useState(() => Math.max(0, Math.min(EXT_MAX, Number(savedView.extL) || 0)));
+  const [extR, setExtR] = useState(() => Math.max(0, Math.min(EXT_MAX, Number(savedView.extR) || 0)));
   const [showArchived, setShowArchived] = useState(true);
   const [archiveMonth, setArchiveMonth] = useState<string | null>(() => savedView.amonth ?? null);
 
-  const vnBase = useMemo(() => rangeDaysForPreset(preset, vs), [preset, vs]);
+  /**
+   * Базовый загруженный диапазон строится из масштаба: видимые дни (оценка по
+   * широкому экрану) + запас по 120 дней в каждую сторону. Жёсткого «периода»
+   * больше нет; при прокрутке диапазон догружается существующим механизмом,
+   * поэтому загруженный край не ощущается границей просмотра.
+   */
+  const vnBase = useMemo(() => {
+    const colW = zoomColW(zoom);
+    return Math.max(140, Math.min(430, Math.ceil(1600 / colW) + 120));
+  }, [zoom]);
   const renderVs = vs - extL;
   const renderVn = vnBase + extL + extR;
 
@@ -157,11 +187,11 @@ export default function TripTimelineModule({ user, settings }: Props) {
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(VIEW_KEY, JSON.stringify({ vs, preset, dtab: dispatcherTab, amonth: archiveMonth }));
+      sessionStorage.setItem(VIEW_KEY, JSON.stringify({ vs, dtab: dispatcherTab, amonth: archiveMonth, extL, extR }));
     } catch {
       /* не критично */
     }
-  }, [vs, preset, dispatcherTab, archiveMonth]);
+  }, [vs, dispatcherTab, archiveMonth, extL, extR]);
 
   const matchesTab = useCallback(
     (dispatcherId: string): boolean => {
@@ -185,6 +215,9 @@ export default function TripTimelineModule({ user, settings }: Props) {
   }, [data.fleetCars, data.bases, data.trips]);
 
   // ── Архив по месяцам (правила «Плана дохода»: currentMonth записи) ─────
+  // Группировка — как в «Плане дохода» (месяц завершения записи), но порядок
+  // вкладок — строго хронологический по числовому году и месяцу: новые первыми
+  // (Январь 2027 → Декабрь 2026 → Ноябрь 2026 → Октябрь 2026 …).
   const archiveMonths = useMemo(() => {
     const months = new Set<string>();
     data.trips.forEach((t) => {
@@ -196,10 +229,8 @@ export default function TripTimelineModule({ user, settings }: Props) {
         months.add('__none__');
       }
     });
-    return Array.from(months)
-      .filter((m) => m !== '__none__')
-      .sort()
-      .concat(months.has('__none__') ? ['__none__'] : []);
+    const dated = sortMonthLabelsDesc(Array.from(months).filter((m) => m !== '__none__'));
+    return dated.concat(months.has('__none__') ? ['__none__'] : []);
   }, [data.trips]);
 
   const monthMatches = useCallback(
@@ -559,13 +590,15 @@ export default function TripTimelineModule({ user, settings }: Props) {
           vs={renderVs}
           vn={renderVn}
           extL={extL}
+          extR={extR}
           navVs={vs}
-          preset={preset}
-          onPresetChange={setPreset}
+          zoom={zoom}
+          onZoomChange={changeZoom}
           onNavigate={navigateRange}
           onRangeExtend={extendRange}
           showArchived={showArchived}
           onShowArchivedChange={setShowArchived}
+          selectedTripKey={openTripKey}
           onOpenTrip={openTrip}
           onOpenBase={openPeriod}
           onOpenCar={openCar}

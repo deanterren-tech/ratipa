@@ -16,7 +16,7 @@
  * Архивный статус связанного рейса меняется только в «Плане дохода»: здесь
  * пояснение и переход по прямой ссылке (в том числе для архивной записи).
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
   CalendarClock,
@@ -40,11 +40,13 @@ import { useDebouncedSaver } from './useDebouncedSaver';
 import DateInput from './DateInput';
 import {
   WEEKEND_HINT,
-  WEEKDAYS_RU,
+  ZOOM_LEVELS,
+  barRectInWindow,
   comparePlanFact,
   computeStoredRange,
   dayNum,
   dayStr,
+  dayToX,
   fmtDev,
   fmtFull,
   getDeadlineStatus,
@@ -53,9 +55,14 @@ import {
   isTripFactOngoing,
   isWeekendDay,
   stageDeviation,
+  stageStateOf,
+  TIMELINE_MINI_COL_W,
   tripFactEnd,
   tripSpan,
+  zoomColW,
+  zoomLabel,
 } from './lib/timeline';
+import CalendarHeader from './CalendarHeader';
 import { eventTypeOf, stageFullName } from './lib/catalog';
 import {
   baseBarRange,
@@ -181,7 +188,6 @@ const toDraft = (t: WholeTrip): Draft => {
 // Встроенный таймлайн выбранной машины (тот же календарь и те же правила)
 // ---------------------------------------------------------------------------
 
-const MINI_COL = 26;
 const MINI_PLAN_H = 26;
 const MINI_FACT_H = 32;
 
@@ -198,6 +204,7 @@ function CarMiniTimeline({
   stageTypes,
   today,
   onSelectTrip,
+  onFocusStage,
 }: {
   focusKey: string;
   carTrips: WholeTrip[];
@@ -206,83 +213,174 @@ function CarMiniTimeline({
   stageTypes: TimelineStageType[];
   today: number;
   onSelectTrip: (tripKey: string) => void;
+  /** Клик по маркеру этапа — переход и подсветка этапа в верхнем блоке окна. */
+  onFocusStage?: (stageId: string) => void;
 }) {
   const focus = carTrips.find((t) => t.key === focusKey) || null;
   const focusSpan = focus ? tripSpan(focus) : null;
-  const anchorStart = focus?.spanOverride?.pMin ?? focusSpan?.pMin ?? focusSpan?.fMin ?? today - 10;
-  const anchorEnd = focus?.spanOverride?.pMax ?? focusSpan?.fMax ?? focusSpan?.pMax ?? today;
-  const initialStart = Math.min(anchorStart, anchorEnd) - 7;
-  const initialEnd = Math.max(anchorStart, anchorEnd) + 7;
-  const initialVn = Math.max(30, initialEnd - initialStart + 1);
+  // Начальный видимый диапазон — объединение ПЛАНА и ФАКТА выбранного рейса
+  // с небольшим запасом по краям (а не «сегодня»): архивный рейс открывается
+  // на своих реальных датах, факт за плановой границей не обрезается.
+  const planA = focus?.spanOverride?.pMin ?? focusSpan?.pMin ?? null;
+  const planB = focus?.spanOverride?.pMax ?? focusSpan?.pMax ?? null;
+  const factA = focusSpan?.fMin ?? null;
+  const factB = focusSpan?.fMax ?? null;
+  const starts = [planA, factA].filter((v): v is number => v != null);
+  const ends = [planB, factB].filter((v): v is number => v != null);
+  const anchorStart = starts.length ? Math.min(...starts) : today - 10;
+  const anchorEnd = ends.length ? Math.max(...ends, anchorStart) : anchorStart;
+  const spanDays = Math.max(1, anchorEnd - anchorStart + 1);
+  /** Масштаб, при котором весь период рейса (± неделя запаса) виден целиком. */
+  const fitZoom = useCallback((): number => {
+    const avail = Math.max(280, Math.min(1360, window.innerWidth * 0.9) - TIMELINE_MINI_COL_W - 90);
+    const need = spanDays + 14;
+    for (let i = ZOOM_LEVELS.length - 1; i >= 0; i -= 1) {
+      if (need * ZOOM_LEVELS[i] <= avail) return i;
+    }
+    return 0;
+  }, [spanDays]);
+  // Масштаб встроенного таймлайна — НЕЗАВИСИМОЕ состояние: его прокрутка и
+  // масштаб не двигают основной таймлайн.
+  const [miniZoom, setMiniZoom] = useState<number>(() => fitZoom());
+  const colW = zoomColW(miniZoom);
+  const initialStart = anchorStart - 7;
+  const initialVn = Math.max(30, anchorEnd + 7 - initialStart + 1);
   const [vs, setVs] = useState(initialStart);
   const [vn, setVn] = useState(initialVn);
   const [extL, setExtL] = useState(0);
   const [extR, setExtR] = useState(0);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const prevExtL = useRef(0);
+  const prevColW = useRef(colW);
+  const pendingAnchor = useRef<{ day: number; frac: number } | null>(null);
   const lastExtend = useRef(0);
+  const didInit = useRef(false);
 
   const renderVs = vs - extL;
   const renderVn = vn + extL + extR;
   const ve = renderVs + renderVn - 1;
-  const W = renderVn * MINI_COL;
-  const pos = (a: number, b: number) => {
-    if (b < renderVs || a > ve) return null;
-    const A = Math.max(a, renderVs);
-    const B = Math.min(b, ve);
-    return { left: Math.round((A - renderVs) * MINI_COL), width: Math.round((B - A + 1) * MINI_COL) };
-  };
+  const W = renderVn * colW;
+  /** Та же единая функция «дата → координата», что в основном таймлайне. */
+  const pos = (a: number, b: number) => barRectInWindow(a, b, renderVs, ve, colW);
 
-  useEffect(() => {
+  // Позиция прокрутки — по календарной дате-якорю (frac — доля видимой области
+  // правее колонки 96px). Та же логика, что у основного таймлайна.
+  const applyAnchor = useCallback(
+    (day: number, frac: number) => {
+      const el = scrollRef.current;
+      if (!el) return;
+      const calW = Math.max(1, el.clientWidth - TIMELINE_MINI_COL_W);
+      const target = (day - renderVs) * colW - frac * calW;
+      const max = Math.max(0, el.scrollWidth - el.clientWidth);
+      if (target > max + 1) {
+        pendingAnchor.current = { day, frac };
+        lastExtend.current = 0;
+        el.scrollLeft = max;
+        return;
+      }
+      pendingAnchor.current = null;
+      el.scrollLeft = Math.max(0, target);
+    },
+    [renderVs, colW],
+  );
+
+  const dayAtMiniCenter = useCallback(
+    (): { day: number; frac: number } => {
+      const el = scrollRef.current;
+      const calW = el ? Math.max(1, el.clientWidth - TIMELINE_MINI_COL_W) : 1;
+      return {
+        day: el ? renderVs + Math.floor((el.scrollLeft + TIMELINE_MINI_COL_W + calW / 2 - TIMELINE_MINI_COL_W) / colW) : anchorStart,
+        frac: 0.5,
+      };
+    },
+    [renderVs, colW, anchorStart],
+  );
+
+  // При открытии окна: масштаб подобран под рейс (fitZoom), позиция — начало рейса.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || didInit.current) return;
+    didInit.current = true;
+    applyAnchor(anchorStart, 0);
+    lastExtend.current = Date.now() + 600;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Смена масштаба встроенного таймлайна: дата-якорь остаётся на месте.
+  useLayoutEffect(() => {
+    if (prevColW.current === colW) return;
+    prevColW.current = colW;
+    const anchor = pendingAnchor.current ?? dayAtMiniCenter();
+    pendingAnchor.current = null;
+    lastExtend.current = 0;
+    applyAnchor(anchor.day, anchor.frac);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colW]);
+
+  useLayoutEffect(() => {
+    if (!pendingAnchor.current) return;
+    applyAnchor(pendingAnchor.current.day, pendingAnchor.current.frac);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extL, extR, vn]);
+
+  // Догрузка влево: компенсация до отрисовки кадра — видимая дата не смещается.
+  useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const d = extL - prevExtL.current;
     prevExtL.current = extL;
-    if (d > 0) el.scrollLeft += d * MINI_COL;
-  }, [extL]);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollLeft = Math.max(0, (anchorStart - vs) * MINI_COL - 60);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (d > 0) el.scrollLeft += d * colW;
+  }, [extL, colW]);
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     const now = Date.now();
-    if (now - lastExtend.current < 250) return;
-    if (el.scrollLeft < MINI_COL * 2 && extL < 300) {
-      lastExtend.current = now;
+    if (now < lastExtend.current) return;
+    if (el.scrollLeft < colW * 2 && extL < 300) {
+      lastExtend.current = now + 250;
       setExtL((v) => v + 30);
-    } else if (el.scrollLeft + el.clientWidth > el.scrollWidth - MINI_COL * 2 && extR < 300) {
-      lastExtend.current = now;
+    } else if (el.scrollLeft + el.clientWidth > el.scrollWidth - colW * 2 && extR < 300) {
+      lastExtend.current = now + 250;
       setExtR((v) => v + 30);
     }
-  }, [extL, extR]);
+  }, [extL, extR, colW]);
 
-  const toFocus = useCallback(() => {
+  /** «Показать рейс целиком»: масштаб под полный период (план + факт) и позиция
+   *  от начала рейса — независимо от основного таймлайна. */
+  const showWholeTrip = useCallback(() => {
     setExtL(0);
     setExtR(0);
     setVs(initialStart);
     setVn(initialVn);
-    window.requestAnimationFrame(() => {
-      const el = scrollRef.current;
-      if (!el) return;
-      el.scrollLeft = Math.max(0, (anchorStart - initialStart) * MINI_COL - 60);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialStart, initialVn, anchorStart]);
+    lastExtend.current = Date.now() + 600;
+    const z = fitZoom();
+    pendingAnchor.current = { day: anchorStart, frac: 0 };
+    if (z !== miniZoom) {
+      setMiniZoom(z);
+    } else {
+      window.requestAnimationFrame(() => applyAnchor(anchorStart, 0));
+    }
+  }, [fitZoom, miniZoom, anchorStart, initialStart, initialVn, applyAnchor]);
+
+  const setMiniZoomAt = useCallback(
+    (next: number) => {
+      const clamped = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, next));
+      if (clamped === miniZoom) return;
+      pendingAnchor.current = dayAtMiniCenter();
+      setMiniZoom(clamped);
+    },
+    [miniZoom, dayAtMiniCenter],
+  );
 
   const bgWeekend = useMemo(() => {
     const segs: Array<{ left: number; width: number }> = [];
     for (let d = renderVs; d <= ve; d += 1) {
       const wd = new Date(d * 86400000).getUTCDay();
-      if (wd === 0 || wd === 6) segs.push({ left: Math.round((d - renderVs) * MINI_COL), width: MINI_COL });
+      if (wd === 0 || wd === 6) segs.push({ left: Math.round((d - renderVs) * colW), width: colW });
     }
     return segs;
-  }, [renderVs, ve]);
+  }, [renderVs, ve, colW]);
 
   const link = (key: string): React.CSSProperties =>
     key === focusKey ? { boxShadow: 'inset 0 0 0 2px var(--accent)' } : { opacity: 0.85 };
@@ -290,12 +388,49 @@ function CarMiniTimeline({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[10px] text-[#6B7280] tabular-nums">
+        <span className="text-[10px] text-[#6B7280] tabular-nums" data-ui="mini-range">
           {fmtFull(isoOf(renderVs))} – {fmtFull(isoOf(ve))}
         </span>
-        <button type="button" data-ui="mini-to-focus" onClick={toFocus} className={UI.buttonGhost}>
-          К выбранному рейсу
+        <button type="button" data-ui="mini-fit-trip" onClick={showWholeTrip} className={UI.buttonGhost}>
+          Показать рейс целиком
         </button>
+        {/* Масштаб встроенного таймлайна — независимый от основного */}
+        <div className="flex items-center gap-1.5" role="group" aria-label="Масштаб встроенного таймлайна" data-ui="mini-zoom-control">
+          <button
+            type="button"
+            data-zoom="mini-out"
+            className={`${UI.buttonGhost} ${miniZoom <= 0 ? 'opacity-40 cursor-default' : ''}`}
+            title="Уменьшить масштаб: ширина дня меньше, дат больше"
+            aria-label="Уменьшить масштаб встроенного таймлайна"
+            disabled={miniZoom <= 0}
+            onClick={() => setMiniZoomAt(miniZoom - 1)}
+          >
+            −
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={ZOOM_LEVELS.length - 1}
+            step={1}
+            value={miniZoom}
+            data-ui="mini-zoom-slider"
+            aria-label="Масштаб встроенного таймлайна"
+            title={`Масштаб: ${zoomLabel(miniZoom)} (${colW}px на день)`}
+            onChange={(e) => setMiniZoomAt(Number(e.target.value))}
+            className="w-20 md:w-28 accent-[var(--accent)] cursor-pointer"
+          />
+          <button
+            type="button"
+            data-zoom="mini-in"
+            className={`${UI.buttonGhost} ${miniZoom >= ZOOM_LEVELS.length - 1 ? 'opacity-40 cursor-default' : ''}`}
+            title="Увеличить масштаб: больше деталей — до отдельных дней"
+            aria-label="Увеличить масштаб встроенного таймлайна"
+            disabled={miniZoom >= ZOOM_LEVELS.length - 1}
+            onClick={() => setMiniZoomAt(miniZoom + 1)}
+          >
+            +
+          </button>
+        </div>
       </div>
       <div
         ref={scrollRef}
@@ -311,29 +446,16 @@ function CarMiniTimeline({
           <div className="sticky left-0 top-0 z-[6] bg-[#F9FAFB] border-b border-r border-[#E5E7EB] px-2 py-1 w-[96px] min-w-[96px]">
             <span className="text-[9px] font-semibold uppercase tracking-wider text-[#9CA3AF]">План</span>
           </div>
-          <div className="sticky top-0 z-[5] bg-[#F9FAFB] border-b border-[#E5E7EB] flex" style={{ width: W }}>
-            {Array.from({ length: renderVn }, (_, i) => renderVs + i).map((d) => {
-              const wd = new Date(d * 86400000).getUTCDay();
-              const isWeekend = wd === 0 || wd === 6;
-              const showWd = new Date(d * 86400000).getUTCDate() % 5 === 1;
-              return (
-                <div
-                  key={d}
-                  className="flex-none text-center text-[8px] leading-tight pt-0.5 overflow-hidden"
-                  style={{ width: MINI_COL, background: isWeekend ? '#F1F2F4' : undefined, color: '#6B7280' }}
-                >
-                  <b className="block text-[9px] text-[#121316]">{new Date(d * 86400000).getUTCDate()}</b>
-                  {showWd ? WEEKDAYS_RU[wd] : ''}
-                </div>
-              );
-            })}
+          <div className="sticky top-0 z-[5] bg-[#F9FAFB] border-b border-[#E5E7EB]" style={{ width: W }}>
+            {/* Та же календарная шапка (месяцы + дни), что и в основном таймлайне */}
+            <CalendarHeader vs={renderVs} vn={renderVn} colW={colW} today={today} pinLeft={104} dense />
           </div>
 
           {/* План */}
-          <div className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#EEF0F3] px-2 py-1 w-[96px] min-w-[96px] text-[9px] text-[#9CA3AF]">
+          <div className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#EEF0F3] px-2 w-[96px] min-w-[96px] text-[9px] leading-[12px] text-[#9CA3AF] overflow-hidden" style={{ height: MINI_PLAN_H, borderRightColor: '#D1D5DB' }}>
             {focus ? formatPlate(focus.carNumber) : ''} · план
           </div>
-          <div data-lane="plan" className="relative border-b border-[#EEF0F3]" style={{ width: W, height: MINI_PLAN_H }}>
+          <div data-lane="plan" className="relative z-0 border-b border-[#EEF0F3]" style={{ width: W, height: MINI_PLAN_H }}>
             {bgWeekend.map((s, i) => (
               <div key={`w${i}`} className="absolute top-0 bottom-0" style={{ left: s.left, width: s.width, background: '#F1F2F4', opacity: 0.7 }} />
             ))}
@@ -417,15 +539,18 @@ function CarMiniTimeline({
                   <div
                     key={`m-${t.key}-${s.id}`}
                     data-bar={s.isCritical ? 'mark-critical' : 'mark-plan'}
-                    className="absolute z-[4]"
+                    data-stage={t.key === focusKey ? s.id : undefined}
+                    role={t.key === focusKey && onFocusStage ? 'button' : undefined}
+                    onClick={t.key === focusKey && onFocusStage ? () => onFocusStage(s.id) : undefined}
+                    className={`absolute z-[4] ${t.key === focusKey && onFocusStage ? 'cursor-pointer' : ''}`}
                     style={{
-                      left: q.left + Math.round(MINI_COL * 0.3),
+                      left: dayToX(d, renderVs, colW) + Math.round(colW * 0.3),
                       top: 2,
                       height: MINI_PLAN_H - 4,
                       width: s.isCritical ? 3 : 2,
                       background: s.isCritical ? '#DC2626' : '#2563EB',
                     }}
-                    title={`${s.isCritical ? 'КРИТИЧЕСКИЙ СРОК: ' : 'план: '}${stageFullName(stageTypes, s)} ${s.plannedDate}`}
+                    title={`${s.isCritical ? 'КРИТИЧЕСКИЙ СРОК: ' : 'план: '}${stageFullName(stageTypes, s)} ${s.plannedDate}${t.key === focusKey && onFocusStage ? ' · клик — к этапу в списке' : ''}`}
                   />
                 );
               }),
@@ -433,10 +558,10 @@ function CarMiniTimeline({
           </div>
 
           {/* Факт */}
-          <div className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2 py-1 w-[96px] min-w-[96px] text-[9px] text-[#9CA3AF]">
+          <div className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2 w-[96px] min-w-[96px] text-[9px] leading-[12px] text-[#9CA3AF] overflow-hidden" style={{ height: MINI_FACT_H, borderRightColor: '#D1D5DB' }}>
             факт · база · ремонт
           </div>
-          <div data-lane="fact" className="relative border-b border-[#E5E7EB]" style={{ width: W, height: MINI_FACT_H }}>
+          <div data-lane="fact" className="relative z-0 border-b border-[#E5E7EB]" style={{ width: W, height: MINI_FACT_H }}>
             {bgWeekend.map((s, i) => (
               <div key={`fw${i}`} className="absolute top-0 bottom-0" style={{ left: s.left, width: s.width, background: '#F1F2F4', opacity: 0.6 }} />
             ))}
@@ -554,7 +679,7 @@ function CarMiniTimeline({
                   key={`mk-${p.key}`}
                   data-bar="mark-ready"
                   className="absolute z-[4]"
-                  style={{ left: q.left + Math.round(MINI_COL * 0.45), top: 2, height: MINI_FACT_H - 4, width: 3, background: '#B45309', opacity: 0.85 }}
+                  style={{ left: dayToX(p.plannedReadyDay, renderVs, colW) + Math.round(colW * 0.45), top: 2, height: MINI_FACT_H - 4, width: 3, background: '#B45309', opacity: 0.85 }}
                   title={`Срок готовности: ${fmtFull(isoOf(p.plannedReadyDay))} — ${baseDeviation(p, today).label}`}
                 />
               );
@@ -570,15 +695,18 @@ function CarMiniTimeline({
                   <div
                     key={`mf-${t.key}-${s.id}`}
                     data-bar={dev != null && dev > 0 ? 'mark-late' : 'mark-fact'}
-                    className="absolute z-[4]"
+                    data-stage={t.key === focusKey ? s.id : undefined}
+                    role={t.key === focusKey && onFocusStage ? 'button' : undefined}
+                    onClick={t.key === focusKey && onFocusStage ? () => onFocusStage(s.id) : undefined}
+                    className={`absolute z-[4] ${t.key === focusKey && onFocusStage ? 'cursor-pointer' : ''}`}
                     style={{
-                      left: q.left + Math.round(MINI_COL * 0.6),
+                      left: dayToX(d, renderVs, colW) + Math.round(colW * 0.6),
                       top: 2,
                       height: MINI_FACT_H - 4,
                       width: 2,
                       background: dev != null && dev > 0 ? '#E11D48' : '#10B981',
                     }}
-                    title={`факт: ${stageFullName(stageTypes, s)} ${s.actualDate}${dev != null ? ` (${dev > 0 ? '+' : ''}${dev} дн)` : ''}`}
+                    title={`факт: ${stageFullName(stageTypes, s)} ${s.actualDate}${dev != null ? ` (${dev > 0 ? '+' : ''}${dev} дн)` : ''}${t.key === focusKey && onFocusStage ? ' · клик — к этапу в списке' : ''}`}
                   />
                 );
               }),
@@ -624,6 +752,8 @@ export default function TripCard({
   const [dirty, setDirty] = useState(false);
   const [metaDraft, setMetaDraft] = useState<Meta>(meta);
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
+  /** Краткая подсветка этапа после клика по маркеру на встроенном таймлайне. */
+  const [highlightStage, setHighlightStage] = useState<string | null>(null);
   const [planDatesError, setPlanDatesError] = useState('');
   const [savingPlan, setSavingPlan] = useState(false);
   const saver = useDebouncedSaver();
@@ -845,6 +975,20 @@ export default function TripCard({
     if (!isPlan) saver.queueTrip(trip.id, computeStoredRange({ ...trip, stages: rest }));
   };
 
+  /** Клик по маркеру этапа на встроенном таймлайне: прокрутка к этапу и
+   *  краткая подсветка строки в верхнем блоке (без вложенных модалок). */
+  const focusStage = useCallback(
+    (stageId: string) => {
+      setHighlightStage(stageId);
+      window.requestAnimationFrame(() => {
+        const row = rootRef.current?.querySelector(`[data-stage="${stageId}"]`);
+        row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+      window.setTimeout(() => setHighlightStage((cur) => (cur === stageId ? null : cur)), 1800);
+    },
+    [],
+  );
+
   const requestDelete = async () => {
     const ok = await showConfirm(`Удалить рейс ${formatPlate(trip.carNumber)} — ${draft.route || 'без маршрута'}?`);
     if (!ok) return;
@@ -878,37 +1022,9 @@ export default function TripCard({
       subtitle={`${isPlan ? 'Рейс из «Плана дохода»' : 'Ручной рейс'}${archived ? ' · архив (просмотр)' : ''} · ${dispatcherShown}`}
       icon={<CalendarClock className="w-4 h-4" aria-hidden="true" />}
       ariaLabel={`Рейс ${title}`}
-      maxWidth="max-w-4xl"
+      maxWidth="max-w-[min(1440px,94vw)]"
       footer={
         <div className="flex flex-wrap items-center gap-2 w-full">
-          {isPlan ? (
-            <>
-              <button
-                type="button"
-                data-ui="open-plan"
-                onClick={() => {
-                  if (dirtyRef.current) {
-                    const ok = window.confirm(
-                      'Есть несохранённые изменения. Сохранить их перед переходом в «План дохода»? «Отмена» — остаться в окне рейса.',
-                    );
-                    if (!ok) return;
-                    flush();
-                    dirtyRef.current = false;
-                    setDirty(false);
-                  }
-                  onOpenPlan(planSourceId);
-                }}
-                className={UI.buttonGhost}
-              >
-                <ExternalLink className="w-4 h-4" aria-hidden="true" />
-                Открыть план дохода
-              </button>
-              <button type="button" data-ui="copy-plan-link" onClick={() => onCopyPlanLink(planSourceId)} className={UI.buttonGhost}>
-                <ClipboardCopy className="w-4 h-4" aria-hidden="true" />
-                Скопировать ссылку на план дохода
-              </button>
-            </>
-          ) : null}
           {!isPlan && canWrite ? (
             <>
               <button
@@ -973,8 +1089,52 @@ export default function TripCard({
           ) : null}
         </div>
 
+        {/* Управление ручным рейсом */}
+        {!isPlan ? (
+          <div className="flex flex-wrap items-end gap-2.5">
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel}>Маршрут</label>
+              <input type="text" value={draft.route} disabled={readOnly} onChange={(e) => onRouteChange(e.target.value)} placeholder="Минск — Алматы" className={`${UI.inputSm} w-[240px]`} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel}>Диспетчер</label>
+              <select
+                value={draft.dispatcherId}
+                disabled={readOnly}
+                onChange={(e) => onDispatcherChange(e.target.value)}
+                className="bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 text-xs text-[#121316] outline-none transition-colors cursor-pointer focus:border-[var(--accent)] disabled:opacity-60"
+              >
+                <option value="">— не указан —</option>
+                {dispatchers.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel}>Запас, дней</label>
+              <input type="number" min={0} value={draft.bufferDays} disabled={readOnly} onChange={(e) => onBufferChange(e.target.value)} className={`${UI.inputSm} w-[80px]`} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className={UI.fieldLabel}>Плановые границы (в записи ручного рейса)</label>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <DateInput value={draft.planStart} disabled={readOnly} ariaLabel="Плановый старт ручного рейса" onChange={(v) => setDraft((d) => ({ ...d, planStart: v }))} />
+                <DateInput value={draft.planEnd} disabled={readOnly} ariaLabel="Плановое возвращение ручного рейса" onChange={(v) => setDraft((d) => ({ ...d, planEnd: v }))} />
+                <button type="button" data-ui="save-plan-dates" disabled={readOnly} onClick={() => savePlanDates(draft.planStart, draft.planEnd)} className={UI.buttonGhost}>
+                  Сохранить границы
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Блок Б: Точки и этапы: план / факт — сразу под шапкой, без вкладок */}
+        <div className="flex items-center justify-between gap-2">
+          <span className={UI.sectionTitle}>Точки и этапы: план / факт</span>
+          <span className="text-[10px] text-[#9CA3AF]">план и факт рядом; отсутствие факта не считается задержкой</span>
+        </div>
+
         {/* План и факт: границы и сравнение */}
-        <div className="border border-[#E5E7EB] rounded-xl overflow-hidden">
+        <div data-ui="trip-bounds" className="border border-[#E5E7EB] rounded-xl overflow-hidden">
           <div className="grid grid-cols-1 sm:grid-cols-3 text-[11px]">
             <div className="px-3 py-2 bg-[#F9FAFB] text-[#6B7280] font-semibold">Границы</div>
             <div className="px-3 py-2 bg-[#F9FAFB] text-[#6B7280] font-semibold">По плану</div>
@@ -1047,122 +1207,6 @@ export default function TripCard({
           ) : null}
         </div>
 
-        {/* Причина и меры при просрочке — по рейсу */}
-        <div className="border border-[#E5E7EB] rounded-xl p-3 flex flex-col gap-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] font-semibold text-[#121316]">Причина и меры при просрочке (по рейсу)</span>
-            <span className="text-[10px] text-[#9CA3AF]">отдельные тексты; не удаляются при изменении дат</span>
-          </div>
-          <label className="flex flex-col gap-1">
-            <span className={UI.fieldLabel}>Причина</span>
-            <AutoGrow
-              value={metaDraft.reason}
-              onChange={(v) => onMeta({ reason: v })}
-              disabled={readOnly}
-              ariaLabel="Причина просрочки по рейсу"
-              placeholder="Опишите причину отклонения от планового срока (по всему рейсу)"
-            />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className={UI.fieldLabel}>Меры при просрочке</span>
-            <AutoGrow
-              value={metaDraft.measures}
-              onChange={(v) => onMeta({ measures: v })}
-              disabled={readOnly}
-              ariaLabel="Меры при просрочке по рейсу"
-              placeholder="Укажите принятые или планируемые меры"
-            />
-          </label>
-        </div>
-
-        {/* План дохода: сведения и плечи */}
-        {isPlan && plan ? (
-          <div className="border border-[#E5E7EB] rounded-xl p-3 flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[#4B5563]">
-              <span className="font-semibold text-[#121316]">План дохода</span>
-              <span>#{plan.id}</span>
-              {plan.direction ? <span>направление: {plan.direction}</span> : null}
-              {plan.month ? <span>месяц в плане: {plan.month}</span> : null}
-              {plan.days != null ? <span>дней: {plan.days}</span> : null}
-              {plan.totalKm != null ? <span>км план: {plan.totalKm}</span> : null}
-              {plan.factKm != null ? <span>км факт: {plan.factKm}</span> : null}
-              <span>фрахт: {money(plan.totalFreight)}</span>
-              <span>профит план: {money(plan.profit)}</span>
-              <span>профит факт: {money(plan.profitFact)}</span>
-            </div>
-            {plan.note ? <div className="text-[11px] text-[#6B7280]">Заметка плана: {plan.note}</div> : null}
-            {plan.legs.length ? (
-              <div className="w-full overflow-x-auto">
-                <table className="w-full text-left min-w-[420px]">
-                  <thead>
-                    <tr className={UI.theadRow}>
-                      <th className={UI.th}>Плечо</th>
-                      <th className={UI.th}>Км</th>
-                      <th className={UI.th}>Ставка</th>
-                      <th className={UI.th}>Фрахт</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {plan.legs.map((l, i) => (
-                      <tr key={`${l.from}-${l.to}-${i}`} className="border-b border-[#E5E7EB] last:border-0">
-                        <td className={UI.td}>
-                          {l.from || 'Не указано'} → {l.to || 'Не указано'}
-                        </td>
-                        <td className={UI.td}>{l.km || '—'}</td>
-                        <td className={UI.td}>{l.rate != null ? l.rate : '—'}</td>
-                        <td className={UI.td}>{l.freight != null ? l.freight : '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className={UI.hint}>Плечи в плане не заполнены (Не указано).</div>
-            )}
-            <div className={UI.hint}>
-              Архивный статус изменяется в плане дохода; кнопка «Открыть план дохода» ведёт по прямой ссылке к этой записи, в том числе архивной.
-            </div>
-          </div>
-        ) : null}
-
-        {/* Управление ручным рейсом */}
-        {!isPlan ? (
-          <div className="flex flex-wrap items-end gap-2.5">
-            <div className="flex flex-col gap-1.5">
-              <label className={UI.fieldLabel}>Маршрут</label>
-              <input type="text" value={draft.route} disabled={readOnly} onChange={(e) => onRouteChange(e.target.value)} placeholder="Минск — Алматы" className={`${UI.inputSm} w-[240px]`} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className={UI.fieldLabel}>Диспетчер</label>
-              <select
-                value={draft.dispatcherId}
-                disabled={readOnly}
-                onChange={(e) => onDispatcherChange(e.target.value)}
-                className="bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 text-xs text-[#121316] outline-none transition-colors cursor-pointer focus:border-[var(--accent)] disabled:opacity-60"
-              >
-                <option value="">— не указан —</option>
-                {dispatchers.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className={UI.fieldLabel}>Запас, дней</label>
-              <input type="number" min={0} value={draft.bufferDays} disabled={readOnly} onChange={(e) => onBufferChange(e.target.value)} className={`${UI.inputSm} w-[80px]`} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className={UI.fieldLabel}>Плановые границы (в записи ручного рейса)</label>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <DateInput value={draft.planStart} disabled={readOnly} ariaLabel="Плановый старт ручного рейса" onChange={(v) => setDraft((d) => ({ ...d, planStart: v }))} />
-                <DateInput value={draft.planEnd} disabled={readOnly} ariaLabel="Плановое возвращение ручного рейса" onChange={(v) => setDraft((d) => ({ ...d, planEnd: v }))} />
-                <button type="button" data-ui="save-plan-dates" disabled={readOnly} onClick={() => savePlanDates(draft.planStart, draft.planEnd)} className={UI.buttonGhost}>
-                  Сохранить границы
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
         {/* Предупреждения */}
         {trip.warnings.length || outOfBounds.length ? (
           <div className={UI.errorBox} role="alert">
@@ -1179,8 +1223,8 @@ export default function TripCard({
           </div>
         ) : null}
 
-        {/* Этапы */}
-        <div className="w-full overflow-x-auto">
+        {/* Этапы: план и факт рядом (главный блок) */}
+        <div data-ui="stages-table" className="w-full overflow-x-auto">
           <table className="w-full text-left min-w-[880px]">
             <thead>
               <tr className={UI.theadRow}>
@@ -1188,7 +1232,7 @@ export default function TripCard({
                 <th className={UI.th}>Уточнение</th>
                 <th className={UI.th}>План</th>
                 <th className={UI.th}>Факт</th>
-                <th className={UI.th}>Откл.</th>
+                <th className={UI.th}>Отклонение / состояние</th>
                 <th className={UI.th}>Крит. срок</th>
                 <th className={UI.th}>Причина и меры</th>
                 <th className={UI.th}>{''}</th>
@@ -1201,10 +1245,11 @@ export default function TripCard({
                 const pDay = dayNum(s.plannedDate);
                 const fDay = dayNum(s.actualDate);
                 const hasText = !!(s.reason || s.action);
+                const stState = stageStateOf(s, today);
                 const expanded = expandedStage === s.id;
                 return (
                   <React.Fragment key={s.id}>
-                    <tr data-stage={s.id} className="border-b border-[#E5E7EB]">
+                    <tr data-stage={s.id} data-stage-highlighted={highlightStage === s.id ? '1' : undefined} className={`border-b border-[#E5E7EB] transition-colors ${highlightStage === s.id ? 'bg-[var(--accent-10)] ring-1 ring-inset ring-[var(--accent-30)]' : ''}`}>
                       <td className="px-2 py-1.5 align-middle">
                         <select
                           value={s.type}
@@ -1249,9 +1294,20 @@ export default function TripCard({
                         </div>
                       </td>
                       <td className="px-2 py-1.5 align-middle whitespace-nowrap">
-                        <span className={`text-[11px] font-semibold ${dev != null && dev > 0 ? 'text-rose-600' : dev != null && dev < 0 ? 'text-emerald-600' : 'text-[#6B7280]'}`}>
-                          {fmtDev(dev)}
-                        </span>
+                        <div className="flex flex-col gap-0.5">
+                          {dev != null ? (
+                            <span className={`text-[11px] font-semibold ${dev > 0 ? 'text-rose-600' : dev < 0 ? 'text-emerald-600' : 'text-[#6B7280]'}`}>
+                              {fmtDev(dev)}
+                            </span>
+                          ) : null}
+                          <span
+                            className={`text-[10px] ${
+                              stState.code === 'late' ? 'text-rose-600' : stState.code === 'early' ? 'text-emerald-600' : 'text-[#6B7280]'
+                            }`}
+                          >
+                            {stState.label}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-2 py-1.5 align-middle">
                         <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
@@ -1363,6 +1419,114 @@ export default function TripCard({
           </div>
         ) : null}
 
+        {/* Причина и меры при просрочке — по рейсу */}
+        <div className="border border-[#E5E7EB] rounded-xl p-3 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold text-[#121316]">Комментарий к рейсу: причина и меры при просрочке</span>
+            <span className="text-[10px] text-[#9CA3AF]">это комментарий ко всему рейсу — отдельно от причин и мер этапов; не удаляется при изменении дат</span>
+          </div>
+          <label className="flex flex-col gap-1">
+            <span className={UI.fieldLabel}>Причина</span>
+            <AutoGrow
+              value={metaDraft.reason}
+              onChange={(v) => onMeta({ reason: v })}
+              disabled={readOnly}
+              ariaLabel="Причина просрочки по рейсу"
+              placeholder="Опишите причину отклонения от планового срока (по всему рейсу)"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className={UI.fieldLabel}>Меры при просрочке</span>
+            <AutoGrow
+              value={metaDraft.measures}
+              onChange={(v) => onMeta({ measures: v })}
+              disabled={readOnly}
+              ariaLabel="Меры при просрочке по рейсу"
+              placeholder="Укажите принятые или планируемые меры"
+            />
+          </label>
+        </div>
+
+        {/* Блок В: План дохода — ниже блока дат и этапов */}
+        {/* План дохода: сведения и плечи */}
+        {isPlan && plan ? (
+          <div className="border border-[#E5E7EB] rounded-xl p-3 flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[#4B5563]">
+              <span className="font-semibold text-[#121316]">План дохода</span>
+              <span>#{plan.id}</span>
+              {plan.direction ? <span>направление: {plan.direction}</span> : null}
+              {plan.month ? <span>месяц в плане: {plan.month}</span> : null}
+              {plan.days != null ? <span>дней: {plan.days}</span> : null}
+              {plan.totalKm != null ? <span>км план: {plan.totalKm}</span> : null}
+              {plan.factKm != null ? <span>км факт: {plan.factKm}</span> : null}
+              <span>фрахт: {money(plan.totalFreight)}</span>
+              <span>профит план: {money(plan.profit)}</span>
+              <span>профит факт: {money(plan.profitFact)}</span>
+            </div>
+            {plan.note ? <div className="text-[11px] text-[#6B7280]">Заметка плана: {plan.note}</div> : null}
+            {plan.legs.length ? (
+              <div className="w-full overflow-x-auto">
+                <table className="w-full text-left min-w-[420px]">
+                  <thead>
+                    <tr className={UI.theadRow}>
+                      <th className={UI.th}>Плечо</th>
+                      <th className={UI.th}>Км</th>
+                      <th className={UI.th}>Ставка</th>
+                      <th className={UI.th}>Фрахт</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {plan.legs.map((l, i) => (
+                      <tr key={`${l.from}-${l.to}-${i}`} className="border-b border-[#E5E7EB] last:border-0">
+                        <td className={UI.td}>
+                          {l.from || 'Не указано'} → {l.to || 'Не указано'}
+                        </td>
+                        <td className={UI.td}>{l.km || '—'}</td>
+                        <td className={UI.td}>{l.rate != null ? l.rate : '—'}</td>
+                        <td className={UI.td}>{l.freight != null ? l.freight : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className={UI.hint}>Плечи в плане не заполнены (Не указано).</div>
+            )}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="button"
+                data-ui="open-plan"
+                onClick={() => {
+                  if (dirtyRef.current) {
+                    const ok = window.confirm(
+                      'Есть несохранённые изменения. Сохранить их перед переходом в «План дохода»? «Отмена» — остаться в окне рейса.',
+                    );
+                    if (!ok) return;
+                    flush();
+                    dirtyRef.current = false;
+                    setDirty(false);
+                  }
+                  onOpenPlan(planSourceId);
+                }}
+                className={UI.buttonGhost}
+              >
+                <ExternalLink className="w-4 h-4" aria-hidden="true" />
+                Открыть план дохода
+              </button>
+              <button type="button" data-ui="copy-plan-link" onClick={() => onCopyPlanLink(planSourceId)} className={UI.buttonGhost}>
+                <ClipboardCopy className="w-4 h-4" aria-hidden="true" />
+                Скопировать ссылку на план дохода
+              </button>
+              <span className="text-[10px] text-[#9CA3AF]">ссылка ведёт на конкретную запись плана дохода</span>
+            </div>
+          </div>
+        ) : (
+          <div className="border border-[#E5E7EB] rounded-xl p-3 flex flex-col gap-1">
+            <span className="text-[11px] font-semibold text-[#121316]">План дохода</span>
+            <span className="text-[11px] text-[#6B7280]">План дохода не связан — запись автоматически по машине или датам не подбирается.</span>
+          </div>
+        )}
+
         {/* События машины за период рейса */}
         <div className="flex flex-col gap-1.5">
           <span className={UI.sectionTitle}>События машины за период рейса</span>
@@ -1388,7 +1552,7 @@ export default function TripCard({
 
         {/* Встроенный таймлайн этой машины */}
         <div className="flex flex-col gap-2">
-          <span className={UI.sectionTitle}>Таймлайн машины {formatPlate(trip.carNumber)}</span>
+          <span className={UI.sectionTitle}>Таймлайн машины {formatPlate(trip.carNumber)} — план и факт выбранного рейса</span>
           <CarMiniTimeline
             focusKey={trip.key}
             carTrips={carTrips}
@@ -1397,6 +1561,7 @@ export default function TripCard({
             stageTypes={stageTypes}
             today={today}
             onSelectTrip={onSelectTrip}
+            onFocusStage={readOnly ? undefined : focusStage}
           />
         </div>
       </div>
