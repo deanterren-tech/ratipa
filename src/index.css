@@ -498,3 +498,49 @@ input:focus, select:focus, textarea:focus, button:focus {
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 108px);
   }
 }
+
+/* ─── Таймлайн рейсов: общий набор токенов оформления (v2) ───────────────────
+   Единые переменные экрана «Таймлайн рейсов» (основное полотно и встроенный
+   мини-таймлайн): плотность, фон, разделители, состояния. Только оформление —
+   данные, расчёты и поведение модуля не затрагиваются. Плотность: подстрока
+   План/Факт — 22px, строка машины — 44px (обе подстроки одной высоты). */
+.tl-scope {
+  --tl-canvas: #F6F7FA;          /* холст полотна */
+  --tl-col-bg: #FAFBFC;          /* закреплённая колонка «Автомобили» */
+  --tl-head-bg: #F4F5F8;         /* липкая шапка календаря */
+  --tl-group-bg: #EDF1F7;        /* мягкая шапка группы диспетчера */
+  --tl-hairline: #E8EAF0;        /* разделитель между машинами */
+  --tl-hairline-faint: #F1F2F6;  /* разделитель План↔Факт внутри машины */
+  --tl-col-edge: #DCE0E7;        /* правая граница закреплённой колонки */
+  --tl-zebra: #F7F8FB;           /* лёгкая зебра строк */
+  --tl-hover: #ECF2FB;           /* подсветка строки при наведении */
+  --tl-weekend: #F2F3F6;         /* выходные */
+  --tl-today-line: rgba(244, 63, 94, 0.40);   /* тонкая линия «сегодня» */
+  --tl-text-strong: #121316;     /* основной текст (графит бренда) */
+  --tl-text: #4B5563;            /* вторичный текст */
+  --tl-text-dim: #646D79;        /* приглушённые подписи (AA на светлых фонах) */
+  --tl-head-h: 48px;             /* высота липкой шапки (синхронизирует TS) */
+  --tl-bar-r: 6px;               /* скругление полос рейсов */
+}
+
+/* Полосы: доступный фокус с клавиатуры (единый контур по бренду) */
+.tl-scope [data-bar]:focus-visible,
+.tl-scope [data-stage-fill]:focus-visible,
+.tl-scope [data-bz-fill]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Полосы рейсов: мягкое «поднятие» и подсветка при наведении (без тяжёлых
+   теней и размытий — только compositor-свойства). */
+.tl-scope [data-bar="plan"],
+.tl-scope [data-bar="fact"],
+.tl-scope [data-bar="fact-none"] {
+  transition: filter 120ms ease, transform 120ms ease;
+}
+.tl-scope [data-bar="plan"]:hover,
+.tl-scope [data-bar="fact"]:hover {
+  filter: brightness(1.03) saturate(1.04);
+  transform: translateY(-1px);
+}
+

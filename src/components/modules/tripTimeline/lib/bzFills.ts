@@ -39,15 +39,16 @@ export interface BzFillColor {
  * Цветовая семантика отметок базы/ремонта (сохранена, но переведена в мягкие
  * заливки): янтарный — план базы и готовность (готовность насыщеннее), серый —
  * факт базы, оранжевый — ремонт (окончание ремонта темнее), светло-серый
- * пунктирный — промежутки «на базе» без записи учёта.
+ * пунктирный — промежутки «на базе» без записи учёта. Палитра — единая тёплая
+ * семья мелких заливок, текст фрагментов держит контраст WCAG AA (≥ 4.5:1).
  */
 export const BZ_COLORS: Record<BzFillKind, BzFillColor> = {
-  'base-plan': { bg: '#FEF3C7', border: '#F59E0B', text: '#92400E' },
-  ready: { bg: '#FDE68A', border: '#B45309', text: '#78350F' },
-  'base-fact': { bg: '#E8EBF0', border: '#9CA3AF', text: '#4B5563' },
-  repair: { bg: '#FED7AA', border: '#EA580C', text: '#9A3412' },
-  'repair-end': { bg: '#FDBA74', border: '#C2410C', text: '#7C2D12' },
-  'base-gap': { bg: '#F5F6F8', border: '#D1D5DB', text: '#9CA3AF' },
+  'base-plan': { bg: '#FCF1CC', border: '#EDC358', text: '#7A5410' },
+  ready: { bg: '#F9DC84', border: '#C98A18', text: '#6E4408' },
+  'base-fact': { bg: '#EAECF0', border: '#A6ADBA', text: '#444B57' },
+  repair: { bg: '#FDDCC0', border: '#EF9A57', text: '#8F3D0B' },
+  'repair-end': { bg: '#FBC193', border: '#CE6A1E', text: '#732E06' },
+  'base-gap': { bg: '#F4F5F8', border: '#C9CFD8', text: '#667080' },
 };
 
 export const bzKindColor = (kind: BzFillKind): BzFillColor => BZ_COLORS[kind];

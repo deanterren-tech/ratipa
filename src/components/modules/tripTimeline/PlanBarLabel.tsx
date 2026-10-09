@@ -120,13 +120,16 @@ const metaFits = (meta: string, width: number | undefined, fontPx: number): bool
 export function PlanBarLabel({
   parts,
   prefix = '',
+  lead,
   width,
   fontPx = 10,
   className = '',
 }: {
   parts: PlanBarParts;
-  /** Статусный значок (⛔/⌛/⚠) перед маршрутом. */
+  /** Текстовый префикс перед маршрутом (совместимость; в редизайне не используется). */
   prefix?: string;
+  /** Ведущий SVG-значок статуса (единый набор иконок вместо эмодзи). */
+  lead?: React.ReactNode;
   /** Ширина полосы в px — чтобы не показывать хвост, которому нет места. */
   width?: number;
   /** Кегль подписи (10 — основной таймлайн, 9 — встроенный). */
@@ -136,6 +139,7 @@ export function PlanBarLabel({
   const showMeta = metaFits(parts.meta, width, fontPx);
   return (
     <span className={`flex items-center w-full min-w-0 ${className}`}>
+      {lead ? <span className="inline-flex items-center shrink-0 mr-1">{lead}</span> : null}
       <span className="truncate min-w-0">
         {prefix}
         {parts.main}

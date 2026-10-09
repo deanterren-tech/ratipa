@@ -57,6 +57,7 @@ import {
 } from './lib/bzFills';
 import {
   baseBarRange,
+  baseDeviation,
   plateKeyOf,
   repairBarRange,
   type BasePeriod,
@@ -65,27 +66,33 @@ import {
 } from './lib/sources';
 import DateInput from './DateInput';
 import CalendarHeader from './CalendarHeader';
-import { AlertTriangle, ArrowRightLeft, Maximize2, Minimize2 } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, ChevronDown, ChevronLeft, ChevronRight, CircleDashed, Hourglass, Maximize2, Minimize2, OctagonX, Palette, TriangleAlert } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
-// Палитра полос (визуальная логика прототипа, палитра — под светлый холст)
+// Палитра полос (визуальная логика прототипа; цвета — единая семья заливок
+// под светлый холст, согласованы с токенами .tl-scope в index.css)
 // ---------------------------------------------------------------------------
 
 const CLR = {
-  planBg: '#DBEAFE',
-  planBorder: '#60A5FA',
-  planText: '#1E3A8A',
-  planArchBg: '#E5E7EB',
-  planArchBorder: '#9CA3AF',
-  planArchText: '#6B7280',
-  planNoneBg: '#F9FAFB',
-  planNoneBorder: '#9CA3AF',
-  bufferA: '#FDE68A',
-  fact: '#10B981',
-  factOpenA: '#A7F3D0',
-  weekend: '#F1F2F4',
+  planBg: '#DFEAFD',
+  planBg2: '#CFE0FB',
+  planBorder: '#8FBBF7',
+  planText: '#1C3D8C',
+  planArchBg: '#EBEDF1',
+  planArchBorder: '#B4BBC6',
+  planArchText: '#5D6470',
+  planNoneBg: '#F7F8FA',
+  planNoneBorder: '#AAB1BD',
+  bufferA: '#F7DF9E',
+  fact: '#2FB68C',
+  factOpenA: '#9FE2C6',
+  weekend: 'var(--tl-weekend)',
   today: '#F43F5E',
+  warn: '#D97706',
+  return: '#2563EB',
 };
+
+const planBarBg = `linear-gradient(180deg, ${CLR.planBg} 0%, ${CLR.planBg2} 100%)`;
 
 const hatch45 = `repeating-linear-gradient(45deg, ${CLR.bufferA}, ${CLR.bufferA} 4px, transparent 4px, transparent 8px)`;
 const hatchOpen = `repeating-linear-gradient(45deg, ${CLR.factOpenA}, ${CLR.factOpenA} 5px, transparent 5px, transparent 10px)`;
@@ -95,7 +102,7 @@ const hatchOpen = `repeating-linear-gradient(45deg, ${CLR.factOpenA}, ${CLR.fact
 // ---------------------------------------------------------------------------
 
 type PlanItem =
-  | { kind: 'plan'; a: number; b: number; tripKey: string; parts: PlanBarParts; archived: boolean; statusKind: DeadlineStatusKind; open: boolean; title: string }
+  | { kind: 'plan'; a: number; b: number; tripKey: string; parts: PlanBarParts; archived: boolean; statusKind: DeadlineStatusKind; open: boolean; title: string; warn: boolean }
   | { kind: 'buffer'; a: number; b: number; days: number }
   | { kind: 'markReturn'; day: number; title: string; tripKey: string }
   | { kind: 'handover'; point: number; from: string; to: string; note: string; title: string; chip: boolean };
@@ -204,20 +211,31 @@ interface Props {
  *  участвуют в цепочке, но за пределами окна обрезаются. */
 const WINDOW_MARGIN = 60;
 
-/** Минимальные высоты подстрок «План»/«Факт» (без дорожек-наложений). */
-const PLAN_H = 26;
+/** Минимальные высоты подстрок «План»/«Факт» — ОДИНАКОВЫЕ (единый ритм). */
+const PLAN_H = 22;
 const FACT_H = 22;
 /** Отступы и зазор дорожек внутри подстроки; высота растёт с числом дорожек. */
-const PLAN_PAD = 5;   // 5 + 16 + 5 = 26 — прежняя высота при одной дорожке
-const FACT_PAD = 3;
+const PLAN_PAD = 3;   // 3 + 16 + 3 = 22 — высота подстроки при одной дорожке
+const FACT_PAD = 4;   // 4 + 14 + 4 = 22 — с «фактом не указан»; факт центрируется в дорожке
 const TRACK_GAP = 2;
 /** Высоты полос по видам (те же, что были при одной общей дорожке). */
 const PLAN_BAR_H = 16;
 const FACT_BAR_H = 8;
 const FACT_NONE_H = 14;
 
+/** Единый набор иконок статусов/предупреждений (вместо эмодзи), один размер. */
+const BAR_ICON_CLS = 'w-3 h-3 shrink-0';
+const STATUS_ICON = {
+  violated: { Icon: OctagonX, color: '#BE123C', label: 'срок нарушен (подтверждён фактом)' },
+  missed: { Icon: Hourglass, color: '#B45309', label: 'плановая дата прошла, факт не указан' },
+  risk: { Icon: TriangleAlert, color: '#B45309', label: 'критический срок под угрозой' },
+} as const;
+
 const navBtn =
-  'inline-flex items-center justify-center px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-white border border-[#E5E7EB] text-[#4B5563] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer';
+  'inline-flex items-center justify-center h-7 px-2.5 rounded-lg text-[11px] font-medium bg-white border border-[var(--tl-hairline)] text-[var(--tl-text)] hover:text-[var(--tl-text-strong)] hover:bg-[#F3F4F6] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default';
+const navBtnIcon = `${navBtn} w-7 px-0`;
+/** Спокойная вторичная «сегментная» оболочка панели управления. */
+const barSegment = 'inline-flex items-center gap-1.5 rounded-xl border border-[var(--tl-hairline)] bg-white px-2 py-1';
 
 const intersects = (a: number | null, b: number | null, from: number, to: number): boolean =>
   a != null && b != null && b >= from && a <= to;
@@ -328,6 +346,7 @@ const buildRows = (
           archived: !!t.archived,
           statusKind: deadline.kind,
           open: openPlan,
+          warn: false,
           title: `${formatPlate(car.carNumber)} · ${parts.titleText} · ${t.dispatcherName || 'без диспетчера'}${t.kind === 'plan' ? ' · из плана дохода' : ''}${t.archived ? ' · архив' : ''}${openPlan ? ' · неполный план (нет даты возвращения)' : ''} · ${deadline.label}`,
         });
       }
@@ -484,22 +503,33 @@ const buildRows = (
       });
     }
 
-    // Пересечения рейс↔база и этапы вне границ (не исправляем — предупреждаем)
+    // Пересечения рейс↔база и этапы вне границ (не исправляем — предупреждаем).
+    // Дополнительно отмечаем «свои» рейсы, к которым относятся предупреждения:
+    // на их полосе показывается компактный значок (полный текст — в подсказке).
+    const tripWarnKeys = new Set<string>();
     myTrips.forEach((t) => {
+      if (t.warnings.length) tripWarnKeys.add(t.key);
       const ov = t.spanOverride || {};
       const s = ov.pMin ?? null;
       const e = ov.pMax ?? null;
       if (s == null || e == null) return;
       baseRanges.forEach((r) => {
-        if (s <= r.b && e >= r.a) warnings.add('Рейс и период на базе пересекаются — проверьте даты');
+        if (s <= r.b && e >= r.a) {
+          warnings.add('Рейс и период на базе пересекаются — проверьте даты');
+          tripWarnKeys.add(t.key);
+        }
       });
       t.stages.forEach((st) => {
         const pd = dayNum(st.plannedDate);
         const ad = dayNum(st.actualDate);
         if ((pd != null && (pd < s || pd > e)) || (ad != null && (ad < s || ad > e))) {
           warnings.add('Этап оказался за границами рейса — проверьте план или событие');
+          tripWarnKeys.add(t.key);
         }
       });
+    });
+    planItems.forEach((it) => {
+      if (it.kind === 'plan' && tripWarnKeys.has(it.tripKey)) it.warn = true;
     });
 
     // Заливки этапов машины — из ВСЕХ её рейсов окна (план/факт разделяются в
@@ -552,6 +582,66 @@ const buildRows = (
 // Отрисовка группы строк машины
 // ---------------------------------------------------------------------------
 
+/** Бейдж статуса машины «на сегодня» (только отображение, данные не меняются). */
+interface TodayBadge {
+  label: string;
+  bg: string;
+  fg: string;
+  dot: string;
+  title: string;
+}
+
+/**
+ * Статус машины для компактного бейджа в левой колонке: просроченная
+ * готовность → ремонт → в рейсе → на базе. Считается по тем же данным и
+ * функциям источников, что и полосы (ничего не выдумывается и не пишется).
+ */
+const todayBadgeOf = (row: CarRowModel, today: number): TodayBadge | null => {
+  const live = row.bzInputs.map((b) => b.period).filter((p) => !p.archived);
+  for (const p of live) {
+    if (baseDeviation(p, today).kind === 'overdue') {
+      return {
+        label: 'срок просрочен',
+        bg: '#FDEBEE',
+        fg: '#9F1239',
+        dot: '#E11D48',
+        title: 'Срок готовности просрочен: плановая дата прошла, фактический выезд не указан',
+      };
+    }
+  }
+  for (const p of live) {
+    const rr = repairBarRange(p, today);
+    if (rr && today >= rr.a && today <= rr.b) {
+      return {
+        label: 'ремонт',
+        bg: '#FCEEDC',
+        fg: '#8A4A0E',
+        dot: '#EA580C',
+        title: `Ремонт: ${fmtDM(rr.a)} – ${rr.open ? 'продолжается (окончание не указано)' : fmtDM(rr.b)}`,
+      };
+    }
+  }
+  const inTrip =
+    row.planItems.some((it) => it.kind === 'plan' && ((it.a <= today && today <= it.b) || (it.open && it.a <= today))) ||
+    row.factItems.some((it) => it.kind === 'fact' && it.a <= today && today <= it.b);
+  if (inTrip) {
+    return { label: 'в рейсе', bg: '#DFF3EA', fg: '#0F6247', dot: '#12B76A', title: 'Сегодня машина в рейсе (полоса покрывает текущую дату)' };
+  }
+  for (const p of live) {
+    const rb = baseBarRange(p, today);
+    if (rb && today >= rb.a && today <= rb.b) {
+      return {
+        label: 'на базе',
+        bg: '#FBF2D3',
+        fg: '#7A5806',
+        dot: '#D97706',
+        title: `На базе: ${fmtDM(rb.a)} – ${rb.open ? 'выезд не указан (период продолжается)' : fmtDM(rb.b)}`,
+      };
+    }
+  }
+  return null;
+};
+
 const TimelineCarRow = React.memo(function TimelineCarRow({
   row,
   colW,
@@ -559,6 +649,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   vn,
   bg,
   today,
+  zebra,
   stageTypes,
   selectedTripKey,
   onOpenTrip,
@@ -573,6 +664,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   vn: number;
   bg: BgSeg[];
   today: number;
+  /** Чётная машина — лёгкая зебра фона строк. */
+  zebra: boolean;
   stageTypes: TimelineStageType[];
   selectedTripKey?: string | null;
   onOpenTrip: (key: string) => void;
@@ -583,6 +676,19 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   onOpenCar: (key: string) => void;
 }) {
   const [hoverTrip, setHoverTrip] = useState<string | null>(null);
+  const [rowHover, setRowHover] = useState(false);
+  const rowSel = `[data-tl-car="${row.carKey}"]`;
+  const onRowEnter = useCallback(() => setRowHover(true), []);
+  const onRowLeave = useCallback(
+    (e: React.MouseEvent) => {
+      const to = e.relatedTarget as HTMLElement | null;
+      if (to && typeof to.closest === 'function' && to.closest(rowSel)) return;
+      setRowHover(false);
+    },
+    [rowSel],
+  );
+  const cellBg = rowHover ? 'var(--tl-hover)' : zebra ? 'var(--tl-zebra)' : 'var(--tl-col-bg)';
+  const laneRowBg = rowHover ? 'var(--tl-hover)' : zebra ? 'var(--tl-zebra)' : 'transparent';
   const W = vn * colW;
   const ve = vs + vn - 1;
   /** Та же единая функция «дата → координата», что у шапки и сетки. */
@@ -796,10 +902,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           <div
             title={it.title}
             data-tl-handover-chip="1"
-            className="absolute flex flex-col gap-0 rounded-md border border-[#D1D5DB] bg-white/95 px-1 py-[1px] shadow-sm cursor-default"
+            className="absolute flex flex-col gap-0 rounded-md border border-[var(--tl-hairline)] bg-white/95 px-1 py-[1px] cursor-default"
             style={{ top: 1, left: 4, maxWidth: 240, overflow: 'hidden' }}
           >
-            <span className="flex items-center gap-0.5 whitespace-nowrap text-[8px] leading-[9px] text-[#4B5563]">
+            <span className="flex items-center gap-0.5 whitespace-nowrap text-[8px] leading-[9px] text-[var(--tl-text)]">
               <ArrowRightLeft className="w-2.5 h-2.5 shrink-0 text-[#6B7280]" aria-hidden="true" />
               <span className="truncate" data-tl-handover-label="1">
                 Передача: {it.from} → {it.to}
@@ -842,47 +948,61 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           width: seg.width,
           background: CLR.today,
           opacity,
+          borderLeft: '1px solid var(--tl-today-line)',
           pointerEvents: 'none',
         }}
       />
     ));
 
+  const countsText = [
+    row.tripsCount ? `рейсов: ${row.tripsCount}` : '',
+    row.basesCount ? `база: ${row.basesCount}` : '',
+    row.repairsCount ? `ремонт: ${row.repairsCount}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const badge = todayBadgeOf(row, today);
+  const cellTitle = `${formatPlate(row.carNumber)} · ${row.dispatcherName || 'без диспетчера'}${countsText ? ` · ${countsText}` : ''}${warnTitle ? `\n${warnTitle}` : ''}`;
+
   return (
     <>
-      {/* Подстрока «План» — закреплена слева, непрозрачный фон, ровно PLAN_H */}
+      {/* Подстрока «План» — закреплена слева: номер машины (главный элемент). */}
       <div
         data-tl-row={row.carNumber}
         data-tl-car={row.carKey}
-        className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2.5 w-[170px] min-w-[170px] overflow-hidden"
-        style={{ height: planH, borderRightColor: '#D1D5DB' }}
+        data-tl-cell="plan"
+        onMouseEnter={onRowEnter}
+        onMouseLeave={onRowLeave}
+        className="sticky left-0 z-[3] border-r border-b px-2 w-[170px] min-w-[170px] overflow-hidden"
+        style={{ height: planH, background: cellBg, borderRightColor: 'var(--tl-col-edge)', borderBottomColor: 'var(--tl-hairline-faint)' }}
+        title={cellTitle}
       >
-        <div className="flex items-start justify-between gap-1">
+        <div className="flex items-center justify-between gap-1.5 h-full">
           <button
             type="button"
             onClick={() => onOpenCar(row.carKey)}
-            title="Обзор рейсов и периодов машины"
-            className="text-[11px] leading-[13px] font-semibold text-[#121316] truncate text-left hover:text-[var(--accent-ink)] cursor-pointer"
+            title={`${cellTitle}\n\nОбзор рейсов и периодов машины`}
+            className="text-[11px] leading-[13px] font-semibold text-[var(--tl-text-strong)] truncate text-left hover:text-[var(--accent-ink)] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] rounded-sm"
           >
             {formatPlate(row.carNumber)}
           </button>
-          <span className="text-[8px] leading-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] shrink-0 pt-0.5">План</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] leading-[12px] text-[#6B7280] truncate">
-            {row.dispatcherName || 'без диспетчера'} · рейсов: {row.tripsCount}
+          <span className="text-[8px] leading-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--tl-text-dim)] shrink-0 select-none">
+            план
           </span>
-          {row.warnings.length ? (
-            <span title={warnTitle} className="shrink-0" aria-label={warnTitle}>
-              <AlertTriangle className="w-3 h-3 text-amber-600" aria-hidden="true" />
-            </span>
-          ) : null}
         </div>
       </div>
-      <div data-lane="plan" className="relative z-0 border-b border-[#EEF0F3]" style={{ width: W, height: planH, ...laneBg }}>
+      <div
+        data-lane="plan"
+        data-tl-car={row.carKey}
+        onMouseEnter={onRowEnter}
+        onMouseLeave={onRowLeave}
+        className="relative z-0 border-b border-[var(--tl-hairline-faint)]"
+        style={{ width: W, height: planH, backgroundColor: laneRowBg, ...laneBg }}
+      >
         {bgPlane('bg', 0.75)}
         {planBzFills.map((f) => renderBzFill(f, 'pb'))}
         {planFills.map((f) => renderStageFill(f, 'pf'))}
-        {todayStrip('t', 0.14)}
+        {todayStrip('t', 0.1)}
         {row.planItems.map((it, idx) => {
           if (it.kind === 'handover') return renderHandover(it, `ph${idx}`);
           const p = pos(it.kind === 'markReturn' ? it.day : it.a, it.kind === 'markReturn' ? it.day : it.b);
@@ -904,13 +1024,13 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   }
                 }}
                 className="absolute z-[2] cursor-pointer"
-                style={{ left: Math.max(0, dayToX(it.day, vs, colW) + colW - 2), top: 3, height: planH - 6, width: 2, background: '#1D4ED8', borderRadius: 1 }}
+                style={{ left: Math.max(0, dayToX(it.day, vs, colW) + colW - 3), top: 3, height: planH - 6, width: 3, background: CLR.return, borderRadius: 2 }}
                 title={it.title}
               />
             );
           }
           if (it.kind === 'plan') {
-            const prefix = it.statusKind === 'violated' ? '⛔ ' : it.statusKind === 'missed' ? '⌛ ' : it.statusKind === 'risk' ? '⚠ ' : '';
+            const st = it.statusKind === 'violated' || it.statusKind === 'missed' || it.statusKind === 'risk' ? STATUS_ICON[it.statusKind] : null;
             return (
               <div
                 key={`p${idx}`}
@@ -926,29 +1046,36 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                     onOpenTrip(it.tripKey);
                   }
                 }}
-                className="absolute overflow-hidden whitespace-nowrap text-[10px] leading-[16px] z-[3] cursor-pointer"
+                className="absolute overflow-hidden whitespace-nowrap text-[10px] z-[3] cursor-pointer flex items-center gap-1"
                 style={{
                   left: p.left,
                   width: p.width,
                   top: planTopOf(idx),
                   height: PLAN_BAR_H,
-                  background: it.archived ? CLR.planArchBg : CLR.planBg,
+                  background: it.archived ? CLR.planArchBg : planBarBg,
                   border: `1px solid ${it.archived ? CLR.planArchBorder : CLR.planBorder}`,
                   color: it.archived ? CLR.planArchText : CLR.planText,
-                  borderRadius: 3,
-                  padding: '0 4px',
+                  borderRadius: 'var(--tl-bar-r)',
+                  padding: '0 6px',
                   ...link(it.tripKey),
                 }}
                 title={it.title}
               >
                 {it.open ? (
                   <>
-                    {prefix}
-                    неполный план
+                    <CircleDashed className={BAR_ICON_CLS} style={{ color: CLR.warn }} aria-hidden="true" />
+                    {p.width >= 118 ? <span className="truncate leading-[14px]">неполный план</span> : null}
                   </>
                 ) : (
-                  <PlanBarLabel parts={it.parts} prefix={prefix} width={p.width} />
+                  <PlanBarLabel
+                    lead={st ? <st.Icon className={BAR_ICON_CLS} style={{ color: st.color }} aria-label={st.label} role="img" /> : null}
+                    parts={it.parts}
+                    width={p.width}
+                  />
                 )}
+                {it.warn && !it.open ? (
+                  <TriangleAlert className={`${BAR_ICON_CLS} ml-auto`} style={{ color: CLR.warn }} aria-hidden="true" />
+                ) : null}
               </div>
             );
           }
@@ -958,7 +1085,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 key={`b${idx}`}
                 data-bar="buffer"
                 className="absolute z-[2]"
-                style={{ left: p.left, width: p.width, top: planTopOf(idx), height: PLAN_BAR_H, background: hatch45, borderRadius: 3 }}
+                style={{ left: p.left, width: p.width, top: planTopOf(idx), height: PLAN_BAR_H, background: hatch45, border: '1px solid rgba(217, 119, 6, 0.22)', borderRadius: 'var(--tl-bar-r)' }}
                 title={`запас ${it.days} дн`}
               />
             );
@@ -967,26 +1094,58 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         })}
       </div>
 
-      {/* Подстрока «Факт» — та же закреплённая колонка, ровно FACT_H */}
+      {/* Подстрока «Факт» — та же закреплённая колонка: одна короткая строка
+          состояния (бейдж «в рейсе / на базе / ремонт / срок просрочен» или
+          счётчики), тревоги — маленьким значком, полный текст — в подсказке. */}
       <div
-        className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2.5 w-[170px] min-w-[170px] overflow-hidden"
-        style={{ height: factH, borderRightColor: '#D1D5DB' }}
+        data-tl-car={row.carKey}
+        data-tl-cell="fact"
+        onMouseEnter={onRowEnter}
+        onMouseLeave={onRowLeave}
+        className="sticky left-0 z-[3] border-r border-b px-2 w-[170px] min-w-[170px] overflow-hidden"
+        style={{ height: factH, background: cellBg, borderRightColor: 'var(--tl-col-edge)', borderBottomColor: 'var(--tl-hairline)' }}
+        title={cellTitle}
       >
-        <div className="flex items-center justify-between gap-1">
-          <span className="text-[8px] leading-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] pt-0.5">Факт</span>
-          <span className="text-[9px] leading-[11px] text-[#9CA3AF] tabular-nums">
-            {row.basesCount ? `база: ${row.basesCount}` : ''}
-            {row.basesCount && row.repairsCount ? ' · ' : ''}
-            {row.repairsCount ? `ремонт: ${row.repairsCount}` : ''}
+        <div className="flex items-center justify-between gap-1.5 h-full">
+          <span className="flex items-center gap-1.5 min-w-0">
+            {badge ? (
+              <span
+                className="inline-flex items-center gap-1 h-[14px] rounded-full px-1.5 py-0 text-[9px] leading-[14px] font-semibold whitespace-nowrap shrink-0"
+                style={{ background: badge.bg, color: badge.fg }}
+                title={badge.title}
+              >
+                <span className="w-1 h-1 rounded-full" style={{ background: badge.dot }} aria-hidden="true" />
+                {badge.label}
+              </span>
+            ) : null}
+            {row.empty ? (
+              <span className="text-[9px] leading-[11px] text-[var(--tl-text-dim)] truncate">Нет рейсов в выбранном периоде</span>
+            ) : countsText ? (
+              <span className="text-[9px] leading-[11px] text-[var(--tl-text-dim)] truncate tabular-nums">{countsText}</span>
+            ) : null}
+          </span>
+          <span className="flex items-center gap-1 shrink-0">
+            {row.warnings.length ? (
+              <span title={warnTitle} className="inline-flex" aria-label={warnTitle}>
+                <AlertTriangle className="w-3 h-3" style={{ color: CLR.warn }} aria-hidden="true" />
+              </span>
+            ) : null}
+            <span className="text-[8px] leading-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--tl-text-dim)] select-none">факт</span>
           </span>
         </div>
-        {row.empty ? <div className="text-[9px] leading-[10px] text-[#9CA3AF]">Нет рейсов в выбранном периоде</div> : null}
       </div>
-      <div data-lane="fact" className="relative z-0 border-b border-[#E5E7EB]" style={{ width: W, height: factH, ...laneBg }}>
+      <div
+        data-lane="fact"
+        data-tl-car={row.carKey}
+        onMouseEnter={onRowEnter}
+        onMouseLeave={onRowLeave}
+        className="relative z-0 border-b border-[var(--tl-hairline)]"
+        style={{ width: W, height: factH, backgroundColor: laneRowBg, ...laneBg }}
+      >
         {bgPlane('fbg', 0.6)}
         {factBzFills.map((f) => renderBzFill(f, 'fb'))}
         {factFills.map((f) => renderStageFill(f, 'ff'))}
-        {todayStrip('ft', 0.14)}
+        {todayStrip('ft', 0.1)}
         {row.factItems.map((it, idx) => {
           if (it.kind === 'handover') return renderHandover(it, `fh${idx}`);
           const p = it.kind === 'event' ? pos(it.day, it.day) : pos(it.a, it.b);
@@ -1015,9 +1174,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                     top: factTopOf(idx),
                     height: FACT_BAR_H,
                     background: it.open ? hatchOpen : CLR.fact,
-                    opacity: it.open ? 1 : 0.65,
+                    opacity: it.open ? 1 : 0.8,
                     border: it.open ? `1px dashed ${CLR.fact}` : undefined,
-                    borderRadius: 2,
+                    borderRadius: 4,
                     ...link(it.tripKey),
                   }}
                   title={it.title}
@@ -1039,14 +1198,14 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                       onOpenTrip(it.tripKey);
                     }
                   }}
-                  className="absolute z-[2] cursor-pointer text-[9px] leading-[14px] text-[#9CA3AF] overflow-hidden whitespace-nowrap text-ellipsis px-1"
+                  className="absolute z-[2] cursor-pointer text-[9px] leading-[14px] text-[var(--tl-text-dim)] overflow-hidden whitespace-nowrap text-ellipsis px-1.5 flex items-center"
                   style={{
                     left: p.left,
                     width: p.width,
                     top: factTopOf(idx),
                     height: FACT_NONE_H,
                     border: `1px dashed ${CLR.planNoneBorder}`,
-                    borderRadius: 2,
+                    borderRadius: 4,
                     background: CLR.planNoneBg,
                     ...link(it.tripKey),
                   }}
@@ -1249,6 +1408,29 @@ export default function TimelineGrid({
     });
     return out;
   }, [rows, groupByDispatcher, dispatcherOrder]);
+
+  /**
+   * Свёрнутые группы диспетчеров — только состояние отображения (список строк
+   * скрывается локально; данные, фильтры и прокрутка не меняются).
+   */
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+  const toggleGroup = useCallback((key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  /** Инициалы диспетчера для аватара шапки группы («Матвей Солодкий» → «МС»). */
+  const initialsOf = (name: string): string =>
+    (name || '')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() || '')
+      .join('');
 
   // Фоновая дорожка одна на всё окно: выходные и подсветка всего столбца «сегодня».
   // Подсветка — ровно календарная ячейка текущего дня (та же формула левой границы
@@ -1461,41 +1643,111 @@ export default function TimelineGrid({
     [onNavigate, navVs],
   );
 
+  /** Попап «Обозначения» (компактная легенда): только состояние отображения. */
+  const [legendOpen, setLegendOpen] = useState(false);
+  const legendRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!legendOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (legendRef.current?.contains(t)) return;
+      setLegendOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setLegendOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [legendOpen]);
+
+  /** Точная высота липкой шапки (месяцы + дни) — столько же держат шапки групп. */
+  const headH = colW >= 12 ? 48 : 42;
+
+  /** Все обозначения легенды — один компактный попап (информация не удалена). */
+  const legendItems: Array<{ swatch: React.ReactNode; label: string }> = [
+    { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: planBarBg, border: `1px solid ${CLR.planBorder}`, borderRadius: 4 }} />, label: 'рейс (план — из «Плана дохода»)' },
+    { swatch: <i className="inline-block w-[3px] h-[12px]" style={{ background: CLR.return, borderRadius: 2 }} />, label: 'плановое возвращение' },
+    { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: hatch45, border: '1px solid rgba(217,119,6,0.25)', borderRadius: 4 }} />, label: 'запас на риски' },
+    { swatch: <i className="inline-block w-[18px] h-[6px]" style={{ background: CLR.fact, opacity: 0.8, borderRadius: 3 }} />, label: 'факт (только заполненные даты)' },
+    { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: hatchOpen, border: `1px dashed ${CLR.fact}`, borderRadius: 4 }} />, label: 'факт продолжается' },
+    { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: CLR.planNoneBg, border: `1px dashed ${CLR.planNoneBorder}`, borderRadius: 4 }} />, label: '«Факт не указан» (не выполнен)' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-fact').bg, border: `1px solid ${bzKindColor('base-fact').border}`, borderRadius: 4 }} />, label: 'база: факт (приезд → выезд) — заливка дней' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-plan').bg, border: `1px solid ${bzKindColor('base-plan').border}`, borderRadius: 4 }} />, label: 'база: план (приезд → готовность)' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('repair').bg, border: `1px solid ${bzKindColor('repair').border}`, borderRadius: 4 }} />, label: 'ремонт (внутри базы) — заливка дней' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('repair-end').bg, border: `1px solid ${bzKindColor('repair-end').border}`, borderRadius: 4 }} />, label: 'дата окончания ремонта' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-gap').bg, border: `1px dashed ${bzKindColor('base-gap').border}`, borderRadius: 4 }} />, label: 'на базе между рейсами (записи учёта нет)' },
+    { swatch: <i className="inline-block w-[9px] h-[9px] rotate-45" style={{ background: '#7C3AED', opacity: 0.95, borderRadius: 2 }} />, label: 'событие машины / журнала рейса (клик — к записи)' },
+    { swatch: <i className="inline-block w-[14px] h-[10px]" style={{ background: '#DFEAFD', border: '1px solid #8FBBF7', borderRadius: 4 }} />, label: 'этап: заливка дня — цвет по типу (клик — этап в карточке)' },
+    { swatch: <i className="inline-block w-[3px] h-[12px]" style={{ background: 'repeating-linear-gradient(to bottom, #6B7280 0 3px, transparent 3px 6px)' }} />, label: 'передача диспетчера (дата не указана — стык между рейсами)' },
+    { swatch: <i className="inline-block w-[12px] h-[10px]" style={{ background: '#F7F8FA', border: '1px dashed #DC2626', borderRadius: 3 }} />, label: 'критический срок этапа' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('ready').bg, border: `1px solid ${bzKindColor('ready').border}`, borderRadius: 4 }} />, label: 'срок готовности (плановая) — заливка дня' },
+    { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: CLR.planArchBg, border: `1px solid ${CLR.planArchBorder}`, borderRadius: 4 }} />, label: 'архивные данные (приглушённые)' },
+    {
+      swatch: (
+        <span className="inline-flex items-center gap-1">
+          <OctagonX className={BAR_ICON_CLS} style={{ color: STATUS_ICON.violated.color }} aria-hidden="true" />
+          <Hourglass className={BAR_ICON_CLS} style={{ color: STATUS_ICON.missed.color }} aria-hidden="true" />
+          <TriangleAlert className={BAR_ICON_CLS} style={{ color: '#D97706' }} aria-hidden="true" />
+        </span>
+      ),
+      label: 'статусы рейса: срок нарушен / план прошёл без факта / срок под угрозой; оранжевый значок — предупреждения данных',
+    },
+  ];
+
+  const legendSwatchCls = 'inline-flex items-center justify-center w-[26px] shrink-0';
+  const legendRowCls = 'flex items-center gap-2 min-w-0';
+
   return (
-    <div className={`flex flex-col ${fullscreen ? 'flex-1 min-h-0' : ''}`}>
-      {/* Панель управления окном */}
+    <div className={`tl-scope flex flex-col ${fullscreen ? 'flex-1 min-h-0' : ''}`}>
+      {/* Панель управления: спокойные сегменты — навигация, масштаб, вид и легенда */}
       <div className="flex flex-wrap items-center gap-2 pb-3">
-        <button type="button" data-nav="month-prev" className={navBtn} onClick={() => shiftMonth(-1)}>« месяц</button>
-        <button type="button" data-nav="week-prev" className={navBtn} onClick={() => onNavigate(navVs - 7)}>‹ неделя</button>
-        <button
-          type="button"
-          data-nav="today"
-          className="inline-flex items-center justify-center px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-[#121316] text-white hover:bg-black transition-colors cursor-pointer"
-          onClick={goToday}
-        >
-          Сегодня
-        </button>
-        <button type="button" data-nav="week-next" className={navBtn} onClick={() => onNavigate(navVs + 7)}>неделя ›</button>
-        <button type="button" data-nav="month-next" className={navBtn} onClick={() => shiftMonth(1)}>месяц »</button>
-        <label className="flex items-center gap-1.5 text-[11px] text-[#6B7280]">
-          Перейти к
-          <DateInput
-            className="w-[120px]"
-            value={dayStr(navVs)}
-            ariaLabel="Перейти к дате"
-            onChange={(v) => {
-              const n = dayNum(v);
-              if (n != null) onNavigate(n);
-            }}
-          />
-        </label>
+        <div className={barSegment}>
+          <button type="button" data-nav="month-prev" className={navBtnIcon} title="Предыдущий месяц" aria-label="Предыдущий месяц" onClick={() => shiftMonth(-1)}>
+            <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
+          </button>
+          <button type="button" data-nav="week-prev" className={navBtn} onClick={() => onNavigate(navVs - 7)}>‹ неделя</button>
+          <button
+            type="button"
+            data-nav="today"
+            className="inline-flex items-center justify-center h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-[#121316] text-white hover:bg-black transition-colors cursor-pointer"
+            onClick={goToday}
+          >
+            Сегодня
+          </button>
+          <button type="button" data-nav="week-next" className={navBtn} onClick={() => onNavigate(navVs + 7)}>неделя ›</button>
+          <button type="button" data-nav="month-next" className={navBtnIcon} title="Следующий месяц" aria-label="Следующий месяц" onClick={() => shiftMonth(1)}>
+            <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+          </button>
+          <span className="w-px h-4 bg-[var(--tl-hairline)] mx-0.5" aria-hidden="true" />
+          <label className="flex items-center gap-1.5 text-[11px] text-[var(--tl-text)] pl-0.5 pr-0.5">
+            Перейти к
+            <DateInput
+              className="w-[120px]"
+              value={dayStr(navVs)}
+              ariaLabel="Перейти к дате"
+              onChange={(v) => {
+                const n = dayNum(v);
+                if (n != null) onNavigate(n);
+              }}
+            />
+          </label>
+        </div>
+
         {/* Масштаб календаря: «−» / ползунок / «+». Ширина дня — единый параметр
             для сетки, полос и шапки; интерфейс вне календаря не масштабируется. */}
-        <div className="flex items-center gap-1.5" role="group" aria-label="Масштаб календаря" data-ui="zoom-control">
+        <div className={barSegment} role="group" aria-label="Масштаб календаря" data-ui="zoom-control">
           <button
             type="button"
             data-zoom="out"
-            className={`${navBtn} ${zoom <= 0 ? 'opacity-40 cursor-default' : ''}`}
+            className={`${navBtnIcon} ${zoom <= 0 ? 'opacity-40 cursor-default' : ''}`}
             title="Уменьшить масштаб: ширина дня меньше, дат на экране больше"
             aria-label="Уменьшить масштаб"
             disabled={zoom <= 0}
@@ -1518,7 +1770,7 @@ export default function TimelineGrid({
           <button
             type="button"
             data-zoom="in"
-            className={`${navBtn} ${zoom >= ZOOM_LEVELS.length - 1 ? 'opacity-40 cursor-default' : ''}`}
+            className={`${navBtnIcon} ${zoom >= ZOOM_LEVELS.length - 1 ? 'opacity-40 cursor-default' : ''}`}
             title="Увеличить масштаб: деталей больше — до отдельных дней и событий"
             aria-label="Увеличить масштаб"
             disabled={zoom >= ZOOM_LEVELS.length - 1}
@@ -1527,47 +1779,95 @@ export default function TimelineGrid({
             +
           </button>
         </div>
-        <span className="flex items-center gap-1.5 text-[11px] text-[#6B7280]">
+
+        <span className="flex items-center gap-1.5 text-[11px] text-[var(--tl-text-dim)] px-1" data-ui="visible-range-wrap">
           Видимый диапазон:
           <VisibleRangeLabel scrollRef={scrollRef} vs={vs} vn={vn} colW={colW} />
         </span>
-        <label className="flex items-center gap-1.5 text-[11px] text-[#6B7280] cursor-pointer select-none py-1" title="Единый переключатель: архивные рейсы плана дохода и архивные записи учёта выезда (база, ремонт)">
-          <input
-            type="checkbox"
-            data-ui="show-archived"
-            checked={showArchived}
-            onChange={(e) => onShowArchivedChange(e.target.checked)}
-            className="w-3.5 h-3.5 rounded border-[#D1D5DB] accent-[var(--accent)] cursor-pointer"
-          />
-          Показывать архивные данные
-        </label>
-        {/* Полный экран: рабочая область раскрывается на всё окно (тот же таймлайн,
-            без копии). Выход — эта же кнопка или Escape. */}
-        {fullscreen ? (
-          <button
-            type="button"
-            data-ui="fullscreen-exit"
-            onClick={onToggleFullscreen}
-            title="Выйти из полноэкранного режима (Escape)"
-            aria-label="Выйти из полноэкранного режима"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#121316] text-white hover:bg-black transition-colors cursor-pointer"
-          >
-            <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
-            Выйти из полноэкранного режима
-          </button>
-        ) : (
-          <button
-            type="button"
-            data-ui="fullscreen-enter"
-            onClick={onToggleFullscreen}
-            title="На весь экран"
-            aria-label="На весь экран"
-            className={navBtn}
-          >
-            <Maximize2 className="w-3.5 h-3.5" aria-hidden="true" />
-            <span className="ml-1.5 hidden sm:inline">На весь экран</span>
-          </button>
-        )}
+
+        <div className="flex flex-wrap items-center gap-2 ml-auto">
+          <div className="relative" ref={legendRef}>
+            <button
+              type="button"
+              data-ui="legend-toggle"
+              aria-expanded={legendOpen}
+              aria-haspopup="dialog"
+              onClick={() => setLegendOpen((v) => !v)}
+              title="Обозначения полос, заливок и значков"
+              className={navBtn}
+            >
+              <Palette className="w-3.5 h-3.5" aria-hidden="true" />
+              <span className="ml-1.5">Обозначения</span>
+            </button>
+            {legendOpen ? (
+              <div
+                data-ui="legend-popup"
+                role="dialog"
+                aria-label="Обозначения"
+                className="absolute right-0 top-full mt-2 z-[60] w-[min(620px,92vw)] max-h-[70vh] overflow-y-auto rounded-2xl border border-[var(--tl-hairline)] bg-white shadow-[0_16px_40px_rgba(18,19,22,0.14)] p-4"
+              >
+                <div className="text-[11px] font-semibold text-[var(--tl-text-strong)] mb-2.5">Обозначения таймлайна</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+                  {legendItems.map((it, i) => (
+                    <div key={i} className={legendRowCls}>
+                      <span className={legendSwatchCls}>{it.swatch}</span>
+                      <span className="text-[10px] leading-[13px] text-[var(--tl-text)] min-w-0">{it.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 pt-2.5 border-t border-[var(--tl-hairline)] text-[10px] leading-[14px] text-[var(--tl-text-dim)]">
+                  Клик по плановой или фактической полосе открывает модальное окно всего рейса; клик по названию машины — обзор её рейсов
+                  и периодов. База и ремонт — заливка ячейки дня: план базы и срок готовности в строке «План», факт базы, ремонт и окончание
+                  ремонта в «Факт»; несколько отметок в одном дне делят ячейку на цветные секции, каждая открывает свою запись периода.
+                  Прокрутка — тачпад, Shift+колесо, полоса; масштаб — «−/+/ползунок» или Ctrl+колесо над календарём (дата под курсором
+                  остаётся на месте). Прокрутка догружает даты влево и вправо; выходные подсвечены фоном; значки статусов —
+                  «срок нарушен», «план прошёл без факта», «срок под угрозой».
+                </p>
+              </div>
+            ) : null}
+          </div>
+
+          <div className={barSegment}>
+            <label className="flex items-center gap-1.5 text-[11px] text-[var(--tl-text)] cursor-pointer select-none" title="Единый переключатель: архивные рейсы плана дохода и архивные записи учёта выезда (база, ремонт)">
+              <input
+                type="checkbox"
+                data-ui="show-archived"
+                checked={showArchived}
+                onChange={(e) => onShowArchivedChange(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-[#D1D5DB] accent-[var(--accent)] cursor-pointer"
+              />
+              Показывать архивные данные
+            </label>
+            <span className="w-px h-4 bg-[var(--tl-hairline)] mx-0.5" aria-hidden="true" />
+            {/* Полный экран: рабочая область раскрывается на всё окно (тот же таймлайн,
+                без копии). Выход — эта же кнопка или Escape. */}
+            {fullscreen ? (
+              <button
+                type="button"
+                data-ui="fullscreen-exit"
+                onClick={onToggleFullscreen}
+                title="Выйти из полноэкранного режима (Escape)"
+                aria-label="Выйти из полноэкранного режима"
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-[#121316] text-white hover:bg-black transition-colors cursor-pointer"
+              >
+                <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
+                Выйти из полноэкранного режима
+              </button>
+            ) : (
+              <button
+                type="button"
+                data-ui="fullscreen-enter"
+                onClick={onToggleFullscreen}
+                title="На весь экран"
+                aria-label="На весь экран"
+                className={navBtn}
+              >
+                <Maximize2 className="w-3.5 h-3.5" aria-hidden="true" />
+                <span className="ml-1.5 hidden sm:inline">На весь экран</span>
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Сетка — ОДИН контейнер прокрутки для шапки, сетки и полос.
@@ -1578,9 +1878,10 @@ export default function TimelineGrid({
         ref={scrollRef}
         onScroll={handleScroll}
         data-ui="timeline-scroll"
-        className={`tl-scroll overflow-auto overscroll-x-contain border border-[#E5E7EB] rounded-xl bg-[#F9FAFB] ${
+        className={`tl-scroll overflow-auto overscroll-x-contain border border-[var(--tl-hairline)] rounded-xl ${
           fullscreen ? 'flex-1 min-h-0' : 'max-h-[68vh] min-h-[280px]'
         }`}
+        style={{ background: 'var(--tl-canvas)', '--tl-head-h': `${headH}px` } as React.CSSProperties}
       >
         <style>{`.tl-scroll{scrollbar-width:thin;scrollbar-color:#B6BBC2 #F3F4F6;}
 .tl-scroll::-webkit-scrollbar{height:12px;width:12px;}
@@ -1591,144 +1892,106 @@ export default function TimelineGrid({
           {/* Шапка — закреплена сверху; левая ячейка — закреплена слева.
               Полоса месяцев и дни — в той же ленте, движутся синхронно с полосами. */}
           <div
-            className="sticky left-0 top-0 z-[6] bg-[#F9FAFB] border-b border-r border-[#E5E7EB] px-2.5 py-1.5 w-[170px] min-w-[170px]"
-            style={{ borderRightColor: '#D1D5DB' }}
+            className="sticky left-0 top-0 z-[6] border-b border-r border-[var(--tl-hairline)] px-2 h-[var(--tl-head-h)] flex items-center w-[170px] min-w-[170px]"
+            style={{ background: 'var(--tl-head-bg)', borderRightColor: 'var(--tl-col-edge)' }}
           >
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF]">Автомобили</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--tl-text-dim)]">Автомобили</span>
           </div>
-          <div className="sticky top-0 z-[5] bg-[#F9FAFB] border-b border-[#E5E7EB]" style={{ width: W }}>
+          <div className="sticky top-0 z-[5] border-b border-[var(--tl-hairline)]" style={{ width: W, background: 'var(--tl-head-bg)' }}>
             <CalendarHeader vs={vs} vn={vn} colW={colW} today={today} pinLeft={178} />
           </div>
 
           {/* Группы машин: «План» сверху, «Факт» снизу. Во вкладке «Все» — блоками
-              по ТЕКУЩЕМУ диспетчеру (порядок — как во вкладках «Плана дохода»),
-              внутри блока — по госномеру; без диспетчера — в конце группой. */}
-          {blocks.map((block) => (
-            <React.Fragment key={`blk-${block.key || 'none'}`}>
-              {groupByDispatcher ? (
-                <div
-                  data-ui="dispatcher-group"
-                  data-dgroup={block.key || 'none'}
-                  className="flex items-stretch"
-                  style={{ gridColumn: '1 / -1' }}
-                >
-                  <div
-                    className="sticky left-0 z-[3] bg-[#EEF1F5] border-r border-b border-[#E5E7EB] px-2.5 w-[170px] min-w-[170px] flex items-center gap-1.5"
-                    style={{ borderRightColor: '#D1D5DB' }}
-                  >
-                    <span className="text-[10px] leading-[12px] font-semibold text-[#374151] truncate" title={block.name || 'Без диспетчера'}>
-                      {block.name || 'Без диспетчера'}
-                    </span>
-                    <span className="text-[9px] leading-[11px] text-[#6B7280] shrink-0 tabular-nums">машин: {block.rows.length}</span>
-                  </div>
-                  <div className="bg-[#EEF1F5] border-b border-[#E5E7EB] h-[22px] min-w-0 flex-1" />
-                </div>
-              ) : null}
-              {block.rows.map((row) => (
-                <TimelineCarRow
-                  key={row.carKey}
-                  row={row}
-                  colW={colW}
-                  vs={vs}
-                  vn={vn}
-                  bg={bg}
-                  today={today}
-                  stageTypes={stageTypes}
-                  selectedTripKey={selectedTripKey}
-                  onOpenTrip={onOpenTrip}
-                  onOpenTripEvent={onOpenTripEvent}
-                  onOpenTripStage={onOpenTripStage}
-                  onOpenBase={onOpenBase}
-                  onOpenCar={onOpenCar}
-                />
-              ))}
-            </React.Fragment>
-          ))}
+              по ТЕКУЩЕМУ диспетчеру; шапка блока липкая (прилипает под шапкой
+              календаря) и сворачивается кликом. Состав и порядок строк — как
+              раньше: без диспетчера — в конце группой. */}
+          {blocks.map((block) => {
+            const blockKey = block.key || 'none';
+            const collapsed = groupByDispatcher && collapsedGroups.has(blockKey);
+            return (
+              <div
+                key={`blk-${blockKey}`}
+                data-ui={groupByDispatcher ? 'dispatcher-group-block' : undefined}
+                className="grid"
+                style={{ gridColumn: '1 / -1', gridTemplateColumns: `170px ${W}px` }}
+              >
+                {groupByDispatcher ? (
+                  <>
+                    <div
+                      data-ui="dispatcher-group"
+                      data-dgroup={blockKey}
+                      data-collapsed={collapsed ? '1' : undefined}
+                      className="sticky left-0 z-[4] border-r border-b border-[var(--tl-hairline)] px-2 h-[26px] min-w-0 flex items-center gap-1.5"
+                      style={{ top: 'var(--tl-head-h)', background: 'var(--tl-group-bg)', borderRightColor: 'var(--tl-col-edge)' }}
+                    >
+                      <button
+                        type="button"
+                        data-ui="group-toggle"
+                        aria-expanded={!collapsed}
+                        aria-label={`${block.name || 'Без диспетчера'} — ${block.rows.length} машин, ${collapsed ? 'развернуть' : 'свернуть'} группу`}
+                        onClick={() => toggleGroup(blockKey)}
+                        title={collapsed ? 'Развернуть группу диспетчера' : 'Свернуть группу диспетчера'}
+                        className="inline-flex items-center gap-1 min-w-0 max-w-full cursor-pointer rounded-md px-0.5 py-0.5 hover:bg-white/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]"
+                      >
+                        <span
+                          className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[7px] font-bold text-[#4B5563] shrink-0 select-none"
+                          style={{ background: '#FFFFFF', border: '1px solid var(--tl-col-edge)' }}
+                          aria-hidden="true"
+                        >
+                          {initialsOf(block.name) || '—'}
+                        </span>
+                        <span className="text-[10px] leading-[12px] font-semibold text-[var(--tl-text-strong)] truncate min-w-0" title={block.name || 'Без диспетчера'}>
+                          {block.name || 'Без диспетчера'}
+                        </span>
+                        <span
+                          className="text-[9px] leading-[11px] text-[var(--tl-text)] shrink-0 tabular-nums rounded px-1"
+                          style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid var(--tl-col-edge)' }}
+                          title={`Машин в группе: ${block.rows.length}`}
+                        >
+                          {block.rows.length}
+                        </span>
+                        <ChevronDown className={`w-3 h-3 shrink-0 text-[var(--tl-text-dim)] transition-transform ${collapsed ? '-rotate-90' : ''}`} aria-hidden="true" />
+                      </button>
+                    </div>
+                    <div
+                      onClick={() => toggleGroup(blockKey)}
+                      title={collapsed ? 'Развернуть группу диспетчера' : 'Свернуть группу диспетчера'}
+                      className="sticky z-[1] border-b border-[var(--tl-hairline)] h-[26px] min-w-0 cursor-pointer"
+                      style={{ top: 'var(--tl-head-h)', background: 'var(--tl-group-bg)' }}
+                    />
+                  </>
+                ) : null}
+                {!collapsed
+                  ? block.rows.map((row, idx) => (
+                      <TimelineCarRow
+                        key={row.carKey}
+                        row={row}
+                        colW={colW}
+                        vs={vs}
+                        vn={vn}
+                        bg={bg}
+                        today={today}
+                        zebra={idx % 2 === 1}
+                        stageTypes={stageTypes}
+                        selectedTripKey={selectedTripKey}
+                        onOpenTrip={onOpenTrip}
+                        onOpenTripEvent={onOpenTripEvent}
+                        onOpenTripStage={onOpenTripStage}
+                        onOpenBase={onOpenBase}
+                        onOpenCar={onOpenCar}
+                      />
+                    ))
+                  : null}
+              </div>
+            );
+          })}
           {rows.length === 0 ? (
-            <div className="col-span-2 py-10 text-center text-xs text-[#6B7280]">
+            <div className="col-span-2 py-10 text-center text-xs text-[var(--tl-text)]">
               В выбранной вкладке нет машин. Проверьте вкладку диспетчера или добавьте рейс кнопкой «Новый рейс».
             </div>
           ) : null}
         </div>
       </div>
-
-      {/* Легенда — компактная единая визуальная система (цвет + форма + штриховка) */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[#6B7280] mt-3">
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: CLR.planBg, border: `1px solid ${CLR.planBorder}` }} />
-          рейс (план — из «Плана дохода»)
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[2px] h-[12px]" style={{ background: '#1D4ED8' }} />
-          плановое возвращение
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: hatch45 }} />
-          запас на риски
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[6px] rounded-[2px]" style={{ background: CLR.fact, opacity: 0.65 }} />
-          факт (только заполненные даты)
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: hatchOpen, border: `1px dashed ${CLR.fact}` }} />
-          факт продолжается
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: CLR.planNoneBg, border: `1px dashed ${CLR.planNoneBorder}` }} />
-          «Факт не указан» (не выполнен)
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[14px] rounded-[2px]" style={{ background: bzKindColor('base-fact').bg, border: `1px solid ${bzKindColor('base-fact').border}` }} />
-          база: факт (приезд → выезд) — заливка дней
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[14px] rounded-[2px]" style={{ background: bzKindColor('base-plan').bg, border: `1px solid ${bzKindColor('base-plan').border}` }} />
-          база: план (приезд → готовность)
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[14px] rounded-[2px]" style={{ background: bzKindColor('repair').bg, border: `1px solid ${bzKindColor('repair').border}` }} />
-          ремонт (внутри базы) — заливка дней
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[14px] rounded-[2px]" style={{ background: bzKindColor('repair-end').bg, border: `1px solid ${bzKindColor('repair-end').border}` }} />
-          дата окончания ремонта
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[14px] rounded-[2px]" style={{ background: bzKindColor('base-gap').bg, border: `1px dashed ${bzKindColor('base-gap').border}` }} />
-          на базе между рейсами (записи учёта нет)
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[9px] h-[9px] rotate-45 rounded-[2px]" style={{ background: '#7C3AED', opacity: 0.95 }} />
-          событие машины / журнала рейса (клик — к записи)
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[14px] h-[10px] rounded-[2px]" style={{ background: '#DBEAFE', border: '1px solid #93C5FD' }} />
-          этап: заливка дня — цвет по типу (клик — этап в карточке)
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[2px] h-[12px]" style={{ background: 'repeating-linear-gradient(to bottom, #6B7280 0 3px, transparent 3px 6px)' }} />
-          передача диспетчера (дата не указана — стык между рейсами)
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[12px] h-[10px] rounded-[2px]" style={{ background: '#F9FAFB', border: '1px dashed #DC2626' }} />
-          критический срок этапа
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[14px] rounded-[2px]" style={{ background: bzKindColor('ready').bg, border: `1px solid ${bzKindColor('ready').border}` }} />
-          срок готовности (плановая) — заливка дня
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[18px] h-[10px] rounded-[2px]" style={{ background: CLR.planArchBg, border: `1px solid ${CLR.planArchBorder}` }} />
-          архивные данные (приглушённые)
-        </span>
-      </div>
-      <p className="text-[10px] text-[#9CA3AF] mt-2">
-        Клик по плановой или фактической полосе открывает модальное окно всего рейса; клик по названию машины — обзор её рейсов и периодов.
-        База и ремонт — заливка ячейки дня: план базы и срок готовности в строке «План», факт базы, ремонт и окончание ремонта в «Факт»; несколько отметок в одном дне делят ячейку на цветные секции, каждая открывает свою запись периода.
-        Прокрутка — тачпад, Shift+колесо, полоса; масштаб — «−/+/ползунок» или Ctrl+колесо над календарём (дата под курсором остаётся на месте).
-        Прокрутка догружает даты влево и вправо; выходные подсвечены фоном; «⌛» — плановая дата прошла, факт не указан, «⛔» — опоздание подтверждено фактом.
-      </p>
     </div>
   );
 }

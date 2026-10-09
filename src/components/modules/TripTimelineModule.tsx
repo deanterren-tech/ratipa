@@ -678,7 +678,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
                 bottom: 0,
                 left: 0,
                 zIndex: 4000,
-                background: '#F9FAFB',
+                background: '#F6F7FA',
                 display: 'flex',
                 flexDirection: 'column',
                 padding: '10px 14px',
