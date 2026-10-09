@@ -59,6 +59,7 @@ import {
   hasWeekendInRange,
   isTripFactOngoing,
   isWeekendDay,
+  layoutLaneTracks,
   stageDeviation,
   stageStateOf,
   TIMELINE_MINI_COL_W,
@@ -66,6 +67,7 @@ import {
   tripSpan,
   zoomColW,
   zoomLabel,
+  type LaneTrackItem,
 } from './lib/timeline';
 import CalendarHeader from './CalendarHeader';
 import { eventTypeOf, stageFullName } from './lib/catalog';
@@ -178,6 +180,13 @@ const toDraft = (t: WholeTrip): Draft => {
 
 const MINI_PLAN_H = 26;
 const MINI_FACT_H = 32;
+/** Зазор дорожек и высоты полос встроенного таймлайна (те же правила, что в основном). */
+const MINI_TRACK_GAP = 2;
+const MINI_PLAN_BAR_H = 16;
+const MINI_FACT_BAR_H = 8;
+const MINI_FACT_NONE_H = 14;
+const MINI_BASE_BAR_H = 14;
+const MINI_REPAIR_BAR_H = 10;
 
 const hatchReady = 'repeating-linear-gradient(45deg,#FDE68A,#FDE68A 3px,transparent 3px,transparent 6px)';
 const hatchBase = 'repeating-linear-gradient(135deg,transparent,transparent 4px,#CFD4DC 4px,#CFD4DC 5px)';
@@ -376,6 +385,83 @@ function CarMiniTimeline({
   const link = (key: string): React.CSSProperties =>
     key === focusKey ? { boxShadow: 'inset 0 0 0 2px var(--accent)' } : { opacity: 0.85 };
 
+  /**
+   * Дорожки встроенного таймлайна — те же правила, что в основном:
+   * группа 0 — рейсы (план/факт), 1 — база (готовность/приезд→выезд),
+   * 2 — ремонт. Пересекающиеся полосы одной группы разводятся на под-дорожки;
+   * горизонтальные координаты не меняются — только вертикальные дорожки.
+   */
+  const miniPlanTrack = useMemo(() => {
+    const items: LaneTrackItem[] = [];
+    const readySlot = new Map<string, number>();
+    const tripSlot = new Map<string, number>();
+    const bufferSlot = new Map<string, number>();
+    carBases.forEach((p) => {
+      const rdy = readyBarRange(p);
+      if (!rdy) return;
+      items.push({ group: 1, a: rdy.a, b: rdy.b, h: MINI_PLAN_BAR_H });
+      readySlot.set(p.key, items.length - 1);
+    });
+    carTrips.forEach((t) => {
+      const ov = t.spanOverride || {};
+      const sp = tripSpan(t);
+      const a = ov.pMin ?? sp.pMin ?? null;
+      if (a == null) return;
+      const b = ov.pMax ?? sp.pMax ?? a;
+      items.push({ group: 0, a, b, h: MINI_PLAN_BAR_H });
+      tripSlot.set(t.key, items.length - 1);
+      if (t.kind === 'manual' && t.bufferDays) {
+        const pmax = ov.pMax ?? sp.pMax ?? null;
+        if (pmax != null) {
+          items.push({ group: 0, a: pmax + 1, b: pmax + t.bufferDays, h: MINI_PLAN_BAR_H });
+          bufferSlot.set(t.key, items.length - 1);
+        }
+      }
+    });
+    return { layout: layoutLaneTracks(items, { padTop: 5, padBottom: 5, gap: MINI_TRACK_GAP }), readySlot, tripSlot, bufferSlot };
+  }, [carBases, carTrips]);
+  const miniPlanH = Math.max(MINI_PLAN_H, miniPlanTrack.layout.laneH);
+
+  const miniFactTrack = useMemo(() => {
+    const items: LaneTrackItem[] = [];
+    const baseSlot = new Map<string, number>();
+    const repairSlot = new Map<string, number>();
+    const factSlot = new Map<string, number>();
+    const factNoneSlot = new Map<string, number>();
+    carBases.forEach((p) => {
+      const rb = baseBarRange(p, today);
+      if (rb) {
+        items.push({ group: 1, a: rb.a, b: rb.b, h: MINI_BASE_BAR_H });
+        baseSlot.set(p.key, items.length - 1);
+      }
+      const rr = repairBarRange(p, today);
+      if (rr) {
+        items.push({ group: 2, a: rr.a, b: rr.b, h: MINI_REPAIR_BAR_H });
+        repairSlot.set(p.key, items.length - 1);
+      }
+    });
+    carTrips.forEach((t) => {
+      const sp = tripSpan(t);
+      if (sp.fMin != null) {
+        const endDay = tripFactEnd(t);
+        const ongoing = endDay == null && !t.archived;
+        const fEnd = ongoing ? Math.max(today, sp.fMax ?? sp.fMin) : (endDay ?? sp.fMax ?? sp.fMin);
+        items.push({ group: 0, a: sp.fMin, b: fEnd, h: MINI_FACT_BAR_H });
+        factSlot.set(t.key, items.length - 1);
+      } else {
+        const ov = t.spanOverride || {};
+        const a = ov.pMin ?? sp.pMin;
+        if (a == null) return;
+        const b = ov.pMax ?? sp.pMax ?? a;
+        items.push({ group: 0, a, b, h: MINI_FACT_NONE_H });
+        factNoneSlot.set(t.key, items.length - 1);
+      }
+    });
+    return { layout: layoutLaneTracks(items, { padTop: 3, padBottom: 3, gap: MINI_TRACK_GAP }), baseSlot, repairSlot, factSlot, factNoneSlot };
+  }, [carBases, carTrips, today]);
+  const miniFactH = Math.max(MINI_FACT_H, miniFactTrack.layout.laneH);
+  const miniFactZone0 = miniFactTrack.layout.zones.find((z) => z.key === 0) ?? null;
+
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -443,10 +529,10 @@ function CarMiniTimeline({
           </div>
 
           {/* План */}
-          <div className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#EEF0F3] px-2 w-[96px] min-w-[96px] text-[9px] leading-[12px] text-[#9CA3AF] overflow-hidden" style={{ height: MINI_PLAN_H, borderRightColor: '#D1D5DB' }}>
+          <div className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#EEF0F3] px-2 w-[96px] min-w-[96px] text-[9px] leading-[12px] text-[#9CA3AF] overflow-hidden" style={{ height: miniPlanH, borderRightColor: '#D1D5DB' }}>
             {focus ? formatPlate(focus.carNumber) : ''} · план
           </div>
-          <div data-lane="plan" className="relative z-0 border-b border-[#EEF0F3]" style={{ width: W, height: MINI_PLAN_H }}>
+          <div data-lane="plan" className="relative z-0 border-b border-[#EEF0F3]" style={{ width: W, height: miniPlanH }}>
             {bgWeekend.map((s, i) => (
               <div key={`w${i}`} className="absolute top-0 bottom-0" style={{ left: s.left, width: s.width, background: '#F1F2F4', opacity: 0.7 }} />
             ))}
@@ -456,12 +542,14 @@ function CarMiniTimeline({
               const q = pos(rdy.a, rdy.b);
               if (!q) return null;
               const dev = baseDeviation(p, today);
+              const ti = miniPlanTrack.readySlot.get(p.key);
+              const top = ti == null ? 5 : miniPlanTrack.layout.tops[ti];
               return (
                 <div
                   key={`rdy-${p.key}`}
                   data-bar="ready"
-                  className="absolute z-[2] overflow-hidden whitespace-nowrap text-[9px] leading-[16px] px-1 text-[#92400E]"
-                  style={{ left: q.left, width: q.width, top: 5, height: 16, background: hatchReady, border: '1px solid #F59E0B', borderRadius: 3 }}
+                  className="absolute z-[2] overflow-hidden whitespace-nowrap text-ellipsis text-[9px] leading-[16px] px-1 text-[#92400E]"
+                  style={{ left: q.left, width: q.width, top, height: MINI_PLAN_BAR_H, background: hatchReady, border: '1px solid #F59E0B', borderRadius: 3 }}
                   title={`План базы: ${fmtFull(isoOf(rdy.a))} → срок готовности ${fmtFull(isoOf(rdy.b))} · ${dev.label}`}
                 >
                   {q.width > 90 ? `готовность${dev.short ? ` · ${dev.short}` : ''}` : ''}
@@ -477,6 +565,8 @@ function CarMiniTimeline({
               const q = pos(a, b);
               if (!q) return null;
               const parts = planBarLabelParts(t);
+              const ti = miniPlanTrack.tripSlot.get(t.key);
+              const top = ti == null ? 5 : miniPlanTrack.layout.tops[ti];
               return (
                 <div
                   key={`p-${t.key}`}
@@ -489,8 +579,8 @@ function CarMiniTimeline({
                   style={{
                     left: q.left,
                     width: q.width,
-                    top: 5,
-                    height: 16,
+                    top,
+                    height: MINI_PLAN_BAR_H,
                     background: t.archived ? '#E5E7EB' : '#DBEAFE',
                     border: `1px solid ${t.archived ? '#9CA3AF' : '#60A5FA'}`,
                     color: t.archived ? '#6B7280' : '#1E3A8A',
@@ -511,12 +601,14 @@ function CarMiniTimeline({
               if (pmax == null) return null;
               const q = pos(pmax + 1, pmax + t.bufferDays);
               if (!q) return null;
+              const ti = miniPlanTrack.bufferSlot.get(t.key);
+              const top = ti == null ? 5 : miniPlanTrack.layout.tops[ti];
               return (
                 <div
                   key={`buf-${t.key}`}
                   data-bar="buffer"
                   className="absolute z-[2]"
-                  style={{ left: q.left, width: q.width, top: 5, height: 16, background: hatchBuffer, borderRadius: 3 }}
+                  style={{ left: q.left, width: q.width, top, height: MINI_PLAN_BAR_H, background: hatchBuffer, borderRadius: 3 }}
                   title={`запас ${t.bufferDays} дн`}
                 />
               );
@@ -538,7 +630,7 @@ function CarMiniTimeline({
                     style={{
                       left: dayToX(d, renderVs, colW) + Math.round(colW * 0.3),
                       top: 2,
-                      height: MINI_PLAN_H - 4,
+                      height: miniPlanH - 4,
                       width: s.isCritical ? 3 : 2,
                       background: s.isCritical ? '#DC2626' : '#2563EB',
                     }}
@@ -550,10 +642,10 @@ function CarMiniTimeline({
           </div>
 
           {/* Факт */}
-          <div className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2 w-[96px] min-w-[96px] text-[9px] leading-[12px] text-[#9CA3AF] overflow-hidden" style={{ height: MINI_FACT_H, borderRightColor: '#D1D5DB' }}>
+          <div className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2 w-[96px] min-w-[96px] text-[9px] leading-[12px] text-[#9CA3AF] overflow-hidden" style={{ height: miniFactH, borderRightColor: '#D1D5DB' }}>
             факт · база · ремонт
           </div>
-          <div data-lane="fact" className="relative z-0 border-b border-[#E5E7EB]" style={{ width: W, height: MINI_FACT_H }}>
+          <div data-lane="fact" className="relative z-0 border-b border-[#E5E7EB]" style={{ width: W, height: miniFactH }}>
             {bgWeekend.map((s, i) => (
               <div key={`fw${i}`} className="absolute top-0 bottom-0" style={{ left: s.left, width: s.width, background: '#F1F2F4', opacity: 0.6 }} />
             ))}
@@ -563,13 +655,15 @@ function CarMiniTimeline({
               const rr = repairBarRange(p, today);
               const qb = rb ? pos(rb.a, rb.b) : null;
               const qr = rr ? pos(rr.a, rr.b) : null;
+              const tBase = miniFactTrack.baseSlot.get(p.key);
+              const tRep = miniFactTrack.repairSlot.get(p.key);
               return (
                 <React.Fragment key={`base-${p.key}`}>
                   {qb ? (
                     <div
                       data-bar="base"
-                      className="absolute z-[2] overflow-hidden whitespace-nowrap text-[9px] leading-[14px] px-1 text-[#4B5563]"
-                      style={{ left: qb.left, width: qb.width, top: 16, height: 14, background: hatchBase, border: '1px solid #9CA3AF', borderRadius: 3 }}
+                      className="absolute z-[2] overflow-hidden whitespace-nowrap text-ellipsis text-[9px] leading-[14px] px-1 text-[#4B5563]"
+                      style={{ left: qb.left, width: qb.width, top: tBase == null ? 16 : miniFactTrack.layout.tops[tBase], height: MINI_BASE_BAR_H, background: hatchBase, border: '1px solid #9CA3AF', borderRadius: 3 }}
                       title={`База (факт): ${fmtFull(isoOf(rb ? rb.a : null))} → ${rb && rb.open ? 'выезд не указан' : fmtFull(isoOf(rb ? rb.b : null))} · срок готовности ${
                         p.plannedReadyDay != null ? fmtFull(isoOf(p.plannedReadyDay)) : 'не указан'
                       } · ${dev.label}`}
@@ -580,8 +674,8 @@ function CarMiniTimeline({
                   {qr ? (
                     <div
                       data-bar="repair"
-                      className="absolute z-[3] text-center text-[9px] leading-[10px] text-white px-1"
-                      style={{ left: qr.left, width: qr.width, top: 18, height: 10, background: '#D97706', opacity: 0.92, borderRadius: 2 }}
+                      className="absolute z-[3] text-center text-ellipsis text-[9px] leading-[10px] text-white px-1"
+                      style={{ left: qr.left, width: qr.width, top: tRep == null ? 18 : miniFactTrack.layout.tops[tRep], height: MINI_REPAIR_BAR_H, background: '#D97706', opacity: 0.92, borderRadius: 2 }}
                       title={`Ремонт: ${fmtFull(isoOf(rr ? rr.a : null))} – ${rr && rr.open ? 'не завершён' : fmtFull(isoOf(rr ? rr.b : null))}`}
                     >
                       {qr.width > 60 ? 'ремонт' : ''}
@@ -613,6 +707,10 @@ function CarMiniTimeline({
                 const left = grouped
                   ? dayToX(g.day, renderVs, colW) + Math.round(colW * 0.45)
                   : dayToX(g.day, renderVs, colW) + Math.round(colW * 0.62);
+                const zoneTop = miniFactZone0 ? miniFactZone0.top : 3;
+                const zoneH = miniFactZone0 ? miniFactZone0.h : MINI_FACT_NONE_H;
+                const markerH = grouped ? 12 : 9;
+                const top = Math.max(1, zoneTop + Math.max(0, Math.round((zoneH - markerH) / 2)));
                 return (
                   <div
                     key={`ev-${gEv || g.day}-${g.count}`}
@@ -625,8 +723,8 @@ function CarMiniTimeline({
                     className={`absolute z-[4] ${linked ? 'cursor-pointer' : ''}`}
                     style={
                       grouped
-                        ? { left, top: 10, height: 12, minWidth: 16, padding: '0 3px', background: '#7C3AED', borderRadius: 6, textAlign: 'center', opacity: 0.95 }
-                        : { left, top: 11, width: 9, height: 9, background: g.items[0].color, borderRadius: 2, transform: 'rotate(45deg)', opacity: 0.95 }
+                        ? { left, top, height: 12, minWidth: 16, padding: '0 3px', background: '#7C3AED', borderRadius: 6, textAlign: 'center', opacity: 0.95 }
+                        : { left, top, width: 9, height: 9, background: g.items[0].color, borderRadius: 2, transform: 'rotate(45deg)', opacity: 0.95 }
                     }
                     title={g.title}
                   >
@@ -643,6 +741,8 @@ function CarMiniTimeline({
               const fEnd = ongoing ? Math.max(today, sp.fMax ?? sp.fMin) : (endDay ?? sp.fMax ?? sp.fMin);
               const q = pos(sp.fMin, fEnd);
               if (!q) return null;
+              const ti = miniFactTrack.factSlot.get(t.key);
+              const top = ti == null ? 4 : miniFactTrack.layout.tops[ti];
               return (
                 <div
                   key={`f-${t.key}`}
@@ -655,8 +755,8 @@ function CarMiniTimeline({
                   style={{
                     left: q.left,
                     width: q.width,
-                    top: 4,
-                    height: 8,
+                    top,
+                    height: MINI_FACT_BAR_H,
                     background: ongoing ? hatchOpen : '#10B981',
                     opacity: ongoing ? 1 : 0.65,
                     border: ongoing ? '1px dashed #10B981' : undefined,
@@ -676,12 +776,14 @@ function CarMiniTimeline({
               const b = ov.pMax ?? sp.pMax ?? a;
               const q = pos(a, b);
               if (!q) return null;
+              const ti = miniFactTrack.factNoneSlot.get(t.key);
+              const top = ti == null ? 3 : miniFactTrack.layout.tops[ti];
               return (
                 <div
                   key={`fn-${t.key}`}
                   data-bar="fact-none"
-                  className="absolute z-[2] text-[8px] leading-[14px] text-[#9CA3AF] px-1 overflow-hidden whitespace-nowrap"
-                  style={{ left: q.left, width: q.width, top: 3, height: 14, border: '1px dashed #9CA3AF', borderRadius: 2, background: '#F9FAFB' }}
+                  className="absolute z-[2] text-[8px] leading-[14px] text-ellipsis text-[#9CA3AF] px-1 overflow-hidden whitespace-nowrap"
+                  style={{ left: q.left, width: q.width, top, height: MINI_FACT_NONE_H, border: '1px dashed #9CA3AF', borderRadius: 2, background: '#F9FAFB' }}
                   title="Фактические данные не указаны"
                 >
                   {q.width > 90 ? 'Факт не указан' : ''}
@@ -697,7 +799,7 @@ function CarMiniTimeline({
                   key={`mk-${p.key}`}
                   data-bar="mark-ready"
                   className="absolute z-[4]"
-                  style={{ left: dayToX(p.plannedReadyDay, renderVs, colW) + Math.round(colW * 0.45), top: 2, height: MINI_FACT_H - 4, width: 3, background: '#B45309', opacity: 0.85 }}
+                  style={{ left: dayToX(p.plannedReadyDay, renderVs, colW) + Math.round(colW * 0.45), top: 2, height: miniFactH - 4, width: 3, background: '#B45309', opacity: 0.85 }}
                   title={`Срок готовности: ${fmtFull(isoOf(p.plannedReadyDay))} — ${baseDeviation(p, today).label}`}
                 />
               );
@@ -720,7 +822,7 @@ function CarMiniTimeline({
                     style={{
                       left: dayToX(d, renderVs, colW) + Math.round(colW * 0.6),
                       top: 2,
-                      height: MINI_FACT_H - 4,
+                      height: miniFactH - 4,
                       width: 2,
                       background: dev != null && dev > 0 ? '#E11D48' : '#10B981',
                     }}

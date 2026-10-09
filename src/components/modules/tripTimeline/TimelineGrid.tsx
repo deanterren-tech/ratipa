@@ -28,12 +28,14 @@ import {
   fmtDM,
   getDeadlineStatus,
   isWeekendDay,
+  layoutLaneTracks,
   stageDeviation,
   tripFactEnd,
   tripSpan,
   visibleRangeText,
   zoomColW,
   zoomLabel,
+  type LaneTrackItem,
 } from './lib/timeline';
 import { eventTypeOf, stageFullName } from './lib/catalog';
 import { PlanBarLabel, planBarLabelParts, type PlanBarParts } from './PlanBarLabel';
@@ -175,8 +177,19 @@ interface Props {
  *  участвуют в цепочке, но за пределами окна обрезаются. */
 const WINDOW_MARGIN = 60;
 
+/** Минимальные высоты подстрок «План»/«Факт» (без дорожек-наложений). */
 const PLAN_H = 26;
-const FACT_H = 32;
+const FACT_H = 22;
+/** Отступы и зазор дорожек внутри подстроки; высота растёт с числом дорожек. */
+const PLAN_PAD = 5;   // 5 + 16 + 5 = 26 — прежняя высота при одной дорожке
+const FACT_PAD = 3;
+const TRACK_GAP = 2;
+/** Высоты полос по видам (те же, что были при одной общей дорожке). */
+const PLAN_BAR_H = 16;
+const FACT_BAR_H = 8;
+const FACT_NONE_H = 14;
+const BASE_BAR_H = 14;
+const REPAIR_BAR_H = 10;
 
 const navBtn =
   'inline-flex items-center justify-center px-2.5 py-1.5 rounded-lg text-[11px] font-medium bg-white border border-[#E5E7EB] text-[#4B5563] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer';
@@ -559,6 +572,67 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   });
 
   const warnTitle = row.warnings.join('\n');
+  /**
+   * Дорожки подстроки «План»: группа 0 — рейсы (план и запас на риски),
+   * группа 1 — план базы (приезд → срок готовности). Пересекающиеся полосы
+   * одной группы уходят на под-дорожки: обе видны и кликабельны. Тонкие
+   * маркеры (этапы, возвращение) — наложения на всю высоту, не полосы.
+   */
+  const planTrack = useMemo(() => {
+    const items: LaneTrackItem[] = [];
+    const slot: Array<number | null> = row.planItems.map((it) => {
+      if (it.kind === 'plan' || it.kind === 'buffer') {
+        items.push({ group: 0, a: it.a, b: it.b, h: PLAN_BAR_H });
+        return items.length - 1;
+      }
+      if (it.kind === 'ready') {
+        items.push({ group: 1, a: it.a, b: it.b, h: PLAN_BAR_H });
+        return items.length - 1;
+      }
+      return null;
+    });
+    return { slot, layout: layoutLaneTracks(items, { padTop: PLAN_PAD, padBottom: PLAN_PAD, gap: TRACK_GAP }) };
+  }, [row.planItems]);
+  const planH = Math.max(PLAN_H, planTrack.layout.laneH);
+  const planTopOf = (idx: number): number => {
+    const s = planTrack.slot[idx];
+    return s == null ? PLAN_PAD : planTrack.layout.tops[s];
+  };
+  /**
+   * Дорожки подстроки «Факт»: группа 0 — факт рейса («Факт не указан»),
+   * группа 1 — база (приезд → выезд) и промежутки «на базе», группа 2 — ремонт.
+   * Ремонт больше не лежит поверх базы: у каждой группы своя дорожка.
+   */
+  const factTrack = useMemo(() => {
+    const items: LaneTrackItem[] = [];
+    const slot: Array<number | null> = row.factItems.map((it) => {
+      if (it.kind === 'fact') {
+        items.push({ group: 0, a: it.a, b: it.b, h: FACT_BAR_H });
+        return items.length - 1;
+      }
+      if (it.kind === 'factNone') {
+        items.push({ group: 0, a: it.a, b: it.b, h: FACT_NONE_H });
+        return items.length - 1;
+      }
+      if (it.kind === 'base' || it.kind === 'gap') {
+        items.push({ group: 1, a: it.a, b: it.b, h: BASE_BAR_H });
+        return items.length - 1;
+      }
+      if (it.kind === 'repair') {
+        items.push({ group: 2, a: it.a, b: it.b, h: REPAIR_BAR_H });
+        return items.length - 1;
+      }
+      return null;
+    });
+    return { slot, layout: layoutLaneTracks(items, { padTop: FACT_PAD, padBottom: FACT_PAD, gap: TRACK_GAP }) };
+  }, [row.factItems]);
+  const factH = Math.max(FACT_H, factTrack.layout.laneH);
+  const factTopOf = (idx: number): number => {
+    const s = factTrack.slot[idx];
+    return s == null ? FACT_PAD : factTrack.layout.tops[s];
+  };
+  /** Дорожка «факта рейса» (группа 0) — над ней стоят маркеры событий. */
+  const factZone0 = factTrack.layout.zones.find((z) => z.key === 0) ?? null;
   /** Спокойная сетка: слабые вертикальные деления дней на читаемых масштабах. */
   const laneBg = colW >= 12
     ? {
@@ -586,7 +660,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         data-tl-row={row.carNumber}
         data-tl-car={row.carKey}
         className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2.5 w-[170px] min-w-[170px] overflow-hidden"
-        style={{ height: PLAN_H, borderRightColor: '#D1D5DB' }}
+        style={{ height: planH, borderRightColor: '#D1D5DB' }}
       >
         <div className="flex items-start justify-between gap-1">
           <button
@@ -610,7 +684,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           ) : null}
         </div>
       </div>
-      <div data-lane="plan" className="relative z-0 border-b border-[#EEF0F3]" style={{ width: W, height: PLAN_H, ...laneBg }}>
+      <div data-lane="plan" className="relative z-0 border-b border-[#EEF0F3]" style={{ width: W, height: planH, ...laneBg }}>
         {bgPlane('bg', 0.75)}
         {row.planItems.map((it, idx) => {
           const p = pos(it.kind === 'markPlan' || it.kind === 'markReturn' ? it.day : it.a, it.kind === 'markPlan' || it.kind === 'markReturn' ? it.day : it.b);
@@ -630,8 +704,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                     onOpenBase(it.periodKey);
                   }
                 }}
-                className="absolute overflow-hidden whitespace-nowrap text-[9px] leading-[16px] z-[2] cursor-pointer px-1 text-[#92400E]"
-                style={{ left: p.left, width: p.width, top: 5, height: 16, background: hatchReady, border: `1px solid #F59E0B`, borderRadius: 3, ...(it.archived ? { filter: 'saturate(0.45)' } : {}) }}
+                className="absolute overflow-hidden whitespace-nowrap text-ellipsis text-[9px] leading-[16px] z-[2] cursor-pointer px-1 text-[#92400E]"
+                style={{ left: p.left, width: p.width, top: planTopOf(idx), height: PLAN_BAR_H, background: hatchReady, border: `1px solid #F59E0B`, borderRadius: 3, ...(it.archived ? { filter: 'saturate(0.45)' } : {}) }}
                 title={it.title}
               >
                 {p.width > 80 ? `готовность${it.deviation ? ` · ${it.deviation}` : ''}${it.archived ? ' · архив' : ''}` : ''}
@@ -655,7 +729,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   }
                 }}
                 className="absolute z-[2] cursor-pointer"
-                style={{ left: Math.max(0, dayToX(it.day, vs, colW) + colW - 2), top: 3, height: PLAN_H - 6, width: 2, background: '#1D4ED8', borderRadius: 1 }}
+                style={{ left: Math.max(0, dayToX(it.day, vs, colW) + colW - 2), top: 3, height: planH - 6, width: 2, background: '#1D4ED8', borderRadius: 1 }}
                 title={it.title}
               />
             );
@@ -681,8 +755,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 style={{
                   left: p.left,
                   width: p.width,
-                  top: 5,
-                  height: 16,
+                  top: planTopOf(idx),
+                  height: PLAN_BAR_H,
                   background: it.archived ? CLR.planArchBg : CLR.planBg,
                   border: `1px solid ${it.archived ? CLR.planArchBorder : CLR.planBorder}`,
                   color: it.archived ? CLR.planArchText : CLR.planText,
@@ -709,7 +783,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 key={`b${idx}`}
                 data-bar="buffer"
                 className="absolute z-[2]"
-                style={{ left: p.left, width: p.width, top: 5, height: 16, background: hatch45, borderRadius: 3 }}
+                style={{ left: p.left, width: p.width, top: planTopOf(idx), height: PLAN_BAR_H, background: hatch45, borderRadius: 3 }}
                 title={`запас ${it.days} дн`}
               />
             );
@@ -722,7 +796,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               style={{
                 left: dayToX(it.day, vs, colW) + Math.round(colW * 0.3),
                 top: 2,
-                height: PLAN_H - 4,
+                height: planH - 4,
                 width: it.critical ? 3 : 2,
                 background: it.critical ? CLR.markCritical : CLR.markPlan,
               }}
@@ -735,7 +809,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       {/* Подстрока «Факт» — та же закреплённая колонка, ровно FACT_H */}
       <div
         className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2.5 w-[170px] min-w-[170px] overflow-hidden"
-        style={{ height: FACT_H, borderRightColor: '#D1D5DB' }}
+        style={{ height: factH, borderRightColor: '#D1D5DB' }}
       >
         <div className="flex items-center justify-between gap-1">
           <span className="text-[8px] leading-[10px] font-semibold uppercase tracking-wider text-[#9CA3AF] pt-0.5">Факт</span>
@@ -747,7 +821,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         </div>
         {row.empty ? <div className="text-[9px] leading-[10px] text-[#9CA3AF]">Нет рейсов в выбранном периоде</div> : null}
       </div>
-      <div data-lane="fact" className="relative z-0 border-b border-[#E5E7EB]" style={{ width: W, height: FACT_H, ...laneBg }}>
+      <div data-lane="fact" className="relative z-0 border-b border-[#E5E7EB]" style={{ width: W, height: factH, ...laneBg }}>
         {bgPlane('fbg', 0.6)}
         {row.factItems.map((it, idx) => {
           const p =
@@ -776,8 +850,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   style={{
                     left: p.left,
                     width: p.width,
-                    top: 4,
-                    height: 8,
+                    top: factTopOf(idx),
+                    height: FACT_BAR_H,
                     background: it.open ? hatchOpen : CLR.fact,
                     opacity: it.open ? 1 : 0.65,
                     border: it.open ? `1px dashed ${CLR.fact}` : undefined,
@@ -803,12 +877,12 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                       onOpenTrip(it.tripKey);
                     }
                   }}
-                  className="absolute z-[2] cursor-pointer text-[9px] leading-[14px] text-[#9CA3AF] overflow-hidden whitespace-nowrap px-1"
+                  className="absolute z-[2] cursor-pointer text-[9px] leading-[14px] text-[#9CA3AF] overflow-hidden whitespace-nowrap text-ellipsis px-1"
                   style={{
                     left: p.left,
                     width: p.width,
-                    top: 3,
-                    height: 14,
+                    top: factTopOf(idx),
+                    height: FACT_NONE_H,
                     border: `1px dashed ${CLR.planNoneBorder}`,
                     borderRadius: 2,
                     background: CLR.planNoneBg,
@@ -834,8 +908,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                       onOpenBase(it.periodKey);
                     }
                   }}
-                  className="absolute overflow-hidden whitespace-nowrap text-[9px] leading-[14px] z-[2] cursor-pointer px-1"
-                  style={{ left: p.left, width: p.width, top: 16, height: 14, background: hatchBase, border: `1px ${it.archived ? 'dashed' : 'solid'} ${CLR.baseBorder}`, borderRadius: 3, color: CLR.baseText, ...(it.archived ? { filter: 'saturate(0.45)' } : {}) }}
+                  className="absolute overflow-hidden whitespace-nowrap text-ellipsis text-[9px] leading-[14px] z-[2] cursor-pointer px-1"
+                  style={{ left: p.left, width: p.width, top: factTopOf(idx), height: BASE_BAR_H, background: hatchBase, border: `1px ${it.archived ? 'dashed' : 'solid'} ${CLR.baseBorder}`, borderRadius: 3, color: CLR.baseText, ...(it.archived ? { filter: 'saturate(0.45)' } : {}) }}
                   title={it.title}
                 >
                   {p.width > 70 ? it.label : ''}
@@ -856,8 +930,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                       onOpenBase(it.periodKey);
                     }
                   }}
-                  className="absolute overflow-hidden whitespace-nowrap text-[9px] leading-[10px] text-white z-[3] cursor-pointer px-1 text-center"
-                  style={{ left: p.left, width: p.width, top: 18, height: 10, background: CLR.repair, opacity: 0.92, borderRadius: 2, ...(it.archived ? { filter: 'saturate(0.45)' } : {}) }}
+                  className="absolute overflow-hidden whitespace-nowrap text-ellipsis text-[9px] leading-[10px] text-white z-[3] cursor-pointer px-1 text-center"
+                  style={{ left: p.left, width: p.width, top: factTopOf(idx), height: REPAIR_BAR_H, background: CLR.repair, opacity: 0.92, borderRadius: 2, ...(it.archived ? { filter: 'saturate(0.45)' } : {}) }}
                   title={it.title}
                 >
                   {p.width > 60 ? `ремонт${it.archived ? ' · архив' : ''}` : ''}
@@ -866,6 +940,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             case 'event': {
               // Компактный маркер события на РЕАЛЬНОЙ дате (не полоса): ромб —
               // одиночное событие, плашка со счётчиком — группа близких событий.
+              // Стоит над дорожкой «факта рейса» — полосы не перекрывает текстом.
               const evTripKey = it.tripKey;
               const evId = it.eventId;
               const linked = !!(evTripKey && evId);
@@ -873,6 +948,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               const left = grouped
                 ? dayToX(it.day, vs, colW) + Math.round(colW * 0.45)
                 : dayToX(it.day, vs, colW) + Math.round(colW * 0.62);
+              const zoneTop = factZone0 ? factZone0.top : FACT_PAD;
+              const zoneH = factZone0 ? factZone0.h : FACT_NONE_H;
+              const markerH = grouped ? 12 : 9;
+              const top = Math.max(1, zoneTop + Math.max(0, Math.round((zoneH - markerH) / 2)));
               return (
                 <div
                   key={`e${idx}`}
@@ -895,8 +974,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   className={`absolute z-[4] ${linked ? 'cursor-pointer' : ''}`}
                   style={
                     grouped
-                      ? { left, top: 10, height: 12, minWidth: 16, padding: '0 3px', background: '#7C3AED', borderRadius: 6, textAlign: 'center', opacity: 0.95 }
-                      : { left, top: 11, width: 9, height: 9, background: it.color, borderRadius: 2, transform: 'rotate(45deg)', opacity: 0.95 }
+                      ? { left, top, height: 12, minWidth: 16, padding: '0 3px', background: '#7C3AED', borderRadius: 6, textAlign: 'center', opacity: 0.95 }
+                      : { left, top, width: 9, height: 9, background: it.color, borderRadius: 2, transform: 'rotate(45deg)', opacity: 0.95 }
                   }
                   title={it.title}
                 >
@@ -909,8 +988,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 <div
                   key={`g${idx}`}
                   data-bar="gap"
-                  className="absolute overflow-hidden whitespace-nowrap text-[9px] leading-[14px] text-center z-[1]"
-                  style={{ left: p.left, width: p.width, top: 16, height: 14, background: hatch135, border: `1px dashed ${CLR.gapBorder}`, borderRadius: 3, color: CLR.baseText }}
+                  className="absolute overflow-hidden whitespace-nowrap text-ellipsis text-[9px] leading-[14px] text-center z-[1]"
+                  style={{ left: p.left, width: p.width, top: factTopOf(idx), height: BASE_BAR_H, background: hatch135, border: `1px dashed ${CLR.gapBorder}`, borderRadius: 3, color: CLR.baseText }}
                   title={`Между рейсами: ${it.days} дн (записи учёта выезда нет)`}
                 >
                   {p.width > 70 ? `на базе · ${it.days} дн` : ''}
@@ -929,7 +1008,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   style={{
                     left: dayToX(it.day, vs, colW) + Math.round(colW * 0.45),
                     top: 2,
-                    height: FACT_H - 4,
+                    height: factH - 4,
                     width: 3,
                     background: CLR.warn,
                     opacity: 0.85,
@@ -950,7 +1029,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   style={{
                     left: dayToX(it.day, vs, colW) + Math.round(colW * 0.6),
                     top: 2,
-                    height: FACT_H - 4,
+                    height: factH - 4,
                     width: 2,
                     background: it.late ? CLR.markLate : CLR.markFact,
                   }}

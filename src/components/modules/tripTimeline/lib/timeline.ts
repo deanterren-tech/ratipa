@@ -117,6 +117,118 @@ export const barRectInWindow = (
   return { left: dayToX(v.a, vs, colW), width: Math.round((v.b - v.a + 1) * colW) };
 };
 
+// ---------------------------------------------------------------------------
+// Вертикальные дорожки подстроки: разведение пересекающихся полос
+// ---------------------------------------------------------------------------
+
+/**
+ * Полоса для раскладки по дорожкам: интервал дней + группа типа + высота.
+ * Горизонтальная геометрия здесь НЕ участвует: left/width считаются только
+ * из дат (dayToX/barRectInWindow), дорожки — чисто вертикальное разведение.
+ */
+export interface LaneTrackItem {
+  /**
+   * Группа типа полосы. Каждая группа (рейс / база / ремонт / факт) занимает
+   * свою дорожку: элементы разных групп никогда не делят вертикальное место.
+   */
+  group: number;
+  /** Первый день интервала (включительно). */
+  a: number;
+  /** Последний день интервала (включительно). */
+  b: number;
+  /** Высота полосы (px). */
+  h: number;
+}
+
+export interface LaneTrackZone {
+  /** Номер группы. */
+  key: number;
+  /** Верх зоны группы (px от верха подстроки). */
+  top: number;
+  /** Высота зоны группы (все её под-дорожки + зазоры между ними). */
+  h: number;
+}
+
+export interface LaneTrackLayout {
+  /** top (px) каждой полосы — в порядке входного массива. */
+  tops: number[];
+  /** Высота всей подстроки (px): сетка и закреплённые ячейки берут её же. */
+  laneH: number;
+  /** Зоны групп (для маркеров-наложений, которым нужен верх дорожки). */
+  zones: LaneTrackZone[];
+}
+
+/**
+ * Раскладка полос подстроки («План» или «Факт») по ВЕРТИКАЛЬНЫМ дорожкам:
+ *  - каждая группа типов получает свою дорожку (рейс / база / ремонт / факт);
+ *  - пересекающиеся интервалы ВНУТРИ группы жадная раскладка разводит на
+ *    под-дорожки: ни одна полоса не скрыта под другой, обе читаемы и кликабельны;
+ *  - высота подстроки = сумма дорожек + отступы (подстраивается под число
+ *    дорожек); горизонтальные координаты и ширины не меняются — только top.
+ * Полосы одной дорожки не пересекаются по датам: конец одной строго раньше
+ * начала следующей, поэтому обрезка чужими полосами невозможна.
+ */
+export const layoutLaneTracks = (
+  items: LaneTrackItem[],
+  opts: { padTop: number; padBottom: number; gap: number },
+): LaneTrackLayout => {
+  const { padTop, padBottom, gap } = opts;
+  const tops: number[] = new Array(items.length).fill(padTop);
+  const zones: LaneTrackZone[] = [];
+  if (!items.length) return { tops, laneH: padTop + padBottom, zones };
+
+  // 1. Группы — в порядке номера; каждая получает свою вертикальную зону.
+  const order: number[] = [];
+  const byGroup = new Map<number, number[]>();
+  items.forEach((it, i) => {
+    let arr = byGroup.get(it.group);
+    if (!arr) {
+      arr = [];
+      byGroup.set(it.group, arr);
+      order.push(it.group);
+    }
+    arr.push(i);
+  });
+  order.sort((x, y) => x - y);
+
+  let y = padTop;
+  order.forEach((g, gi) => {
+    const idxs = byGroup.get(g) as number[];
+    // 2. Под-дорожки внутри группы: жадный first-fit по началу интервала —
+    //    первая дорожка, чей последний занятый день строго раньше начала полосы.
+    const sorted = [...idxs].sort((x, z) => items[x].a - items[z].a || items[x].b - items[z].b || x - z);
+    const ends: number[] = [];
+    const trackOf = new Map<number, number>();
+    sorted.forEach((i) => {
+      const it = items[i];
+      let t = ends.findIndex((end) => end < it.a);
+      if (t === -1) {
+        t = ends.length;
+        ends.push(Number.NEGATIVE_INFINITY);
+      }
+      ends[t] = it.b;
+      trackOf.set(i, t);
+    });
+    const trackH = ends.map(() => 0);
+    idxs.forEach((i) => {
+      const t = trackOf.get(i) as number;
+      trackH[t] = Math.max(trackH[t], items[i].h);
+    });
+    // 3. Стек дорожек группы: полоса центрируется в своей дорожке.
+    if (gi > 0) y += gap;
+    const zoneTop = y;
+    ends.forEach((_, t) => {
+      if (t > 0) y += gap;
+      idxs.forEach((i) => {
+        if (trackOf.get(i) === t) tops[i] = y + Math.round((trackH[t] - items[i].h) / 2);
+      });
+      y += trackH[t];
+    });
+    zones.push({ key: g, top: zoneTop, h: y - zoneTop });
+  });
+  return { tops, laneH: y + padBottom, zones };
+};
+
 export interface MonthSegment {
   /** Ключ сегмента (год-месяц). */
   key: string;
