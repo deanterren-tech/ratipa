@@ -21,6 +21,7 @@ import { buildDispatcherDirectory, type DispatcherDirectory } from '../../../uti
 import type { TimelineStageType, TimelineTrip, TimelineVehicleEvent } from '../../../types';
 import { dayNum, normalizeStages, withFallbackStages } from './lib/timeline';
 import { effectiveStageTypes } from './lib/catalog';
+import { mergeDirections, type DirectionDef } from './lib/directions';
 import {
   bazaToBasePeriods,
   buildCarIndex,
@@ -53,6 +54,8 @@ export interface TimelineData {
   stageTypes: TimelineStageType[];
   /** Города из справочника расстояний (подсказки для свободного поля «Место»). */
   cities: string[];
+  /** Направления (Турция, Китай и добавленные пользователем): встроенные + справочник. */
+  directions: DirectionDef[];
 }
 
 const normalizeManualTrip = (raw: TimelineTrip, carIndex: Map<string, CarRef>, dir: DispatcherDirectory): WholeTrip => {
@@ -104,6 +107,7 @@ export function useTimelineData(): TimelineData {
   const [dispatchers, setDispatchers] = useState<DispatcherOption[]>([]);
   const [dbStageTypes, setDbStageTypes] = useState<TimelineStageType[]>([]);
   const [cities, setCities] = useState<string[]>([]);
+  const [dbDirections, setDbDirections] = useState<Array<Record<string, unknown>>>([]);
 
   useEffect(() => {
     const u1 = dbService.getTimelineTrips((list) => setManualTrips(list || []));
@@ -131,9 +135,11 @@ export function useTimelineData(): TimelineData {
     const u6 = dbService.getPlanDohodTrips((list) => setPlanTrips((list || []) as unknown as Array<Record<string, unknown>>));
     const u7 = dbService.getBazaRecords((list) => setBaza((list || []) as unknown as Array<Record<string, unknown>>));
     // Единая база сцепок: машины и их диспетчеры (стабильные id)
-    const u8 = getCouplingsFlat((list) => setCouplings((list || []) as unknown as Array<Record<string, unknown>>));
+    const u8 = getCouplingsFlat((list) => setCouplings((list || []) as Array<Record<string, unknown>>));
     // Этапы рейсов, связанных с планом дохода
     const u9 = dbService.getTimelineTripStages((store) => setStagesStore(store || {}));
+    // Направления (Турция, Китай, добавленные пользователем) — справочник «Настройки»
+    const u10 = directoryService.getTripDirections((list) => setDbDirections((list || []) as Array<Record<string, unknown>>));
     return () => {
       if (typeof u1 === 'function') u1();
       if (typeof u2 === 'function') u2();
@@ -144,6 +150,7 @@ export function useTimelineData(): TimelineData {
       if (typeof u7 === 'function') u7();
       if (typeof u8 === 'function') u8();
       if (typeof u9 === 'function') u9();
+      if (typeof u10 === 'function') u10();
     };
   }, []);
 
@@ -161,5 +168,7 @@ export function useTimelineData(): TimelineData {
 
   const stageTypes = useMemo(() => effectiveStageTypes(dbStageTypes), [dbStageTypes]);
 
-  return { trips, bases, events, fleetCars, dispatchers, stageTypes, cities };
+  const directions = useMemo(() => mergeDirections(dbDirections), [dbDirections]);
+
+  return { trips, bases, events, fleetCars, dispatchers, stageTypes, cities, directions };
 }

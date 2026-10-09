@@ -25,6 +25,7 @@ import {
   type DispatcherDirectory,
 } from '../../../../utils/dispatcher';
 import { dayNum, normalizeStages, todayNum, type SpanOverride } from './timeline';
+import { dedupeBazaRecords } from '../../baza/lib/bazaDedupe';
 
 const normKey = (s: unknown): string => String(s ?? '').toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '');
 const firstPart = (s: unknown): string => String(s ?? '').split('/')[0] || '';
@@ -304,14 +305,22 @@ const causeOf = (rec: Record<string, unknown>): { label: string; kind: BasePerio
   return { label: 'На базе', kind: 'base' };
 };
 
-/** Записи «Учёта выезда» → периоды базы и ремонта (идемпотентно, без записей). */
+/** Записи «Учёта выезда» → периоды базы и ремонта (идемпотентно, без записей).
+ *  Дубли активных записей (одна машина + один приезд) схлопываются по
+ *  стабильному ключу «машина + период + класс» (lib/bazaDedupe) — на таймлайне
+ *  показывается та же единственная запись, что и в модуле «Учёт выезда»;
+ *  данные в базе не изменяются (список для очистки — в отчёте, удаление
+ *  только с подтверждением владельца). */
 export const bazaToBasePeriods = (
   baza: Array<Record<string, unknown>>,
   carIndex: Map<string, CarRef>,
   dir: DispatcherDirectory,
-): BasePeriod[] =>
-  (baza || [])
+): BasePeriod[] => {
+  const rawRecords: Array<Record<string, unknown> & { id: string }> = (baza || [])
     .filter((rec) => rec && typeof rec === 'object')
+    .map((rec) => ({ ...rec, id: String(rec.id || '') }));
+  const deduped = dedupeBazaRecords(rawRecords).kept;
+  return deduped
     .map((rec) => {
       const id = String(rec.id || '');
       const carNumberText = String(rec.carNumber || '');
@@ -375,6 +384,7 @@ export const bazaToBasePeriods = (
       } satisfies BasePeriod;
     })
     .filter((p) => p.arrivalDay != null || p.departureDay != null || p.repairStartDay != null);
+};
 
 /** ПЛАН периода на базе: приезд → СРОК ГОТОВНОСТИ (dateLoading). Это плановая
  *  конечная точка базы, НЕ окончание ремонта; без срока полосу не рисуем. */

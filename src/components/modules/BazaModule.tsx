@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useMemo} from 'react'
+import React, {useState, useEffect, useMemo, useCallback, useRef} from 'react'
 import {UserProfile, AppSettings} from '../../types'
 import {dbService, onValue} from '../../api'
 import {pdService} from '../../api'
@@ -37,6 +37,10 @@ import {formatDriverShortName} from '../../utils/driverSync'
 import {applySharedCarToBazaRecord, applySharedDriverToBazaRecord, normalizePlate} from '../../utils/bazaSync'
 import CouplingPicker from '../common/CouplingPicker';
 import { resolvePermission } from '../../utils/permissions';
+import VyezdPeriodWindow from './tripTimeline/VyezdPeriodWindow';
+import { parseVyezdHash, type ParsedVyezdRoute } from './tripTimeline/lib/vyezd';
+import { todayNum } from './tripTimeline/lib/timeline';
+import { findActiveDuplicate } from './baza/lib/bazaDedupe';
 
 interface BazaModuleProps {
   user: UserProfile;
@@ -132,16 +136,52 @@ function BazaDateField({
 export default function BazaModule({ user: ratipaUser, settings }: BazaModuleProps) {
   const { showConfirm } = useDialog();
 
-  // Переход из таймлайна: «Открыть учёт выезда» помечает запись — подсвечиваем
-  // и прокручиваем к ней, когда список загрузился (данные приходят асинхронно).
+  // Переход из таймлайна и карточек: ЕДИНЫЙ хелпер «открыть учёт выезда
+  // (машина, период)» (tripTimeline/lib/vyezd) выставляет hash
+  // #baza/vyezd/<id | car/…>. Здесь окно открывается ИМЕННО для этой машины и
+  // периода, а список модуля заранее фокусируется на записи (прокрутка+подсветка).
+  // Старый механизм sessionStorage 'ratipa_focus_baza_record' сохранён.
+  const [vyezdTarget, setVyezdTarget] = useState<ParsedVyezdRoute | null>(() =>
+    typeof window === 'undefined' ? null : parseVyezdHash(window.location.hash),
+  );
+  /** Запрос фокуса записи в списке (каждый вызов перезапускает ожидание/подсветку). */
+  const [focusReq, setFocusReq] = useState<{ id: string; n: number } | null>(null);
+  const focusBazaRecord = useCallback((focusId: string) => {
+    if (!focusId) return;
+    setFocusReq((prev) => ({ id: focusId, n: (prev?.n || 0) + 1 }));
+  }, []);
+
+  // Окно периода: открывается/закрывается по hash. «Назад» браузера возвращает
+  // на прежний экран (таймлайн — в прежней позиции прокрутки и масштабе:
+  // вид и прокрутку восстанавливают существующие механизмы модуля таймлайна).
   useEffect(() => {
-    let focusId = '';
-    try {
-      focusId = sessionStorage.getItem('ratipa_focus_baza_record') || '';
-      if (focusId) sessionStorage.removeItem('ratipa_focus_baza_record');
-    } catch {
-      /* не критично */
-    }
+    const apply = () => {
+      const route = parseVyezdHash(window.location.hash);
+      setVyezdTarget(route);
+      if (route?.periodId) {
+        focusBazaRecord(route.periodId);
+        return;
+      }
+      try {
+        const pending = sessionStorage.getItem('ratipa_focus_baza_record') || '';
+        if (pending) {
+          sessionStorage.removeItem('ratipa_focus_baza_record');
+          focusBazaRecord(pending);
+        }
+      } catch {
+        /* не критично */
+      }
+    };
+    apply();
+    window.addEventListener('hashchange', apply);
+    return () => window.removeEventListener('hashchange', apply);
+  }, [focusBazaRecord]);
+
+  // Подсветка и прокрутка к записи, когда список загрузился (данные приходят
+  // асинхронно). Запись может лежать в другой вкладке или ниже по списку
+  // (пагинация) — переключаемся/догружаем, не теряя намерение показать запись.
+  useEffect(() => {
+    const focusId = focusReq?.id;
     if (!focusId) return;
     let tries = 0;
     const clickTab = (re: RegExp) => {
@@ -164,16 +204,13 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
         window.setTimeout(() => el.classList.remove('ring-2', 'ring-[var(--accent-30)]'), 3000);
         return;
       }
-      // Запись может лежать в другой вкладке или ниже по списку (пагинация) —
-      // переключаемся/догружаем, не теряя намерение показать именно эту запись.
       if (tries === 2) clickTab(/^Архив\b/);
       if (tries === 4 || tries === 6 || tries === 8) clickTab(/^Показать ещё\b/);
       if (tries === 10) clickTab(/^На базе\b/);
       if (tries > 14) window.clearInterval(timer);
     }, 600);
     return () => window.clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [focusReq]);
   const { toast } = useToast();
   const [currentTab, setCurrentTab] = useState<'base' | 'archive' | 'history'>('base');
   
@@ -296,6 +333,8 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
   // be wiped (e.g. when the car coupling is changed).
   const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
   const [bazaUndoStack, setBazaUndoStack] = useState<{ id: string; field: string; oldValue: any; rootBranch?: string }[]>([]);
+  /** Защита формы добавления от повторной отправки (двойной клик / повторный Enter). */
+  const addBusyRef = useRef(false);
 
   // Keyboard Navigation & Actions
   useEffect(() => {
@@ -580,6 +619,20 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
       return;
     }
     setFormErrors({});
+    // Защита от повторной отправки (двойной клик / повторный Enter до ответа базы).
+    if (addBusyRef.current) return;
+    // Уникальность при создании: активная запись этой же машины с той же датой
+    // приезда — тот же ключ «машина + период», значит дубль. Вторую не создаём:
+    // открываем существующую запись (данные не меняются, ничего не удаляется).
+    const dup = findActiveDuplicate([...(bazaLegacy || []), ...(bazaCarsLegacy || [])], cNum, formData.dateArrival);
+    if (dup) {
+      const dd = String((dup as { dateArrival?: unknown }).dateArrival || '');
+      const pretty = dd ? dd.split('-').reverse().join('/') : 'дата не указана';
+      toast(`По машине ${cNum} уже есть активная запись «Учёта выезда» с приездом ${pretty} — дубликат не создан, открыта существующая запись.`, 'error');
+      openCarModal(dup);
+      return;
+    }
+    addBusyRef.current = true;
 
     if (!knownFleet.includes(cNum)) {
       push(ref(db, 'known_fleet'), cNum);
@@ -655,6 +708,7 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
       status: 'base'
     };
     set(newRef, carData).then(() => {
+       addBusyRef.current = false;
        logHistory(newRef.key as string, "baza", "Запись создана", "", `Госномер: ${cNum}`, cNum);
        // Auto-status: car now appears in Учёт выезда → it's on base.
        if (couplingId) {
@@ -664,6 +718,10 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
             });
        }
        setFormData({ carNumber: '', driverName: '', dateArrival: '', dateLoading: '', dateRepairStart: '', dateRepairEnd: '', dateDeparture: '', comment: '' });
+    }).catch((err) => {
+       // Ошибка записи: форму не теряем, повтор разрешён после исправления.
+       addBusyRef.current = false;
+       toast(`Не удалось создать запись: ${(err as Error)?.message || 'неизвестная ошибка'}. Данные формы сохранены — повторите отправку.`, 'error');
     });
   };
 
@@ -1150,6 +1208,67 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
     );
   }
 
+  /**
+   * Окно периода «Учёта выезда» (единый хелпер: #baza/vyezd/…):
+   *  - закрытие — заменяем адрес на #baza (без новой записи истории, «Назад»
+   *    после закрытия возвращает на прежний экран, как и после Esc);
+   *  - «Открыть полный учёт выезда» — окно закрывается, запись показывается
+   *    в списке модуля (прокрутка + подсветка существующим механизмом);
+   *  - «Исправить в учёте выезда» — существующая карточка записи (openCarModal);
+   *  - «Перейти к рейсу» — адресуемая карточка рейса таймлайна.
+   */
+  const findBazaRecord = useCallback(
+    (id: string | null | undefined): Record<string, unknown> | null => {
+      if (!id) return null;
+      const lists: any[][] = [bazaLegacy, bazaCarsLegacy, archiveLegacy, vehicleDriverLegacy];
+      for (const list of lists) {
+        const hit = (list || []).find((r: any) => r && String(r.id) === String(id));
+        if (hit) return hit as Record<string, unknown>;
+      }
+      return null;
+    },
+    [bazaLegacy, bazaCarsLegacy, archiveLegacy, vehicleDriverLegacy],
+  );
+
+  const closeVyezdWindow = useCallback(() => {
+    setVyezdTarget(null);
+    try {
+      const { pathname, search } = window.location;
+      window.history.replaceState(null, '', `${pathname}${search}#baza`);
+    } catch {
+      /* не критично */
+    }
+  }, []);
+
+  const switchVyezdPeriod = useCallback((periodId: string) => {
+    setVyezdTarget((prev) => ({
+      kind: 'period',
+      periodId,
+      carKey: prev?.carKey ?? null,
+      carNumber: null,
+    }));
+  }, []);
+
+  const openFullBaza = useCallback(
+    (recordId: string | null) => {
+      closeVyezdWindow();
+      if (recordId) focusBazaRecord(recordId);
+    },
+    [closeVyezdWindow, focusBazaRecord],
+  );
+
+  const openTripFromWindow = useCallback((tripKey: string) => {
+    window.location.hash = `#tripTimeline/trip/${encodeURIComponent(tripKey)}`;
+  }, []);
+
+  const editRecordFromWindow = useCallback(
+    (recordId: string) => {
+      const rec = findBazaRecord(recordId);
+      if (rec) openCarModal(rec);
+    },
+    [findBazaRecord, openCarModal],
+  );
+
   return (
     <>
       <ModuleShell
@@ -1551,6 +1670,25 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
           </div>
         </div>
       </ModuleShell>
+
+      {/* Окно периода «Учёта выезда» — ИМЕННО эта машина и этот период
+          (единый хелпер #baza/vyezd/…; окно поверх списка модуля) */}
+      {vyezdTarget ? (
+        <VyezdPeriodWindow
+          target={vyezdTarget}
+          record={findBazaRecord(vyezdTarget.periodId)}
+          today={todayNum()}
+          user={ratipaUser}
+          settings={settings}
+          canEdit={canWriteBaza && !isMechanic}
+          editorOpen={isCarModalOpen}
+          onEditRecord={editRecordFromWindow}
+          onOpenTrip={openTripFromWindow}
+          onOpenFull={openFullBaza}
+          onClose={closeVyezdWindow}
+          onSwitchPeriod={switchVyezdPeriod}
+        />
+      ) : null}
 
       {/* Модальное окно редактирования автомобиля */}
       <ModalShell

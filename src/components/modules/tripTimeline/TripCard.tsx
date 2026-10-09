@@ -90,10 +90,12 @@ import {
 } from './lib/sources';
 import {
   bzKindColor,
+  bzStripeColor,
   layoutBzFills,
   type BzMark,
   type BzStripe,
 } from './lib/bzFills';
+import { tripRangeOf, vyezdStatusIcon } from './lib/vyezd';
 
 const STATUS_TONE: Record<number, { dot: string; text: string }> = {
   3: { dot: 'bg-rose-500', text: 'text-rose-600 font-semibold' },
@@ -220,6 +222,7 @@ export function CarMiniTimeline({
   carEvents,
   stageTypes,
   today,
+  highlightRange,
   onSelectTrip,
   onOpenEventTrip,
   onFocusStage,
@@ -232,6 +235,12 @@ export function CarMiniTimeline({
   carEvents: TimelineVehicleEvent[];
   stageTypes: TimelineStageType[];
   today: number;
+  /**
+   * Выделенный диапазон (период «Учёта выезда» из окна периода): масштаб и
+   * позиция подбираются под него, диапазон подсвечивается мягкой полосой с
+   * акцентными границами. Не задан — поведение прежнее (рейс или «сегодня»).
+   */
+  highlightRange?: { a: number; b: number } | null;
   onSelectTrip: (tripKey: string) => void;
   /** Клик по маркеру события связанного рейса — открыть рейс и показать запись. */
   onOpenEventTrip?: (tripKey: string, eventId: string) => void;
@@ -245,13 +254,17 @@ export function CarMiniTimeline({
   // Начальный видимый диапазон — объединение ПЛАНА и ФАКТА выбранного рейса
   // с небольшим запасом по краям (а не «сегодня»): архивный рейс открывается
   // на своих реальных датах, факт за плановой границей не обрезается.
+  // Выделенный диапазон периода (окно «Учёта выезда») перекрывает оба варианта.
   // Без выбранного рейса (обзор машины) — позиция на сегодняшней дате.
+  const hlA = highlightRange?.a ?? null;
+  const hlB = highlightRange?.b ?? null;
+  const hasHighlight = hlA != null && hlB != null;
   const planA = focus?.spanOverride?.pMin ?? focusSpan?.pMin ?? null;
   const planB = focus?.spanOverride?.pMax ?? focusSpan?.pMax ?? null;
   const factA = focusSpan?.fMin ?? null;
   const factB = focusSpan?.fMax ?? null;
-  const starts = [planA, factA].filter((v): v is number => v != null);
-  const ends = [planB, factB].filter((v): v is number => v != null);
+  const starts = [planA, factA, hlA].filter((v): v is number => v != null);
+  const ends = [planB, factB, hlB].filter((v): v is number => v != null);
   const anchorStart = starts.length ? Math.min(...starts) : today;
   const anchorEnd = ends.length ? Math.max(...ends, anchorStart) : anchorStart;
   const spanDays = Math.max(1, anchorEnd - anchorStart + 1);
@@ -268,7 +281,7 @@ export function CarMiniTimeline({
   // масштаб не двигают основной таймлайн.
   const [miniZoom, setMiniZoom] = useState<number>(() => fitZoom());
   const colW = zoomColW(miniZoom);
-  const initialStart = focus ? anchorStart - 7 : anchorStart - 10;
+  const initialStart = focus || hasHighlight ? anchorStart - 7 : anchorStart - 10;
   const initialVn = Math.max(30, anchorEnd + 7 - initialStart + 1);
   const [vs, setVs] = useState(initialStart);
   const [vn, setVn] = useState(initialVn);
@@ -330,13 +343,13 @@ export function CarMiniTimeline({
     [renderVs, colW, anchorStart],
   );
 
-  // При открытии окна: масштаб подобран под рейс (fitZoom), позиция — начало рейса;
-  // без выбранного рейса (обзор машины) — позиция на сегодняшней дате.
+  // При открытии окна: масштаб подобран под рейс или выделенный период (fitZoom),
+  // позиция — их начало; без выбранного рейса (обзор машины) — на сегодняшней дате.
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el || didInit.current) return;
     didInit.current = true;
-    if (focus) applyAnchor(anchorStart, 0);
+    if (focus || hasHighlight) applyAnchor(anchorStart, 0);
     else applyAnchor(today, 0.35);
     lastExtend.current = Date.now() + 600;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -521,7 +534,14 @@ export function CarMiniTimeline({
   // основном таймлайне): план — в подстроке «План», факт — в «Факт»; клик
   // выделяет этап в таблице. База и ремонт — непрерывные полосы периода;
   // готовность и окончание ремонта — отметки на всю ячейку дня.
-  const miniBzInputs = useMemo(() => carBases.map((p) => ({ period: p })), [carBases]);
+  const miniTripRanges = useMemo(
+    () => carTrips.map((t) => tripRangeOf(t)).filter((r): r is NonNullable<typeof r> => !!r),
+    [carTrips],
+  );
+  const miniBzInputs = useMemo(
+    () => carBases.map((p) => ({ period: p, tripRanges: miniTripRanges })),
+    [carBases, miniTripRanges],
+  );
   const miniPlanBz = useMemo(
     () => layoutBzFills(miniBzInputs, [], 'plan', renderVs, ve, today),
     [miniBzInputs, renderVs, ve, today],
@@ -602,7 +622,7 @@ export function CarMiniTimeline({
    * концах, «продолжающийся» край — обрыв с мягким градиентом.
    */
   const renderMiniBzStripe = (s: BzStripe, keyPrefix: string) => {
-    const color = bzKindColor(s.kind);
+    const color = bzStripeColor(s);
     const clipA = Math.max(s.a, renderVs);
     const clipB = Math.min(s.b, ve);
     const left = dayToX(clipA, renderVs, colW);
@@ -624,18 +644,26 @@ export function CarMiniTimeline({
         : undefined;
     const clickable = !!(s.periodKey && onOpenBasePeriod);
     const open = clickable && s.periodKey ? () => onOpenBasePeriod?.(s.periodKey as string) : undefined;
-    const showLabel = width >= 40;
+    // «Учёт выезда»: подпись и иконка статуса, цвет полосы задан статусом.
+    const isVyezd = s.kind === 'base-fact';
+    const StatusIcon = isVyezd && s.status ? vyezdStatusIcon(s.status) : null;
+    const showLabel = width >= (isVyezd ? 58 : 40);
     const labelText =
-      s.kind === 'repair' && width >= 120 && s.dateLabel ? `${s.label} · ${s.dateLabel}` : s.label;
+      (s.kind === 'repair' || isVyezd) && width >= 128 && s.dateLabel ? `${s.label} · ${s.dateLabel}` : s.label;
     const labelEl = showLabel ? (
       <span
         data-bz-label="1"
-        className={`inline-block max-w-full truncate px-1 text-[8px] leading-[10px] font-semibold ${
+        className={`inline-flex items-center gap-0.5 max-w-full truncate px-1 text-[8px] leading-[10px] font-semibold ${
           s.stickyLabel ? 'sticky' : 'absolute left-1 top-1/2 -translate-y-1/2'
         }`}
         style={{ ...(s.stickyLabel ? { left: 104 } : {}), background: color.bg, color: color.text, borderRadius: 4 }}
       >
+        {StatusIcon ? <StatusIcon className="w-2.5 h-2.5 shrink-0" style={{ color: color.text }} aria-hidden="true" /> : null}
         {labelText}
+      </span>
+    ) : isVyezd && StatusIcon && width >= 16 ? (
+      <span data-bz-label="icon" className="w-full h-full flex items-center justify-center" aria-hidden="true">
+        <StatusIcon className="w-3 h-3 shrink-0" style={{ color: color.text }} />
       </span>
     ) : null;
     return (
@@ -644,6 +672,7 @@ export function CarMiniTimeline({
         role={clickable ? 'button' : undefined}
         tabIndex={clickable ? 0 : undefined}
         data-bz-stripe={s.kind}
+        data-bz-status={s.status || undefined}
         data-bz-a={s.a}
         data-bz-b={s.b}
         data-bz-edge-l={s.edgeL}
@@ -679,6 +708,29 @@ export function CarMiniTimeline({
       >
         {labelEl}
       </div>
+    );
+  };
+  /** Подсветка выделенного периода (окно «Учёта выезда»): мягкая полоса под данными,
+   *  акцентные границы; сама полоса периода остаётся кликабельной. */
+  const periodBand = () => {
+    if (!hasHighlight || hlA == null || hlB == null) return null;
+    const leftB = dayToX(Math.max(hlA, renderVs), renderVs, colW);
+    const rightB = dayToX(Math.min(hlB, ve), renderVs, colW) + colW;
+    const l = Math.max(0, leftB);
+    const w = Math.max(1, Math.min(W, rightB) - l);
+    if (rightB <= 0 || leftB >= W) return null;
+    return (
+      <div
+        data-mini-period-band="1"
+        className="absolute top-0 bottom-0 z-0 pointer-events-none"
+        style={{
+          left: l,
+          width: w,
+          background: 'var(--accent-8)',
+          borderLeft: '2px solid var(--accent-40)',
+          borderRight: '2px solid var(--accent-40)',
+        }}
+      />
     );
   };
   /** Однодневная отметка на всю ячейку (готовность / окончание ремонта) с иконкой. */
@@ -835,6 +887,7 @@ export function CarMiniTimeline({
                 style={{ left: s.left, width: s.width, background: '#F1F2F4', opacity: 0.7, pointerEvents: 'none' }}
               />
             ))}
+            {periodBand()}
             {miniPlanBz.stripes.map((s) => renderMiniBzStripe(s, 'mpbz'))}
             {miniPlanBz.marks.map((m) => renderMiniBzMark(m, 'mpbm', miniPlanStageDays))}
             {miniPlanFills.map((f) => renderMiniFill(f, 'mpf'))}
@@ -915,6 +968,7 @@ export function CarMiniTimeline({
                 style={{ left: s.left, width: s.width, background: '#F1F2F4', opacity: 0.6, pointerEvents: 'none' }}
               />
             ))}
+            {periodBand()}
             {miniFactBz.stripes.map((s) => renderMiniBzStripe(s, 'mfbz'))}
             {miniFactBz.marks.map((m) => renderMiniBzMark(m, 'mfbm', miniFactStageDays))}
             {miniFactFills.map((f) => renderMiniFill(f, 'mff'))}

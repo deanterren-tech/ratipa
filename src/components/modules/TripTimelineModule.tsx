@@ -31,11 +31,11 @@ import TimelineGrid from './tripTimeline/TimelineGrid';
 import TripCard from './tripTimeline/TripCard';
 import NewTripForm, { type NewTripDraft, type NewTripResult } from './tripTimeline/NewTripForm';
 import StatsBlock from './tripTimeline/StatsBlock';
-import PeriodModal from './tripTimeline/PeriodModal';
 import CarOverviewModal from './tripTimeline/CarOverviewModal';
 import { useTimelineData } from './tripTimeline/useTimelineData';
 import { sortMonthLabelsDesc, todayNum, zoomColW, zoomIndexOf } from './tripTimeline/lib/timeline';
 import { plateKeyOf } from './tripTimeline/lib/sources';
+import { openVyezdPeriod } from './tripTimeline/lib/vyezd';
 import { buildTimelinePlanPayload } from './tripTimeline/lib/planFromDraft';
 
 type TabId = 'timeline' | 'stats';
@@ -337,7 +337,6 @@ export default function TripTimelineModule({ user, settings }: Props) {
   const [focusEventId, setFocusEventId] = useState<string | null>(null);
   /** Этап, который нужно выделить в карточке (клик по заливке этапа на полотне). */
   const [focusStageId, setFocusStageId] = useState<string | null>(null);
-  const [periodKey, setPeriodKey] = useState<string | null>(null);
   const [overviewCarKey, setOverviewCarKey] = useState<string | null>(null);
   const [showNewTrip, setShowNewTrip] = useState(false);
 
@@ -454,7 +453,21 @@ export default function TripTimelineModule({ user, settings }: Props) {
     return () => document.removeEventListener('keydown', onKey);
   }, [fullscreen]);
 
-  const openPeriod = useCallback((key: string) => setPeriodKey(key), []);
+  /**
+   * Клик по полосе/отметке периода «Учёта выезда» — ЕДИНЫЙ хелпер
+   * «открыть учёт выезда (машина, период)» (lib/vyezd): открывает окно периода
+   * в модуле «Учёт выезда» именно этой машины (прямой URL #baza/vyezd/<id>;
+   * «Назад» возвращает на таймлайн в прежней позиции прокрутки и масштабе).
+   * Общий список не открывается, чужая машина не показывается.
+   */
+  const openPeriod = useCallback(
+    (key: string) => {
+      const p = data.bases.find((b) => b.key === key);
+      if (!p) return;
+      openVyezdPeriod({ periodId: p.id, carKey: p.carKey, carNumber: p.carNumber });
+    },
+    [data.bases],
+  );
   const openCar = useCallback((carKey: string) => setOverviewCarKey(carKey), []);
   const extendRange = useCallback((dir: 'left' | 'right') => {
     if (dir === 'left') setExtL((v) => Math.min(v + EXT_STEP, EXT_MAX));
@@ -598,22 +611,12 @@ export default function TripTimelineModule({ user, settings }: Props) {
     [planUrl, toast],
   );
 
-  const openBazaRecord = useCallback((recordId: string) => {
-    try {
-      sessionStorage.setItem('ratipa_focus_baza_record', recordId);
-    } catch {
-      /* не критично */
-    }
-    window.location.hash = '#baza';
-  }, []);
-
   const tabs = [
     { key: 'timeline', label: 'Таймлайн' },
     { key: 'stats', label: 'Статистика' },
   ];
 
   const renderVe = renderVs + renderVn - 1;
-  const selectedPeriod = periodKey ? data.bases.find((p) => p.key === periodKey) || null : null;
   const overviewCarNumber = overviewCarKey
     ? data.fleetCars.find((c) => `car:${c.carId || c.carNumber}` === overviewCarKey)?.carNumber ||
       data.trips.find((t) => t.carKey === overviewCarKey)?.carNumber ||
@@ -789,6 +792,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
             dispatcherOrder={dispatcherOrderIds}
             groupByDispatcher={dispatcherTab === ALL_TAB}
             carCurrentDispatcher={carCurrentDispatcher}
+            directions={data.directions}
             fullscreen={fullscreen}
             onToggleFullscreen={toggleFullscreen}
           />
@@ -863,10 +867,6 @@ export default function TripTimelineModule({ user, settings }: Props) {
             onCancel={() => setShowNewTrip(false)}
           />
         </ModalShell>
-      ) : null}
-
-      {selectedPeriod ? (
-        <PeriodModal period={selectedPeriod} today={today} onClose={() => setPeriodKey(null)} onOpenBaza={openBazaRecord} />
       ) : null}
 
       {overviewCarKey ? (

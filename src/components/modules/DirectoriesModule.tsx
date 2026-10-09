@@ -7,6 +7,7 @@ import {UserProfile} from '../../types'
 import CurrencyDirectoryBlock from './directories/CurrencyDirectoryBlock'
 import FerryDirectoryBlock from './directories/FerryDirectoryBlock'
 import CheckpointDirectoryBlock from './directories/CheckpointDirectoryBlock'
+import { mergeDirections } from './tripTimeline/lib/directions'
 import {UI, foundLabel} from '../../ui/kit'
 import {ModuleShell, SearchField, EmptyState, ModalShell} from '../../ui/components'
 
@@ -17,7 +18,7 @@ interface DirectoriesModuleProps {
   embedded?: boolean;
 }
 
-type DirKey = 'vehicleBrands' | 'trailerBrands' | 'rateGroups' | 'directions' | 'currencies' | 'ferries' | 'checkpoints';
+type DirKey = 'vehicleBrands' | 'trailerBrands' | 'rateGroups' | 'directions' | 'tripDirections' | 'currencies' | 'ferries' | 'checkpoints';
 
 interface TabDef {
   key: DirKey;
@@ -46,6 +47,13 @@ const TABS: TabDef[] = [
     fields: [
       { f: 'label', label: 'Название', ph: 'RUS-BY' },
       { f: 'coeff', label: 'Коэффициент', ph: '1.0', numeric: true },
+    ], searchable: true },
+  { key: 'tripDirections', label: 'Направления (цвета)', idField: 'id', nameField: 'name',
+    fields: [
+      { f: 'name', label: 'Название', ph: 'Казахстан' },
+      { f: 'code', label: 'Короткий код', ph: 'KZ' },
+      { f: 'color', label: 'Цвет метки', type: 'color' },
+      { f: 'order', label: 'Порядок', ph: '3', numeric: true },
     ], searchable: true },
   { key: 'currencies', label: 'Валюты', block: CurrencyDirectoryBlock },
   { key: 'ferries', label: 'Паромы', block: FerryDirectoryBlock },
@@ -82,6 +90,10 @@ export default function DirectoriesModule({ user, embedded = false }: Directorie
       trailerBrands: directoryService.getTrailerBrands,
       rateGroups: directoryService.getRateGroups,
       directions: directoryService.getDirections,
+      // Направления таймлайна: встроенные Турция/Китай показываются вместе с
+      // записями справочника (правка встроенных сохраняется как переопределение).
+      tripDirections: (cb: (list: any[]) => void) =>
+        directoryService.getTripDirections((list: any[]) => cb(mergeDirections(list))),
     }[activeTab];
     if (!getter) return;
     const unsub = getter((list: any[]) => setItems(list || []));
@@ -251,6 +263,12 @@ export default function DirectoriesModule({ user, embedded = false }: Directorie
                 Добавить
               </button>
               <span className={UI.hint}>{foundLabel(filtered.length)}</span>
+              {tab.key === 'tripDirections' ? (
+                <span className={UI.hint}>
+                  Турция и Китай — встроенные направления (метки на таймлайне): их можно править, цвет выбирается полем «Цвет метки»;
+                  новые направления добавляются сюда и сразу появляются в фильтре таймлайна.
+                </span>
+              ) : null}
             </div>
           )}
 
@@ -285,6 +303,21 @@ export default function DirectoriesModule({ user, embedded = false }: Directorie
                       {tab.key === 'directions' && it.coeff != null && (
                         <div className="text-[11px] text-[#6B7280] font-mono">коэфф: {it.coeff}</div>
                       )}
+                      {tab.key === 'tripDirections' && (
+                        <div className="text-[11px] text-[#6B7280] flex items-center gap-2">
+                          {it.color ? (
+                            <span
+                              className="inline-block w-3 h-3 rounded-full shrink-0"
+                              style={{ background: String(it.color), border: '1px solid #D1D5DB' }}
+                              aria-hidden="true"
+                            />
+                          ) : null}
+                          <span className="font-mono">
+                            код: {String(it.code || '—')} · порядок: {it.order ?? '—'}
+                          </span>
+                          {it.builtin ? <span className={UI.chip}>встроенное</span> : null}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
@@ -297,15 +330,17 @@ export default function DirectoriesModule({ user, embedded = false }: Directorie
                     >
                       <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(it)}
-                      aria-label="Удалить"
-                      title="Удалить"
-                      className="inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                    </button>
+                    {!(tab.key === 'tripDirections' && it.builtin) && (
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(it)}
+                        aria-label="Удалить"
+                        title="Удалить"
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

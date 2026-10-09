@@ -43,7 +43,7 @@ import {
 import { firebaseConfig } from "./firebaseConfig";
 import { registerRead, markRead, releaseRead } from "./db/moduleReadiness";
 import { handleFailure, configureErrorReporting, reportAppError, ID_KEY } from "./utils/appErrors";
-import { sharedGetDrivers, sharedGetTractors, sharedGetTrailers, sharedGetCouplings, sharedGetCarRateGroups, sharedGetCurrencies, sharedGetSettings, sharedGetFerryTemplates, sharedGetCheckpoints, sharedGetDistances, sharedGetDirections, sharedGetVehicleStatuses, sharedDirVehicleBrands, sharedDirTrailerBrands, sharedDirDispatchers, sharedDirRateGroups, sharedDirStatusTypes, sharedDirDirections } from "./db/subscriptions";
+import { sharedGetDrivers, sharedGetTractors, sharedGetTrailers, sharedGetCouplings, sharedGetCarRateGroups, sharedGetCurrencies, sharedGetSettings, sharedGetFerryTemplates, sharedGetCheckpoints, sharedGetDistances, sharedGetDirections, sharedGetVehicleStatuses, sharedDirVehicleBrands, sharedDirTrailerBrands, sharedDirDispatchers, sharedDirRateGroups, sharedDirStatusTypes, sharedDirDirections, sharedDirTripDirections } from "./db/subscriptions";
 import { DEFAULT_USERS, INITIAL_VEHICLES, INITIAL_TRIPS, INITIAL_PERMITS, INITIAL_FERRY_TEMPLATES, INITIAL_DISTANCES, INITIAL_CARS_POOL, INITIAL_DIRECTIONS, INITIAL_SETTINGS } from "./db/seed";
 
 // Доставка ошибок: в базу (для дашборда «Ошибки» в администрировании) и,
@@ -442,6 +442,9 @@ export const directoryService = {
   getRateGroups: (cb: (d: any[]) => void) => sharedDirRateGroups(cb),
   getStatusTypes: (cb: (d: any[]) => void) => sharedDirStatusTypes(cb),
   getDirections: (cb: (d: any[]) => void) => sharedDirDirections(cb),
+  /** Направления таймлайна (название/код/цвет/порядок) — справочник «Настройки»;
+   *  сохранение/удаление — общие saveDirItem/deleteDirItem('tripDirections'). */
+  getTripDirections: (cb: (d: any[]) => void) => sharedDirTripDirections(cb),
 
   saveDirItem: (collection: string, item: any, user = "system", role = "admin") => {
     if (useFirebase) {

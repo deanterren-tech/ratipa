@@ -525,5 +525,7 @@ export const sharedDirTrailerBrands = createDirGetSub<any[]>("directories/traile
 export const sharedDirDispatchers = createDirGetSub<any[]>("directories/dispatchers");
 export const sharedDirRateGroups = createDirGetSub<any[]>("directories/rateGroups");
 export const sharedDirStatusTypes = createDirGetSub<any[]>("directories/statusTypes");
+/** Направления таймлайна (название/код/цвет/порядок) — справочник «Настройки». */
+export const sharedDirTripDirections = createDirGetSub<any[]>("directories/tripDirections");
 export const sharedDirDirections = createDirGetSub<any[]>("directories/directions");
 

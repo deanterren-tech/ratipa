@@ -50,12 +50,15 @@ import {
 } from './lib/stageFills';
 import {
   bzKindColor,
+  bzStripeColor,
   layoutBzFills,
   type BzFillGap,
   type BzFillInput,
   type BzMark,
   type BzStripe,
 } from './lib/bzFills';
+import { tripRangeOf, VYEZD_STATUS, vyezdStatusIcon } from './lib/vyezd';
+import { directionChipColors, directionOfTrip, mixHex, type DirectionDef } from './lib/directions';
 import {
   baseBarRange,
   baseDeviation,
@@ -67,7 +70,7 @@ import {
 } from './lib/sources';
 import DateInput from './DateInput';
 import CalendarHeader from './CalendarHeader';
-import { AlertTriangle, ArrowRightLeft, CalendarCheck2, ChevronDown, ChevronLeft, ChevronRight, CircleDashed, Hourglass, Maximize2, Minimize2, OctagonX, Palette, TriangleAlert, Wrench } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, CalendarCheck2, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleDashed, Hourglass, Maximize2, Minimize2, OctagonX, Palette, TriangleAlert, Wrench } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Палитра полос (визуальная логика прототипа; цвета — единая семья заливок
@@ -103,7 +106,7 @@ const hatchOpen = `repeating-linear-gradient(45deg, ${CLR.factOpenA}, ${CLR.fact
 // ---------------------------------------------------------------------------
 
 type PlanItem =
-  | { kind: 'plan'; a: number; b: number; tripKey: string; parts: PlanBarParts; archived: boolean; statusKind: DeadlineStatusKind; open: boolean; title: string; warn: boolean }
+  | { kind: 'plan'; a: number; b: number; tripKey: string; parts: PlanBarParts; archived: boolean; statusKind: DeadlineStatusKind; open: boolean; title: string; warn: boolean; dir?: DirectionDef | null }
   | { kind: 'buffer'; a: number; b: number; days: number }
   | { kind: 'markReturn'; day: number; title: string; tripKey: string }
   | { kind: 'handover'; point: number; from: string; to: string; note: string; title: string; chip: boolean };
@@ -138,6 +141,8 @@ interface CarRowModel {
   bzInputs: BzFillInput[];
   /** Промежутки «на базе» между рейсами без записи учёта выезда (заливка «Факт»). */
   bzGaps: BzFillGap[];
+  /** Направления рейсов машины в окне (для мини-чипа в левой колонке). */
+  directions: DirectionDef[];
 }
 
 /** Маркер стыка смены диспетчера: точка между двумя рейсами разных диспетчеров. */
@@ -203,6 +208,8 @@ interface Props {
   groupByDispatcher: boolean;
   /** Текущее назначение машин (справочник сцепок) по ключу строки. */
   carCurrentDispatcher: Map<string, { id: string; name: string }>;
+  /** Справочник направлений (метки-чипы, фильтр и режим раскраски). */
+  directions: DirectionDef[];
   /** Полноэкранный режим: рабочая область раскрыта, полотно тянется по высоте. */
   fullscreen: boolean;
   onToggleFullscreen: () => void;
@@ -257,6 +264,10 @@ const buildRows = (
   today: number,
   /** Текущее назначение машин (справочник сцепок) по ключу строки: «Все» группируется по нему. */
   carCurrentDispatcher: Map<string, { id: string; name: string }>,
+  /** Справочник направлений (метки и фильтр; данные рейсов не меняются). */
+  directions: DirectionDef[],
+  /** Активные чипы фильтра направлений (null — все рейсы). */
+  dirFilter: string[] | null,
 ): CarRowModel[] => {
   const from = vs - WINDOW_MARGIN;
   const to = ve + WINDOW_MARGIN;
@@ -272,6 +283,12 @@ const buildRows = (
     const s = ov.pMin ?? span.pMin ?? span.fMin ?? null;
     const e = ov.pMax ?? span.pMax ?? span.fMax ?? s;
     if (!intersects(s, e, from, to)) return false;
+    // Фильтр направлений — только видимость: выбранные направления показываются,
+    // остальные скрываются; рейсы без направления при активном фильтре скрыты.
+    if (dirFilter && dirFilter.length) {
+      const d = directionOfTrip(t, directions);
+      if (!d || !dirFilter.includes(d.name)) return false;
+    }
     seenTripKeys.add(t.key);
     return true;
   });
@@ -335,6 +352,7 @@ const buildRows = (
       const openPlan = t.openPlan === true || pMax == null;
       const planEnd = pMax ?? pMin;
       const deadline = getDeadlineStatus(t, today, (s) => stageFullName(stageTypes, s));
+      const dir = directionOfTrip(t, directions);
       if (visible(pMin, planEnd)) {
         const parts = planBarLabelParts(t);
         const shown: PlanBarParts = openPlan ? { ...parts, main: 'неполный план', meta: '' } : parts;
@@ -348,7 +366,8 @@ const buildRows = (
           statusKind: deadline.kind,
           open: openPlan,
           warn: false,
-          title: `${formatPlate(car.carNumber)} · ${parts.titleText} · ${t.dispatcherName || 'без диспетчера'}${t.kind === 'plan' ? ' · из плана дохода' : ''}${t.archived ? ' · архив' : ''}${openPlan ? ' · неполный план (нет даты возвращения)' : ''} · ${deadline.label}`,
+          dir,
+          title: `${formatPlate(car.carNumber)} · ${parts.titleText} · ${t.dispatcherName || 'без диспетчера'}${dir ? ` · направление: ${dir.name}` : ''}${t.kind === 'plan' ? ' · из плана дохода' : ''}${t.archived ? ' · архив' : ''}${openPlan ? ' · неполный план (нет даты возвращения)' : ''} · ${deadline.label}`,
         });
       }
       // Плановое возвращение — отдельный аккуратный маркер в конце плановой полосы
@@ -547,6 +566,25 @@ const buildRows = (
     });
 
     const empty = myTrips.length === 0 && myBases.length === 0;
+    // Направления рейсов машины в окне (уникальные, в порядке появления) — для
+    // мини-чипа в левой колонке; данные рейсов не меняются.
+    const rowDirs: DirectionDef[] = [];
+    myTrips.forEach((t) => {
+      const d = directionOfTrip(t, directions);
+      if (d && !rowDirs.some((x) => x.name === d.name)) rowDirs.push(d);
+    });
+    // Рейсы машины для статуса и подсказки полосы «Учёт выезда» — по модульным
+    // вкладкам, но без фильтра архивной галочки и без клипа видимой области:
+    // статус не должен меняться от прокрутки и переключателя архива.
+    const seenRangeKeys = new Set<string>();
+    const carTripRanges = trips
+      .filter((t) => {
+        if (t.carKey !== car.carKey || seenRangeKeys.has(t.key)) return false;
+        seenRangeKeys.add(t.key);
+        return true;
+      })
+      .map((t) => tripRangeOf(t))
+      .filter((r): r is NonNullable<typeof r> => !!r);
     // Текущее назначение (справочник сцепок) — основа группировки во «Все».
     const current = carCurrentDispatcher.get(car.carKey) || null;
     rows.push({
@@ -565,8 +603,9 @@ const buildRows = (
       planItems,
       factItems,
       stageInputs,
-      bzInputs: myBases.map((p) => ({ period: p })),
+      bzInputs: myBases.map((p) => ({ period: p, tripRanges: carTripRanges })),
       bzGaps,
+      directions: rowDirs,
     });
   });
 
@@ -653,6 +692,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   zebra,
   stageTypes,
   selectedTripKey,
+  paintByDirection,
   onOpenTrip,
   onOpenTripEvent,
   onOpenTripStage,
@@ -669,6 +709,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   zebra: boolean;
   stageTypes: TimelineStageType[];
   selectedTripKey?: string | null;
+  /** Режим «Раскрасить по направлению»: подсветка полос рейсов, данные не меняются. */
+  paintByDirection: boolean;
   onOpenTrip: (key: string) => void;
   onOpenTripEvent: (tripKey: string, eventId: string) => void;
   /** Клик по заливке этапа: открыть рейс и выделить этап в карточке. */
@@ -861,7 +903,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
    * обрыв без скругления с мягким градиентом. Клик и подсказка — на всей полосе.
    */
   const renderBzStripe = (s: BzStripe, keyPrefix: string) => {
-    const color = bzKindColor(s.kind);
+    const color = bzStripeColor(s);
     const clipA = Math.max(s.a, vs);
     const clipB = Math.min(s.b, ve);
     const left = dayToX(clipA, vs, colW);
@@ -883,14 +925,18 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         ? `linear-gradient(to right, #000 calc(100% - ${fadePx}px), transparent 100%)`
         : undefined;
     const open = s.periodKey ? () => onOpenBase(s.periodKey as string) : undefined;
-    const showLabel = width >= 44;
-    // У ремонта — подпись «Ремонт» и даты, если помещаются; sticky внутри полосы.
+    // «Учёт выезда»: подпись и иконка статуса (учёт ведётся / закрыт / не зафиксирован /
+    // расхождение) — цвет полосы задан статусом; при узкой ширине остаётся иконка.
+    const isVyezd = s.kind === 'base-fact';
+    const StatusIcon = isVyezd && s.status ? vyezdStatusIcon(s.status) : null;
+    const showLabel = width >= (isVyezd ? 62 : 44) && (!isVyezd || !!StatusIcon);
+    // У ремонта и учёта выезда — подпись и даты, если помещаются; sticky внутри полосы.
     const labelText =
-      s.kind === 'repair' && width >= 130 && s.dateLabel ? `${s.label} · ${s.dateLabel}` : s.label;
+      (s.kind === 'repair' || isVyezd) && width >= 138 && s.dateLabel ? `${s.label} · ${s.dateLabel}` : s.label;
     const labelEl = showLabel ? (
       <span
         data-bz-label="1"
-        className={`inline-block max-w-full truncate px-1 text-[8px] leading-[10px] font-semibold ${
+        className={`inline-flex items-center gap-0.5 max-w-full truncate px-1 text-[8px] leading-[10px] font-semibold ${
           s.stickyLabel ? 'sticky' : 'absolute left-1 top-1/2 -translate-y-1/2'
         }`}
         style={{
@@ -900,7 +946,12 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           borderRadius: 4,
         }}
       >
+        {StatusIcon ? <StatusIcon className="w-2.5 h-2.5 shrink-0" style={{ color: color.text }} aria-hidden="true" /> : null}
         {labelText}
+      </span>
+    ) : isVyezd && StatusIcon && width >= 16 ? (
+      <span data-bz-label="icon" className="w-full h-full flex items-center justify-center" aria-hidden="true">
+        <StatusIcon className="w-3 h-3 shrink-0" style={{ color: color.text }} />
       </span>
     ) : null;
     return (
@@ -909,6 +960,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         role={s.periodKey ? 'button' : undefined}
         tabIndex={s.periodKey ? 0 : undefined}
         data-bz-stripe={s.kind}
+        data-bz-status={s.status || undefined}
         data-bz-a={s.a}
         data-bz-b={s.b}
         data-bz-edge-l={s.edgeL}
@@ -1085,7 +1137,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     .filter(Boolean)
     .join(' · ');
   const badge = todayBadgeOf(row, today);
-  const cellTitle = `${formatPlate(row.carNumber)} · ${row.dispatcherName || 'без диспетчера'}${countsText ? ` · ${countsText}` : ''}${warnTitle ? `\n${warnTitle}` : ''}`;
+  const dirsTitle = row.directions.length ? `\nНаправления: ${row.directions.map((d) => `${d.name} (${d.code})`).join(', ')}` : '';
+  const cellTitle = `${formatPlate(row.carNumber)} · ${row.dispatcherName || 'без диспетчера'}${countsText ? ` · ${countsText}` : ''}${dirsTitle}${warnTitle ? `\n${warnTitle}` : ''}`;
 
   return (
     <>
@@ -1155,6 +1208,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           }
           if (it.kind === 'plan') {
             const st = it.statusKind === 'violated' || it.statusKind === 'missed' || it.statusKind === 'risk' ? STATUS_ICON[it.statusKind] : null;
+            // Направление: цветной акцент по краю, код-чип в начале полосы и
+            // (в режиме «Раскрасить по направлению») приглушённая заливка полосы.
+            const chip = it.dir ? directionChipColors(it.dir.color) : null;
+            const paint = paintByDirection && it.dir ? chip : null;
             return (
               <div
                 key={`p${idx}`}
@@ -1162,6 +1219,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 tabIndex={0}
                 data-bar="plan"
                 data-trip={it.tripKey}
+                data-dir={it.dir ? it.dir.name : undefined}
                 {...hoverProps(it.tripKey)}
                 onClick={() => onOpenTrip(it.tripKey)}
                 onKeyDown={(e) => {
@@ -1176,15 +1234,23 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   width: p.width,
                   top: planTopOf(idx),
                   height: PLAN_BAR_H,
-                  background: it.archived ? CLR.planArchBg : planBarBg,
-                  border: `1px solid ${it.archived ? CLR.planArchBorder : CLR.planBorder}`,
-                  color: it.archived ? CLR.planArchText : CLR.planText,
+                  background: paint ? paint.bg : it.archived ? CLR.planArchBg : planBarBg,
+                  border: `1px solid ${paint ? paint.border : it.archived ? CLR.planArchBorder : CLR.planBorder}`,
+                  color: paint ? paint.text : it.archived ? CLR.planArchText : CLR.planText,
                   borderRadius: 'var(--tl-bar-r)',
-                  padding: '0 6px',
+                  padding: it.dir ? '0 6px 0 10px' : '0 6px',
                   ...link(it.tripKey),
                 }}
                 title={it.title}
               >
+                {it.dir ? (
+                  <span
+                    aria-hidden="true"
+                    data-bar-dir-accent="1"
+                    className="absolute left-0 top-0 bottom-0"
+                    style={{ width: 3, background: it.dir.color, borderTopLeftRadius: 'var(--tl-bar-r)', borderBottomLeftRadius: 'var(--tl-bar-r)' }}
+                  />
+                ) : null}
                 {it.open ? (
                   <>
                     <CircleDashed className={BAR_ICON_CLS} style={{ color: CLR.warn }} aria-hidden="true" />
@@ -1197,6 +1263,18 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                     width={p.width}
                   />
                 )}
+                {/* Код направления — только когда есть место; при мелком масштабе
+                    остаются цветной акцент и текст (без перегрузки). */}
+                {chip && p.width >= 96 ? (
+                  <span
+                    data-bar-dir-chip="1"
+                    className="inline-flex items-center h-[13px] px-1 rounded-[4px] text-[8px] leading-[13px] font-semibold shrink-0"
+                    style={{ background: chip.bg, border: `1px solid ${chip.border}`, color: chip.text }}
+                    title={`Направление: ${it.dir?.name}`}
+                  >
+                    {it.dir?.code}
+                  </span>
+                ) : null}
                 {it.warn && !it.open ? (
                   <TriangleAlert className={`${BAR_ICON_CLS} ml-auto`} style={{ color: CLR.warn }} aria-hidden="true" />
                 ) : null}
@@ -1240,6 +1318,27 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               >
                 <span className="w-1 h-1 rounded-full" style={{ background: badge.dot }} aria-hidden="true" />
                 {badge.label}
+              </span>
+            ) : null}
+            {/* Мини-чипы направлений машины (приглушённая палитра; полное имя — в подсказке) */}
+            {row.directions.slice(0, 2).map((d) => {
+              const dc = directionChipColors(d.color);
+              return (
+                <span
+                  key={d.id}
+                  data-tl-dir-chip={d.name}
+                  className="inline-flex items-center gap-0.5 h-[14px] rounded-full px-1.5 text-[9px] leading-[14px] font-semibold shrink-0 select-none"
+                  style={{ background: dc.bg, border: `1px solid ${dc.border}`, color: dc.text }}
+                  title={`Направление: ${d.name}${d.code ? ` (${d.code})` : ''}`}
+                >
+                  <span className="w-1 h-1 rounded-full" style={{ background: dc.solid }} aria-hidden="true" />
+                  {d.code}
+                </span>
+              );
+            })}
+            {row.directions.length > 2 ? (
+              <span className="text-[9px] leading-[12px] text-[var(--tl-text-dim)] shrink-0 tabular-nums" title={row.directions.map((d) => d.name).join(', ')}>
+                +{row.directions.length - 2}
               </span>
             ) : null}
             {row.empty ? (
@@ -1474,12 +1573,17 @@ export default function TimelineGrid({
   dispatcherOrder,
   groupByDispatcher,
   carCurrentDispatcher,
+  directions,
   fullscreen,
   onToggleFullscreen,
 }: Props) {
   const ve = vs + vn - 1;
   const colW = zoomColW(zoom);
   const W = vn * colW;
+  /** Фильтр направлений: активные чипы (null — показаны все). Только видимость. */
+  const [dirFilter, setDirFilter] = useState<string[] | null>(null);
+  /** Режим «Раскрасить по направлению»: цвет полосы рейса — приглушённый цвет направления. */
+  const [paintByDirection, setPaintByDirection] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   /** Первичная установка позиции прокрутки выполнена. */
   const didInitScroll = useRef(false);
@@ -1496,8 +1600,9 @@ export default function TimelineGrid({
   const pendingAnchor = useRef<{ day: number; frac: number } | null>(null);
 
   const rows = useMemo(
-    () => buildRows(trips, bases, events, fleetCars, stageTypes, showArchived, vs, ve, today, carCurrentDispatcher),
-    [trips, bases, events, fleetCars, stageTypes, showArchived, vs, ve, today, carCurrentDispatcher],
+    () =>
+      buildRows(trips, bases, events, fleetCars, stageTypes, showArchived, vs, ve, today, carCurrentDispatcher, directions, dirFilter),
+    [trips, bases, events, fleetCars, stageTypes, showArchived, vs, ve, today, carCurrentDispatcher, directions, dirFilter],
   );
 
   /**
@@ -1804,11 +1909,33 @@ export default function TimelineGrid({
     { swatch: <i className="inline-block w-[18px] h-[6px]" style={{ background: CLR.fact, opacity: 0.8, borderRadius: 3 }} />, label: 'факт (только заполненные даты)' },
     { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: hatchOpen, border: `1px dashed ${CLR.fact}`, borderRadius: 4 }} />, label: 'факт продолжается' },
     { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: CLR.planNoneBg, border: `1px dashed ${CLR.planNoneBorder}`, borderRadius: 4 }} />, label: '«Факт не указан» (не выполнен)' },
-    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-fact').bg, border: `1px solid ${bzKindColor('base-fact').border}`, borderRadius: 4 }} />, label: 'база: факт (приезд → выезд) — сплошная полоса' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-fact').bg, border: `1px solid ${bzKindColor('base-fact').border}`, borderRadius: 4 }} />, label: 'учёт выезда (период: приезд → выезд) — сплошная полоса, цвет = статус' },
+    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: VYEZD_STATUS.active.bg, border: `1px solid ${VYEZD_STATUS.active.border}`, borderRadius: 4 }}><CircleDashed className="w-2.5 h-2.5" style={{ color: VYEZD_STATUS.active.text }} aria-hidden="true" /></i>, label: 'учёт выезда: учёт ведётся (период открыт)' },
+    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: VYEZD_STATUS.closed.bg, border: `1px solid ${VYEZD_STATUS.closed.border}`, borderRadius: 4 }}><CircleCheck className="w-2.5 h-2.5" style={{ color: VYEZD_STATUS.closed.text }} aria-hidden="true" /></i>, label: 'учёт выезда: период закрыт (фактический выезд указан)' },
+    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: VYEZD_STATUS['no-departure'].bg, border: `1px solid ${VYEZD_STATUS['no-departure'].border}`, borderRadius: 4 }}><Hourglass className="w-2.5 h-2.5" style={{ color: VYEZD_STATUS['no-departure'].text }} aria-hidden="true" /></i>, label: 'учёт выезда: выезд не зафиксирован (срок готовности прошёл)' },
+    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: VYEZD_STATUS.conflict.bg, border: `1px solid ${VYEZD_STATUS.conflict.border}`, borderRadius: 4 }}><TriangleAlert className="w-2.5 h-2.5" style={{ color: VYEZD_STATUS.conflict.text }} aria-hidden="true" /></i>, label: 'учёт выезда: расхождение с рейсом (клик — окно периода)' },
     { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-plan').bg, border: `1px solid ${bzKindColor('base-plan').border}`, borderRadius: 4 }} />, label: 'база: план (приезд → готовность) — сплошная полоса' },
     { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('repair').bg, border: `1px solid ${bzKindColor('repair').border}`, borderRadius: 4 }} />, label: 'ремонт (внутри базы) — сплошная полоса, подпись внутри' },
     { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: bzKindColor('repair-end').bg, border: `1px solid ${bzKindColor('repair-end').border}`, borderRadius: 4 }}><Wrench className="w-2.5 h-2.5" style={{ color: bzKindColor('repair-end').text }} aria-hidden="true" /></i>, label: 'дата окончания ремонта — вся ячейка дня (иконка)' },
     { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-gap').bg, border: `1px dashed ${bzKindColor('base-gap').border}`, borderRadius: 4 }} />, label: 'на базе между рейсами (записи учёта нет)' },
+    // Направления — отдельная приглушённая палитра (сине-фиолетовые, бирюзовые):
+    // не конфликтует со статусами; различие подкреплено кодом (CN, TR…).
+    ...directions.map((d) => {
+      const dc = directionChipColors(d.color);
+      return {
+        swatch: (
+          <i
+            className="inline-flex items-center justify-center w-[18px] h-[14px]"
+            style={{ background: dc.bg, border: `1px solid ${dc.border}`, borderRadius: 4 }}
+          >
+            <span className="text-[8px] leading-none font-semibold" style={{ color: dc.text }}>
+              {d.code}
+            </span>
+          </i>
+        ),
+        label: `направление «${d.name}» — код ${d.code}: акцент по краю полосы и мини-чип в колонке`,
+      };
+    }),
     { swatch: <i className="inline-block w-[9px] h-[9px] rotate-45" style={{ background: '#7C3AED', opacity: 0.95, borderRadius: 2 }} />, label: 'событие машины / журнала рейса (клик — к записи)' },
     { swatch: <i className="inline-block w-[14px] h-[10px]" style={{ background: '#DFEAFD', border: '1px solid #8FBBF7', borderRadius: 4 }} />, label: 'этап: заливка/секция дня — цвет по типу (клик — этап в карточке)' },
     { swatch: <i className="inline-block w-[3px] h-[12px]" style={{ background: 'repeating-linear-gradient(to bottom, #6B7280 0 3px, transparent 3px 6px)' }} />, label: 'передача диспетчера (дата не указана — стык между рейсами)' },
@@ -1951,6 +2078,59 @@ export default function TimelineGrid({
                 </p>
               </div>
             ) : null}
+          </div>
+
+          {/* Направления: мультивыбор чипами (только скрывает/подсвечивает —
+              данные рейсов не меняются) + режим «Раскрасить по направлению». */}
+          <div className={barSegment} data-ui="dir-filter">
+            <span className="text-[10px] text-[var(--tl-text-dim)]">Направления:</span>
+            {directions.map((d) => {
+              const on = !dirFilter || dirFilter.includes(d.name);
+              const pressed = !!dirFilter && dirFilter.includes(d.name);
+              const dc = directionChipColors(d.color);
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  data-dir-chip={d.name}
+                  aria-pressed={pressed}
+                  title={`Показать только рейсы направления «${d.name}» (повторный клик — снять)`}
+                  onClick={() =>
+                    setDirFilter((prev) => {
+                      const cur = prev || [];
+                      const has = cur.includes(d.name);
+                      const next = has ? cur.filter((x) => x !== d.name) : [...cur, d.name];
+                      // Пусто или всё выбранное = без фильтра (та же видимость)
+                      return next.length === 0 || next.length === directions.length ? null : next;
+                    })
+                  }
+                  className="inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-medium border transition-colors cursor-pointer"
+                  style={{
+                    background: on ? dc.bg : 'transparent',
+                    borderColor: on ? dc.border : 'var(--tl-hairline)',
+                    color: on ? dc.text : 'var(--tl-text-dim)',
+                    opacity: on ? 1 : 0.75,
+                  }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: dc.solid, opacity: on ? 1 : 0.5 }} aria-hidden="true" />
+                  {d.name}
+                </button>
+              );
+            })}
+            <span className="w-px h-4 bg-[var(--tl-hairline)] mx-0.5" aria-hidden="true" />
+            <label
+              className="flex items-center gap-1.5 text-[11px] text-[var(--tl-text)] cursor-pointer select-none"
+              title="Подсветка: полосы рейсов окрашиваются в приглушённый цвет направления (данные не меняются)"
+            >
+              <input
+                type="checkbox"
+                data-ui="paint-by-direction"
+                checked={paintByDirection}
+                onChange={(e) => setPaintByDirection(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-[#D1D5DB] accent-[var(--accent)] cursor-pointer"
+              />
+              Раскрасить по направлению
+            </label>
           </div>
 
           <div className={barSegment}>
@@ -2100,6 +2280,7 @@ export default function TimelineGrid({
                         zebra={idx % 2 === 1}
                         stageTypes={stageTypes}
                         selectedTripKey={selectedTripKey}
+                        paintByDirection={paintByDirection}
                         onOpenTrip={onOpenTrip}
                         onOpenTripEvent={onOpenTripEvent}
                         onOpenTripStage={onOpenTripStage}

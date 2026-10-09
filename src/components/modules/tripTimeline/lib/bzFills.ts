@@ -28,6 +28,7 @@ import {
   type BasePeriod,
 } from './sources';
 import { fmtDM } from './timeline';
+import { vyezdStatusOf, vyezdSummaryOf, VYEZD_STATUS, type VyezdStatusKind, type VyezdTripRange } from './vyezd';
 
 export type BzFillKind = 'base-plan' | 'ready' | 'base-fact' | 'repair' | 'repair-end' | 'base-gap';
 
@@ -57,6 +58,14 @@ export const BZ_COLORS: Record<BzFillKind, BzFillColor> = {
 
 export const bzKindColor = (kind: BzFillKind): BzFillColor => BZ_COLORS[kind];
 
+/**
+ * Цвет полосы с учётом статуса: у «фактического» периода «Учёта выезда»
+ * (base-fact) цвет зависит от состояния — учёт ведётся / период закрыт /
+ * выезд не зафиксирован / расхождение с рейсом (см. lib/vyezd).
+ */
+export const bzStripeColor = (s: { kind: BzStripe['kind']; status?: VyezdStatusKind }): BzFillColor =>
+  s.kind === 'base-fact' && s.status ? VYEZD_STATUS[s.status] : bzKindColor(s.kind);
+
 /** Отметка записи «Учёта выезда» (план базы, готовность, факт базы, ремонт, окончание ремонта). */
 export interface BzFillInput {
   period: BasePeriod;
@@ -65,6 +74,11 @@ export interface BzFillInput {
    * dateRepairEnd). В основной сетке — да; во встроенном таймлайне — тоже да.
    */
   withRepairEnd?: boolean;
+  /**
+   * Рейсы машины (план, как в существующей проверке пересечений) — для статуса
+   * периода, подсказки и сводки дней. Границы берутся из источников, не выдумываются.
+   */
+  tripRanges?: VyezdTripRange[];
 }
 
 /** Промежуток «на базе» между рейсами без записи учёта выезда (из рейсов машины). */
@@ -95,9 +109,11 @@ export interface BzStripe {
   /** Ключ записи учёта выезда (bz:<id>) — клик открывает период; у промежутка без записи null. */
   periodKey: string | null;
   archived: boolean;
+  /** Статус периода «Учёта выезда» (только base-fact): цвет и иконка полосы. */
+  status?: VyezdStatusKind;
   /** Короткая подпись внутри полосы (если хватает ширины). */
   label: string;
-  /** Даты периода для подписи — «13/07 – 18/08» (ремонт; открытый/до выезда). */
+  /** Даты периода для подписи — «13/07 – 18/08» (ремонт/учёт выезда; открытый — без конца). */
   dateLabel: string;
   /** Подпись обязана оставаться видимой при прокрутке (sticky внутри полосы). */
   stickyLabel: boolean;
@@ -206,7 +222,7 @@ export const layoutBzFills = (
   const marksRaw: Array<Omit<BzMark, 'section' | 'sections'>> = [];
   const inWindow = (a: number, b: number): boolean => b >= vs && a <= ve;
 
-  inputs.forEach(({ period: p, withRepairEnd = true }) => {
+  inputs.forEach(({ period: p, withRepairEnd = true, tripRanges = [] }) => {
     const arch = p.archived ? ' · архив' : '';
     const dev = baseDeviation(p, today);
     if (kind === 'plan') {
@@ -245,9 +261,49 @@ export const layoutBzFills = (
       return;
     }
     // Факт базы: приезд → фактический выезд (открытый период — та же граница, что была у полосы).
+    // Полоса «Учёт выезда»: цельная, статус (ведётся/закрыт/не зафиксирован/расхождение)
+    // отражён цветом и иконкой; подсказка — машина, период, дни, статус, показатели,
+    // расхождения и причина простым языком.
     const rb = baseBarRange(p, today);
     if (rb && inWindow(rb.a, rb.b)) {
       const readyTxt = p.plannedReadyDay != null ? fmtDM(p.plannedReadyDay) : 'не указан';
+      const status = vyezdStatusOf(p, today, tripRanges);
+      const sum = vyezdSummaryOf(p, today, tripRanges);
+      const titleLines = [
+        `Учёт выезда · ${p.carNumber}${p.dispatcherName ? ` · ${p.dispatcherName}` : ''}${arch}`,
+        `Период: приезд ${fmtDM(rb.a)} – ${rb.open ? 'выезд не указан (период продолжается)' : fmtDM(rb.b)} · ${sum.total} дн на базе · срок готовности ${readyTxt}`,
+        `Статус: ${status.label} — ${status.reason}`,
+      ];
+      const realTrips = sum.trips.filter((t) => !t.boundary);
+      const boundaryTrips = sum.trips.filter((t) => t.boundary);
+      if (realTrips.length) {
+        const tripsTxt = realTrips.map((t) => `${t.label} ${fmtDM(t.a)} – ${fmtDM(t.b)} (${t.days} дн)`).join('; ');
+        titleLines.push(`Рейсы внутри периода: ${realTrips.reduce((n, t) => n + t.days, 0)} дн — ${tripsTxt}`);
+      } else {
+        titleLines.push('Рейсы внутри периода: нет — весь период машина на базе');
+      }
+      if (boundaryTrips.length) {
+        titleLines.push(
+          `Стык с рейсом (день перехода, не расхождение): ${boundaryTrips
+            .map(
+              (t) =>
+                `${t.label} ${fmtDM(t.a)} – ${fmtDM(t.b)} (${
+                  p.departureDay != null && t.a === p.departureDay ? 'рейс начался в день выезда' : 'рейс завершился в день приезда'
+                })`,
+            )
+            .join('; ')}`,
+        );
+      }
+      if (sum.repairDays > 0) {
+        titleLines.push(
+          `Ремонт (${sum.repairDays} дн): ${fmtDM(p.repairStartDay as number)} – ${
+            p.repairEndDay != null ? fmtDM(p.repairEndDay) : p.departureDay != null ? 'до выезда (окончание не указано)' : 'продолжается'
+          }`,
+        );
+      }
+      if (p.warnings.length) titleLines.push(`Предупреждения: ${p.warnings.join('; ')}`);
+      if (p.comment) titleLines.push(`Примечание: ${p.comment}`);
+      titleLines.push('Клик — открыть окно учёта выезда этой машины и периода');
       stripes.push({
         kind: 'base-fact',
         a: rb.a,
@@ -258,12 +314,11 @@ export const layoutBzFills = (
         lanes: 1,
         periodKey: p.key,
         archived: p.archived,
-        label: `${p.causeLabel}${dev.short ? ` · ${dev.short}` : ''}`,
+        status: status.kind,
+        label: 'Учёт выезда',
         dateLabel: `${fmtDM(rb.a)} – ${rb.open ? '…' : fmtDM(rb.b)}`,
         stickyLabel: false,
-        title: `База (факт)${arch}: приезд ${fmtDM(rb.a)} – ${
-          rb.open ? 'выезд не указан (период продолжается)' : fmtDM(rb.b)
-        } · срок готовности ${readyTxt} · ${dev.label}${p.comment ? ` · ${p.comment}` : ''} · клик — открыть период`,
+        title: titleLines.join('\n'),
       });
     }
     // Период ремонта: одна непрерывная полоса (открытый/обрезанный выездом — как было).
