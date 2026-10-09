@@ -298,7 +298,7 @@ export interface TimelineStage {
   id: string;
   /** Ключ типа из расширяемого справочника (load, border, unl, …). */
   type: string;
-  /** «Уточнение»: конкретный переход/КПП или пояснение к этапу. */
+  /** «Место»: город, адрес, объект, конкретный переход/КПП или пояснение к этапу (свободный ввод). */
   label?: string;
   /** План, YYYY-MM-DD. */
   plannedDate?: string;
@@ -380,7 +380,17 @@ export interface TimelinePlanHistoryEntry {
   by: string;
   /** uid пользователя, если известен. */
   byId?: string;
-  action: 'initial' | 'update' | 'admin-update' | 'grant' | 'revoke';
+  action:
+    | 'initial'
+    | 'update'
+    | 'admin-update'
+    | 'grant'
+    | 'revoke'
+    | 'request'
+    | 'request-approved'
+    | 'request-rejected'
+    | 'request-used'
+    | 'request-revoked';
   note?: string;
 }
 
@@ -411,6 +421,59 @@ export interface TimelinePlanPermission {
   grantedById?: string;
   /** Версия плана на момент выдачи — защита от молчаливой перезаписи. */
   planVersion: number;
+}
+
+// ---- Запрос разового доступа к плану этапов (просьба диспетчера) ----------
+// Ветка: tripTimeline/planRequests/<tripKey>/u_<uid> — ОДНА запись на пару
+// (рейс, пользователь). Запись существует всё время жизни доступа и хранит
+// полную историю (запрос → решение → использование/отзыв); история не удаляется
+// после погашения. Решение принимается RTDB-транзакцией (ровно один раз даже
+// при одновременных решениях двух администраторов из разных вкладок).
+
+/** Событие жизненного цикла запроса доступа. */
+export interface TimelinePlanRequestHistoryEntry {
+  at: string;
+  /** Имя пользователя, совершившего действие. */
+  by: string;
+  byId?: string;
+  action: 'request' | 'approved' | 'rejected' | 'used' | 'revoked';
+  /** Причина из запроса (для действия request). */
+  reason?: string;
+  /** Комментарий администратора (для решения). */
+  comment?: string;
+}
+
+/** Запрос разового доступа к плану этапов: статусы по спецификации модуля. */
+export interface TimelinePlanRequest {
+  /** Детерминированный id записи: `u_<uid>`. */
+  id?: string;
+  /** Кто запросил (uid и имя пользователя-отправителя). */
+  userId: string;
+  userName: string;
+  /** Рейс: стабильный ключ таймлайна (`tl:<id>` | `pd:<id>`). */
+  tripKey: string;
+  carNumber: string;
+  route: string;
+  createdAt: string;
+  reason?: string;
+  /** Версия сохранённого плана на момент запроса. */
+  planVersion: number;
+  /** ожидает / одобрен / отклонён / использован / отозван. */
+  status: 'pending' | 'approved' | 'rejected' | 'used' | 'revoked';
+  decidedAt?: string;
+  decidedBy?: string;
+  decidedById?: string;
+  decisionComment?: string;
+  /** Версия плана на момент одобрения (для защиты от молчаливой перезаписи). */
+  approvedVersion?: number;
+  /** Как появился доступ: по запросу; выдан администратором напрямую. */
+  source?: 'request' | 'direct';
+  usedAt?: string;
+  revokedAt?: string;
+  revokedBy?: string;
+  revokedById?: string;
+  /** Полная история решения — не удаляется после погашения. */
+  history: TimelinePlanRequestHistoryEntry[];
 }
 
 export interface Permit {

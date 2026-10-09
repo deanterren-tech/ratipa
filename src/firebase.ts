@@ -37,6 +37,8 @@ import {
   TimelineStageType,
   TimelinePlanGuard,
   TimelinePlanPermission,
+  TimelinePlanRequest,
+  TimelinePlanRequestHistoryEntry,
 } from "./types";
 import { firebaseConfig } from "./firebaseConfig";
 import { registerRead, markRead, releaseRead } from "./db/moduleReadiness";
@@ -2157,7 +2159,7 @@ export const dbService = {
   consumeTimelinePlanPermission: async (
     tripKey: string,
     uid: string,
-  ): Promise<{ ok: boolean; reason?: 'missing' | 'already-used'; snapshot?: TimelinePlanPermission }> => {
+  ): Promise<{ ok: boolean; reason?: 'missing' | 'already-used' | 'failed'; snapshot?: TimelinePlanPermission }> => {
     if (!useFirebase || !tripKey || !uid) return { ok: true };
     let snapshot: TimelinePlanPermission | null = null;
     try {
@@ -2169,8 +2171,9 @@ export const dbService = {
       if (res.committed) return { ok: true, snapshot: snapshot || undefined };
       return { ok: false, reason: 'already-used' };
     } catch (err) {
+      // Сетевая/серверная ошибка: транзакция НЕ прошла — разрешение не израсходовано.
       console.warn('Timeline plan permission consume failed:', err);
-      return { ok: false, reason: 'missing' };
+      return { ok: false, reason: 'failed' };
     }
   },
 
@@ -2230,8 +2233,8 @@ export const dbService = {
     dbService.logAction(adminName, adminRole, 'Выдано разрешение на изменение плана', 'TripTimeline', tripKey, `${perm.userName}: разрешение на одно изменение плана (версия плана ${perm.planVersion})`);
   },
 
-  /** Отзыв неиспользованного разрешения. */
-  revokeTimelinePlanPermission: (tripKey: string, uid: string, history: unknown, adminName: string, adminRole: string) => {
+  /** Отзыв неиспользованного разрешения (и связанного запроса доступа — статус «отозвано»). */
+  revokeTimelinePlanPermission: (tripKey: string, uid: string, history: unknown, adminName: string, adminRole: string, adminId?: string) => {
     if (!useFirebase || !tripKey || !uid) return;
     const at = new Date().toISOString();
     const entry = { at, by: adminName, action: 'revoke', note: 'Разрешение отозвано администратором' };
@@ -2246,7 +2249,379 @@ export const dbService = {
     update(ref(database), updates).catch((err) =>
       handleFailure('firebase', err, { path: `tripTimeline/planPerms/${tripKey}/${uid}`, userMessage: 'Не удалось отозвать разрешение' }),
     );
+    // Та же пара (рейс, пользователь): неиспользованное разрешение отозвано —
+    // запрос помечается «отозвано», история не удаляется.
+    dbService.markTimelinePlanRequestRevoked(tripKey, uid, adminName, adminId);
     dbService.logAction(adminName, adminRole, 'Отозвано разрешение на изменение плана', 'TripTimeline', tripKey, 'Разрешение отозвано до использования');
+  },
+
+  // ---- ЗАПРОС РАЗОВОГО ДОСТУПА К ПЛАНУ ЭТАПОВ ------------------------------
+  // Диспетчер просит доступ к заблокированному плану этапов конкретного рейса;
+  // администратор решает (окно решения, уведомление). Выдача и погашение —
+  // СУЩЕСТВУЮЩИМ механизмом tripTimeline/planPerms + история planGuard:
+  // второй механизм доступа не создаётся. Запись запроса — одна на пару
+  // (рейс, пользователь): `tripTimeline/planRequests/<tripKey>/u_<uid>`;
+  // решение и использование — RTDB-транзакции (ровно один раз даже из двух
+  // вкладок/при одновременном решении двух администраторов). История запроса
+  // (запрос → решение → использование/отзыв) не удаляется после погашения.
+
+  /** Подписка на запросы доступа (все рейсы) — для карточки рейса и окна решения. */
+  getTimelinePlanRequests: (callback: (store: Record<string, Record<string, TimelinePlanRequest>>) => void) => {
+    if (useFirebase) {
+      return onValue(
+        ref(database, "tripTimeline/planRequests"),
+        (snapshot) => callback((snapshot.val() || {}) as Record<string, Record<string, TimelinePlanRequest>>),
+        (err) => {
+          console.warn("Timeline plan requests read lock:", err);
+          callback({});
+        },
+      );
+    }
+    callback({});
+    return () => {};
+  },
+
+  /** Детерминированный ключ записи запроса: один канал на пару (рейс, пользователь). */
+  planRequestIdOf: (uid: string): string => `u_${String(uid || '').replace(/[.#$/\[\]]/g, '_')}`,
+
+  /** Отправка внутреннего уведомления (существующая ветка ratipa_notifications). */
+  pushTimelinePlanNotification: (notif: Record<string, unknown>) => {
+    if (!useFirebase) return;
+    const id = `planreq_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+    set(ref(database, `ratipa_notifications/${id}`), stripUndefinedDeep(notif)).catch((err) =>
+      handleFailure('firebase', err, { path: 'ratipa_notifications', userMessage: 'Уведомление о запросе доступа не доставлено' }),
+    );
+  },
+
+  /**
+   * Создание запроса разового доступа (диспетчер). Транзакция на пару
+   * (рейс, пользователь): пока запрос ожидает решения — повторный отклонить;
+   * после решения новый запрос записывается поверх с СОХРАНЕНИЕМ истории.
+   */
+  createTimelinePlanRequest: async (
+    params: {
+      tripKey: string;
+      userId: string;
+      userName: string;
+      carNumber: string;
+      route: string;
+      reason?: string;
+      planVersion: number;
+    },
+    history?: unknown,
+  ): Promise<{ ok: boolean; reason?: 'already-pending' | 'failed' }> => {
+    if (!useFirebase || !params.tripKey || !params.userId) return { ok: false, reason: 'failed' };
+    const reqId = `u_${String(params.userId).replace(/[.#$/\[\]]/g, '_')}`;
+    const at = new Date().toISOString();
+    const entry: TimelinePlanRequestHistoryEntry = {
+      at,
+      by: params.userName,
+      byId: params.userId,
+      action: 'request',
+      ...(params.reason ? { reason: params.reason } : {}),
+    };
+    let outcome = { v: 'blocked' as 'created' | 'already-pending' | 'blocked' };
+    try {
+      const res = await runTransaction(ref(database, `tripTimeline/planRequests/${params.tripKey}/${reqId}`), (cur) => {
+        const prev = (cur || null) as TimelinePlanRequest | null;
+        if (prev && prev.status === 'pending') {
+          outcome.v = 'already-pending';
+          return; // ожидающий запрос уже есть — повторный запрещён
+        }
+        outcome.v = 'created';
+        const historyPrev = Array.isArray(prev?.history) ? prev!.history : [];
+        const next: TimelinePlanRequest = {
+          id: reqId,
+          userId: params.userId,
+          userName: params.userName,
+          tripKey: params.tripKey,
+          carNumber: params.carNumber,
+          route: params.route,
+          createdAt: at,
+          ...(params.reason ? { reason: params.reason } : {}),
+          planVersion: Number(params.planVersion) || 0,
+          status: 'pending',
+          source: 'request',
+          history: [...historyPrev, entry].slice(-60),
+        };
+        return stripUndefinedDeep(next);
+      });
+      if (!res.committed || outcome.v !== 'created') {
+        return { ok: false, reason: outcome.v === 'already-pending' ? 'already-pending' : 'failed' };
+      }
+    } catch (err) {
+      handleFailure('firebase', err, { path: `tripTimeline/planRequests/${params.tripKey}`, userMessage: 'Не удалось отправить запрос доступа' });
+      return { ok: false, reason: 'failed' };
+    }
+
+    // Уведомление администраторам (кто, авто, рейс, время, причина).
+    const timeLabel = new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+    dbService.pushTimelinePlanNotification({
+      title: 'Запрос разового доступа к плану этапов',
+      text: `${params.userName} · ${params.carNumber || 'авто не указано'} · ${params.route || params.tripKey} · запрошено: ${timeLabel}${params.reason ? ` · причина: ${params.reason}` : ''}`,
+      type: 'warning',
+      date: timeLabel,
+      dispatcher: params.userName,
+      targetRoles: ['root_admin', 'admin'],
+      kind: 'plan-access-request',
+      requestKey: reqId,
+      tripKey: params.tripKey,
+    });
+
+    // История плана: запись о запросе (автор, время, причина).
+    if (Array.isArray(history)) {
+      const guardEntry = stripUndefinedDeep({
+        at,
+        by: params.userName,
+        byId: params.userId,
+        action: 'request' as const,
+        note: `Запрос разового доступа${params.reason ? `: ${params.reason}` : ''}`,
+      });
+      update(ref(database), {
+        [`tripTimeline/planGuard/${params.tripKey}/history`]: stripUndefinedDeep([...history, guardEntry]),
+      }).catch((err) =>
+        console.warn('Plan guard request history append failed:', err),
+      );
+    }
+    return { ok: true };
+  },
+
+  /**
+   * Решение администратора: RTDB-транзакция — решение принимается РОВНО ОДИН РАЗ
+   * (повторное/параллельное решение отменяется; нельзя одобрить собственный
+   * запрос). Одобрение выдаёт разрешение существующим механизмом planPerms и
+   * уведомляет диспетчера; отклонение — только уведомление и запись истории.
+   */
+  decideTimelinePlanRequest: async (params: {
+    tripKey: string;
+    requestUserId: string;
+    approve: boolean;
+    comment?: string;
+    byName: string;
+    byId?: string;
+    byRole: string;
+    planVersion: number;
+    history?: unknown;
+  }): Promise<{ ok: boolean; reason?: 'not-pending' | 'self' | 'failed'; snapshot?: TimelinePlanRequest | null }> => {
+    if (!useFirebase || !params.tripKey || !params.requestUserId) return { ok: false, reason: 'failed' };
+    const reqId = `u_${String(params.requestUserId).replace(/[.#$/\[\]]/g, '_')}`;
+    const at = new Date().toISOString();
+    let snapshot: TimelinePlanRequest | null = null;
+    try {
+      const res = await runTransaction(ref(database, `tripTimeline/planRequests/${params.tripKey}/${reqId}`), (cur) => {
+        const prev = (cur || null) as TimelinePlanRequest | null;
+        if (!prev || prev.status !== 'pending') {
+          return; // решение уже принято (или запрос не найден) — второе не создаётся
+        }
+        if (params.byId && prev.userId === params.byId) {
+          return; // нельзя одобрить/отклонить собственный запрос
+        }
+        snapshot = prev;
+        const entry: TimelinePlanRequestHistoryEntry = {
+          at,
+          by: params.byName,
+          ...(params.byId ? { byId: params.byId } : {}),
+          action: params.approve ? 'approved' : 'rejected',
+          ...(params.comment ? { comment: params.comment } : {}),
+        };
+        const historyPrev = Array.isArray(prev.history) ? prev.history : [];
+        const next: TimelinePlanRequest = {
+          ...prev,
+          status: params.approve ? 'approved' : 'rejected',
+          decidedAt: at,
+          decidedBy: params.byName,
+          ...(params.byId ? { decidedById: params.byId } : {}),
+          ...(params.comment ? { decisionComment: params.comment } : {}),
+          ...(params.approve ? { approvedVersion: Number(params.planVersion) || 0 } : {}),
+          history: [...historyPrev, entry].slice(-60),
+        };
+        return stripUndefinedDeep(next);
+      });
+      if (!res.committed) {
+        // Причина отказа: свежее чтение записи (запрос уже решён / это свой запрос).
+        let reason: 'not-pending' | 'self' | 'failed' = 'failed';
+        try {
+          const cur = await firebaseGet(ref(database, `tripTimeline/planRequests/${params.tripKey}/${reqId}`));
+          const now = (cur.val() || null) as TimelinePlanRequest | null;
+          if (now && now.status !== 'pending') reason = 'not-pending';
+          else if (now && params.byId && now.userId === params.byId) reason = 'self';
+        } catch {
+          /* оставляем failed */
+        }
+        return { ok: false, reason };
+      }
+    } catch (err) {
+      handleFailure('firebase', err, { path: `tripTimeline/planRequests/${params.tripKey}`, userMessage: 'Не удалось записать решение по запросу доступа' });
+      return { ok: false, reason: 'failed' };
+    }
+
+    const req = snapshot as TimelinePlanRequest | null;
+    if (!req) return { ok: true, snapshot: null };
+    const timeLabel = new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+    const guardHistory = Array.isArray(params.history) ? params.history : [];
+    const decisionEntry = stripUndefinedDeep({
+      at,
+      by: params.byName,
+      ...(params.byId ? { byId: params.byId } : {}),
+      action: params.approve ? 'request-approved' : 'request-rejected',
+      note: `Запрос доступа (${req.userName}): ${params.approve ? 'одобрен' : 'отклонён'}${params.comment ? ` · ${params.comment}` : ''}`,
+    });
+
+    if (params.approve) {
+      // Выдача — существующим механизмом; в историю пойдёт запись решения
+      // и запись «разрешение выдано» (grant добавляет её сам).
+      dbService.grantTimelinePlanPermission(
+        params.tripKey,
+        {
+          userId: req.userId,
+          userName: req.userName,
+          grantedAt: at,
+          grantedBy: params.byName,
+          ...(params.byId ? { grantedById: params.byId } : {}),
+          planVersion: Number(params.planVersion) || 0,
+        },
+        [...guardHistory, decisionEntry],
+        params.byName,
+        params.byRole,
+      );
+    } else {
+      update(ref(database), stripUndefinedDeep({
+        [`tripTimeline/planGuard/${params.tripKey}/history`]: [...guardHistory, decisionEntry],
+        [`tripTimeline/planGuard/${params.tripKey}/updatedAt`]: at,
+        [`tripTimeline/planGuard/${params.tripKey}/updatedBy`]: params.byName,
+      })).catch((err) =>
+        handleFailure('firebase', err, { path: `tripTimeline/planGuard/${params.tripKey}`, userMessage: 'Решение записано, но история плана не обновилась' }),
+      );
+    }
+
+    // Уведомление диспетчеру — только конкретному пользователю.
+    dbService.pushTimelinePlanNotification({
+      title: params.approve ? 'Запрос доступа к плану этапов одобрен' : 'Запрос доступа к плану этапов отклонён',
+      text: `${req.carNumber || ''} · ${req.route || req.tripKey} · ${params.approve ? 'Одобрено: доступен один раз сохранить изменения плана этапов' : 'Отклонено'}${params.comment ? ` · комментарий: ${params.comment}` : ''} · ${params.byName} · ${timeLabel}`,
+      type: params.approve ? 'success' : 'warning',
+      date: timeLabel,
+      dispatcher: params.byName,
+      targetUserId: req.userId,
+      kind: 'plan-access-decision',
+      requestKey: reqId,
+      tripKey: params.tripKey,
+      decision: params.approve ? 'approved' : 'rejected',
+    });
+    return { ok: true, snapshot: req };
+  },
+
+  /** Пометка «разрешение использовано» — после успешного сохранения плана. */
+  markTimelinePlanRequestUsed: async (tripKey: string, uid: string, by?: { byName?: string; byId?: string }) => {
+    if (!useFirebase || !tripKey || !uid) return;
+    const reqId = `u_${String(uid).replace(/[.#$/\[\]]/g, '_')}`;
+    const at = new Date().toISOString();
+    try {
+      await runTransaction(ref(database, `tripTimeline/planRequests/${tripKey}/${reqId}`), (cur) => {
+        const prev = (cur || null) as TimelinePlanRequest | null;
+        if (!prev || prev.status !== 'approved') return; // использованию подлежит только одобренный
+        const entry: TimelinePlanRequestHistoryEntry = {
+          at,
+          by: by?.byName || prev.userName,
+          ...(by?.byId ? { byId: by.byId } : {}),
+          action: 'used',
+        };
+        const historyPrev = Array.isArray(prev.history) ? prev.history : [];
+        return stripUndefinedDeep({ ...prev, status: 'used', usedAt: at, history: [...historyPrev, entry].slice(-60) });
+      });
+    } catch (err) {
+      console.warn('Timeline plan request used-mark failed:', err);
+    }
+  },
+
+  /** Пометка «разрешение отозвано» (неиспользованное) — история сохраняется. */
+  markTimelinePlanRequestRevoked: async (tripKey: string, uid: string, byName: string, byId?: string) => {
+    if (!useFirebase || !tripKey || !uid) return;
+    const reqId = `u_${String(uid).replace(/[.#$/\[\]]/g, '_')}`;
+    const at = new Date().toISOString();
+    try {
+      await runTransaction(ref(database, `tripTimeline/planRequests/${tripKey}/${reqId}`), (cur) => {
+        const prev = (cur || null) as TimelinePlanRequest | null;
+        if (!prev || prev.status !== 'approved') return; // отзываем только выданное и неиспользованное
+        const entry: TimelinePlanRequestHistoryEntry = {
+          at,
+          by: byName,
+          ...(byId ? { byId } : {}),
+          action: 'revoked',
+        };
+        const historyPrev = Array.isArray(prev.history) ? prev.history : [];
+        return stripUndefinedDeep({ ...prev, status: 'revoked', revokedAt: at, revokedBy: byName, ...(byId ? { revokedById: byId } : {}), history: [...historyPrev, entry].slice(-60) });
+      });
+    } catch (err) {
+      console.warn('Timeline plan request revoke-mark failed:', err);
+    }
+  },
+
+  /**
+   * Прямая выдача доступа администратором (кнопка в карточке): в историю
+   * запросов пишется та же запись со статусом «одобрен» (источник: админ),
+   * пользователю уходит адресное уведомление. Механизм выдачи один — planPerms.
+   */
+  recordDirectPlanGrant: async (params: {
+    tripKey: string;
+    userId: string;
+    userName: string;
+    carNumber?: string;
+    route?: string;
+    byName: string;
+    byId?: string;
+    planVersion: number;
+  }) => {
+    if (!useFirebase || !params.tripKey || !params.userId) return;
+    const reqId = `u_${String(params.userId).replace(/[.#$/\[\]]/g, '_')}`;
+    const at = new Date().toISOString();
+    try {
+      await runTransaction(ref(database, `tripTimeline/planRequests/${params.tripKey}/${reqId}`), (cur) => {
+        const prev = (cur || null) as TimelinePlanRequest | null;
+        const historyPrev = Array.isArray(prev?.history) ? prev!.history : [];
+        const entry: TimelinePlanRequestHistoryEntry = {
+          at,
+          by: params.byName,
+          ...(params.byId ? { byId: params.byId } : {}),
+          action: 'approved',
+          comment: 'Выдано администратором напрямую',
+        };
+        const next: TimelinePlanRequest = {
+          id: reqId,
+          userId: params.userId,
+          userName: params.userName,
+          tripKey: params.tripKey,
+          carNumber: params.carNumber || prev?.carNumber || '',
+          route: params.route || prev?.route || '',
+          createdAt: prev?.createdAt || at,
+          ...(prev?.reason ? { reason: prev.reason } : {}),
+          planVersion: Number(prev?.planVersion) || Number(params.planVersion) || 0,
+          status: 'approved',
+          source: 'direct',
+          decidedAt: at,
+          decidedBy: params.byName,
+          ...(params.byId ? { decidedById: params.byId } : {}),
+          decisionComment: 'Выдано администратором напрямую',
+          approvedVersion: Number(params.planVersion) || 0,
+          history: [...historyPrev, entry].slice(-60),
+        };
+        return stripUndefinedDeep(next);
+      });
+    } catch (err) {
+      console.warn('Plan request direct-grant record failed:', err);
+    }
+    const timeLabel = new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+    dbService.pushTimelinePlanNotification({
+      title: 'Выдан разовый доступ к плану этапов',
+      text: `${params.carNumber || ''} · ${params.route || params.tripKey} · администратор ${params.byName} выдал доступ: один раз сохранить изменения плана · ${timeLabel}`,
+      type: 'success',
+      date: timeLabel,
+      dispatcher: params.byName,
+      targetUserId: params.userId,
+      kind: 'plan-access-decision',
+      requestKey: reqId,
+      tripKey: params.tripKey,
+      decision: 'approved',
+    });
   },
 
   /** Расширяемый справочник типов этапов: tripTimeline/config/stageTypes.

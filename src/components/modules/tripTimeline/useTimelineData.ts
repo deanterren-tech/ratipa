@@ -10,7 +10,9 @@
  *    события, привязанные к конкретному рейсу;
  *  - события машины (tripTimeline/vehicleEvents) — сохранены как есть;
  *  - справочник сцепок (couplings) — машины и их диспетчеры (стабильные id);
- *  - справочник типов этапов (tripTimeline/config/stageTypes) и КПП (checkpoints).
+ *  - справочник типов этапов (tripTimeline/config/stageTypes);
+ *  - города — из существующего справочника расстояний портала
+ *    (knownDistancesList): подсказки в поле «Место», свободный ввод не ограничен.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { dbService, directoryService } from '../../../api';
@@ -49,8 +51,8 @@ export interface TimelineData {
   dispatchers: DispatcherOption[];
   /** Эффективный справочник типов этапов (из базы либо встроенный). */
   stageTypes: TimelineStageType[];
-  /** Названия КПП из справочника checkpoints — подсказки в «Уточнении». */
-  checkpoints: string[];
+  /** Города из справочника расстояний (подсказки для свободного поля «Место»). */
+  cities: string[];
 }
 
 const normalizeManualTrip = (raw: TimelineTrip, carIndex: Map<string, CarRef>, dir: DispatcherDirectory): WholeTrip => {
@@ -100,7 +102,7 @@ export function useTimelineData(): TimelineData {
   const [stagesStore, setStagesStore] = useState<Record<string, Record<string, unknown>>>({});
   const [dispatchers, setDispatchers] = useState<DispatcherOption[]>([]);
   const [dbStageTypes, setDbStageTypes] = useState<TimelineStageType[]>([]);
-  const [checkpoints, setCheckpoints] = useState<string[]>([]);
+  const [cities, setCities] = useState<string[]>([]);
 
   useEffect(() => {
     const u1 = dbService.getTimelineTrips((list) => setManualTrips(list || []));
@@ -113,12 +115,16 @@ export function useTimelineData(): TimelineData {
       );
     });
     const u4 = dbService.getTimelineStageTypes((list) => setDbStageTypes(list || []));
-    const u5 = dbService.getCheckpoints((list) => {
-      setCheckpoints(
-        (list || [])
-          .filter((c) => c && c.name && c.active !== false)
-          .map((c) => String(c.name)),
-      );
+    const u5 = dbService.getDistances((list) => {
+      // Города для подсказок поля «Место» — из существующего справочника
+      // расстояний (knownDistancesList), без отдельного справочника.
+      const set = new Set<string>();
+      (list || []).forEach((d) => {
+        if (!d) return;
+        if (d.from) set.add(String(d.from).trim());
+        if (d.to) set.add(String(d.to).trim());
+      });
+      setCities(Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b, 'ru')));
     });
     // Источники: «План дохода» (рабочая ветка trips_dashboard) и «Учёт выезда»
     const u6 = dbService.getPlanDohodTrips((list) => setPlanTrips((list || []) as unknown as Array<Record<string, unknown>>));
@@ -154,5 +160,5 @@ export function useTimelineData(): TimelineData {
 
   const stageTypes = useMemo(() => effectiveStageTypes(dbStageTypes), [dbStageTypes]);
 
-  return { trips, bases, events, fleetCars, dispatchers, stageTypes, checkpoints };
+  return { trips, bases, events, fleetCars, dispatchers, stageTypes, cities };
 }

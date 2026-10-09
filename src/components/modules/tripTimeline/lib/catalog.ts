@@ -50,7 +50,7 @@ export const stageTypeName = (types: TimelineStageType[], stage: TimelineStage):
   return found ? found.name : (stage.type || 'Этап');
 };
 
-/** Полное имя этапа: тип + уточнение (какая граница / переход). */
+/** Полное имя этапа: тип + место (какая граница / переход / объект). */
 export const stageFullName = (types: TimelineStageType[], stage: TimelineStage): string => {
   const base = stageTypeName(types, stage);
   return stage.label ? `${base} — ${stage.label}` : base;

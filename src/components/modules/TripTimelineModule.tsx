@@ -19,7 +19,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
-import type { AppSettings, TimelinePlanGuard, TimelinePlanPermission, TimelineTrip, UserProfile } from '../../types';
+import type { AppSettings, TimelinePlanGuard, TimelinePlanPermission, TimelinePlanRequest, TimelineTrip, UserProfile } from '../../types';
 import { dbService } from '../../api';
 import { resolvePermission } from '../../utils/permissions';
 import { buildDispatcherDirectory } from '../../utils/dispatcher';
@@ -71,7 +71,23 @@ export default function TripTimelineModule({ user, settings }: Props) {
 
   const canWrite = resolvePermission(user, 'tripTimeline', settings?.rolePermissions) === 'write';
   const canEditPlan = resolvePermission(user, 'planDohod', settings?.rolePermissions) === 'write';
-  const today = useMemo(() => todayNum(), []);
+  const [today, setToday] = useState<number>(() => todayNum());
+  /**
+   * Текущий день — по календарной дате пользователя (та же конвенция, что во
+   * всём модуле: todayNum, YYYY-MM-DD без времени). Обновляем без перезагрузки:
+   * лёгкая проверка раз в минуту и при возврате на вкладку — подсветка
+   * «сегодня» переезжает на новый день сразу после смены суток.
+   */
+  useEffect(() => {
+    const tick = () => setToday((cur) => { const n = todayNum(); return n === cur ? cur : n; });
+    const timer = window.setInterval(tick, 60000);
+    const onVisible = () => { if (document.visibilityState === 'visible') tick(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
 
   // Вид таймлайна (диапазон, пресет периода, вкладка диспетчера, месяц архива)
   const savedView = useMemo(() => {
@@ -274,6 +290,8 @@ export default function TripTimelineModule({ user, settings }: Props) {
   // ── Контроль плана этапов: состояние планов и разовые разрешения ────────
   const [planGuardStore, setPlanGuardStore] = useState<Record<string, TimelinePlanGuard>>({});
   const [planPermsStore, setPlanPermsStore] = useState<Record<string, Record<string, TimelinePlanPermission>>>({});
+  /** Запросы разового доступа (по рейсам) — статусы кнопки запроса в карточке. */
+  const [planRequestsStore, setPlanRequestsStore] = useState<Record<string, Record<string, TimelinePlanRequest>>>({});
   useEffect(() => {
     const unsub = dbService.getTimelinePlanGuards((store) => setPlanGuardStore(store || {}));
     return () => {
@@ -282,6 +300,12 @@ export default function TripTimelineModule({ user, settings }: Props) {
   }, []);
   useEffect(() => {
     const unsub = dbService.getTimelinePlanPerms((store) => setPlanPermsStore(store || {}));
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
+  }, []);
+  useEffect(() => {
+    const unsub = dbService.getTimelinePlanRequests((store) => setPlanRequestsStore(store || {}));
     return () => {
       if (typeof unsub === 'function') unsub();
     };
@@ -483,14 +507,6 @@ export default function TripTimelineModule({ user, settings }: Props) {
     window.location.hash = '#baza';
   }, []);
 
-  const checkpointList = (
-    <datalist id="tl-checkpoints-list">
-      {data.checkpoints.map((name) => (
-        <option key={name} value={name} />
-      ))}
-    </datalist>
-  );
-
   const tabs = [
     { key: 'timeline', label: 'Таймлайн' },
     { key: 'stats', label: 'Статистика' },
@@ -539,8 +555,6 @@ export default function TripTimelineModule({ user, settings }: Props) {
         </div>
       }
     >
-      {checkpointList}
-
       {/* Вкладки диспетчеров — тот же источник и стиль, что у «Плана дохода» */}
       <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-[#E5E7EB] mb-4">
         <span className={UI.caption}>Диспетчеры:</span>
@@ -672,10 +686,12 @@ export default function TripTimelineModule({ user, settings }: Props) {
           onOpenEventTrip={openTripAtEvent}
           planGuard={openTripKey ? planGuardStore[openTripKey] || null : null}
           planPerms={openTripKey ? planPermsStore[openTripKey] || {} : {}}
+          planRequests={openTripKey ? planRequestsStore[openTripKey] || {} : {}}
           planControlEnabled={dbService.isOnline()}
           carTrips={carTripsForModal}
           carBases={carBasesForModal}
           carEvents={carEventsForModal}
+          cities={data.cities}
           onSelectTrip={(key) => setOpenTripKey(key)}
           onOpenPlan={openPlanRecord}
           onCopyPlanLink={copyPlanLink}

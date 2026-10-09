@@ -93,12 +93,14 @@ export default function CalendarHeader({ vs, vn, colW, today, pinLeft, dense = f
             <div
               key={d}
               data-day={d}
+              data-tl-day-today={isToday ? '1' : undefined}
               className={`flex-none text-center overflow-hidden ${dayTextCls} ${dense ? 'pt-0.5' : 'pt-1'}`}
               style={{
                 width: colW,
-                background: isWeekend ? CLR.weekend : undefined,
+                // Ячейка текущего дня в шапке — та же мягкая заливка, что столбец
+                // «сегодня» на полотне (поверх выходного фона, при совпадении).
+                background: isToday ? 'rgba(244, 63, 94, 0.12)' : isWeekend ? CLR.weekend : undefined,
                 color: isToday ? CLR.today : CLR.text,
-                boxShadow: isToday ? `inset 0 -2px 0 ${CLR.today}` : undefined,
                 borderLeft: isMonday ? `1px solid ${tier === 'compact' ? '#E5E7EB' : '#F1F2F4'}` : undefined,
               }}
             >

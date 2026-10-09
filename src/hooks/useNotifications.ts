@@ -13,6 +13,13 @@ export interface NotificationItem {
   dispatcher?: string;
   isDeleted?: boolean;
   targetRoles?: string[];
+  /** Адресное уведомление конкретному пользователю (запросы доступа к плану этапов и т.п.). */
+  targetUserId?: string;
+  /** Служебные поля действий: запрос доступа к плану этапов. */
+  kind?: string;
+  requestKey?: string;
+  tripKey?: string;
+  decision?: 'approved' | 'rejected';
 }
 
 export function useNotifications(user: UserProfile, settings: AppSettings | null) {
@@ -172,6 +179,9 @@ export function useNotifications(user: UserProfile, settings: AppSettings | null
     const visible = notifications.filter(n => {
       if (userNotifState[n.id]?.isDeleted) return false;
 
+      // Адресное уведомление — только указанному пользователю.
+      if (n.targetUserId && n.targetUserId !== user.uid) return false;
+
       if (n.targetRoles && n.targetRoles.length > 0) {
         if (!n.targetRoles.includes(user.role)) return false;
       }
@@ -210,6 +220,8 @@ export function useNotifications(user: UserProfile, settings: AppSettings | null
     markAllNotifsAsRead,
     deleteNotif,
     clearAllNotifications,
+    /** Персональные состояния прочтения/удаления — для отметки непрочитанных в списке. */
+    userNotifState,
     // Internal state (exposed for click-outside handling in AppShell)
     bazaCars,
     tripsDashboard,

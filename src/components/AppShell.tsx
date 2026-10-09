@@ -16,6 +16,8 @@ import AccountSettingsModal from './AccountSettingsModal'
 import ErrorPage from './common/ErrorPage'
 import ModuleDataContainer from './common/ModuleLoadState'
 import {useNotifications} from '../hooks/useNotifications'
+import type { NotificationItem } from '../hooks/useNotifications'
+import PlanAccessDecisionModal from './modules/tripTimeline/PlanAccessDecisionModal'
 import {useConverter} from '../hooks/useConverter'
 import UpdateTour from './UpdateTour'
 import PortalInstructionsModal from './PortalInstructionsModal'
@@ -322,6 +324,23 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const presence = usePresence(user, activeModule);
   useChat(user);
 
+  /**
+   * Окно решения по запросу разового доступа к плану этапов рейса.
+   * Открывается кликом по уведомлению администратора или по событию
+   * `ratipa-plan-request-open` (карточка рейса/уведомление).
+   */
+  const [planRequestModal, setPlanRequestModal] = useState<{ tripKey: string; requestId: string } | null>(null);
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent<{ tripKey?: string; requestId?: string }>).detail || {};
+      if (detail.tripKey && detail.requestId) {
+        setPlanRequestModal({ tripKey: detail.tripKey, requestId: detail.requestId });
+      }
+    };
+    window.addEventListener('ratipa-plan-request-open', onOpen);
+    return () => window.removeEventListener('ratipa-plan-request-open', onOpen);
+  }, []);
+
   const {
     filteredNotifications,
     unreadNotifsCount,
@@ -335,7 +354,25 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     markAllNotifsAsRead,
     deleteNotif,
     clearAllNotifications,
+    userNotifState,
   } = notif;
+
+  /**
+   * Клик по уведомлению: администратору запрос доступа открывает окно решения по
+   * конкретному запросу; адресное уведомление диспетчера — ведёт к карточке рейса.
+   */
+  const handleNotificationClick = (n: NotificationItem) => {
+    markNotifAsRead(n.id);
+    setIsNotifOpen(false);
+    const canDecide = user.role === 'root_admin' || user.role === 'admin';
+    if (n.requestKey && n.tripKey && canDecide && n.kind !== 'plan-access-decision') {
+      setPlanRequestModal({ tripKey: n.tripKey, requestId: n.requestKey });
+      return;
+    }
+    if (n.requestKey && n.tripKey) {
+      window.location.hash = `#tripTimeline/trip/${encodeURIComponent(n.tripKey)}`;
+    }
+  };
 
   const {
     isConverterOpen,
@@ -1343,6 +1380,80 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
             <TopBarCalendar />
           </div>
 
+          {/* Центр внутренних уведомлений: запросы доступа к плану этапов и
+              системные сообщения портала (ветка ratipa_notifications).
+              Показывается, когда есть видимые уведомления; клик по запросу
+              открывает окно решения по этому запросу. */}
+          {filteredNotifications.length > 0 ? (
+          <div className="relative" ref={notifRef}>
+            <button
+              type="button"
+              data-ui="notif-bell"
+              aria-haspopup="dialog"
+              aria-expanded={isNotifOpen}
+              title="Уведомления"
+              onClick={() => setIsNotifOpen((v) => !v)}
+              className="relative flex items-center justify-center h-9 w-9 rounded-lg border border-transparent hover:bg-[#F3F4F6] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)]"
+            >
+              {unreadNotifsCount > 0
+                ? <BellRing className="h-4 w-4 text-[#121316]" aria-hidden="true" />
+                : <Bell className="h-4 w-4 text-[#121316]" aria-hidden="true" />}
+              {unreadNotifsCount > 0 ? (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-semibold flex items-center justify-center" data-ui="notif-badge">
+                  {unreadNotifsCount > 9 ? '9+' : unreadNotifsCount}
+                </span>
+              ) : null}
+            </button>
+            {isNotifOpen ? (
+              <div
+                data-ui="notif-dropdown"
+                role="dialog"
+                aria-label="Уведомления"
+                className="absolute right-0 top-full mt-1.5 w-[360px] max-w-[92vw] bg-white border border-[#E5E7EB] rounded-xl shadow-[0_8px_24px_rgba(15,23,42,0.12)] z-[1200] overflow-hidden"
+              >
+                <div className="flex items-center justify-between px-3 py-2 border-b border-[#F3F4F6]">
+                  <span className="text-xs font-semibold text-[#121316]">Уведомления</span>
+                  {unreadNotifsCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => markAllNotifsAsRead()}
+                      className="text-[10px] text-[var(--accent-ink)] hover:underline cursor-pointer"
+                    >
+                      Прочитать все
+                    </button>
+                  ) : null}
+                </div>
+                <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
+                  {filteredNotifications.length === 0 ? (
+                    <div className="px-3 py-4 text-[11px] text-[#6B7280]">Пока нет уведомлений</div>
+                  ) : (
+                    filteredNotifications.slice(0, 40).map((n) => {
+                      const unread = !userNotifState[n.id]?.isRead;
+                      return (
+                        <button
+                          key={n.id}
+                          type="button"
+                          data-ui="notif-item"
+                          data-kind={n.kind || ''}
+                          onClick={() => handleNotificationClick(n)}
+                          className={`w-full text-left px-3 py-2.5 border-b border-[#F9FAFB] last:border-0 hover:bg-[#F9FAFB] transition-colors cursor-pointer flex gap-2 ${unread ? '' : 'opacity-70'}`}
+                        >
+                          <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${unread ? 'bg-[var(--accent)]' : 'bg-transparent'}`} aria-hidden="true" />
+                          <span className="min-w-0 flex flex-col gap-0.5">
+                            <span className="text-[11px] font-semibold text-[#121316] truncate">{n.title}</span>
+                            <span className="text-[11px] text-[#4B5563] whitespace-pre-wrap break-words">{n.text}</span>
+                            {n.date ? <span className="text-[10px] text-[#9CA3AF]">{n.date}</span> : null}
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+          ) : null}
+
           {/* Fully featured Notifications Center dropdown */}
 
           {/* Live indicator badge */}
@@ -1460,6 +1571,16 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         settings={settings}
         onClose={() => setPortalHelpOpen(false)}
       />
+
+      {/* Окно решения по запросу разового доступа к плану этапов (из уведомления) */}
+      {planRequestModal ? (
+        <PlanAccessDecisionModal
+          tripKey={planRequestModal.tripKey}
+          requestId={planRequestModal.requestId}
+          user={user}
+          onClose={() => setPlanRequestModal(null)}
+        />
+      ) : null}
 
       <UpdateTour
         isOpen={tourOpen}

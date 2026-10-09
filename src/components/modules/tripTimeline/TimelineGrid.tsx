@@ -9,9 +9,9 @@
  *
  * Производительность: строки-группы — memo-компоненты, модель строк собирается
  * одним useMemo по видимому окну + запас по краям, фоновые дорожки выходных и
- * линия «сегодня» считаются один раз на окно, связь «план↔факт» при наведении —
- * локальное состояние внутри строки машины. Позиция прокрутки сохраняется между
- * возвратами (sessionStorage + вкладки не размонтируются).
+ * подсветка столбца «сегодня» считаются один раз на окно, связь «план↔факт» при
+ * наведении — локальное состояние внутри строки машины. Позиция прокрутки
+ * сохраняется между возвратами (sessionStorage + вкладки не размонтируются).
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TimelineStageType, TimelineVehicleEvent } from '../../../types';
@@ -643,12 +643,16 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     bg.map((seg, i) => (
       <div
         key={`${keyPrefix}${i}`}
+        data-tl-today={seg.kind === 'today' ? '1' : undefined}
         className="absolute top-0 bottom-0"
         style={{
           left: seg.left,
           width: seg.width,
           background: seg.kind === 'weekend' ? CLR.weekend : CLR.today,
-          opacity: seg.kind === 'weekend' ? opacity : 0.5,
+          // «Сегодня» — мягкая полупрозрачная заливка (различима поверх выходных),
+          // рисуется ПОД полосами/маркерами и не перехватывает клики.
+          opacity: seg.kind === 'weekend' ? opacity : 0.12,
+          pointerEvents: 'none',
         }}
       />
     ));
@@ -1146,13 +1150,16 @@ export default function TimelineGrid({
     [trips, bases, events, fleetCars, stageTypes, showArchived, vs, ve, today],
   );
 
-  // Фоновая дорожка одна на всё окно: выходные и линия «сегодня»
+  // Фоновая дорожка одна на всё окно: выходные и подсветка всего столбца «сегодня».
+  // Подсветка — ровно календарная ячейка текущего дня (та же формула левой границы
+  // и ширины, что у дней сетки/шапки), если сегодня вне окна — сегмент не создаётся:
+  // чужую дату не подсвечиваем и календарь автоматически не прокручиваем.
   const bg = useMemo(() => {
     const segs: BgSeg[] = [];
     for (let d = vs; d <= ve; d += 1) {
       const wd = new Date(d * 86400000).getUTCDay();
       if (wd === 0 || wd === 6) segs.push({ left: Math.round((d - vs) * colW), width: colW, kind: 'weekend' });
-      if (d === today) segs.push({ left: Math.round((d - vs) * colW + colW / 2 - 1), width: 2, kind: 'today' });
+      if (d === today) segs.push({ left: Math.round((d - vs) * colW), width: Math.round(colW), kind: 'today' });
     }
     return segs;
   }, [vs, ve, colW, today]);

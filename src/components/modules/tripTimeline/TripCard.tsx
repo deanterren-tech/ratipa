@@ -29,7 +29,7 @@ import {
   Trash2,
   TriangleAlert,
 } from 'lucide-react';
-import type { LegPlan, TimelinePlanGuard, TimelinePlanHistoryEntry, TimelinePlanPermission, TimelineStage, TimelineStageType, TimelineVehicleEvent, UserProfile } from '../../../types';
+import type { LegPlan, TimelinePlanGuard, TimelinePlanHistoryEntry, TimelinePlanPermission, TimelinePlanRequest, TimelineStage, TimelineStageType, TimelineVehicleEvent, UserProfile } from '../../../types';
 import { UI } from '../../../ui/kit';
 import { ModalShell } from '../../../ui/components';
 import { formatPlate } from '../../../utils/salaryAutofill';
@@ -40,6 +40,7 @@ import { useToast } from '../../ToastProvider';
 import type { DispatcherOption } from './useTimelineData';
 import { useDebouncedSaver } from './useDebouncedSaver';
 import DateInput from './DateInput';
+import CityAutocomplete from '../../common/CityAutocomplete';
 import TripEventsJournal from './TripEventsJournal';
 import { PlanBarLabel, planBarLabelParts } from './PlanBarLabel';
 import { eventMarkOf, groupEventMarks, type EventMark } from './lib/eventMarks';
@@ -127,12 +128,16 @@ interface Props {
   planGuard?: TimelinePlanGuard | null;
   /** Действующие разовые разрешения рейса (tripTimeline/planPerms). */
   planPerms?: Record<string, TimelinePlanPermission>;
+  /** Запросы разового доступа рейса (tripTimeline/planRequests/tripKey): статусы для кнопки запроса. */
+  planRequests?: Record<string, TimelinePlanRequest>;
   /** Контроль плана этапов доступен только в облачном режиме. */
   planControlEnabled?: boolean;
   /** Рейсы, периоды и события этой же машины — контекст встроенного таймлайна. */
   carTrips: WholeTrip[];
   carBases: BasePeriod[];
   carEvents: TimelineVehicleEvent[];
+  /** Города из существующего справочника расстояний портала — подсказки в «Месте» (свободный ввод). */
+  cities: string[];
   onSelectTrip: (tripKey: string) => void;
   onOpenPlan: (planId: string) => void;
   onCopyPlanLink: (planId: string) => void;
@@ -373,14 +378,18 @@ function CarMiniTimeline({
     [miniZoom, dayAtMiniCenter],
   );
 
-  const bgWeekend = useMemo(() => {
-    const segs: Array<{ left: number; width: number }> = [];
+  // Фон дорожек мини-таймлайна: выходные + мягкая подсветка всего столбца
+  // «сегодня» (та же логика и вид, что в основном таймлайне; если сегодня вне
+  // видимого окна — подсветки нет и прокрутка не выполняется).
+  const bgSegs = useMemo(() => {
+    const segs: Array<{ left: number; width: number; today: boolean }> = [];
     for (let d = renderVs; d <= ve; d += 1) {
       const wd = new Date(d * 86400000).getUTCDay();
-      if (wd === 0 || wd === 6) segs.push({ left: Math.round((d - renderVs) * colW), width: colW });
+      if (wd === 0 || wd === 6) segs.push({ left: Math.round((d - renderVs) * colW), width: colW, today: false });
+      if (d === today) segs.push({ left: Math.round((d - renderVs) * colW), width: Math.round(colW), today: true });
     }
     return segs;
-  }, [renderVs, ve, colW]);
+  }, [renderVs, ve, colW, today]);
 
   const link = (key: string): React.CSSProperties =>
     key === focusKey ? { boxShadow: 'inset 0 0 0 2px var(--accent)' } : { opacity: 0.85 };
@@ -533,8 +542,13 @@ function CarMiniTimeline({
             {focus ? formatPlate(focus.carNumber) : ''} · план
           </div>
           <div data-lane="plan" className="relative z-0 border-b border-[#EEF0F3]" style={{ width: W, height: miniPlanH }}>
-            {bgWeekend.map((s, i) => (
-              <div key={`w${i}`} className="absolute top-0 bottom-0" style={{ left: s.left, width: s.width, background: '#F1F2F4', opacity: 0.7 }} />
+            {bgSegs.map((s, i) => (
+              <div
+                key={`w${i}`}
+                data-tl-today={s.today ? '1' : undefined}
+                className="absolute top-0 bottom-0"
+                style={{ left: s.left, width: s.width, background: s.today ? '#F43F5E' : '#F1F2F4', opacity: s.today ? 0.12 : 0.7, pointerEvents: 'none' }}
+              />
             ))}
             {carBases.map((p) => {
               const rdy = readyBarRange(p);
@@ -646,8 +660,13 @@ function CarMiniTimeline({
             факт · база · ремонт
           </div>
           <div data-lane="fact" className="relative z-0 border-b border-[#E5E7EB]" style={{ width: W, height: miniFactH }}>
-            {bgWeekend.map((s, i) => (
-              <div key={`fw${i}`} className="absolute top-0 bottom-0" style={{ left: s.left, width: s.width, background: '#F1F2F4', opacity: 0.6 }} />
+            {bgSegs.map((s, i) => (
+              <div
+                key={`fw${i}`}
+                data-tl-today={s.today ? '1' : undefined}
+                className="absolute top-0 bottom-0"
+                style={{ left: s.left, width: s.width, background: s.today ? '#F43F5E' : '#F1F2F4', opacity: s.today ? 0.12 : 0.6, pointerEvents: 'none' }}
+              />
             ))}
             {carBases.map((p) => {
               const dev = baseDeviation(p, today);
@@ -860,10 +879,12 @@ export default function TripCard({
   onOpenEventTrip,
   planGuard,
   planPerms,
+  planRequests,
   planControlEnabled,
   carTrips,
   carBases,
   carEvents,
+  cities,
   onSelectTrip,
   onOpenPlan,
   onCopyPlanLink,
@@ -888,6 +909,11 @@ export default function TripCard({
   /** Выдача разового разрешения администратором: выбор пользователя. */
   const [grantOpen, setGrantOpen] = useState(false);
   const [grantUserId, setGrantUserId] = useState('');
+  /** Форма запроса разового доступа (диспетчер): причина и отправка. */
+  const [requestFormOpen, setRequestFormOpen] = useState(false);
+  const [requestReason, setRequestReason] = useState('');
+  const [requestSending, setRequestSending] = useState(false);
+  const [requestError, setRequestError] = useState('');
   /** Запрос из таблицы этапов: открыть форму события с предвыбранным этапом. */
   const [eventFormRequest, setEventFormRequest] = useState<{ stageId?: string; nonce: number } | null>(null);
   /** Краткая подсветка этапа после клика по маркеру на встроенном таймлайне. */
@@ -917,6 +943,55 @@ export default function TripCard({
   const autoSavePlanned = !planEnabled || planState === 'draft';
   /** Кнопка «Сохранить план этапов» (первичное сохранение / после разрешения / админ). */
   const showSavePlanStages = planEnabled && !readOnly && (planState === 'draft' || planState === 'permitted' || isRootAdmin);
+  /** Запрос разового доступа ТЕКУЩЕГО пользователя по этому рейсу (одна запись на пару). */
+  const myPlanRequest = useMemo<TimelinePlanRequest | null>(() => {
+    const store = planRequests || {};
+    const key = planUserId ? dbService.planRequestIdOf(planUserId) : '';
+    const mine = key ? store[key] : undefined;
+    return mine || null;
+  }, [planRequests, planUserId]);
+  /** Кнопка «Запросить разовый доступ» — диспетчеру при заблокированном плане. */
+  const showRequestAccess = planEnabled && planState === 'saved' && !readOnly && !isRootAdmin;
+
+  /**
+   * Отправка запроса разового доступа: свежая версия сохранённого плана, одна
+   * запись на пару (рейс, пользователь); повторный запрос при ожидающем
+   * запрещён (транзакция в базе, не только интерфейс).
+   */
+  const submitPlanRequest = async () => {
+    if (requestSending || !planUserId || !planTripKey) return;
+    setRequestSending(true);
+    setRequestError('');
+    try {
+      const fresh = await dbService.getTimelinePlanGuardOnce(planTripKey);
+      const version = Number(fresh?.version) || planLock.version || 1;
+      const res = await dbService.createTimelinePlanRequest(
+        {
+          tripKey: planTripKey,
+          userId: planUserId,
+          userName: user.name,
+          carNumber: trip.carNumber || '',
+          route: draft.route || trip.plan?.direction || '',
+          ...(requestReason.trim() ? { reason: requestReason.trim() } : {}),
+          planVersion: version,
+        },
+        planLock.history,
+      );
+      if (res.ok) {
+        setRequestFormOpen(false);
+        setRequestReason('');
+        toast('Запрос отправлен. Ожидается решение администратора', 'success');
+      } else if (res.reason === 'already-pending') {
+        setRequestError('Запрос уже отправлен и ожидает решения — повторно отправлять нельзя.');
+      } else {
+        setRequestError('Не удалось отправить запрос — повторите отправку.');
+      }
+    } catch (err) {
+      setRequestError(`Не удалось отправить запрос: ${(err as Error).message}`);
+    } finally {
+      setRequestSending(false);
+    }
+  };
 
   useEffect(() => {
     if (!dirtyRef.current) setDraft(toDraft(trip));
@@ -1095,7 +1170,11 @@ export default function TripCard({
       if (perm) {
         const consumed = await dbService.consumeTimelinePlanPermission(planTripKey, planUserId);
         if (!consumed.ok) {
-          setPlanSaveError('Разрешение уже использовано другим сохранением или отозвано — обновите данные: повторное использование невозможно.');
+          setPlanSaveError(
+            consumed.reason === 'failed'
+              ? 'Не удалось погасить разрешение (ошибка сети или записи) — ничего не записано, разрешение НЕ израсходовано. Повторите сохранение.'
+              : 'Разрешение уже использовано другим сохранением или отозвано — обновите данные: повторное использование невозможно.',
+          );
           return;
         }
         consumedSnapshot = consumed.snapshot ?? null;
@@ -1131,6 +1210,9 @@ export default function TripCard({
       };
       if (perm) updates[`tripTimeline/planPerms/${planTripKey}/${planUserId}`] = null;
       await dbService.saveTimelinePlanCommit(updates, user.name, user.role, details);
+      // Разрешение использовано: после успешного сохранения запись запроса
+      // помечается «использовано» (история сохраняется), поля снова блокируются.
+      dbService.markTimelinePlanRequestUsed(planTripKey, planUserId, { byName: user.name, byId: planUserId });
       planDirtyRef.current = false;
       setPlanDirty(false);
       dirtyRef.current = false;
@@ -1177,6 +1259,18 @@ export default function TripCard({
       user.name,
       user.role,
     );
+    // История запросов: прямая выдача — та же запись со статусом «одобрен»
+    // (источник: администратор) + уведомление пользователю. Один механизм.
+    dbService.recordDirectPlanGrant({
+      tripKey: planTripKey,
+      userId: sel.id,
+      userName: sel.name,
+      carNumber: trip.carNumber || '',
+      route: draft.route || trip.plan?.direction || '',
+      byName: user.name,
+      ...(planUserId ? { byId: planUserId } : {}),
+      planVersion: version,
+    });
     setGrantOpen(false);
     toast(`Разрешено одно изменение плана: ${sel.name}`, 'success');
   };
@@ -1185,7 +1279,7 @@ export default function TripCard({
     if (!isRootAdmin) return;
     const ok = await showConfirm(`Отозвать неиспользованное разрешение для ${name}?`);
     if (!ok) return;
-    dbService.revokeTimelinePlanPermission(planTripKey, uid, planLock.history, user.name, user.role);
+    dbService.revokeTimelinePlanPermission(planTripKey, uid, planLock.history, user.name, user.role, planUserId);
     toast('Разрешение отозвано', 'success');
   };
 
@@ -1580,6 +1674,47 @@ export default function TripCard({
               {planState === 'saved' && !readOnly && !isRootAdmin ? (
                 <span className="text-[#6B7280]">изменение плановых дат — только с разового разрешения администратора</span>
               ) : null}
+              {/* Запрос разового доступа: диспетчер при заблокированном плане.
+                  Одна запись на пару (рейс, пользователь); пока ожидает решения —
+                  повторный запрос запрещён; после решения кнопка снова доступна. */}
+              {showRequestAccess ? (
+                <>
+                  {myPlanRequest?.status === 'pending' ? (
+                    <span data-ui="plan-request-pending" className="text-amber-700 font-semibold">
+                      Запрос отправлен. Ожидается решение администратора
+                      {myPlanRequest.createdAt ? ` (${fmtFull(myPlanRequest.createdAt.slice(0, 10))})` : ''}
+                    </span>
+                  ) : (
+                    <>
+                      {myPlanRequest?.status === 'rejected' ? (
+                        <span data-ui="plan-request-rejected" className="text-rose-600">
+                          Запрос отклонён{myPlanRequest.decisionComment ? `: ${myPlanRequest.decisionComment}` : ''} — план остаётся заблокированным
+                        </span>
+                      ) : null}
+                      {myPlanRequest?.status === 'used' ? (
+                        <span data-ui="plan-request-used" className="text-[#6B7280]">
+                          Разрешение использовано — план снова заблокирован
+                        </span>
+                      ) : null}
+                      {myPlanRequest?.status === 'revoked' ? (
+                        <span data-ui="plan-request-revoked" className="text-[#6B7280]">
+                          Ранее выданное разрешение отозвано администратором
+                        </span>
+                      ) : null}
+                      {myPlanRequest?.status === 'approved' ? null : (
+                        <button
+                          type="button"
+                          data-ui="plan-request-open"
+                          onClick={() => setRequestFormOpen((v) => !v)}
+                          className={UI.buttonGhost}
+                        >
+                          Запросить разовый доступ
+                        </button>
+                      )}
+                    </>
+                  )}
+                </>
+              ) : null}
               {planState === 'saved' && isRootAdmin && !readOnly ? (
                 <span className="text-[#6B7280]">root-администратор может изменить план без разрешения</span>
               ) : null}
@@ -1605,6 +1740,42 @@ export default function TripCard({
               <div className={UI.errorBox} role="alert">
                 <TriangleAlert className="w-4 h-4 shrink-0" aria-hidden="true" />
                 {planSaveError}
+              </div>
+            ) : null}
+            {/* Форма запроса разового доступа: пояснение, причина, отправка. */}
+            {showRequestAccess && requestFormOpen ? (
+              <div data-ui="plan-request-form" className="border border-[#E5E7EB] rounded-xl px-3 py-2 flex flex-col gap-2">
+                <span className="text-[11px] text-[#6B7280]">
+                  Доступ позволит один раз сохранить изменения плана этапов этого рейса. Запрос автоматически связан с этим рейсом, вами и текущей сохранённой версией плана (v{planLock.version}).
+                </span>
+                <label className={UI.fieldLabel}>Причина запроса (необязательно)</label>
+                <textarea
+                  data-ui="plan-request-reason"
+                  rows={2}
+                  value={requestReason}
+                  disabled={requestSending}
+                  onChange={(e) => setRequestReason(e.target.value)}
+                  placeholder="Например: уточнена дата границы — перенос на 2 дня"
+                  className="w-full bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#121316] outline-none resize-y focus:border-[var(--accent)] disabled:opacity-60"
+                />
+                {requestError ? (
+                  <div className={UI.errorBox} role="alert">{requestError}</div>
+                ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" data-ui="plan-request-submit" disabled={requestSending} onClick={submitPlanRequest} className={UI.buttonPrimary}>
+                    {requestSending ? 'Отправляется…' : 'Отправить запрос'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRequestFormOpen(false);
+                      setRequestError('');
+                    }}
+                    className={UI.buttonGhost}
+                  >
+                    Отмена
+                  </button>
+                </div>
               </div>
             ) : null}
             {isRootAdmin && !readOnly && planState !== 'draft' ? (
@@ -1769,7 +1940,7 @@ export default function TripCard({
             <thead>
               <tr className={UI.theadRow}>
                 <th className={UI.th}>Этап</th>
-                <th className={UI.th}>Уточнение</th>
+                <th className={UI.th} title="Город, адрес, объект или другое место выполнения этапа — свободный ввод с подсказками городов портала">Место</th>
                 <th className={UI.th}>План</th>
                 <th className={UI.th}>Факт</th>
                 <th className={UI.th}>Отклонение / состояние</th>
@@ -1802,13 +1973,12 @@ export default function TripCard({
                         </select>
                       </td>
                       <td className="px-2 py-1.5 align-middle">
-                        <input
-                          type="text"
+                        <CityAutocomplete
                           value={s.label || ''}
                           disabled={readOnly}
-                          onChange={(e) => onStageField(s.id, 'label', e.target.value)}
-                          placeholder="напр. Достык"
-                          list="tl-checkpoints-list"
+                          onChange={(v) => onStageField(s.id, 'label', v)}
+                          placeholder="город, адрес или объект"
+                          cities={cities}
                           className={`${UI.inputSm} w-[160px]`}
                         />
                       </td>
