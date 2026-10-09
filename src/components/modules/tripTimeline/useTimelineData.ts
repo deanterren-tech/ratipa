@@ -88,6 +88,7 @@ const normalizeManualTrip = (raw: TimelineTrip, carIndex: Map<string, CarRef>, d
     carNumber: car?.carNumber || raw.carNumber || '',
     dispatcherId,
     dispatcherName,
+    planDraftFromTimeline: true,
     spanOverride,
     warnings: [],
   };

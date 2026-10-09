@@ -166,6 +166,12 @@ export interface WholeTrip extends TimelineTrip {
   openPlan?: boolean;
   /** Переопределение плановых границ (из плана дохода). */
   spanOverride?: SpanOverride;
+  /**
+   * План создан формой таймлайна и потому может быть в состоянии «Черновик
+   * плана»: только для таких записей маркер planGuard.draftCreated учитывается
+   * контролем плана (у заполненных реальных рейсов он не даёт бесплатную правку).
+   */
+  planDraftFromTimeline?: boolean;
   /** Понятные предупреждения по данным (конфликты не исправляются автоматически). */
   warnings: string[];
 }
@@ -237,6 +243,9 @@ export const planTripsToWholeTrips = (
         openPlan: pMin != null && pMax == null,
         spanOverride: { pMin, pMax },
         planRaw: rec,
+        // Черновик формы таймлайна (маркер planGuard.draftCreated действителен):
+        // запись создана «Новым рейсом» и ещё «Требует заполнения».
+        planDraftFromTimeline: rec.createdFrom === 'timeline' || rec.needsFill === true,
         warnings,
         plan: {
           id,

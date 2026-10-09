@@ -41,6 +41,14 @@ import { eventTypeOf, stageFullName } from './lib/catalog';
 import { PlanBarLabel, planBarLabelParts, type PlanBarParts } from './PlanBarLabel';
 import { eventMarkOf, groupEventMarks, type EventMark } from './lib/eventMarks';
 import {
+  layoutStageFills,
+  stageColorOf,
+  stageFillTitle,
+  stageShortName,
+  type StageFillInput,
+  type StageFillSection,
+} from './lib/stageFills';
+import {
   baseBarRange,
   baseDeviation,
   plateKeyOf,
@@ -52,7 +60,7 @@ import {
 } from './lib/sources';
 import DateInput from './DateInput';
 import CalendarHeader from './CalendarHeader';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, Maximize2, Minimize2 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Палитра полос (визуальная логика прототипа, палитра — под светлый холст)
@@ -97,9 +105,9 @@ const hatchOpen = `repeating-linear-gradient(45deg, ${CLR.factOpenA}, ${CLR.fact
 type PlanItem =
   | { kind: 'plan'; a: number; b: number; tripKey: string; parts: PlanBarParts; archived: boolean; statusKind: DeadlineStatusKind; open: boolean; title: string }
   | { kind: 'buffer'; a: number; b: number; days: number }
-  | { kind: 'markPlan'; day: number; critical: boolean; title: string; tripKey: string; weekend: boolean }
   | { kind: 'markReturn'; day: number; title: string; tripKey: string }
-  | { kind: 'ready'; a: number; b: number; periodKey: string; title: string; deviation: string; archived: boolean };
+  | { kind: 'ready'; a: number; b: number; periodKey: string; title: string; deviation: string; archived: boolean }
+  | { kind: 'handover'; point: number; from: string; to: string; note: string; title: string; chip: boolean };
 
 type DeadlineStatusKind = 'none' | 'ok' | 'risk' | 'violated' | 'missed';
 
@@ -110,8 +118,8 @@ type FactItem =
   | { kind: 'repair'; a: number; b: number; open: boolean; capped: boolean; periodKey: string; title: string; archived: boolean }
   | { kind: 'event'; day: number; lastDay: number; count: number; color: string; title: string; tripKey?: string; eventId?: string }
   | { kind: 'gap'; a: number; b: number; days: number }
-  | { kind: 'markFact'; day: number; late: boolean; title: string; tripKey: string; weekend: boolean }
-  | { kind: 'markReady'; day: number; title: string; periodKey: string; archived: boolean };
+  | { kind: 'markReady'; day: number; title: string; periodKey: string; archived: boolean }
+  | { kind: 'handover'; point: number; from: string; to: string; note: string; title: string; chip: boolean };
 
 interface CarRowModel {
   carKey: string;
@@ -119,6 +127,9 @@ interface CarRowModel {
   carId: string;
   dispatcherId: string;
   dispatcherName: string;
+  /** ТЕКУЩЕЕ назначение машины (справочник сцепок): по нему группируется «Все». */
+  groupDispatcherId: string;
+  groupDispatcherName: string;
   tripsCount: number;
   basesCount: number;
   repairsCount: number;
@@ -126,6 +137,20 @@ interface CarRowModel {
   empty: boolean;
   planItems: PlanItem[];
   factItems: FactItem[];
+  /** Этапы всех рейсов машины в окне — источник заливок «План»/«Факт». */
+  stageInputs: StageFillInput[];
+}
+
+/** Маркер стыка смены диспетчера: точка между двумя рейсами разных диспетчеров. */
+interface HandoverMark {
+  /** Координата в днях (дробная: стык между днями не выдаётся за дату передачи). */
+  point: number;
+  /** Предыдущий и новый диспетчеры (по стабильным id исходных записей). */
+  from: string;
+  to: string;
+  /** Подпись про дату передачи (в источниках не хранится — не выдумывается). */
+  note: string;
+  title: string;
 }
 
 interface BgSeg {
@@ -169,8 +194,19 @@ interface Props {
   onOpenTrip: (tripKey: string) => void;
   /** Клик по маркеру события: открыть связанный рейс и выделить запись в журнале. */
   onOpenTripEvent: (tripKey: string, eventId: string) => void;
+  /** Клик по заливке этапа: открыть рейс и выделить этап в карточке. */
+  onOpenTripStage: (tripKey: string, stageId: string) => void;
   onOpenBase: (periodKey: string) => void;
   onOpenCar: (carKey: string) => void;
+  /** Порядок диспетчеров — как во вкладках «Плана дохода» (id, по порядку справочника). */
+  dispatcherOrder: string[];
+  /** Вкладка «Все»: группировать машины по ТЕКУЩЕМУ диспетчеру с заголовками блоков. */
+  groupByDispatcher: boolean;
+  /** Текущее назначение машин (справочник сцепок) по ключу строки. */
+  carCurrentDispatcher: Map<string, { id: string; name: string }>;
+  /** Полноэкранный режим: рабочая область раскрыта, полотно тянется по высоте. */
+  fullscreen: boolean;
+  onToggleFullscreen: () => void;
 }
 
 /** Запас по краям окна: полосы, пересекающиеся с [vs−margin, ve+margin],
@@ -211,29 +247,47 @@ const buildRows = (
   vs: number,
   ve: number,
   today: number,
+  /** Текущее назначение машин (справочник сцепок) по ключу строки: «Все» группируется по нему. */
+  carCurrentDispatcher: Map<string, { id: string; name: string }>,
 ): CarRowModel[] => {
   const from = vs - WINDOW_MARGIN;
   const to = ve + WINDOW_MARGIN;
   const visibleTrips = trips.filter((t) => showArchived || !t.archived);
+  // Уникальность — по СТАБИЛЬНЫМ ключам исходных записей (`pd:` / `tl:` / `bz:`):
+  // повторные записи одного источника не создают вторую полосу, а смена
+  // диспетчера у машины не порождает дубликатов.
+  const seenTripKeys = new Set<string>();
   const tripCandidates = visibleTrips.filter((t) => {
+    if (seenTripKeys.has(t.key)) return false;
     const ov = t.spanOverride || {};
     const span = tripSpan(t);
     const s = ov.pMin ?? span.pMin ?? span.fMin ?? null;
     const e = ov.pMax ?? span.pMax ?? span.fMax ?? s;
-    return intersects(s, e, from, to);
+    if (!intersects(s, e, from, to)) return false;
+    seenTripKeys.add(t.key);
+    return true;
   });
 
+  const seenBaseKeys = new Set<string>();
   const baseCandidates = bases.filter((p) => {
     if (!showArchived && p.archived) return false; // архивные данные скрыты полностью
+    if (seenBaseKeys.has(p.key)) return false;
     const rb = baseBarRange(p, today);
     const rr = repairBarRange(p, today);
-    return (rb && intersects(rb.a, rb.b, from, to)) || (rr && intersects(rr.a, rr.b, from, to));
+    const hit = (rb && intersects(rb.a, rb.b, from, to)) || (rr && intersects(rr.a, rr.b, from, to));
+    if (!hit) return false;
+    seenBaseKeys.add(p.key);
+    return true;
   });
 
+  const seenEventIds = new Set<string>();
   const eventCandidates = events.filter((e) => {
+    if (seenEventIds.has(e.id)) return false;
     const a = dayNum(e.dateFrom);
     const b = dayNum(e.dateTo) ?? a;
-    return intersects(a, b, from, to);
+    if (!intersects(a, b, from, to)) return false;
+    seenEventIds.add(e.id);
+    return true;
   });
 
   // Машины: с данными + справочные (список уже соответствует вкладке)
@@ -328,32 +382,9 @@ const buildRows = (
         });
       }
 
-      // Маркеры этапов: план — на подстроке «План», факт — на «Факт»
-      t.stages.forEach((s) => {
-        const p = dayNum(s.plannedDate);
-        const f = dayNum(s.actualDate);
-        if (p != null && visible(p, p)) {
-          planItems.push({
-            kind: 'markPlan',
-            day: p,
-            critical: !!s.isCritical,
-            tripKey: t.key,
-            weekend: isWeekendDay(p),
-            title: `${s.isCritical ? 'КРИТИЧЕСКИЙ СРОК: ' : 'план: '}${stageFullName(stageTypes, s)} ${s.plannedDate}`,
-          });
-        }
-        if (f != null && visible(f, f)) {
-          const dev = stageDeviation(s);
-          factItems.push({
-            kind: 'markFact',
-            day: f,
-            late: dev != null && dev > 0,
-            tripKey: t.key,
-            weekend: isWeekendDay(f),
-            title: `факт: ${stageFullName(stageTypes, s)} ${s.actualDate}${dev != null ? ` (${dev > 0 ? '+' : ''}${dev} дн)` : ''}`,
-          });
-        }
-      });
+      // Этапы на этой подстроке больше НЕ тонкие маркеры: они рисуются
+      // заливкой ячейки дня (StageFillInput собирается ниже), поэтому здесь
+      // для stages ничего не добавляется. Состав и даты не изменяются.
     });
 
     // ── Периоды «Учёта выезда»: ПЛАН приезд→срок готовности, ФАКТ приезд→выезд ──
@@ -480,6 +511,39 @@ const buildRows = (
       });
     });
 
+    // ── Стыки смены диспетчера: между соседними рейсами с РАЗНЫМИ
+    // диспетчерами (по стабильным id исходных записей). Это НЕ новый рейс и
+    // НЕ полоса: рейсы не разрываются и не копируются, старые записи не
+    // переписываются. Даты передачи в источниках нет — разделитель ставится
+    // между рейсами и подписан честно («дата передачи не указана»); начало
+    // следующего рейса за дату передачи не выдаётся.
+    const handovers: HandoverMark[] = [];
+    for (let i = 0; i < tripsSorted.length - 1; i += 1) {
+      const prev = tripsSorted[i];
+      const next = tripsSorted[i + 1];
+      const prevDisp = prev.dispatcherId || '';
+      const nextDisp = next.dispatcherId || '';
+      if (!prevDisp || !nextDisp || prevDisp === nextDisp) continue;
+      const prevSpan = tripSpan(prev);
+      const nextSpan = tripSpan(next);
+      const prevEnd = prev.spanOverride?.pMax ?? prevSpan.pMax ?? prevSpan.fMax ?? null;
+      const nextStart = next.spanOverride?.pMin ?? nextSpan.pMin ?? null;
+      if (prevEnd == null || nextStart == null || nextStart <= prevEnd) continue;
+      // Стык: соприкасающиеся периоды — на шве; между периодами — посередине
+      // промежутка (конкретный день передачи не выдумываем).
+      const point = nextStart > prevEnd + 1 ? (prevEnd + nextStart) / 2 : prevEnd + 0.5;
+      const prevName = prev.dispatcherName || 'без диспетчера';
+      const nextName = next.dispatcherName || 'без диспетчера';
+      handovers.push({
+        point,
+        from: prevName,
+        to: nextName,
+        // Дата передачи в источниках НЕ хранится: подпись честно сообщает об этом.
+        note: 'дата передачи не указана',
+        title: `Смена диспетчера на машине: ${prevName} → ${nextName}. Дата и время передачи не сохранены (достоверных данных нет) — начало следующего рейса датой передачи не считается.`,
+      });
+    }
+
     // Пересечения рейс↔база и этапы вне границ (не исправляем — предупреждаем)
     myTrips.forEach((t) => {
       const ov = t.spanOverride || {};
@@ -498,13 +562,30 @@ const buildRows = (
       });
     });
 
+    // Заливки этапов машины — из ВСЕХ её рейсов окна (план/факт разделяются в
+    // раскладке). Дата в данные не пишется: только отображение.
+    const stageInputs: StageFillInput[] = [];
+    myTrips.forEach((t) => {
+      t.stages.forEach((s) => stageInputs.push({ tripKey: t.key, stage: s, archived: !!t.archived }));
+    });
+
+    // Стык смены диспетчера — в обе подстроки: «План» с подписью, «Факт» линией.
+    handovers.forEach((h) => {
+      planItems.push({ kind: 'handover', point: h.point, from: h.from, to: h.to, note: h.note, title: h.title, chip: true });
+      factItems.push({ kind: 'handover', point: h.point, from: h.from, to: h.to, note: h.note, title: h.title, chip: false });
+    });
+
     const empty = myTrips.length === 0 && myBases.length === 0;
+    // Текущее назначение (справочник сцепок) — основа группировки во «Все».
+    const current = carCurrentDispatcher.get(car.carKey) || null;
     rows.push({
       carKey: car.carKey,
       carNumber: car.carNumber,
       carId: car.carId,
-      dispatcherId: car.dispatcherId,
-      dispatcherName: car.dispatcherName,
+      dispatcherId: current ? current.id : car.dispatcherId,
+      dispatcherName: current ? current.name || car.dispatcherName : car.dispatcherName,
+      groupDispatcherId: current ? current.id : car.dispatcherId,
+      groupDispatcherName: current ? current.name || car.dispatcherName : car.dispatcherName,
       tripsCount: myTrips.length,
       basesCount: myBases.filter((p) => p.arrivalDay != null).length,
       repairsCount: myBases.filter((p) => p.repairStartDay != null).length,
@@ -512,6 +593,7 @@ const buildRows = (
       empty,
       planItems,
       factItems,
+      stageInputs,
     });
   });
 
@@ -534,9 +616,12 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   vs,
   vn,
   bg,
+  today,
+  stageTypes,
   selectedTripKey,
   onOpenTrip,
   onOpenTripEvent,
+  onOpenTripStage,
   onOpenBase,
   onOpenCar,
 }: {
@@ -545,9 +630,13 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   vs: number;
   vn: number;
   bg: BgSeg[];
+  today: number;
+  stageTypes: TimelineStageType[];
   selectedTripKey?: string | null;
   onOpenTrip: (key: string) => void;
   onOpenTripEvent: (tripKey: string, eventId: string) => void;
+  /** Клик по заливке этапа: открыть рейс и выделить этап в карточке. */
+  onOpenTripStage: (tripKey: string, stageId: string) => void;
   onOpenBase: (key: string) => void;
   onOpenCar: (key: string) => void;
 }) {
@@ -633,25 +722,127 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   };
   /** Дорожка «факта рейса» (группа 0) — над ней стоят маркеры событий. */
   const factZone0 = factTrack.layout.zones.find((z) => z.key === 0) ?? null;
+  /**
+   * Заливки этапов: план — в подстроке «План», факт — в «Факт». Этап с одной
+   * датой закрашивает всю ячейку своего дня; несколько этапов в одном дне
+   * делят ячейку на цветные секции (клик — открыть рейс и выделить этап).
+   */
+  const planFills = useMemo(() => layoutStageFills(row.stageInputs, 'plan', vs, ve), [row.stageInputs, vs, ve]);
+  const factFills = useMemo(() => layoutStageFills(row.stageInputs, 'fact', vs, ve), [row.stageInputs, vs, ve]);
   /** Спокойная сетка: слабые вертикальные деления дней на читаемых масштабах. */
   const laneBg = colW >= 12
     ? {
         backgroundImage: `repeating-linear-gradient(to right, #F1F2F4 0px, #F1F2F4 1px, transparent 1px, transparent ${colW}px)`,
       }
     : {};
+  /** Секции заливок этапов — на всю высоту подстроки, кликабельны. */
+  const renderStageFill = (f: StageFillSection, keyPrefix: string) => {
+    const color = stageColorOf(f.stage.type);
+    const left = dayToX(f.day, vs, colW) + Math.round((f.section * colW) / f.sections);
+    const right = dayToX(f.day, vs, colW) + Math.round(((f.section + 1) * colW) / f.sections);
+    const width = Math.max(1, right - left);
+    const open = () => onOpenTripStage(f.tripKey, f.stage.id);
+    return (
+      <div
+        key={`${keyPrefix}-${f.tripKey}-${f.stage.id}-${f.day}`}
+        role="button"
+        tabIndex={0}
+        data-stage-fill="1"
+        data-stage={f.stage.id}
+        data-trip={f.tripKey}
+        onClick={open}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            open();
+          }
+        }}
+        className="absolute top-0 bottom-0 z-[4] cursor-pointer overflow-hidden whitespace-nowrap flex items-center justify-center px-0.5"
+        style={{
+          left,
+          width,
+          background: color.bg,
+          borderLeft: `1px solid ${color.border}`,
+          borderRight: f.section === f.sections - 1 ? `1px solid ${color.border}` : undefined,
+          color: color.text,
+          ...(f.stage.isCritical ? { outline: '1px dashed #DC2626', outlineOffset: '-1px' } : {}),
+          ...(f.archived ? { opacity: 0.72 } : {}),
+        }}
+        title={stageFillTitle(stageTypes, f.stage, f.day, today)}
+      >
+        {width >= 44 ? (
+          <span className="text-[8px] leading-[10px] truncate max-w-full">{stageShortName(stageTypes, f.stage)}</span>
+        ) : null}
+      </div>
+    );
+  };
+  /** Стык смены диспетчера: линия через подстроку; в «Плане» — с подписью. */
+  const renderHandover = (it: { point: number; from: string; to: string; note: string; title: string; chip: boolean }, keyPrefix: string) => {
+    const x = Math.round((it.point - vs) * colW);
+    if (x < -4 || x > W + 4) return null;
+    return (
+      <div key={`${keyPrefix}-${it.point}`} data-tl-handover="1" className="absolute top-0 bottom-0 z-[6]" style={{ left: x, width: 0 }}>
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            left: -1,
+            top: 0,
+            bottom: 0,
+            borderLeft: '2px dashed #6B7280',
+            opacity: 0.75,
+          }}
+        />
+        {it.chip ? (
+          <div
+            title={it.title}
+            data-tl-handover-chip="1"
+            className="absolute flex flex-col gap-0 rounded-md border border-[#D1D5DB] bg-white/95 px-1 py-[1px] shadow-sm cursor-default"
+            style={{ top: 1, left: 4, maxWidth: 240, overflow: 'hidden' }}
+          >
+            <span className="flex items-center gap-0.5 whitespace-nowrap text-[8px] leading-[9px] text-[#4B5563]">
+              <ArrowRightLeft className="w-2.5 h-2.5 shrink-0 text-[#6B7280]" aria-hidden="true" />
+              <span className="truncate" data-tl-handover-label="1">
+                Передача: {it.from} → {it.to}
+              </span>
+            </span>
+            <span className="whitespace-nowrap text-[7px] leading-[8px] text-[#9CA3AF] truncate" data-tl-handover-note="1">
+              {it.note}
+            </span>
+          </div>
+        ) : (
+          <span title={it.title} className="absolute" style={{ top: 1, left: 4, width: 8, height: 8 }} aria-hidden="true" />
+        )}
+      </div>
+    );
+  };
+  /** Выходные — под полосами; «сегодня» — отдельным слоем ПОВЕРХ заливок этапов
+   *  (подсветка столбца остаётся различимой под цветными секциями). */
   const bgPlane = (keyPrefix: string, opacity: number) =>
-    bg.map((seg, i) => (
+    bg.filter((seg) => seg.kind === 'weekend').map((seg, i) => (
       <div
         key={`${keyPrefix}${i}`}
-        data-tl-today={seg.kind === 'today' ? '1' : undefined}
         className="absolute top-0 bottom-0"
         style={{
           left: seg.left,
           width: seg.width,
-          background: seg.kind === 'weekend' ? CLR.weekend : CLR.today,
-          // «Сегодня» — мягкая полупрозрачная заливка (различима поверх выходных),
-          // рисуется ПОД полосами/маркерами и не перехватывает клики.
-          opacity: seg.kind === 'weekend' ? opacity : 0.12,
+          background: CLR.weekend,
+          opacity,
+          pointerEvents: 'none',
+        }}
+      />
+    ));
+  const todayStrip = (keyPrefix: string, opacity: number) =>
+    bg.filter((seg) => seg.kind === 'today').map((seg, i) => (
+      <div
+        key={`${keyPrefix}t${i}`}
+        data-tl-today="1"
+        className="absolute top-0 bottom-0 z-[5]"
+        style={{
+          left: seg.left,
+          width: seg.width,
+          background: CLR.today,
+          opacity,
           pointerEvents: 'none',
         }}
       />
@@ -690,8 +881,11 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       </div>
       <div data-lane="plan" className="relative z-0 border-b border-[#EEF0F3]" style={{ width: W, height: planH, ...laneBg }}>
         {bgPlane('bg', 0.75)}
+        {planFills.map((f) => renderStageFill(f, 'pf'))}
+        {todayStrip('t', 0.14)}
         {row.planItems.map((it, idx) => {
-          const p = pos(it.kind === 'markPlan' || it.kind === 'markReturn' ? it.day : it.a, it.kind === 'markPlan' || it.kind === 'markReturn' ? it.day : it.b);
+          if (it.kind === 'handover') return renderHandover(it, `ph${idx}`);
+          const p = pos(it.kind === 'markReturn' ? it.day : it.a, it.kind === 'markReturn' ? it.day : it.b);
           if (!p) return null;
           if (it.kind === 'ready') {
             return (
@@ -792,21 +986,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               />
             );
           }
-          return (
-            <div
-              key={`m${idx}`}
-              data-bar={it.critical ? 'mark-critical' : 'mark-plan'}
-              className="absolute z-[4]"
-              style={{
-                left: dayToX(it.day, vs, colW) + Math.round(colW * 0.3),
-                top: 2,
-                height: planH - 4,
-                width: it.critical ? 3 : 2,
-                background: it.critical ? CLR.markCritical : CLR.markPlan,
-              }}
-              title={`${it.weekend ? '⚠ дата на выходном · ' : ''}${it.title}`}
-            />
-          );
+          return null;
         })}
       </div>
 
@@ -827,9 +1007,12 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       </div>
       <div data-lane="fact" className="relative z-0 border-b border-[#E5E7EB]" style={{ width: W, height: factH, ...laneBg }}>
         {bgPlane('fbg', 0.6)}
+        {factFills.map((f) => renderStageFill(f, 'ff'))}
+        {todayStrip('ft', 0.14)}
         {row.factItems.map((it, idx) => {
+          if (it.kind === 'handover') return renderHandover(it, `fh${idx}`);
           const p =
-            it.kind === 'event' || it.kind === 'markFact' || it.kind === 'markReady'
+            it.kind === 'event' || it.kind === 'markReady'
               ? pos(it.day, it.day)
               : pos(it.a, it.b);
           if (!p) return null;
@@ -975,7 +1158,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                         }
                       : undefined
                   }
-                  className={`absolute z-[4] ${linked ? 'cursor-pointer' : ''}`}
+                  className={`absolute z-[6] ${linked ? 'cursor-pointer' : ''}`}
                   style={
                     grouped
                       ? { left, top, height: 12, minWidth: 16, padding: '0 3px', background: '#7C3AED', borderRadius: 6, textAlign: 'center', opacity: 0.95 }
@@ -1008,7 +1191,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   data-bar="mark-ready"
                   data-period={it.periodKey}
                   onClick={() => onOpenBase(it.periodKey)}
-                  className="absolute z-[4] cursor-pointer"
+                  className="absolute z-[6] cursor-pointer"
                   style={{
                     left: dayToX(it.day, vs, colW) + Math.round(colW * 0.45),
                     top: 2,
@@ -1020,27 +1203,6 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   title={it.title}
                 />
               );
-            case 'markFact': {
-              return (
-                <div
-                  key={`mf${idx}`}
-                  role="button"
-                  tabIndex={0}
-                  data-bar={it.late ? 'mark-late' : 'mark-fact'}
-                  data-trip={it.tripKey}
-                  onClick={() => onOpenTrip(it.tripKey)}
-                  className="absolute z-[4] cursor-pointer"
-                  style={{
-                    left: dayToX(it.day, vs, colW) + Math.round(colW * 0.6),
-                    top: 2,
-                    height: factH - 4,
-                    width: 2,
-                    background: it.late ? CLR.markLate : CLR.markFact,
-                  }}
-                  title={`${it.weekend ? '⚠ дата на выходном · ' : ''}${it.title}`}
-                />
-              );
-            }
             default:
               return null;
           }
@@ -1124,8 +1286,14 @@ export default function TimelineGrid({
   selectedTripKey,
   onOpenTrip,
   onOpenTripEvent,
+  onOpenTripStage,
   onOpenBase,
   onOpenCar,
+  dispatcherOrder,
+  groupByDispatcher,
+  carCurrentDispatcher,
+  fullscreen,
+  onToggleFullscreen,
 }: Props) {
   const ve = vs + vn - 1;
   const colW = zoomColW(zoom);
@@ -1146,9 +1314,43 @@ export default function TimelineGrid({
   const pendingAnchor = useRef<{ day: number; frac: number } | null>(null);
 
   const rows = useMemo(
-    () => buildRows(trips, bases, events, fleetCars, stageTypes, showArchived, vs, ve, today),
-    [trips, bases, events, fleetCars, stageTypes, showArchived, vs, ve, today],
+    () => buildRows(trips, bases, events, fleetCars, stageTypes, showArchived, vs, ve, today, carCurrentDispatcher),
+    [trips, bases, events, fleetCars, stageTypes, showArchived, vs, ve, today, carCurrentDispatcher],
   );
+
+  /**
+   * Блоки вкладки «Все»: машины одного диспетчера — рядом, единым блоком.
+   * Порядок диспетчеров — как во вкладках «Плана дохода»; внутри блока — по
+   * госномеру (сортировка стабильная: те же ключи при обновлении данных, tie —
+   * по стабильному carKey). Без диспетчера — в конце, группой.
+   */
+  const blocks = useMemo(() => {
+    if (!groupByDispatcher) return [{ key: '', name: '', rows }];
+    const orderIdx = new Map<string, number>();
+    dispatcherOrder.forEach((id, i) => orderIdx.set(id, i));
+    const idxOf = (row: CarRowModel): number => {
+      if (!row.groupDispatcherId) return Number.MAX_SAFE_INTEGER;
+      const i = orderIdx.get(row.groupDispatcherId);
+      return i == null ? Number.MAX_SAFE_INTEGER - 1 : i;
+    };
+    const sorted = [...rows].sort((a, b) => {
+      const ai = idxOf(a);
+      const bi = idxOf(b);
+      if (ai !== bi) return ai - bi;
+      const an = (a.groupDispatcherName || '').toLocaleLowerCase('ru');
+      const bn = (b.groupDispatcherName || '').toLocaleLowerCase('ru');
+      if (an !== bn) return an.localeCompare(bn, 'ru');
+      return a.carNumber.localeCompare(b.carNumber, 'ru') || a.carKey.localeCompare(b.carKey);
+    });
+    const out: Array<{ key: string; name: string; rows: CarRowModel[] }> = [];
+    sorted.forEach((row) => {
+      const key = row.groupDispatcherId || '';
+      const last = out[out.length - 1];
+      if (last && last.key === key) last.rows.push(row);
+      else out.push({ key, name: row.groupDispatcherName || '', rows: [row] });
+    });
+    return out;
+  }, [rows, groupByDispatcher, dispatcherOrder]);
 
   // Фоновая дорожка одна на всё окно: выходные и подсветка всего столбца «сегодня».
   // Подсветка — ровно календарная ячейка текущего дня (та же формула левой границы
@@ -1362,7 +1564,7 @@ export default function TimelineGrid({
   );
 
   return (
-    <div className="flex flex-col">
+    <div className={`flex flex-col ${fullscreen ? 'flex-1 min-h-0' : ''}`}>
       {/* Панель управления окном */}
       <div className="flex flex-wrap items-center gap-2 pb-3">
         <button type="button" data-nav="month-prev" className={navBtn} onClick={() => shiftMonth(-1)}>« месяц</button>
@@ -1441,16 +1643,46 @@ export default function TimelineGrid({
           />
           Показывать архивные данные
         </label>
+        {/* Полный экран: рабочая область раскрывается на всё окно (тот же таймлайн,
+            без копии). Выход — эта же кнопка или Escape. */}
+        {fullscreen ? (
+          <button
+            type="button"
+            data-ui="fullscreen-exit"
+            onClick={onToggleFullscreen}
+            title="Выйти из полноэкранного режима (Escape)"
+            aria-label="Выйти из полноэкранного режима"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-[#121316] text-white hover:bg-black transition-colors cursor-pointer"
+          >
+            <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
+            Выйти из полноэкранного режима
+          </button>
+        ) : (
+          <button
+            type="button"
+            data-ui="fullscreen-enter"
+            onClick={onToggleFullscreen}
+            title="На весь экран"
+            aria-label="На весь экран"
+            className={navBtn}
+          >
+            <Maximize2 className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="ml-1.5 hidden sm:inline">На весь экран</span>
+          </button>
+        )}
       </div>
 
       {/* Сетка — ОДИН контейнер прокрутки для шапки, сетки и полос.
           Монтируется всегда (даже без машин), чтобы позиция прокрутки не терялась
-          при загрузке данных и смене вкладки диспетчера. */}
+          при загрузке данных и смене вкладки диспетчера. В полноэкранном режиме
+          тянется по высоте окна (max-h снимается, flex-1). */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
         data-ui="timeline-scroll"
-        className="tl-scroll overflow-auto overscroll-x-contain border border-[#E5E7EB] rounded-xl bg-[#F9FAFB] max-h-[68vh] min-h-[280px]"
+        className={`tl-scroll overflow-auto overscroll-x-contain border border-[#E5E7EB] rounded-xl bg-[#F9FAFB] ${
+          fullscreen ? 'flex-1 min-h-0' : 'max-h-[68vh] min-h-[280px]'
+        }`}
       >
         <style>{`.tl-scroll{scrollbar-width:thin;scrollbar-color:#B6BBC2 #F3F4F6;}
 .tl-scroll::-webkit-scrollbar{height:12px;width:12px;}
@@ -1470,21 +1702,49 @@ export default function TimelineGrid({
             <CalendarHeader vs={vs} vn={vn} colW={colW} today={today} pinLeft={178} />
           </div>
 
-          {/* Группы машин: «План» сверху, «Факт» снизу */}
-          {rows.map((row) => (
-            <TimelineCarRow
-              key={row.carKey}
-              row={row}
-              colW={colW}
-              vs={vs}
-              vn={vn}
-              bg={bg}
-              selectedTripKey={selectedTripKey}
-              onOpenTrip={onOpenTrip}
-              onOpenTripEvent={onOpenTripEvent}
-              onOpenBase={onOpenBase}
-              onOpenCar={onOpenCar}
-            />
+          {/* Группы машин: «План» сверху, «Факт» снизу. Во вкладке «Все» — блоками
+              по ТЕКУЩЕМУ диспетчеру (порядок — как во вкладках «Плана дохода»),
+              внутри блока — по госномеру; без диспетчера — в конце группой. */}
+          {blocks.map((block) => (
+            <React.Fragment key={`blk-${block.key || 'none'}`}>
+              {groupByDispatcher ? (
+                <div
+                  data-ui="dispatcher-group"
+                  data-dgroup={block.key || 'none'}
+                  className="flex items-stretch"
+                  style={{ gridColumn: '1 / -1' }}
+                >
+                  <div
+                    className="sticky left-0 z-[3] bg-[#EEF1F5] border-r border-b border-[#E5E7EB] px-2.5 w-[170px] min-w-[170px] flex items-center gap-1.5"
+                    style={{ borderRightColor: '#D1D5DB' }}
+                  >
+                    <span className="text-[10px] leading-[12px] font-semibold text-[#374151] truncate" title={block.name || 'Без диспетчера'}>
+                      {block.name || 'Без диспетчера'}
+                    </span>
+                    <span className="text-[9px] leading-[11px] text-[#6B7280] shrink-0 tabular-nums">машин: {block.rows.length}</span>
+                  </div>
+                  <div className="bg-[#EEF1F5] border-b border-[#E5E7EB] h-[22px] min-w-0 flex-1" />
+                </div>
+              ) : null}
+              {block.rows.map((row) => (
+                <TimelineCarRow
+                  key={row.carKey}
+                  row={row}
+                  colW={colW}
+                  vs={vs}
+                  vn={vn}
+                  bg={bg}
+                  today={today}
+                  stageTypes={stageTypes}
+                  selectedTripKey={selectedTripKey}
+                  onOpenTrip={onOpenTrip}
+                  onOpenTripEvent={onOpenTripEvent}
+                  onOpenTripStage={onOpenTripStage}
+                  onOpenBase={onOpenBase}
+                  onOpenCar={onOpenCar}
+                />
+              ))}
+            </React.Fragment>
           ))}
           {rows.length === 0 ? (
             <div className="col-span-2 py-10 text-center text-xs text-[#6B7280]">
@@ -1537,8 +1797,16 @@ export default function TimelineGrid({
           событие машины / журнала рейса (клик — к записи)
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <i className="inline-block w-[3px] h-[12px]" style={{ background: CLR.markCritical }} />
-          критический дедлайн
+          <i className="inline-block w-[14px] h-[10px] rounded-[2px]" style={{ background: '#DBEAFE', border: '1px solid #93C5FD' }} />
+          этап: заливка дня — цвет по типу (клик — этап в карточке)
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <i className="inline-block w-[2px] h-[12px]" style={{ background: 'repeating-linear-gradient(to bottom, #6B7280 0 3px, transparent 3px 6px)' }} />
+          передача диспетчера (дата не указана — стык между рейсами)
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <i className="inline-block w-[12px] h-[10px] rounded-[2px]" style={{ background: '#F9FAFB', border: '1px dashed #DC2626' }} />
+          критический срок этапа
         </span>
         <span className="inline-flex items-center gap-1.5">
           <i className="inline-block w-[3px] h-[12px]" style={{ background: CLR.warn, opacity: 0.7 }} />
@@ -1551,7 +1819,8 @@ export default function TimelineGrid({
       </div>
       <p className="text-[10px] text-[#9CA3AF] mt-2">
         Клик по плановой или фактической полосе открывает модальное окно всего рейса; клик по названию машины — обзор её рейсов и периодов.
-        Периоды базы и ремонта открываются кликом по полосе. Прокрутка — тачпад, Shift+колесо, полоса; масштаб — «−/+/ползунок» или Ctrl+колесо над календарём (дата под курсором остаётся на месте).
+        Периоды базы и ремонта открываются кликом по полосе. Заливка дня — этап: клик открывает рейс и выделяет этап в карточке; несколько этапов в дне делят ячейку на цветные секции.
+        Прокрутка — тачпад, Shift+колесо, полоса; масштаб — «−/+/ползунок» или Ctrl+колесо над календарём (дата под курсором остаётся на месте).
         Прокрутка догружает даты влево и вправо; выходные подсвечены фоном; «⌛» — плановая дата прошла, факт не указан, «⛔» — опоздание подтверждено фактом.
       </p>
     </div>

@@ -138,8 +138,18 @@ export default function TripTimelineModule({ user, settings }: Props) {
   // прокрутки восстанавливается по календарной дате-якорю (без скачка).
   const [extL, setExtL] = useState(() => Math.max(0, Math.min(EXT_MAX, Number(savedView.extL) || 0)));
   const [extR, setExtR] = useState(() => Math.max(0, Math.min(EXT_MAX, Number(savedView.extR) || 0)));
-  const [showArchived, setShowArchived] = useState(true);
+  /**
+   * Архив по умолчанию СКРЫТ: при входе в модуль и после перезагрузки галочка
+   * выключена, включённое состояние из localStorage/настроек НЕ восстанавливается.
+   * В рамках открытого модуля состояние живёт в React и сохраняется при
+   * обновлении данных и переключении вкладок (модуль не размонтируется).
+   * Фильтр применяется до первого рендера полос — архив не мелькает.
+   */
+  const [showArchived, setShowArchived] = useState(false);
   const [archiveMonth, setArchiveMonth] = useState<string | null>(() => savedView.amonth ?? null);
+  /** Полноэкранный режим рабочей области (тот же таймлайн, без копии DOM). */
+  const [fullscreen, setFullscreen] = useState(false);
+  const toggleFullscreen = useCallback(() => setFullscreen((v) => !v), []);
 
   /**
    * Базовый загруженный диапазон строится из масштаба: видимые дни (оценка по
@@ -179,7 +189,10 @@ export default function TripTimelineModule({ user, settings }: Props) {
     };
     data.trips.forEach((t) => addFrom(t.dispatcherId, t.dispatcherName));
     data.bases.forEach((p) => addFrom(p.dispatcherId, p.dispatcherName));
-    return tabs.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    // Порядок — как во вкладках «Плана дохода» (порядок справочника, БЕЗ
+    // алфавитной пересортировки); диспетчеры, встречающиеся только в записях,
+    // добавляются после — в порядке первого появления.
+    return tabs;
   }, [data.dispatchers, data.trips, data.bases]);
 
   const hasUnassigned = useMemo(
@@ -322,14 +335,30 @@ export default function TripTimelineModule({ user, settings }: Props) {
   const [openTripKey, setOpenTripKey] = useState<string | null>(null);
   /** Событие, к которому нужно перейти в журнале карточки (с маркера таймлайна). */
   const [focusEventId, setFocusEventId] = useState<string | null>(null);
+  /** Этап, который нужно выделить в карточке (клик по заливке этапа на полотне). */
+  const [focusStageId, setFocusStageId] = useState<string | null>(null);
   const [periodKey, setPeriodKey] = useState<string | null>(null);
   const [overviewCarKey, setOverviewCarKey] = useState<string | null>(null);
   const [showNewTrip, setShowNewTrip] = useState(false);
+
+  // Текущее назначение машин (единый справочник сцепок) — основа группировки
+  // вкладки «Все»: одна группа строк на автомобиль, без дублей из-за истории.
+  const carCurrentDispatcher = useMemo(() => {
+    const m = new Map<string, { id: string; name: string }>();
+    data.fleetCars.forEach((c) => {
+      m.set(`car:${c.carId || c.carNumber}`, { id: c.dispatcherId, name: c.dispatcherName });
+    });
+    return m;
+  }, [data.fleetCars]);
+
+  /** Порядок диспетчеров для блоков «Все» — тот же, что у вкладок модуля. */
+  const dispatcherOrderIds = useMemo(() => dispatcherTabs.map((t) => t.id), [dispatcherTabs]);
 
   const openTrip = useCallback((tripKey: string) => {
     setOverviewCarKey(null);
     setOpenTripKey(tripKey);
     setFocusEventId(null);
+    setFocusStageId(null);
     try {
       // адресуемая ссылка на окно рейса (переживает F5 и открытие в новой вкладке)
       window.history.replaceState(null, '', `#tripTimeline/trip/${encodeURIComponent(tripKey)}`);
@@ -343,6 +372,15 @@ export default function TripTimelineModule({ user, settings }: Props) {
     (tripKey: string, eventId: string) => {
       openTrip(tripKey);
       setFocusEventId(eventId);
+    },
+    [openTrip],
+  );
+
+  /** Клик по заливке этапа: открыть рейс и выделить этап в таблице карточки. */
+  const openTripAtStage = useCallback(
+    (tripKey: string, stageId: string) => {
+      openTrip(tripKey);
+      setFocusStageId(stageId);
     },
     [openTrip],
   );
@@ -389,6 +427,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
   const closeTrip = useCallback(() => {
     setOpenTripKey(null);
     setFocusEventId(null);
+    setFocusStageId(null);
     try {
       const h = window.location.hash || '';
       const clean = h.replace(/\/trip\/[^/]*$/, '');
@@ -397,6 +436,23 @@ export default function TripTimelineModule({ user, settings }: Props) {
       /* не критично */
     }
   }, []);
+
+  /**
+   * Выход из полноэкранного режима — Escape. Если открыта карточка рейса или
+   * вложенное окно (aria-modal), Escape сначала закрывает ЕЁ (свой обработчик
+   * карточки перехватывает клавишу раньше), а режим остаётся — это проверяем и
+   * явно, чтобы вложенные окна закрывались первыми.
+   */
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (document.querySelector('[aria-modal="true"]')) return; // закроется вложенное окно
+      setFullscreen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [fullscreen]);
 
   const openPeriod = useCallback((key: string) => setPeriodKey(key), []);
   const openCar = useCallback((carKey: string) => setOverviewCarKey(carKey), []);
@@ -607,105 +663,136 @@ export default function TripTimelineModule({ user, settings }: Props) {
         </div>
       }
     >
-      {/* Вкладки диспетчеров — тот же источник и стиль, что у «Плана дохода» */}
-      <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-[#E5E7EB] mb-4">
-        <span className={UI.caption}>Диспетчеры:</span>
-        <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-0.5" role="tablist" aria-label="Вкладки диспетчеров">
-          <button
-            type="button"
-            data-dtab={ALL_TAB}
-            aria-pressed={dispatcherTab === ALL_TAB}
-            onClick={() => setDispatcherTab(ALL_TAB)}
-            className={`${UI.filterPill} shrink-0 ${dispatcherTab === ALL_TAB ? activeTabCls : UI.filterPillIdle}`}
-          >
-            Все диспетчеры
-          </button>
-          {dispatcherTabs.map((d) => (
-            <button
-              key={d.id}
-              type="button"
-              data-dtab={d.id}
-              aria-pressed={dispatcherTab === d.id}
-              onClick={() => setDispatcherTab(d.id)}
-              title={d.name}
-              className={`${UI.filterPill} shrink-0 truncate max-w-[170px] ${dispatcherTab === d.id ? activeTabCls : UI.filterPillIdle}`}
-            >
-              {d.name}
-            </button>
-          ))}
-          {hasUnassigned ? (
-            <button
-              type="button"
-              data-dtab={NONE_TAB}
-              aria-pressed={dispatcherTab === NONE_TAB}
-              onClick={() => setDispatcherTab(NONE_TAB)}
-              className={`${UI.filterPill} shrink-0 ${dispatcherTab === NONE_TAB ? activeTabCls : UI.filterPillIdle}`}
-            >
-              Без диспетчера
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Месяцы архива — те же записи и правило группировки, что в «Плане дохода»
-          (месяц завершения, currentMonth записи плана дохода) */}
-      {showArchived && archiveMonths.length ? (
-        <div className="flex flex-wrap items-center gap-2 pb-3 mb-4 border-b border-[#E5E7EB]">
-          <span className={UI.caption} title="Рейсы сгруппированы по месяцу завершения, как в архиве «Плана дохода»">
-            Архив по месяцам:
-          </span>
-          <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-0.5" role="tablist" aria-label="Месяцы архива">
+      {/* Единая рабочая область: вкладки диспетчеров, месяцы архива и полотно.
+          В полноэкранном режиме раскрывается на всё окно (position: fixed) —
+          это ТОТ ЖЕ DOM, без копии таймлайна: прокрутка, масштаб, вкладка и
+          дата-якорь сохраняются при входе и выходе. */}
+      <div
+        data-ui={fullscreen ? 'timeline-fullscreen' : 'timeline-workarea'}
+        style={
+          fullscreen
+            ? {
+                position: 'fixed',
+                top: 0,
+                right: 0,
+                bottom: 0,
+                left: 0,
+                zIndex: 4000,
+                background: '#F9FAFB',
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '10px 14px',
+                overflow: 'hidden',
+              }
+            : undefined
+        }
+      >
+        {/* Вкладки диспетчеров — тот же источник и стиль, что у «Плана дохода» */}
+        <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-[#E5E7EB] mb-4">
+          <span className={UI.caption}>Диспетчеры:</span>
+          <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-0.5" role="tablist" aria-label="Вкладки диспетчеров">
             <button
               type="button"
-              data-amonth="all"
-              aria-pressed={archiveMonth == null}
-              onClick={() => setArchiveMonth(null)}
-              className={`${UI.filterPill} shrink-0 ${archiveMonth == null ? activeTabCls : UI.filterPillIdle}`}
+              data-dtab={ALL_TAB}
+              aria-pressed={dispatcherTab === ALL_TAB}
+              onClick={() => setDispatcherTab(ALL_TAB)}
+              className={`${UI.filterPill} shrink-0 ${dispatcherTab === ALL_TAB ? activeTabCls : UI.filterPillIdle}`}
             >
-              Все месяцы
+              Все диспетчеры
             </button>
-            {archiveMonths.map((m) => (
+            {dispatcherTabs.map((d) => (
               <button
-                key={m}
+                key={d.id}
                 type="button"
-                data-amonth={m}
-                aria-pressed={archiveMonth === m}
-                onClick={() => setArchiveMonth(m)}
-                className={`${UI.filterPill} shrink-0 truncate max-w-[200px] ${archiveMonth === m ? activeTabCls : UI.filterPillIdle}`}
+                data-dtab={d.id}
+                aria-pressed={dispatcherTab === d.id}
+                onClick={() => setDispatcherTab(d.id)}
+                title={d.name}
+                className={`${UI.filterPill} shrink-0 truncate max-w-[170px] ${dispatcherTab === d.id ? activeTabCls : UI.filterPillIdle}`}
               >
-                {m === '__none__' ? 'Без даты' : m}
+                {d.name}
               </button>
             ))}
+            {hasUnassigned ? (
+              <button
+                type="button"
+                data-dtab={NONE_TAB}
+                aria-pressed={dispatcherTab === NONE_TAB}
+                onClick={() => setDispatcherTab(NONE_TAB)}
+                className={`${UI.filterPill} shrink-0 ${dispatcherTab === NONE_TAB ? activeTabCls : UI.filterPillIdle}`}
+              >
+                Без диспетчера
+              </button>
+            ) : null}
           </div>
         </div>
-      ) : null}
 
-      {/* Вкладки модуля держим смонтированными: возврат сохраняет прокрутку и состояние */}
-      <div className={activeTab === 'timeline' ? '' : 'hidden'}>
-        <TimelineGrid
-          trips={filteredTrips}
-          bases={filteredBases}
-          events={filteredEvents}
-          fleetCars={filteredFleetCars}
-          stageTypes={data.stageTypes}
-          today={today}
-          vs={renderVs}
-          vn={renderVn}
-          extL={extL}
-          extR={extR}
-          navVs={vs}
-          zoom={zoom}
-          onZoomChange={changeZoom}
-          onNavigate={navigateRange}
-          onRangeExtend={extendRange}
-          showArchived={showArchived}
-          onShowArchivedChange={setShowArchived}
-          selectedTripKey={openTripKey}
-          onOpenTrip={openTrip}
-          onOpenTripEvent={openTripAtEvent}
-          onOpenBase={openPeriod}
-          onOpenCar={openCar}
-        />
+        {/* Месяцы архива — те же записи и правило группировки, что в «Плане дохода»
+            (месяц завершения, currentMonth записи плана дохода) */}
+        {showArchived && archiveMonths.length ? (
+          <div className="flex flex-wrap items-center gap-2 pb-3 mb-4 border-b border-[#E5E7EB]">
+            <span className={UI.caption} title="Рейсы сгруппированы по месяцу завершения, как в архиве «Плана дохода»">
+              Архив по месяцам:
+            </span>
+            <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-0.5" role="tablist" aria-label="Месяцы архива">
+              <button
+                type="button"
+                data-amonth="all"
+                aria-pressed={archiveMonth == null}
+                onClick={() => setArchiveMonth(null)}
+                className={`${UI.filterPill} shrink-0 ${archiveMonth == null ? activeTabCls : UI.filterPillIdle}`}
+              >
+                Все месяцы
+              </button>
+              {archiveMonths.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  data-amonth={m}
+                  aria-pressed={archiveMonth === m}
+                  onClick={() => setArchiveMonth(m)}
+                  className={`${UI.filterPill} shrink-0 truncate max-w-[200px] ${archiveMonth === m ? activeTabCls : UI.filterPillIdle}`}
+                >
+                  {m === '__none__' ? 'Без даты' : m}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {/* Вкладки модуля держим смонтированными: возврат сохраняет прокрутку и состояние */}
+        <div className={activeTab === 'timeline' ? (fullscreen ? 'flex-1 min-h-0 flex flex-col' : '') : 'hidden'}>
+          <TimelineGrid
+            trips={filteredTrips}
+            bases={filteredBases}
+            events={filteredEvents}
+            fleetCars={filteredFleetCars}
+            stageTypes={data.stageTypes}
+            today={today}
+            vs={renderVs}
+            vn={renderVn}
+            extL={extL}
+            extR={extR}
+            navVs={vs}
+            zoom={zoom}
+            onZoomChange={changeZoom}
+            onNavigate={navigateRange}
+            onRangeExtend={extendRange}
+            showArchived={showArchived}
+            onShowArchivedChange={setShowArchived}
+            selectedTripKey={openTripKey}
+            onOpenTrip={openTrip}
+            onOpenTripEvent={openTripAtEvent}
+            onOpenTripStage={openTripAtStage}
+            onOpenBase={openPeriod}
+            onOpenCar={openCar}
+            dispatcherOrder={dispatcherOrderIds}
+            groupByDispatcher={dispatcherTab === ALL_TAB}
+            carCurrentDispatcher={carCurrentDispatcher}
+            fullscreen={fullscreen}
+            onToggleFullscreen={toggleFullscreen}
+          />
+        </div>
       </div>
 
       <div className={activeTab === 'stats' ? '' : 'hidden'}>
@@ -735,6 +822,8 @@ export default function TripTimelineModule({ user, settings }: Props) {
           onSaveMeta={(key, patch) => saveMeta(key, patch as Record<string, unknown>)}
           focusEventId={focusEventId}
           onFocusEventDone={() => setFocusEventId(null)}
+          focusStageId={focusStageId}
+          onFocusStageDone={() => setFocusStageId(null)}
           onOpenEventTrip={openTripAtEvent}
           planGuard={openTripKey ? planGuardStore[openTripKey] || null : null}
           planPerms={openTripKey ? planPermsStore[openTripKey] || {} : {}}

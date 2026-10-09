@@ -44,22 +44,41 @@ export const hasStoredPlan = (stages: TimelineStage[] | undefined): boolean =>
   (stages || []).some((s) => !isFallbackStage(s) && dayNum(s.plannedDate) != null);
 
 /**
+ * Есть ли у рейса сохранённый СОСТАВ плана этапов (непустой набор реальных
+ * этапов, без служебных заглушек). Заполненный состав без дат — тоже
+ * «заполненный план»: у реальных рейсов он исторически сохранён.
+ */
+export const hasStoredStages = (stages: TimelineStage[] | undefined): boolean =>
+  (stages || []).some((s) => !isFallbackStage(s));
+
+/**
  * Состояние плана рейса.
  * @param storedStages — СОХРАНЁННЫЕ этапы (из источника, не черновик окна):
  *   по ним определяется «исторически заполненный» план.
+ * @param timelineDraft — запись плана СОЗДАНА формой таймлайна (черновик):
+ *   только для таких записей маркер draftCreated означает «первичное
+ *   планирование ещё идёт». У реальных рейсов («План дохода» и ручные рейсы
+ *   прошлых сессий) заполненный состав/даты — это сохранённый план, даже если
+ *   маркер черновика туда попал ошибочно (например, старым скриптом или
+ *   прежней версией формы): бесплатной правки заполненные рейсы не получают.
  */
 export const resolvePlanLock = (params: {
   storedStages: TimelineStage[] | undefined;
   guard?: TimelinePlanGuard | null;
   perms?: Record<string, TimelinePlanPermission> | null;
   userId?: string | null;
+  timelineDraft?: boolean;
 }): PlanLockInfo => {
   const guard = params.guard || null;
   const perms = params.perms || {};
   const userId = String(params.userId || '');
   const hasInitial = !!guard?.initialSavedAt;
+  const filled = hasStoredStages(params.storedStages) || hasStoredPlan(params.storedStages);
   // План заполнен до включения контроля: сохранён, но автор/дата неизвестны.
-  const legacy = !hasInitial && !guard?.draftCreated && hasStoredPlan(params.storedStages);
+  // Маркер черновика учитывается ТОЛЬКО у записей, созданных формой таймлайна:
+  // у заполненных реальных рейсов он не даёт «бесплатную» правку.
+  const draftMarker = !!guard?.draftCreated && params.timelineDraft === true;
+  const legacy = !hasInitial && !draftMarker && filled;
   const saved = hasInitial || legacy;
   const version = Number(guard?.version) || (saved ? 1 : 0);
   const permission = userId ? perms[userId] : undefined;

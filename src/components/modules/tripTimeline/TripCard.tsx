@@ -44,6 +44,14 @@ import CityAutocomplete from '../../common/CityAutocomplete';
 import TripEventsJournal from './TripEventsJournal';
 import { PlanBarLabel, planBarLabelParts } from './PlanBarLabel';
 import { eventMarkOf, groupEventMarks, type EventMark } from './lib/eventMarks';
+import {
+  layoutStageFills,
+  stageColorOf,
+  stageFillTitle,
+  stageShortName,
+  type StageFillInput,
+  type StageFillSection,
+} from './lib/stageFills';
 import { computePlanStageChanges, resolvePlanLock, type PlanStageChanges } from './lib/planLock';
 import { hasPlanFinancials } from './lib/planFromDraft';
 import {
@@ -123,6 +131,9 @@ interface Props {
   /** Переход с маркера события на таймлайне: id записи для журнала. */
   focusEventId?: string | null;
   onFocusEventDone?: () => void;
+  /** Клик по заливке этапа на полотне: id этапа — выделить в таблице этапов. */
+  focusStageId?: string | null;
+  onFocusStageDone?: () => void;
   /** Клик по маркеру события другого рейса во встроенном таймлайне. */
   onOpenEventTrip?: (tripKey: string, eventId: string) => void;
   /** Состояние плана этапов рейса (tripTimeline/planGuard) — блокировка плановых дат. */
@@ -472,6 +483,58 @@ function CarMiniTimeline({
   const miniFactH = Math.max(MINI_FACT_H, miniFactTrack.layout.laneH);
   const miniFactZone0 = miniFactTrack.layout.zones.find((z) => z.key === 0) ?? null;
 
+  // Заливки этапов (та же модель отображения, что в основном таймлайне):
+  // план — в подстроке «План», факт — в «Факт»; клик выделяет этап в таблице.
+  const miniFillInputs = useMemo<StageFillInput[]>(
+    () => carTrips.flatMap((t) => (t.stages || []).map((s) => ({ tripKey: t.key, stage: s, archived: !!t.archived }))),
+    [carTrips],
+  );
+  const miniPlanFills = useMemo(() => layoutStageFills(miniFillInputs, 'plan', renderVs, ve), [miniFillInputs, renderVs, ve]);
+  const miniFactFills = useMemo(() => layoutStageFills(miniFillInputs, 'fact', renderVs, ve), [miniFillInputs, renderVs, ve]);
+  const renderMiniFill = (f: StageFillSection, keyPrefix: string) => {
+    const color = stageColorOf(f.stage.type);
+    const left = dayToX(f.day, renderVs, colW) + Math.round((f.section * colW) / f.sections);
+    const right = dayToX(f.day, renderVs, colW) + Math.round(((f.section + 1) * colW) / f.sections);
+    const width = Math.max(1, right - left);
+    const clickable = !!onFocusStage;
+    const open = clickable ? () => onFocusStage?.(f.stage.id) : undefined;
+    return (
+      <div
+        key={`${keyPrefix}-${f.tripKey}-${f.stage.id}-${f.day}`}
+        role={clickable ? 'button' : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        data-stage-fill="1"
+        data-stage={clickable ? f.stage.id : undefined}
+        data-trip={f.tripKey}
+        onClick={open}
+        onKeyDown={
+          clickable
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onFocusStage?.(f.stage.id);
+                }
+              }
+            : undefined
+        }
+        className={`absolute top-0 bottom-0 z-[4] overflow-hidden whitespace-nowrap flex items-center justify-center px-0.5 ${clickable ? 'cursor-pointer' : ''}`}
+        style={{
+          left,
+          width,
+          background: color.bg,
+          borderLeft: `1px solid ${color.border}`,
+          borderRight: f.section === f.sections - 1 ? `1px solid ${color.border}` : undefined,
+          color: color.text,
+          ...(f.stage.isCritical ? { outline: '1px dashed #DC2626', outlineOffset: '-1px' } : {}),
+          ...(f.archived ? { opacity: 0.72 } : {}),
+        }}
+        title={`${stageFillTitle(stageTypes, f.stage, f.day, today)}${clickable ? '' : ' · (только просмотр)'}`}
+      >
+        {width >= 40 ? <span className="text-[8px] leading-[10px] truncate max-w-full">{stageShortName(stageTypes, f.stage)}</span> : null}
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -543,12 +606,20 @@ function CarMiniTimeline({
             {focus ? formatPlate(focus.carNumber) : ''} · план
           </div>
           <div data-lane="plan" className="relative z-0 border-b border-[#EEF0F3]" style={{ width: W, height: miniPlanH }}>
-            {bgSegs.map((s, i) => (
+            {bgSegs.filter((s) => !s.today).map((s, i) => (
               <div
                 key={`w${i}`}
-                data-tl-today={s.today ? '1' : undefined}
                 className="absolute top-0 bottom-0"
-                style={{ left: s.left, width: s.width, background: s.today ? '#F43F5E' : '#F1F2F4', opacity: s.today ? 0.12 : 0.7, pointerEvents: 'none' }}
+                style={{ left: s.left, width: s.width, background: '#F1F2F4', opacity: 0.7, pointerEvents: 'none' }}
+              />
+            ))}
+            {miniPlanFills.map((f) => renderMiniFill(f, 'mpf'))}
+            {bgSegs.filter((s) => s.today).map((s, i) => (
+              <div
+                key={`wt${i}`}
+                data-tl-today="1"
+                className="absolute top-0 bottom-0 z-[5]"
+                style={{ left: s.left, width: s.width, background: '#F43F5E', opacity: 0.14, pointerEvents: 'none' }}
               />
             ))}
             {carBases.map((p) => {
@@ -628,45 +699,25 @@ function CarMiniTimeline({
                 />
               );
             })}
-            {carTrips.flatMap((t) =>
-              t.stages.map((s) => {
-                const d = dayNum(s.plannedDate);
-                if (d == null) return null;
-                const q = pos(d, d);
-                if (!q) return null;
-                return (
-                  <div
-                    key={`m-${t.key}-${s.id}`}
-                    data-bar={s.isCritical ? 'mark-critical' : 'mark-plan'}
-                    data-stage={t.key === focusKey ? s.id : undefined}
-                    role={t.key === focusKey && onFocusStage ? 'button' : undefined}
-                    onClick={t.key === focusKey && onFocusStage ? () => onFocusStage(s.id) : undefined}
-                    className={`absolute z-[4] ${t.key === focusKey && onFocusStage ? 'cursor-pointer' : ''}`}
-                    style={{
-                      left: dayToX(d, renderVs, colW) + Math.round(colW * 0.3),
-                      top: 2,
-                      height: miniPlanH - 4,
-                      width: s.isCritical ? 3 : 2,
-                      background: s.isCritical ? '#DC2626' : '#2563EB',
-                    }}
-                    title={`${s.isCritical ? 'КРИТИЧЕСКИЙ СРОК: ' : 'план: '}${stageFullName(stageTypes, s)} ${s.plannedDate}${t.key === focusKey && onFocusStage ? ' · клик — к этапу в списке' : ''}`}
-                  />
-                );
-              }),
-            )}
           </div>
-
-          {/* Факт */}
           <div className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2 w-[96px] min-w-[96px] text-[9px] leading-[12px] text-[#9CA3AF] overflow-hidden" style={{ height: miniFactH, borderRightColor: '#D1D5DB' }}>
             факт · база · ремонт
           </div>
           <div data-lane="fact" className="relative z-0 border-b border-[#E5E7EB]" style={{ width: W, height: miniFactH }}>
-            {bgSegs.map((s, i) => (
+            {bgSegs.filter((s) => !s.today).map((s, i) => (
               <div
                 key={`fw${i}`}
-                data-tl-today={s.today ? '1' : undefined}
                 className="absolute top-0 bottom-0"
-                style={{ left: s.left, width: s.width, background: s.today ? '#F43F5E' : '#F1F2F4', opacity: s.today ? 0.12 : 0.6, pointerEvents: 'none' }}
+                style={{ left: s.left, width: s.width, background: '#F1F2F4', opacity: 0.6, pointerEvents: 'none' }}
+              />
+            ))}
+            {miniFactFills.map((f) => renderMiniFill(f, 'mff'))}
+            {bgSegs.filter((s) => s.today).map((s, i) => (
+              <div
+                key={`fwt${i}`}
+                data-tl-today="1"
+                className="absolute top-0 bottom-0 z-[5]"
+                style={{ left: s.left, width: s.width, background: '#F43F5E', opacity: 0.14, pointerEvents: 'none' }}
               />
             ))}
             {carBases.map((p) => {
@@ -740,7 +791,7 @@ function CarMiniTimeline({
                     data-event={gEv}
                     data-trip={gTrip}
                     onClick={gTrip && gEv ? () => onOpenEventTrip?.(gTrip, gEv) : undefined}
-                    className={`absolute z-[4] ${linked ? 'cursor-pointer' : ''}`}
+                    className={`absolute z-[6] ${linked ? 'cursor-pointer' : ''}`}
                     style={
                       grouped
                         ? { left, top, height: 12, minWidth: 16, padding: '0 3px', background: '#7C3AED', borderRadius: 6, textAlign: 'center', opacity: 0.95 }
@@ -818,39 +869,12 @@ function CarMiniTimeline({
                 <div
                   key={`mk-${p.key}`}
                   data-bar="mark-ready"
-                  className="absolute z-[4]"
+                  className="absolute z-[6]"
                   style={{ left: dayToX(p.plannedReadyDay, renderVs, colW) + Math.round(colW * 0.45), top: 2, height: miniFactH - 4, width: 3, background: '#B45309', opacity: 0.85 }}
                   title={`Срок готовности: ${fmtFull(isoOf(p.plannedReadyDay))} — ${baseDeviation(p, today).label}`}
                 />
               );
             })}
-            {carTrips.flatMap((t) =>
-              t.stages.map((s) => {
-                const d = dayNum(s.actualDate);
-                if (d == null) return null;
-                const q = pos(d, d);
-                if (!q) return null;
-                const dev = stageDeviation(s);
-                return (
-                  <div
-                    key={`mf-${t.key}-${s.id}`}
-                    data-bar={dev != null && dev > 0 ? 'mark-late' : 'mark-fact'}
-                    data-stage={t.key === focusKey ? s.id : undefined}
-                    role={t.key === focusKey && onFocusStage ? 'button' : undefined}
-                    onClick={t.key === focusKey && onFocusStage ? () => onFocusStage(s.id) : undefined}
-                    className={`absolute z-[4] ${t.key === focusKey && onFocusStage ? 'cursor-pointer' : ''}`}
-                    style={{
-                      left: dayToX(d, renderVs, colW) + Math.round(colW * 0.6),
-                      top: 2,
-                      height: miniFactH - 4,
-                      width: 2,
-                      background: dev != null && dev > 0 ? '#E11D48' : '#10B981',
-                    }}
-                    title={`факт: ${stageFullName(stageTypes, s)} ${s.actualDate}${dev != null ? ` (${dev > 0 ? '+' : ''}${dev} дн)` : ''}${t.key === focusKey && onFocusStage ? ' · клик — к этапу в списке' : ''}`}
-                  />
-                );
-              }),
-            )}
           </div>
         </div>
       </div>
@@ -877,6 +901,8 @@ export default function TripCard({
   meta,
   focusEventId,
   onFocusEventDone,
+  focusStageId,
+  onFocusStageDone,
   onOpenEventTrip,
   planGuard,
   planPerms,
@@ -932,8 +958,17 @@ export default function TripCard({
   const planEnabled = !!planControlEnabled;
   const planUserId = String(user.uid || '');
   const planLock = useMemo(
-    () => resolvePlanLock({ storedStages: trip.stages, guard: planGuard || null, perms: planPerms || {}, userId: planUserId }),
-    [trip.stages, planGuard, planPerms, planUserId],
+    () =>
+      resolvePlanLock({
+        storedStages: trip.stages,
+        guard: planGuard || null,
+        perms: planPerms || {},
+        userId: planUserId,
+        // Маркер черновика учитывается только у записей, созданных формой
+        // таймлайна: у заполненных реальных рейсов он не даёт бесплатную правку.
+        timelineDraft: trip.planDraftFromTimeline === true,
+      }),
+    [trip.stages, trip.planDraftFromTimeline, planGuard, planPerms, planUserId],
   );
   const isRootAdmin = user.role === 'root_admin';
   /** Итоговое состояние: вне облака контроль выключен (локальный режим). */
@@ -1493,6 +1528,14 @@ export default function TripCard({
     },
     [],
   );
+
+  /** Переход с заливки этапа на полотне: выделить этап в таблице и прокрутить к нему. */
+  useEffect(() => {
+    if (!focusStageId) return;
+    focusStage(focusStageId);
+    onFocusStageDone?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusStageId]);
 
   const requestDelete = async () => {
     const ok = await showConfirm(`Удалить рейс ${formatPlate(trip.carNumber)} — ${draft.route || 'без маршрута'}?`);
