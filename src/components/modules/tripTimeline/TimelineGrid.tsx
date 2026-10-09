@@ -58,6 +58,8 @@ import {
   type BzStripe,
 } from './lib/bzFills';
 import { tripRangeOf, VYEZD_STATUS, vyezdStatusIcon } from './lib/vyezd';
+import { resolveRowOverlaps, type RowOverlapResolution, type RowTripAdjust, type RowTripInterval } from './lib/overlapRow';
+import type { ResolvedMarker, ResolvedWarning, WaitGap } from './lib/overlap';
 import { directionChipColors, directionOfTrip, mixHex, type DirectionDef } from './lib/directions';
 import {
   baseBarRange,
@@ -70,7 +72,7 @@ import {
 } from './lib/sources';
 import DateInput from './DateInput';
 import CalendarHeader from './CalendarHeader';
-import { AlertTriangle, ArrowRightLeft, CalendarCheck2, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleDashed, Hourglass, Maximize2, Minimize2, OctagonX, Palette, TriangleAlert, Wrench } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, CalendarCheck2, CalendarClock, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleDashed, Hourglass, LogIn, LogOut, Maximize2, Minimize2, OctagonX, Palette, TriangleAlert, Wrench } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Палитра полос (визуальная логика прототипа; цвета — единая семья заливок
@@ -100,6 +102,19 @@ const planBarBg = `linear-gradient(180deg, ${CLR.planBg} 0%, ${CLR.planBg2} 100%
 
 const hatch45 = `repeating-linear-gradient(45deg, ${CLR.bufferA}, ${CLR.bufferA} 4px, transparent 4px, transparent 8px)`;
 const hatchOpen = `repeating-linear-gradient(45deg, ${CLR.factOpenA}, ${CLR.factOpenA} 5px, transparent 5px, transparent 10px)`;
+/** Тонкая штриховка зоны конфликта данных (рейс ↔ простой) — предупреждение, не маскировка. */
+const conflictHatch = 'repeating-linear-gradient(45deg, rgba(190,18,60,0.30), rgba(190,18,60,0.30) 2px, transparent 2px, transparent 6px)';
+/** Нейтральная штриховка промежутка «Ожидание выезда». */
+const waitHatch = 'repeating-linear-gradient(45deg, rgba(100,116,139,0.22), rgba(100,116,139,0.22) 2px, transparent 2px, transparent 7px)';
+/** Тона маркеров стыков: янтарный — расхождение с учётом (выехала раньше/позже). */
+const MARKER_TONE = {
+  'early-departure': { fg: '#B45309', bg: '#FFF4DE', border: '#E3B04B' },
+  departure: { fg: '#475569', bg: 'rgba(255,255,255,0.97)', border: '#CBD5E1' },
+  arrival: { fg: '#0F6246', bg: 'rgba(255,255,255,0.97)', border: '#8FC9AE' },
+} as const;
+/** Промежутки «Ожидание выезда»: совпадает ли полоса base-gap с зоной ожидания. */
+const waitCovers = (gaps: Array<{ a: number; b: number }>, s: { a: number; b: number }): boolean =>
+  gaps.some((g) => s.a <= g.b && s.b >= g.a);
 
 // ---------------------------------------------------------------------------
 // Модель строки машины
@@ -141,6 +156,10 @@ interface CarRowModel {
   bzInputs: BzFillInput[];
   /** Промежутки «на базе» между рейсами без записи учёта выезда (заливка «Факт»). */
   bzGaps: BzFillGap[];
+  /** Разрешение наложений полос «План» (срезы дня смены, укорочение простоя, маркеры). */
+  planOv: RowOverlapResolution;
+  /** Разрешение наложений полос «Факт». */
+  factOv: RowOverlapResolution;
   /** Направления рейсов машины в окне (для мини-чипа в левой колонке). */
   directions: DirectionDef[];
 }
@@ -340,6 +359,9 @@ const buildRows = (
 
     const planItems: PlanItem[] = [];
     const factItems: FactItem[] = [];
+    /** Интервалы, ОТОБРАЖАЕМЫЕ в подстроках, — вход разрешения наложений (lib/overlap). */
+    const planInts: RowTripInterval[] = [];
+    const factInts: RowTripInterval[] = [];
 
     // ── Целые рейсы: план-полоса, запас, факт/«факт не указан», маркеры ──
     myTrips.forEach((t) => {
@@ -351,6 +373,7 @@ const buildRows = (
       if (pMin == null) return; // без старта полосу не рисуем — дату не выдумываем
       const openPlan = t.openPlan === true || pMax == null;
       const planEnd = pMax ?? pMin;
+      const tripLabel = `Рейс «${t.route || 'без маршрута'}»`;
       const deadline = getDeadlineStatus(t, today, (s) => stageFullName(stageTypes, s));
       const dir = directionOfTrip(t, directions);
       if (visible(pMin, planEnd)) {
@@ -370,6 +393,7 @@ const buildRows = (
           title: `${formatPlate(car.carNumber)} · ${parts.titleText} · ${t.dispatcherName || 'без диспетчера'}${dir ? ` · направление: ${dir.name}` : ''}${t.kind === 'plan' ? ' · из плана дохода' : ''}${t.archived ? ' · архив' : ''}${openPlan ? ' · неполный план (нет даты возвращения)' : ''} · ${deadline.label}`,
         });
       }
+      planInts.push({ key: t.key, a: pMin, b: planEnd, open: openPlan, label: tripLabel });
       // Плановое возвращение — отдельный аккуратный маркер в конце плановой полосы
       // (подробности по наведению), без постоянных подписей.
       if (pMax != null && !openPlan && pMax > pMin && visible(pMax, pMax)) {
@@ -390,6 +414,7 @@ const buildRows = (
         const factEndDay = tripFactEnd(t);
         const ongoing = factEndDay == null && !t.archived;
         const fEnd = ongoing ? Math.max(today, span.fMax ?? span.fMin) : (factEndDay ?? span.fMax ?? span.fMin);
+        factInts.push({ key: t.key, a: span.fMin, b: fEnd, open: ongoing, label: tripLabel });
         if (visible(span.fMin, fEnd)) {
           factItems.push({
             kind: 'fact',
@@ -400,14 +425,17 @@ const buildRows = (
             title: `${formatPlate(car.carNumber)} · факт: ${fmtDM(span.fMin)} – ${ongoing ? 'продолжается (окончание не указано)' : fmtDM(fEnd)}`,
           });
         }
-      } else if (visible(pMin, planEnd)) {
-        factItems.push({
-          kind: 'factNone',
-          a: pMin,
-          b: planEnd,
-          tripKey: t.key,
-          title: 'Фактические данные не указаны',
-        });
+      } else {
+        factInts.push({ key: t.key, a: pMin, b: planEnd, open: openPlan, label: tripLabel });
+        if (visible(pMin, planEnd)) {
+          factItems.push({
+            kind: 'factNone',
+            a: pMin,
+            b: planEnd,
+            tripKey: t.key,
+            title: 'Фактические данные не указаны',
+          });
+        }
       }
 
       // Этапы на этой подстроке больше НЕ тонкие маркеры: они рисуются
@@ -523,22 +551,28 @@ const buildRows = (
       });
     }
 
-    // Пересечения рейс↔база и этапы вне границ (не исправляем — предупреждаем).
-    // Дополнительно отмечаем «свои» рейсы, к которым относятся предупреждения:
+    // ── Разрешение наложений (lib/overlap → lib/overlapRow): считается ОДИН РАЗ
+    // на машину и подстроку, ПЛАН и ФАКТ отдельно (правила не смешиваются);
+    // рендер использует только результат этой функции. ──
+    const planOv = resolveRowOverlaps(myBases, planInts, 'plan', today, fmtDM, formatPlate(car.carNumber));
+    const factOv = resolveRowOverlaps(myBases, factInts, 'fact', today, fmtDM, formatPlate(car.carNumber));
+
+    // Пересечения рейс↔база (точные зоны — из разрешения наложений) и этапы вне
+    // границ (не исправляем — предупреждаем). Дополнительно отмечаем «свои» рейсы:
     // на их полосе показывается компактный значок (полный текст — в подсказке).
     const tripWarnKeys = new Set<string>();
+    [...planOv.warnings, ...factOv.warnings].forEach((w) => {
+      warnings.add(w.title);
+      w.refs.forEach((k) => {
+        if (!k.startsWith('bz:')) tripWarnKeys.add(k);
+      });
+    });
     myTrips.forEach((t) => {
       if (t.warnings.length) tripWarnKeys.add(t.key);
       const ov = t.spanOverride || {};
       const s = ov.pMin ?? null;
       const e = ov.pMax ?? null;
       if (s == null || e == null) return;
-      baseRanges.forEach((r) => {
-        if (s <= r.b && e >= r.a) {
-          warnings.add('Рейс и период на базе пересекаются — проверьте даты');
-          tripWarnKeys.add(t.key);
-        }
-      });
       t.stages.forEach((st) => {
         const pd = dayNum(st.plannedDate);
         const ad = dayNum(st.actualDate);
@@ -605,6 +639,8 @@ const buildRows = (
       stageInputs,
       bzInputs: myBases.map((p) => ({ period: p, tripRanges: carTripRanges })),
       bzGaps,
+      planOv,
+      factOv,
       directions: rowDirs,
     });
   });
@@ -750,6 +786,154 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     onMouseEnter: () => setHoverTrip(tripKey),
     onMouseLeave: () => setHoverTrip((v) => (v === tripKey ? null : v)),
   });
+
+  /** Правка полосы рейса из разрешения наложений (доли дня смены у краёв). */
+  const adjRect = (
+    p: { left: number; width: number } | null,
+    adj: RowTripAdjust | null,
+  ): { left: number; width: number } | null => {
+    if (!p || !adj) return p;
+    const l = p.left + Math.round(adj.fracA * colW);
+    const r = p.left + p.width - Math.round((1 - adj.fracB) * colW);
+    return { left: l, width: Math.max(1, r - l) };
+  };
+  /** Маркер стыка (выезд / прибытие / выехала раньше): SVG-иконка на срезе дня.
+   *  Клик — окно «Учёта выезда» через единый хелпер (onOpenBase → openVyezdPeriod). */
+  const renderOvMarker = (m: ResolvedMarker, keyPrefix: string, rowH: number): React.ReactNode => {
+    const x = dayToX(m.day, vs, colW) + Math.round(colW * m.frac);
+    if (x < -12 || x > W + 12) return null;
+    const tone =
+      m.kind === 'early-departure'
+        ? MARKER_TONE['early-departure']
+        : m.kind === 'departure'
+          ? MARKER_TONE.departure
+          : MARKER_TONE.arrival;
+    const Icon = m.kind === 'arrival' ? LogIn : LogOut;
+    const open = m.periodKey
+      ? () => onOpenBase(m.periodKey as string)
+      : m.tripKey
+        ? () => onOpenTrip(m.tripKey as string)
+        : undefined;
+    const top = Math.max(1, Math.round((rowH - 14) / 2));
+    return (
+      <div
+        key={`${keyPrefix}-${m.kind}-${m.day}-${m.tripKey || ''}`}
+        role={open ? 'button' : undefined}
+        tabIndex={open ? 0 : undefined}
+        data-tl-marker={m.kind}
+        data-tl-marker-day={m.day}
+        data-tl-marker-frac={m.frac}
+        data-tl-marker-period={m.periodKey || undefined}
+        data-tl-marker-trip={m.tripKey || undefined}
+        onClick={open}
+        onKeyDown={
+          open
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  open();
+                }
+              }
+            : undefined
+        }
+        className={`absolute z-[7] flex items-center justify-center rounded-full select-none ${open ? 'cursor-pointer' : ''}`}
+        style={{
+          left: x - 7,
+          top,
+          width: 14,
+          height: 14,
+          background: tone.bg,
+          border: `1px solid ${tone.border}`,
+          boxShadow: '0 1px 2px rgba(18,19,22,0.18)',
+        }}
+        title={m.title}
+      >
+        <Icon className="w-2.5 h-2.5" style={{ color: tone.fg }} aria-hidden="true" />
+      </div>
+    );
+  };
+  /** Промежуток «Ожидание выезда»: нейтральная штриховка с подписью (учёт не закрыт). */
+  const renderWaitGap = (g: WaitGap & { periodKey: string }, keyPrefix: string): React.ReactNode => {
+    const clipA = Math.max(g.a, vs);
+    const clipB = Math.min(g.b, ve);
+    if (clipB < clipA) return null;
+    const left = dayToX(clipA, vs, colW);
+    const width = Math.max(1, dayToX(clipB, vs, colW) + colW - left);
+    return (
+      <div
+        key={`${keyPrefix}-${g.periodKey}-${g.a}-${g.b}`}
+        data-tl-wait="1"
+        data-tl-wait-a={g.a}
+        data-tl-wait-b={g.b}
+        data-tl-wait-days={g.days}
+        title={g.title}
+        className="absolute top-0 bottom-0 z-[2] flex items-center overflow-hidden cursor-default"
+        style={{
+          left,
+          width,
+          background: waitHatch,
+          borderLeft: '1px dashed #94A3B8',
+          borderRight: '1px dashed #94A3B8',
+        }}
+      >
+        {width >= 86 ? (
+          <span className="text-[8px] leading-[10px] font-semibold text-[#475569] bg-white/90 border border-[#CBD5E1] rounded px-1 whitespace-nowrap ml-0.5">
+            Ожидание выезда · {g.days} дн
+          </span>
+        ) : null}
+      </div>
+    );
+  };
+  /** Конфликт данных: тонкая штриховка зоны + значок со ссылкой на источник. */
+  const renderConflict = (w: ResolvedWarning, keyPrefix: string, rowH: number): React.ReactNode => {
+    const clipA = Math.max(w.a, vs);
+    const clipB = Math.min(w.b, ve);
+    if (clipB < clipA) return null;
+    const left = dayToX(clipA, vs, colW);
+    const width = Math.max(1, dayToX(clipB, vs, colW) + colW - left);
+    const open = () => {
+      const k = w.refs[0] || '';
+      if (k.startsWith('bz:')) onOpenBase(k);
+      else onOpenTrip(k);
+    };
+    return (
+      <div
+        key={`${keyPrefix}-${w.a}-${w.b}`}
+        data-tl-conflict="1"
+        data-tl-conflict-a={w.a}
+        data-tl-conflict-b={w.b}
+        className="absolute top-0 bottom-0 z-[4] pointer-events-none"
+        style={{ left, width }}
+      >
+        <div aria-hidden="true" className="absolute inset-0" style={{ background: conflictHatch, borderRadius: 'var(--tl-bar-r)' }} />
+        <div
+          role="button"
+          tabIndex={0}
+          data-tl-conflict-icon="1"
+          data-refs={w.refs.join(',')}
+          onClick={open}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              open();
+            }
+          }}
+          className="absolute pointer-events-auto flex items-center justify-center rounded-full cursor-pointer"
+          style={{
+            left: Math.max(0, Math.round(width / 2) - 6),
+            top: Math.max(0, Math.round((rowH - 12) / 2)),
+            width: 12,
+            height: 12,
+            background: 'rgba(255,255,255,0.95)',
+            border: '1px solid #EFA3B1',
+          }}
+          title={w.title}
+        >
+          <TriangleAlert className="w-2.5 h-2.5" style={{ color: '#BE123C' }} aria-hidden="true" />
+        </div>
+      </div>
+    );
+  };
 
   const warnTitle = row.warnings.join('\n');
   /**
@@ -902,21 +1086,29 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
    * реальном начале/конце; если период продолжается за видимую область, на краю
    * обрыв без скругления с мягким градиентом. Клик и подсказка — на всей полосе.
    */
-  const renderBzStripe = (s: BzStripe, keyPrefix: string) => {
+  const renderBzStripe = (s: BzStripe, keyPrefix: string, ov: RowOverlapResolution) => {
     const color = bzStripeColor(s);
-    const clipA = Math.max(s.a, vs);
-    const clipB = Math.min(s.b, ve);
-    const left = dayToX(clipA, vs, colW);
-    const right = dayToX(clipB, vs, colW) + colW;
+    // Полосы простоя, укороченные/разрезанные разрешением наложений (lib/overlap):
+    // база обрывается в день выезда по рейсу, день смены делится по горизонтали.
+    const adj =
+      (s.kind === 'base-plan' || s.kind === 'base-fact') && s.periodKey ? ov.baseAdjust.get(s.periodKey) : undefined;
+    const srcA = adj ? adj.a : s.a;
+    const srcB = adj ? adj.b : s.b;
+    const fracA = adj ? adj.fracA : 0;
+    const fracB = adj ? adj.fracB : 1;
+    const clipA = Math.max(srcA, vs);
+    const clipB = Math.min(srcB, ve);
+    const left = dayToX(clipA, vs, colW) + Math.round(fracA * colW);
+    const right = dayToX(clipB, vs, colW) + Math.round(colW * fracB);
     const width = Math.max(1, right - left);
     const r = 'var(--tl-bar-r)';
-    const radius = `${s.edgeL === 'round' ? r : '0px'} ${s.edgeR === 'round' ? r : '0px'} ${
-      s.edgeR === 'round' ? r : '0px'
-    } ${s.edgeL === 'round' ? r : '0px'}`;
+    const roundL = s.edgeL === 'round' && fracA === 0;
+    const roundR = s.edgeR === 'round' && fracB === 1;
+    const radius = `${roundL ? r : '0px'} ${roundR ? r : '0px'} ${roundR ? r : '0px'} ${roundL ? r : '0px'}`;
     // Мягкий градиент на «продолжающемся» краю (обрыв за окно или открытый период).
     const fadePx = 22;
-    const fadeL = s.edgeL !== 'round';
-    const fadeR = s.edgeR !== 'round';
+    const fadeL = s.edgeL !== 'round' && fracA === 0;
+    const fadeR = s.edgeR !== 'round' && fracB === 1;
     const mask = fadeL
       ? fadeR
         ? `linear-gradient(to right, transparent 0, #000 ${fadePx}px, #000 calc(100% - ${fadePx}px), transparent 100%)`
@@ -954,6 +1146,18 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         <StatusIcon className="w-3 h-3 shrink-0" style={{ color: color.text }} />
       </span>
     ) : null;
+    // Подпись полосы дополняется стыком с рейсом (укорочение/день смены) — но
+    // данные учёта в подсказке не подменяются: указываем и учётный конец.
+    const adjLine =
+      adj == null
+        ? ''
+        : adj.truncatedDays > 0
+          ? `Стык с рейсом: простой укорочен до ${fmtDM(adj.b)} — машина выехала на ${adj.truncatedDays} дн. раньше учётного срока (данные учёта не изменены, конец учёта: ${fmtDM(s.b)}).`
+          : adj.cutA || adj.cutB
+            ? s.kind === 'base-plan'
+              ? 'Плановый день смены разделён с полосой рейса (рейс и база видны).'
+              : 'День смены разделён с полосой рейса (штатный переход, не расхождение).'
+            : '';
     return (
       <div
         key={`${keyPrefix}-${s.kind}-${s.periodKey || 'gap'}-${s.a}-${s.b}`}
@@ -965,6 +1169,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         data-bz-b={s.b}
         data-bz-edge-l={s.edgeL}
         data-bz-edge-r={s.edgeR}
+        data-bz-frac-a={adj && fracA !== 0 ? `${fracA}` : undefined}
+        data-bz-frac-b={adj && fracB !== 1 ? `${fracB}` : undefined}
+        data-bz-trunc={adj && adj.truncatedDays > 0 ? `${adj.truncatedDays}` : undefined}
         data-period={s.periodKey || undefined}
         onClick={open}
         onKeyDown={
@@ -996,7 +1203,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             ? { borderTopStyle: 'dashed', borderBottomStyle: 'dashed' }
             : {}),
         }}
-        title={s.title}
+        title={adjLine ? `${s.title}\n${adjLine}` : s.title}
       >
         {labelEl}
       </div>
@@ -1137,8 +1344,14 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     .filter(Boolean)
     .join(' · ');
   const badge = todayBadgeOf(row, today);
+  /** Расхождения стыков «рейс ↔ учёт выезда» (выехала раньше/позже) — малозаметный
+   *  индикатор в левой колонке; полные тексты — в подсказке и на маркерах. */
+  const ovAlertTitles = Array.from(
+    new Set([...row.planOv.markers, ...row.factOv.markers].filter((m) => m.alert).map((m) => m.title)),
+  );
+  const ovNote = ovAlertTitles.length ? `Стыки с расхождением учёта (${ovAlertTitles.length}):\n${ovAlertTitles.join('\n')}` : '';
   const dirsTitle = row.directions.length ? `\nНаправления: ${row.directions.map((d) => `${d.name} (${d.code})`).join(', ')}` : '';
-  const cellTitle = `${formatPlate(row.carNumber)} · ${row.dispatcherName || 'без диспетчера'}${countsText ? ` · ${countsText}` : ''}${dirsTitle}${warnTitle ? `\n${warnTitle}` : ''}`;
+  const cellTitle = `${formatPlate(row.carNumber)} · ${row.dispatcherName || 'без диспетчера'}${countsText ? ` · ${countsText}` : ''}${dirsTitle}${warnTitle ? `\n${warnTitle}` : ''}${ovNote ? `\n${ovNote}` : ''}`;
 
   return (
     <>
@@ -1176,7 +1389,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         style={{ width: W, height: planH, backgroundColor: laneRowBg, ...laneBg }}
       >
         {bgPlane('bg', 0.75)}
-        {planBz.stripes.map((s) => renderBzStripe(s, 'pb'))}
+        {planBz.stripes.map((s) => renderBzStripe(s, 'pb', row.planOv))}
         {planBz.marks.map((m) => renderBzMark(m, 'pbm', planStageDays))}
         {planFills.map((f) => renderStageFill(f, 'pf'))}
         {todayStrip('t', 0.1)}
@@ -1185,7 +1398,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           const p = pos(it.kind === 'markReturn' ? it.day : it.a, it.kind === 'markReturn' ? it.day : it.b);
           if (!p) return null;
           if (it.kind === 'markReturn') {
-            // Аккуратный маркер планового возвращения: линия в конце рейса + клик
+            // Аккуратный маркер планового возвращения: линия в конце рейса + клик.
+            // Если день смены срезан (рейс → база), линия стоит на срезе, не в базе.
+            const adjR = row.planOv.tripAdjust.get(it.tripKey) ?? null;
+            const retX = dayToX(it.day, vs, colW) + Math.round(colW * (adjR?.fracB ?? 1)) - 3;
             return (
               <div
                 key={`mr${idx}`}
@@ -1201,7 +1417,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   }
                 }}
                 className="absolute z-[2] cursor-pointer"
-                style={{ left: Math.max(0, dayToX(it.day, vs, colW) + colW - 3), top: 3, height: planH - 6, width: 3, background: CLR.return, borderRadius: 2 }}
+                style={{ left: Math.max(0, retX), top: 3, height: planH - 6, width: 3, background: CLR.return, borderRadius: 2 }}
                 title={it.title}
               />
             );
@@ -1212,6 +1428,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             // (в режиме «Раскрасить по направлению») приглушённая заливка полосы.
             const chip = it.dir ? directionChipColors(it.dir.color) : null;
             const paint = paintByDirection && it.dir ? chip : null;
+            // Срез дня смены и штриховка конфликта — из разрешения наложений.
+            const adj = row.planOv.tripAdjust.get(it.tripKey) ?? null;
+            const pr = adjRect(p, adj) ?? p;
             return (
               <div
                 key={`p${idx}`}
@@ -1220,6 +1439,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 data-bar="plan"
                 data-trip={it.tripKey}
                 data-dir={it.dir ? it.dir.name : undefined}
+                data-bar-frac-a={adj && adj.fracA !== 0 ? `${adj.fracA}` : undefined}
+                data-bar-frac-b={adj && adj.fracB !== 1 ? `${adj.fracB}` : undefined}
+                data-overlap={adj?.overlap ? '1' : undefined}
                 {...hoverProps(it.tripKey)}
                 onClick={() => onOpenTrip(it.tripKey)}
                 onKeyDown={(e) => {
@@ -1230,8 +1452,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 }}
                 className="absolute overflow-hidden whitespace-nowrap text-[10px] z-[3] cursor-pointer flex items-center gap-1"
                 style={{
-                  left: p.left,
-                  width: p.width,
+                  left: pr.left,
+                  width: pr.width,
                   top: planTopOf(idx),
                   height: PLAN_BAR_H,
                   background: paint ? paint.bg : it.archived ? CLR.planArchBg : planBarBg,
@@ -1243,6 +1465,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 }}
                 title={it.title}
               >
+                {adj?.overlap ? (
+                  <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
+                ) : null}
                 {it.dir ? (
                   <span
                     aria-hidden="true"
@@ -1254,18 +1479,18 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 {it.open ? (
                   <>
                     <CircleDashed className={BAR_ICON_CLS} style={{ color: CLR.warn }} aria-hidden="true" />
-                    {p.width >= 118 ? <span className="truncate leading-[14px]">неполный план</span> : null}
+                    {pr.width >= 118 ? <span className="truncate leading-[14px]">неполный план</span> : null}
                   </>
                 ) : (
                   <PlanBarLabel
                     lead={st ? <st.Icon className={BAR_ICON_CLS} style={{ color: st.color }} aria-label={st.label} role="img" /> : null}
                     parts={it.parts}
-                    width={p.width}
+                    width={pr.width}
                   />
                 )}
                 {/* Код направления — только когда есть место; при мелком масштабе
                     остаются цветной акцент и текст (без перегрузки). */}
-                {chip && p.width >= 96 ? (
+                {chip && pr.width >= 96 ? (
                   <span
                     data-bar-dir-chip="1"
                     className="inline-flex items-center h-[13px] px-1 rounded-[4px] text-[8px] leading-[13px] font-semibold shrink-0"
@@ -1294,6 +1519,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           }
           return null;
         })}
+        {row.planOv.waitGaps.map((g) => renderWaitGap(g, 'pw'))}
+        {row.planOv.warnings.map((w) => renderConflict(w, 'pc', planH))}
+        {row.planOv.markers.map((m) => renderOvMarker(m, 'pm', planH))}
       </div>
 
       {/* Подстрока «Факт» — та же закреплённая колонка: одна короткая строка
@@ -1348,6 +1576,17 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             ) : null}
           </span>
           <span className="flex items-center gap-1 shrink-0">
+            {ovAlertTitles.length ? (
+              <span
+                data-tl-overlap-indicator="1"
+                data-tl-car={row.carKey}
+                className="inline-flex items-center"
+                title={ovNote}
+                aria-label={ovNote}
+              >
+                <CalendarClock className="w-3 h-3" style={{ color: '#B45309' }} aria-hidden="true" />
+              </span>
+            ) : null}
             {row.warnings.length ? (
               <span title={warnTitle} className="inline-flex" aria-label={warnTitle}>
                 <AlertTriangle className="w-3 h-3" style={{ color: CLR.warn }} aria-hidden="true" />
@@ -1366,7 +1605,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         style={{ width: W, height: factH, backgroundColor: laneRowBg, ...laneBg }}
       >
         {bgPlane('fbg', 0.6)}
-        {factBz.stripes.map((s) => renderBzStripe(s, 'fb'))}
+        {factBz.stripes.map((s) =>
+          s.kind === 'base-gap' && waitCovers(row.factOv.waitGaps, s) ? null : renderBzStripe(s, 'fb', row.factOv),
+        )}
         {factBz.marks.map((m) => renderBzMark(m, 'fbm', factStageDays))}
         {factFills.map((f) => renderStageFill(f, 'ff'))}
         {todayStrip('ft', 0.1)}
@@ -1375,7 +1616,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           const p = it.kind === 'event' ? pos(it.day, it.day) : pos(it.a, it.b);
           if (!p) return null;
           switch (it.kind) {
-            case 'fact':
+            case 'fact': {
+              // Срез дня смены и штриховка конфликта — из разрешения наложений.
+              const adjF = row.factOv.tripAdjust.get(it.tripKey) ?? null;
+              const prF = adjRect(p, adjF) ?? p;
               return (
                 <div
                   key={`f${idx}`}
@@ -1383,6 +1627,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   tabIndex={0}
                   data-bar="fact"
                   data-trip={it.tripKey}
+                  data-bar-frac-a={adjF && adjF.fracA !== 0 ? `${adjF.fracA}` : undefined}
+                  data-bar-frac-b={adjF && adjF.fracB !== 1 ? `${adjF.fracB}` : undefined}
+                  data-overlap={adjF?.overlap ? '1' : undefined}
                   {...hoverProps(it.tripKey)}
                   onClick={() => onOpenTrip(it.tripKey)}
                   onKeyDown={(e) => {
@@ -1391,10 +1638,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                       onOpenTrip(it.tripKey);
                     }
                   }}
-                  className="absolute z-[3] cursor-pointer"
+                  className="absolute z-[3] cursor-pointer overflow-hidden"
                   style={{
-                    left: p.left,
-                    width: p.width,
+                    left: prF.left,
+                    width: prF.width,
                     top: factTopOf(idx),
                     height: FACT_BAR_H,
                     background: it.open ? hatchOpen : CLR.fact,
@@ -1404,9 +1651,17 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                     ...link(it.tripKey),
                   }}
                   title={it.title}
-                />
+                >
+                  {adjF?.overlap ? (
+                    <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
+                  ) : null}
+                </div>
               );
-            case 'factNone':
+            }
+            case 'factNone': {
+              // «Факт не указан» — та же полоса до плановым датам, тоже режется днём смены.
+              const adjN = row.factOv.tripAdjust.get(it.tripKey) ?? null;
+              const prN = adjRect(p, adjN) ?? p;
               return (
                 <div
                   key={`fn${idx}`}
@@ -1414,6 +1669,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   tabIndex={0}
                   data-bar="fact-none"
                   data-trip={it.tripKey}
+                  data-bar-frac-a={adjN && adjN.fracA !== 0 ? `${adjN.fracA}` : undefined}
+                  data-bar-frac-b={adjN && adjN.fracB !== 1 ? `${adjN.fracB}` : undefined}
+                  data-overlap={adjN?.overlap ? '1' : undefined}
                   {...hoverProps(it.tripKey)}
                   onClick={() => onOpenTrip(it.tripKey)}
                   onKeyDown={(e) => {
@@ -1424,8 +1682,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   }}
                   className="absolute z-[2] cursor-pointer text-[9px] leading-[14px] text-[var(--tl-text-dim)] overflow-hidden whitespace-nowrap text-ellipsis px-1.5 flex items-center"
                   style={{
-                    left: p.left,
-                    width: p.width,
+                    left: prN.left,
+                    width: prN.width,
                     top: factTopOf(idx),
                     height: FACT_NONE_H,
                     border: `1px dashed ${CLR.planNoneBorder}`,
@@ -1435,9 +1693,13 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   }}
                   title={it.title}
                 >
-                  {p.width > 90 ? 'Факт не указан' : ''}
+                  {adjN?.overlap ? (
+                    <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
+                  ) : null}
+                  {prN.width > 90 ? 'Факт не указан' : ''}
                 </div>
               );
+            }
             case 'event': {
               // Компактный маркер события на РЕАЛЬНОЙ дате (не полоса): ромб —
               // одиночное событие, плашка со счётчиком — группа близких событий.
@@ -1488,6 +1750,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               return null;
           }
         })}
+        {row.factOv.waitGaps.map((g) => renderWaitGap(g, 'fw'))}
+        {row.factOv.warnings.map((w) => renderConflict(w, 'fc', factH))}
+        {row.factOv.markers.map((m) => renderOvMarker(m, 'fm', factH))}
       </div>
     </>
   );
@@ -1940,6 +2205,13 @@ export default function TimelineGrid({
     { swatch: <i className="inline-block w-[14px] h-[10px]" style={{ background: '#DFEAFD', border: '1px solid #8FBBF7', borderRadius: 4 }} />, label: 'этап: заливка/секция дня — цвет по типу (клик — этап в карточке)' },
     { swatch: <i className="inline-block w-[3px] h-[12px]" style={{ background: 'repeating-linear-gradient(to bottom, #6B7280 0 3px, transparent 3px 6px)' }} />, label: 'передача диспетчера (дата не указана — стык между рейсами)' },
     { swatch: <i className="inline-block w-[12px] h-[10px]" style={{ background: '#F7F8FA', border: '1px dashed #DC2626', borderRadius: 3 }} />, label: 'критический срок этапа' },
+    // Маркеры стыков рейса и простоя (единое разрешение наложений, lib/overlap):
+    // день смены делится по горизонтали, обе части кликабельны.
+    { swatch: <i className="inline-flex items-center justify-center w-[16px] h-[16px] rounded-full" style={{ background: 'rgba(255,255,255,0.97)', border: '1px solid #8FC9AE' }}><LogIn className="w-2.5 h-2.5" style={{ color: '#0F6246' }} aria-hidden="true" /></i>, label: 'маркер «прибытие на базу»: рейс завершён в день начала простоя (день делится)' },
+    { swatch: <i className="inline-flex items-center justify-center w-[16px] h-[16px] rounded-full" style={{ background: 'rgba(255,255,255,0.97)', border: '1px solid #CBD5E1' }}><LogOut className="w-2.5 h-2.5" style={{ color: '#475569' }} aria-hidden="true" /></i>, label: 'маркер «выезд»: простой закончился и рейс начался в один день' },
+    { swatch: <i className="inline-flex items-center justify-center w-[16px] h-[16px] rounded-full" style={{ background: '#FFF4DE', border: '1px solid #E3B04B' }}><LogOut className="w-2.5 h-2.5" style={{ color: '#B45309' }} aria-hidden="true" /></i>, label: 'выехала раньше/позже учёта выезда — простой укорочен до дня выезда (клик — окно периода)' },
+    { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: waitHatch, border: '1px dashed #94A3B8', borderRadius: 4 }} />, label: '«Ожидание выезда» — промежуток между простоем и рейсом (учёт не закрыт) с числом дней' },
+    { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: conflictHatch, border: '1px solid #EFA3B1', borderRadius: 4 }}><TriangleAlert className="w-2.5 h-2.5" style={{ color: '#BE123C' }} aria-hidden="true" /></i>, label: 'конфликт данных — тонкая штриховка зоны и значок со ссылкой на источник (не маскируется)' },
     { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: bzKindColor('ready').bg, border: `1px solid ${bzKindColor('ready').border}`, borderRadius: 4 }}><CalendarCheck2 className="w-2.5 h-2.5" style={{ color: bzKindColor('ready').text }} aria-hidden="true" /></i>, label: 'срок готовности (плановая) — вся ячейка дня (иконка)' },
     { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: CLR.planArchBg, border: `1px solid ${CLR.planArchBorder}`, borderRadius: 4 }} />, label: 'архивные данные (приглушённые)' },
     {

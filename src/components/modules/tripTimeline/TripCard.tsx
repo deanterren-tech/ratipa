@@ -26,6 +26,8 @@ import {
   ClipboardCopy,
   ExternalLink,
   Flag,
+  LogIn,
+  LogOut,
   Plus,
   Trash2,
   TriangleAlert,
@@ -66,6 +68,7 @@ import {
   dayNum,
   dayStr,
   dayToX,
+  fmtDM,
   fmtDev,
   fmtFull,
   getDeadlineStatus,
@@ -96,6 +99,8 @@ import {
   type BzStripe,
 } from './lib/bzFills';
 import { tripRangeOf, vyezdStatusIcon } from './lib/vyezd';
+import { resolveRowOverlaps, type RowOverlapResolution, type RowTripAdjust, type RowTripInterval } from './lib/overlapRow';
+import type { ResolvedMarker, ResolvedWarning, WaitGap } from './lib/overlap';
 
 const STATUS_TONE: Record<number, { dot: string; text: string }> = {
   3: { dot: 'bg-rose-500', text: 'text-rose-600 font-semibold' },
@@ -214,6 +219,15 @@ const MINI_FACT_NONE_H = 14;
 
 const hatchOpen = 'repeating-linear-gradient(45deg,#A7F3D0,#A7F3D0 5px,transparent 5px,transparent 10px)';
 const hatchBuffer = 'repeating-linear-gradient(45deg,#FDE68A,#FDE68A 4px,transparent 4px,transparent 8px)';
+/** Тонкая штриховка конфликта данных и нейтральная «Ожидание выезда» (как в основном). */
+const conflictHatchMini = 'repeating-linear-gradient(45deg, rgba(190,18,60,0.30), rgba(190,18,60,0.30) 2px, transparent 2px, transparent 6px)';
+const waitHatchMini = 'repeating-linear-gradient(45deg, rgba(100,116,139,0.22), rgba(100,116,139,0.22) 2px, transparent 2px, transparent 7px)';
+/** Тона маркеров стыков (те же, что в основном таймлайне). */
+const MARKER_TONE_MINI = {
+  'early-departure': { fg: '#B45309', bg: '#FFF4DE', border: '#E3B04B' },
+  departure: { fg: '#475569', bg: 'rgba(255,255,255,0.97)', border: '#CBD5E1' },
+  arrival: { fg: '#0F6246', bg: 'rgba(255,255,255,0.97)', border: '#8FC9AE' },
+} as const;
 
 export function CarMiniTimeline({
   focusKey,
@@ -550,6 +564,58 @@ export function CarMiniTimeline({
     () => layoutBzFills(miniBzInputs, [], 'fact', renderVs, ve, today),
     [miniBzInputs, renderVs, ve, today],
   );
+  // ── Разрешение наложений (та же единая функция, что в основном таймлайне):
+  // план и факт отдельно; результата достаточно для срезов дня смены,
+  // укорочения простоя, «Ожидания выезда», маркеров и конфликтов. ──
+  const miniCarLabel = carTrips[0] ? formatPlate(carTrips[0].carNumber) : '';
+  const miniPlanInts = useMemo<RowTripInterval[]>(
+    () =>
+      carTrips
+        .map((t) => {
+          const ov = t.spanOverride || {};
+          const sp = tripSpan(t);
+          const a = ov.pMin ?? sp.pMin ?? null;
+          if (a == null) return null;
+          const b = ov.pMax ?? sp.pMax ?? a;
+          return {
+            key: t.key,
+            a,
+            b,
+            open: t.openPlan === true || (ov.pMax ?? sp.pMax) == null,
+            label: `Рейс «${t.route || 'без маршрута'}»`,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => !!x),
+    [carTrips],
+  );
+  const miniFactInts = useMemo<RowTripInterval[]>(
+    () =>
+      carTrips
+        .map((t) => {
+          const sp = tripSpan(t);
+          const ov = t.spanOverride || {};
+          if (sp.fMin != null) {
+            const endDay = tripFactEnd(t);
+            const ongoing = endDay == null && !t.archived;
+            const fEnd = ongoing ? Math.max(today, sp.fMax ?? sp.fMin) : (endDay ?? sp.fMax ?? sp.fMin);
+            return { key: t.key, a: sp.fMin, b: fEnd, open: ongoing, label: `Рейс «${t.route || 'без маршрута'}»` };
+          }
+          const a = ov.pMin ?? sp.pMin;
+          if (a == null) return null;
+          const b = ov.pMax ?? sp.pMax ?? a;
+          return { key: t.key, a, b, open: t.openPlan === true || (ov.pMax ?? sp.pMax) == null, label: `Рейс «${t.route || 'без маршрута'}»` };
+        })
+        .filter((x): x is NonNullable<typeof x> => !!x),
+    [carTrips, today],
+  );
+  const miniPlanOv = useMemo(
+    () => resolveRowOverlaps(carBases, miniPlanInts, 'plan', today, fmtDM, miniCarLabel),
+    [carBases, miniPlanInts, today, miniCarLabel],
+  );
+  const miniFactOv = useMemo(
+    () => resolveRowOverlaps(carBases, miniFactInts, 'fact', today, fmtDM, miniCarLabel),
+    [carBases, miniFactInts, today, miniCarLabel],
+  );
   const miniFillInputs = useMemo<StageFillInput[]>(
     () => carTrips.flatMap((t) => (t.stages || []).map((s) => ({ tripKey: t.key, stage: s, archived: !!t.archived }))),
     [carTrips],
@@ -621,20 +687,27 @@ export function CarMiniTimeline({
    * основном таймлайне: на всю высоту подстроки, скругление только на реальных
    * концах, «продолжающийся» край — обрыв с мягким градиентом.
    */
-  const renderMiniBzStripe = (s: BzStripe, keyPrefix: string) => {
+  const renderMiniBzStripe = (s: BzStripe, keyPrefix: string, ov: RowOverlapResolution) => {
     const color = bzStripeColor(s);
-    const clipA = Math.max(s.a, renderVs);
-    const clipB = Math.min(s.b, ve);
-    const left = dayToX(clipA, renderVs, colW);
-    const right = dayToX(clipB, renderVs, colW) + colW;
+    // Те же правила разрешения наложений, что в основном таймлайне.
+    const adj =
+      (s.kind === 'base-plan' || s.kind === 'base-fact') && s.periodKey ? ov.baseAdjust.get(s.periodKey) : undefined;
+    const srcA = adj ? adj.a : s.a;
+    const srcB = adj ? adj.b : s.b;
+    const fracA = adj ? adj.fracA : 0;
+    const fracB = adj ? adj.fracB : 1;
+    const clipA = Math.max(srcA, renderVs);
+    const clipB = Math.min(srcB, ve);
+    const left = dayToX(clipA, renderVs, colW) + Math.round(fracA * colW);
+    const right = dayToX(clipB, renderVs, colW) + Math.round(colW * fracB);
     const width = Math.max(1, right - left);
     const r = 'var(--tl-bar-r)';
-    const radius = `${s.edgeL === 'round' ? r : '0px'} ${s.edgeR === 'round' ? r : '0px'} ${
-      s.edgeR === 'round' ? r : '0px'
-    } ${s.edgeL === 'round' ? r : '0px'}`;
+    const roundL = s.edgeL === 'round' && fracA === 0;
+    const roundR = s.edgeR === 'round' && fracB === 1;
+    const radius = `${roundL ? r : '0px'} ${roundR ? r : '0px'} ${roundR ? r : '0px'} ${roundL ? r : '0px'}`;
     const fadePx = 18;
-    const fadeL = s.edgeL !== 'round';
-    const fadeR = s.edgeR !== 'round';
+    const fadeL = s.edgeL !== 'round' && fracA === 0;
+    const fadeR = s.edgeR !== 'round' && fracB === 1;
     const mask = fadeL
       ? fadeR
         ? `linear-gradient(to right, transparent 0, #000 ${fadePx}px, #000 calc(100% - ${fadePx}px), transparent 100%)`
@@ -677,6 +750,9 @@ export function CarMiniTimeline({
         data-bz-b={s.b}
         data-bz-edge-l={s.edgeL}
         data-bz-edge-r={s.edgeR}
+        data-bz-frac-a={adj && fracA !== 0 ? `${fracA}` : undefined}
+        data-bz-frac-b={adj && fracB !== 1 ? `${fracB}` : undefined}
+        data-bz-trunc={adj && adj.truncatedDays > 0 ? `${adj.truncatedDays}` : undefined}
         data-period={s.periodKey || undefined}
         onClick={open}
         onKeyDown={
@@ -704,7 +780,13 @@ export function CarMiniTimeline({
           ...(s.archived ? { opacity: 0.72 } : {}),
           ...(s.kind === 'base-gap' ? { borderTopStyle: 'dashed', borderBottomStyle: 'dashed' } : {}),
         }}
-        title={`${s.title}${clickable ? '' : ' · (только просмотр)'}`}
+        title={`${s.title}${
+          adj && adj.truncatedDays > 0
+            ? `\nСтык с рейсом: простой укорочен до ${fmtDM(adj.b)} — машина выехала на ${adj.truncatedDays} дн. раньше учётного срока (данные учёта не изменены).`
+            : adj && (adj.cutA || adj.cutB)
+              ? '\nДень смены разделён с полосой рейса (штатный переход, не расхождение).'
+              : ''
+        }${clickable ? '' : ' · (только просмотр)'}`}
       >
         {labelEl}
       </div>
@@ -785,6 +867,148 @@ export function CarMiniTimeline({
         title={`${m.title}${clickable ? '' : ' · (только просмотр)'}`}
       >
         {width >= 14 ? <Icon className="w-3 h-3 shrink-0" style={{ color: color.text }} aria-hidden="true" /> : null}
+      </div>
+    );
+  };
+  /** Правка полосы рейса из разрешения наложений (доли дня смены у краёв). */
+  const miniAdjRect = (
+    p: { left: number; width: number } | null,
+    adj: RowTripAdjust | null,
+  ): { left: number; width: number } | null => {
+    if (!p || !adj) return p;
+    const l = p.left + Math.round(adj.fracA * colW);
+    const r = p.left + p.width - Math.round((1 - adj.fracB) * colW);
+    return { left: l, width: Math.max(1, r - l) };
+  };
+  /** Маркер стыка (выезд/прибытие/выехала раньше) — SVG-иконка на срезе дня. */
+  const renderMiniOvMarker = (m: ResolvedMarker, keyPrefix: string, rowH: number): React.ReactNode => {
+    const x = dayToX(m.day, renderVs, colW) + Math.round(colW * m.frac);
+    if (x < -12 || x > W + 12) return null;
+    const tone =
+      m.kind === 'early-departure'
+        ? MARKER_TONE_MINI['early-departure']
+        : m.kind === 'departure'
+          ? MARKER_TONE_MINI.departure
+          : MARKER_TONE_MINI.arrival;
+    const Icon = m.kind === 'arrival' ? LogIn : LogOut;
+    const clickable = !!(m.periodKey && onOpenBasePeriod);
+    const open = clickable && m.periodKey ? () => onOpenBasePeriod?.(m.periodKey as string) : undefined;
+    return (
+      <div
+        key={`${keyPrefix}-${m.kind}-${m.day}-${m.tripKey || ''}`}
+        role={open ? 'button' : undefined}
+        tabIndex={open ? 0 : undefined}
+        data-tl-marker={m.kind}
+        data-tl-marker-day={m.day}
+        data-tl-marker-frac={m.frac}
+        data-tl-marker-period={m.periodKey || undefined}
+        data-tl-marker-trip={m.tripKey || undefined}
+        onClick={open}
+        onKeyDown={
+          open
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  open();
+                }
+              }
+            : undefined
+        }
+        className={`absolute z-[7] flex items-center justify-center rounded-full select-none ${open ? 'cursor-pointer' : ''}`}
+        style={{
+          left: x - 7,
+          top: Math.max(1, Math.round((rowH - 14) / 2)),
+          width: 14,
+          height: 14,
+          background: tone.bg,
+          border: `1px solid ${tone.border}`,
+          boxShadow: '0 1px 2px rgba(18,19,22,0.18)',
+        }}
+        title={`${m.title}${clickable ? '' : ' · (только просмотр)'}`}
+      >
+        <Icon className="w-2.5 h-2.5" style={{ color: tone.fg }} aria-hidden="true" />
+      </div>
+    );
+  };
+  /** «Ожидание выезда»: нейтральная штриховка с подписью. */
+  const renderMiniWaitGap = (g: WaitGap & { periodKey: string }, keyPrefix: string): React.ReactNode => {
+    const clipA = Math.max(g.a, renderVs);
+    const clipB = Math.min(g.b, ve);
+    if (clipB < clipA) return null;
+    const left = dayToX(clipA, renderVs, colW);
+    const width = Math.max(1, dayToX(clipB, renderVs, colW) + colW - left);
+    return (
+      <div
+        key={`${keyPrefix}-${g.periodKey}-${g.a}-${g.b}`}
+        data-tl-wait="1"
+        data-tl-wait-a={g.a}
+        data-tl-wait-b={g.b}
+        data-tl-wait-days={g.days}
+        title={g.title}
+        className="absolute top-0 bottom-0 z-[2] flex items-center overflow-hidden cursor-default"
+        style={{
+          left,
+          width,
+          background: waitHatchMini,
+          borderLeft: '1px dashed #94A3B8',
+          borderRight: '1px dashed #94A3B8',
+        }}
+      >
+        {width >= 86 ? (
+          <span className="text-[8px] leading-[10px] font-semibold text-[#475569] bg-white/90 border border-[#CBD5E1] rounded px-1 whitespace-nowrap ml-0.5">
+            Ожидание выезда · {g.days} дн
+          </span>
+        ) : null}
+      </div>
+    );
+  };
+  /** Конфликт данных: штриховка зоны + значок со ссылкой на источник. */
+  const renderMiniConflict = (w: ResolvedWarning, keyPrefix: string, rowH: number): React.ReactNode => {
+    const clipA = Math.max(w.a, renderVs);
+    const clipB = Math.min(w.b, ve);
+    if (clipB < clipA) return null;
+    const left = dayToX(clipA, renderVs, colW);
+    const width = Math.max(1, dayToX(clipB, renderVs, colW) + colW - left);
+    const open = () => {
+      const k = w.refs[0] || '';
+      if (k.startsWith('bz:')) onOpenBasePeriod?.(k);
+      else onSelectTrip(k);
+    };
+    return (
+      <div
+        key={`${keyPrefix}-${w.a}-${w.b}`}
+        data-tl-conflict="1"
+        data-tl-conflict-a={w.a}
+        data-tl-conflict-b={w.b}
+        className="absolute top-0 bottom-0 z-[4] pointer-events-none"
+        style={{ left, width }}
+      >
+        <div aria-hidden="true" className="absolute inset-0" style={{ background: conflictHatchMini, borderRadius: 'var(--tl-bar-r)' }} />
+        <div
+          role="button"
+          tabIndex={0}
+          data-tl-conflict-icon="1"
+          data-refs={w.refs.join(',')}
+          onClick={open}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              open();
+            }
+          }}
+          className="absolute pointer-events-auto flex items-center justify-center rounded-full cursor-pointer"
+          style={{
+            left: Math.max(0, Math.round(width / 2) - 6),
+            top: Math.max(1, Math.round((rowH - 12) / 2)),
+            width: 12,
+            height: 12,
+            background: 'rgba(255,255,255,0.95)',
+            border: '1px solid #EFA3B1',
+          }}
+          title={w.title}
+        >
+          <TriangleAlert className="w-2.5 h-2.5" style={{ color: '#BE123C' }} aria-hidden="true" />
+        </div>
       </div>
     );
   };
@@ -888,7 +1112,7 @@ export function CarMiniTimeline({
               />
             ))}
             {periodBand()}
-            {miniPlanBz.stripes.map((s) => renderMiniBzStripe(s, 'mpbz'))}
+            {miniPlanBz.stripes.map((s) => renderMiniBzStripe(s, 'mpbz', miniPlanOv))}
             {miniPlanBz.marks.map((m) => renderMiniBzMark(m, 'mpbm', miniPlanStageDays))}
             {miniPlanFills.map((f) => renderMiniFill(f, 'mpf'))}
             {bgSegs.filter((s) => s.today).map((s, i) => (
@@ -907,6 +1131,8 @@ export function CarMiniTimeline({
               const b = ov.pMax ?? sp.pMax ?? a;
               const q = pos(a, b);
               if (!q) return null;
+              const adj = miniPlanOv.tripAdjust.get(t.key) ?? null;
+              const qa = miniAdjRect(q, adj) ?? q;
               const parts = planBarLabelParts(t);
               const ti = miniPlanTrack.tripSlot.get(t.key);
               const top = ti == null ? 5 : miniPlanTrack.layout.tops[ti];
@@ -917,11 +1143,14 @@ export function CarMiniTimeline({
                   tabIndex={0}
                   data-bar="plan"
                   data-trip={t.key}
+                  data-bar-frac-a={adj && adj.fracA !== 0 ? `${adj.fracA}` : undefined}
+                  data-bar-frac-b={adj && adj.fracB !== 1 ? `${adj.fracB}` : undefined}
+                  data-overlap={adj?.overlap ? '1' : undefined}
                   onClick={() => t.key !== focusKey && onSelectTrip(t.key)}
                   className="absolute z-[3] overflow-hidden whitespace-nowrap text-[9px] leading-[16px] cursor-pointer px-1"
                   style={{
-                    left: q.left,
-                    width: q.width,
+                    left: qa.left,
+                    width: qa.width,
                     top,
                     height: MINI_PLAN_BAR_H,
                     background: t.archived ? '#E5E7EB' : '#DBEAFE',
@@ -932,7 +1161,10 @@ export function CarMiniTimeline({
                   }}
                   title={`${formatPlate(t.carNumber)} · ${parts.titleText}${t.archived ? ' · архив' : ''}${t.key === focusKey ? ' · выбранный рейс' : ' · соседний рейс (контекст)'}`}
                 >
-                  {q.width > 40 ? <PlanBarLabel parts={parts} width={q.width} fontPx={9} /> : ''}
+                  {adj?.overlap ? (
+                    <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatchMini }} />
+                  ) : null}
+                  {qa.width > 40 ? <PlanBarLabel parts={parts} width={qa.width} fontPx={9} /> : ''}
                 </div>
               );
             })}
@@ -956,6 +1188,9 @@ export function CarMiniTimeline({
                 />
               );
             })}
+            {miniPlanOv.waitGaps.map((g) => renderMiniWaitGap(g, 'mpw'))}
+            {miniPlanOv.warnings.map((w) => renderMiniConflict(w, 'mpc', miniPlanH))}
+            {miniPlanOv.markers.map((m) => renderMiniOvMarker(m, 'mpm', miniPlanH))}
           </div>
           <div className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2 w-[96px] min-w-[96px] text-[9px] leading-[12px] text-[#9CA3AF] overflow-hidden" style={{ height: miniFactH, borderRightColor: '#D1D5DB' }}>
             факт · база · ремонт
@@ -969,7 +1204,7 @@ export function CarMiniTimeline({
               />
             ))}
             {periodBand()}
-            {miniFactBz.stripes.map((s) => renderMiniBzStripe(s, 'mfbz'))}
+            {miniFactBz.stripes.map((s) => renderMiniBzStripe(s, 'mfbz', miniFactOv))}
             {miniFactBz.marks.map((m) => renderMiniBzMark(m, 'mfbm', miniFactStageDays))}
             {miniFactFills.map((f) => renderMiniFill(f, 'mff'))}
             {bgSegs.filter((s) => s.today).map((s, i) => (
@@ -1037,6 +1272,8 @@ export function CarMiniTimeline({
               const fEnd = ongoing ? Math.max(today, sp.fMax ?? sp.fMin) : (endDay ?? sp.fMax ?? sp.fMin);
               const q = pos(sp.fMin, fEnd);
               if (!q) return null;
+              const adjF = miniFactOv.tripAdjust.get(t.key) ?? null;
+              const qf = miniAdjRect(q, adjF) ?? q;
               const ti = miniFactTrack.factSlot.get(t.key);
               const top = ti == null ? 4 : miniFactTrack.layout.tops[ti];
               return (
@@ -1046,11 +1283,14 @@ export function CarMiniTimeline({
                   tabIndex={0}
                   data-bar="fact"
                   data-trip={t.key}
+                  data-bar-frac-a={adjF && adjF.fracA !== 0 ? `${adjF.fracA}` : undefined}
+                  data-bar-frac-b={adjF && adjF.fracB !== 1 ? `${adjF.fracB}` : undefined}
+                  data-overlap={adjF?.overlap ? '1' : undefined}
                   onClick={() => t.key !== focusKey && onSelectTrip(t.key)}
-                  className="absolute z-[3] cursor-pointer"
+                  className="absolute z-[3] cursor-pointer overflow-hidden"
                   style={{
-                    left: q.left,
-                    width: q.width,
+                    left: qf.left,
+                    width: qf.width,
                     top,
                     height: MINI_FACT_BAR_H,
                     background: ongoing ? hatchOpen : '#10B981',
@@ -1060,7 +1300,11 @@ export function CarMiniTimeline({
                     ...link(t.key),
                   }}
                   title={`${formatPlate(t.carNumber)} · факт: ${fmtFull(isoOf(sp.fMin))} – ${ongoing ? 'окончание не указано' : fmtFull(isoOf(fEnd))}${t.key === focusKey ? ' · выбранный рейс' : ''}`}
-                />
+                >
+                  {adjF?.overlap ? (
+                    <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatchMini }} />
+                  ) : null}
+                </div>
               );
             })}
             {carTrips.map((t) => {
@@ -1072,20 +1316,31 @@ export function CarMiniTimeline({
               const b = ov.pMax ?? sp.pMax ?? a;
               const q = pos(a, b);
               if (!q) return null;
+              const adjN = miniFactOv.tripAdjust.get(t.key) ?? null;
+              const qn = miniAdjRect(q, adjN) ?? q;
               const ti = miniFactTrack.factNoneSlot.get(t.key);
               const top = ti == null ? 3 : miniFactTrack.layout.tops[ti];
               return (
                 <div
                   key={`fn-${t.key}`}
                   data-bar="fact-none"
+                  data-bar-frac-a={adjN && adjN.fracA !== 0 ? `${adjN.fracA}` : undefined}
+                  data-bar-frac-b={adjN && adjN.fracB !== 1 ? `${adjN.fracB}` : undefined}
+                  data-overlap={adjN?.overlap ? '1' : undefined}
                   className="absolute z-[2] text-[8px] leading-[14px] text-ellipsis text-[#9CA3AF] px-1 overflow-hidden whitespace-nowrap"
-                  style={{ left: q.left, width: q.width, top, height: MINI_FACT_NONE_H, border: '1px dashed #9CA3AF', borderRadius: 2, background: '#F9FAFB' }}
+                  style={{ left: qn.left, width: qn.width, top, height: MINI_FACT_NONE_H, border: '1px dashed #9CA3AF', borderRadius: 2, background: '#F9FAFB' }}
                   title="Фактические данные не указаны"
                 >
-                  {q.width > 90 ? 'Факт не указан' : ''}
+                  {adjN?.overlap ? (
+                    <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatchMini }} />
+                  ) : null}
+                  {qn.width > 90 ? 'Факт не указан' : ''}
                 </div>
               );
             })}
+            {miniFactOv.waitGaps.map((g) => renderMiniWaitGap(g, 'mfw'))}
+            {miniFactOv.warnings.map((w) => renderMiniConflict(w, 'mfc', miniFactH))}
+            {miniFactOv.markers.map((m) => renderMiniOvMarker(m, 'mfm', miniFactH))}
           </div>
         </div>
       </div>
