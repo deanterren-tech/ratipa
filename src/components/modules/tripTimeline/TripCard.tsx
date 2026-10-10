@@ -62,7 +62,7 @@ import { useCrosshair } from './lib/useCrosshair';
 import { useColumnHighlight } from './lib/timelinePrefs';
 // Z-шкала слоёв полотна — единый источник (lib/visuals): встроенный таймлайн
 // использует те же слои, что основное полотно (этапы всегда поверх полос).
-import { BAR_ICON_CLS, TL_Z, stageIconOf } from './lib/visuals';
+import { BAR_ICON_CLS, TL_Z, TRIP_CIRCLE_BADGE_CLS, TRIP_CIRCLE_TICK_CLS, TRIP_CIRCLE_TICK_LINE, TRIP_CIRCLE_TICK_TEXT, conflictHatch, hatch45, stageIconOf, tripCircleBadgeStyle, waitHatch } from './lib/visuals';
 // Единое правило долей ячейки дня (половины/трети событий) — общее с полотном.
 import {
   buildRowDaySections,
@@ -83,7 +83,7 @@ import {
   type StageFillSection,
 } from './lib/stageFills';
 import { computePlanStageChanges, resolvePlanLock, type PlanStageChanges } from './lib/planLock';
-import { normalizeCircles } from './lib/circles';
+import { normalizeCircles, tripCircleMarksOf, visibleCircleTicks, type TripCircleMarks } from './lib/circles';
 import { hasPlanFinancials } from './lib/planFromDraft';
 import {
   WEEKEND_HINT,
@@ -289,11 +289,8 @@ const MINI_PLAN_BAR_H = 16;
 const MINI_FACT_BAR_H = 8;
 const MINI_FACT_NONE_H = 14;
 
-const hatchOpen = 'repeating-linear-gradient(45deg,#A7F3D0,#A7F3D0 5px,transparent 5px,transparent 10px)';
-const hatchBuffer = 'repeating-linear-gradient(45deg,#FDE68A,#FDE68A 4px,transparent 4px,transparent 8px)';
-/** Тонкая штриховка конфликта данных и нейтральная «Ожидание выезда» (как в основном). */
-const conflictHatchMini = 'repeating-linear-gradient(45deg, rgba(190,18,60,0.30), rgba(190,18,60,0.30) 2px, transparent 2px, transparent 6px)';
-const waitHatchMini = 'repeating-linear-gradient(45deg, rgba(100,116,139,0.22), rgba(100,116,139,0.22) 2px, transparent 2px, transparent 7px)';
+// Штриховки встроенного таймлайна — ОБЩИЕ константы lib/visuals (те же, что
+// на полотне): собственных копий цветов здесь нет (единый источник легенды).
 /** Тона маркеров стыков (те же, что в основном таймлайне). */
 const MARKER_TONE_MINI = {
   'early-departure': { fg: '#B45309', bg: '#FFF4DE', border: '#E3B04B' },
@@ -797,7 +794,7 @@ export function CarMiniTimeline({
               }
             : undefined
         }
-        className={`absolute top-0 bottom-0 overflow-hidden whitespace-nowrap flex items-center justify-center px-0.5 ${clickable ? 'cursor-pointer' : ''}`}
+        className={`absolute top-0 bottom-0 overflow-hidden whitespace-nowrap flex items-center justify-center ${width >= 18 ? 'px-0.5' : ''} ${clickable ? 'cursor-pointer' : ''}`}
         style={{
           zIndex: TL_Z.stage,
           left,
@@ -1085,6 +1082,59 @@ export function CarMiniTimeline({
       </div>
     );
   };
+  /**
+   * Метки кругов рейса для встроенного таймлайна — ТЕ ЖЕ правила, что на
+   * основном полотне (lib/circles + TL_Z.mark): бейдж «×N» у начала полосы и
+   * тонкие засечки с номерами между кругами. Слой не перехватывает указатель
+   * (pointer-events: none); подпись полосы обходит бейдж отступом.
+   */
+  const renderMiniCircleMarks = (
+    cm: TripCircleMarks | null | undefined,
+    keyPrefix: string,
+    rect: { left: number; width: number; top: number; height: number },
+  ): React.ReactNode => {
+    if (!cm || (!cm.badge && !cm.ticks.length)) return null;
+    // Узкие полосы факта ниже бейджа — слой центрируется и чуть выходит
+    // за края полосы (без обрезки: overflow у слоя не скрыт).
+    const h = Math.max(rect.height, 13);
+    const top = rect.top + (rect.height - h) / 2;
+    const ticks = visibleCircleTicks(cm, (tk) => Math.round((tk.at - renderVs) * colW) - rect.left - 1);
+    if (!cm.badge && !ticks.length) return null;
+    return (
+      <div
+        key={`${keyPrefix}-circles`}
+        aria-hidden="true"
+        data-tl-circles-trip
+        className="absolute flex items-center pointer-events-none"
+        style={{ zIndex: TL_Z.mark, left: rect.left, top, width: rect.width, height: h }}
+      >
+        {cm.badge ? (
+          <span
+            data-tl-trip-circles={cm.count}
+            className={`${TRIP_CIRCLE_BADGE_CLS} ml-0.5`}
+            style={tripCircleBadgeStyle()}
+            title={cm.title}
+          >
+            {cm.badge}
+          </span>
+        ) : null}
+        {ticks.map(({ tick: tk, x }) => (
+          <span
+            key={`${keyPrefix}-ct-${tk.n}`}
+            data-tl-circle-tick={tk.n}
+            className={TRIP_CIRCLE_TICK_CLS}
+            style={{ left: x }}
+            title={tk.title}
+          >
+            <i className="w-[2px] h-[9px] rounded-full" style={{ background: TRIP_CIRCLE_TICK_LINE }} />
+            <b className="text-[7px] leading-none font-bold" style={{ color: TRIP_CIRCLE_TICK_TEXT }}>
+              {tk.n}
+            </b>
+          </span>
+        ))}
+      </div>
+    );
+  };
   /** «Ожидание выезда»: нейтральная штриховка с подписью. */
   const renderMiniWaitGap = (g: WaitGap & { periodKey: string }, keyPrefix: string): React.ReactNode => {
     const clipA = Math.max(g.a, renderVs);
@@ -1105,7 +1155,7 @@ export function CarMiniTimeline({
           zIndex: TL_Z.bz,
           left,
           width,
-          background: waitHatchMini,
+          background: waitHatch,
           borderLeft: '1px dashed #94A3B8',
           borderRight: '1px dashed #94A3B8',
         }}
@@ -1139,7 +1189,7 @@ export function CarMiniTimeline({
         className="absolute top-0 bottom-0 pointer-events-none"
         style={{ zIndex: TL_Z.mark, left, width }}
       >
-        <div aria-hidden="true" className="absolute inset-0" style={{ background: conflictHatchMini, borderRadius: 'var(--tl-bar-r)' }} />
+        <div aria-hidden="true" className="absolute inset-0" style={{ background: conflictHatch, borderRadius: 'var(--tl-bar-r)' }} />
         <div
           role="button"
           tabIndex={0}
@@ -1292,9 +1342,13 @@ export function CarMiniTimeline({
               const parts = planBarLabelParts(t);
               const ti = miniPlanTrack.tripSlot.get(t.key);
               const top = ti == null ? 5 : miniPlanTrack.layout.tops[ti];
+              // Круги рейса — те же правила, что на полотне (lib/circles):
+              // бейдж «×N» и засечки между кругами (по плановым датам этапов).
+              const cm = tripCircleMarksOf(t.circles, t.stages, 'plan');
+              const badgePad = cm?.badge ? 19 : 0;
               return (
+                <React.Fragment key={`p-${t.key}`}>
                 <div
-                  key={`p-${t.key}`}
                   role="button"
                   tabIndex={0}
                   data-bar="plan"
@@ -1316,13 +1370,22 @@ export function CarMiniTimeline({
                     borderRadius: 3,
                     ...link(t.key),
                   }}
-                  title={`${formatPlate(t.carNumber)} · ${parts.titleText}${t.archived ? ' · архив' : ''}${t.key === focusKey ? ' · выбранный рейс' : ' · соседний рейс (контекст)'}`}
+                  title={`${formatPlate(t.carNumber)} · ${parts.titleText}${cm ? ` · ${cm.title}` : ''}${t.archived ? ' · архив' : ''}${t.key === focusKey ? ' · выбранный рейс' : ' · соседний рейс (контекст)'}`}
                 >
                   {adj?.overlap ? (
-                    <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatchMini }} />
+                    <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
                   ) : null}
-                  {qa.width > 40 ? <PlanBarLabel parts={parts} width={qa.width} fontPx={9} /> : ''}
+                  {qa.width > 40 ? (
+                    <PlanBarLabel
+                      parts={parts}
+                      width={qa.width - badgePad}
+                      fontPx={9}
+                      className={badgePad ? 'pl-[19px]' : ''}
+                    />
+                  ) : ''}
                 </div>
+                {renderMiniCircleMarks(cm, `p-${t.key}`, { left: qa.left, width: qa.width, top, height: MINI_PLAN_BAR_H })}
+                </React.Fragment>
               );
             })}
             {carTrips.map((t) => {
@@ -1340,7 +1403,7 @@ export function CarMiniTimeline({
                   key={`buf-${t.key}`}
                   data-bar="buffer"
                   className="absolute"
-                  style={{ zIndex: TL_Z.tripBar, left: q.left, width: q.width, top, height: MINI_PLAN_BAR_H, background: hatchBuffer, borderRadius: 3 }}
+                  style={{ zIndex: TL_Z.tripBar, left: q.left, width: q.width, top, height: MINI_PLAN_BAR_H, background: hatch45, borderRadius: 3 }}
                   title={`запас ${t.bufferDays} дн`}
                 />
               );
@@ -1437,9 +1500,12 @@ export function CarMiniTimeline({
               // основном таймлайне (lib/factSegments): правила не копируются.
               const segRes = factSegmentsOfTrip(t, sp.fMin, fEnd, today);
               const segs = segRes.segments;
+              // Круги рейса — те же правила, что на полотне: засечки факта
+              // строятся по ФАКТИЧЕСКИМ датам этапов (даты не выдумываются).
+              const cmF = tripCircleMarksOf(t.circles, t.stages, 'fact');
               return (
+                <React.Fragment key={`f-${t.key}`}>
                 <div
-                  key={`f-${t.key}`}
                   role="button"
                   tabIndex={0}
                   data-bar="fact"
@@ -1463,7 +1529,7 @@ export function CarMiniTimeline({
                   title={`${formatPlate(t.carNumber)} · факт: ${fmtFull(isoOf(sp.fMin))} – ${ongoing ? 'окончание не указано' : fmtFull(isoOf(fEnd))} · ${segs
                     .map((x) => FACT_SEGMENT_COLORS[x.color].label)
                     .filter((v, i, arr) => arr.indexOf(v) === i)
-                    .join('; ')}${segRes.noPlan ? ' · план не указан' : ''}${t.key === focusKey ? ' · выбранный рейс' : ''}`}
+                    .join('; ')}${cmF ? ` · ${cmF.title}` : ''}${segRes.noPlan ? ' · план не указан' : ''}${t.key === focusKey ? ' · выбранный рейс' : ''}`}
                 >
                   {segs.map((x, i) => {
                     const col = FACT_SEGMENT_COLORS[x.color];
@@ -1487,9 +1553,11 @@ export function CarMiniTimeline({
                     );
                   })}
                   {adjF?.overlap ? (
-                    <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatchMini }} />
+                    <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
                   ) : null}
                 </div>
+                {renderMiniCircleMarks(cmF, `f-${t.key}`, { left: qf.left, width: qf.width, top, height: MINI_FACT_BAR_H })}
+                </React.Fragment>
               );
             })}
             {carTrips.map((t) => {
@@ -1517,7 +1585,7 @@ export function CarMiniTimeline({
                   title="Фактические данные не указаны"
                 >
                   {adjN?.overlap ? (
-                    <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatchMini }} />
+                    <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
                   ) : null}
                   {qn.width > 90 ? 'Факт не указан' : ''}
                 </div>

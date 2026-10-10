@@ -757,8 +757,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
           height: isMobile ? "100%" : `${nbCoords.h}px`,
           // На телефоне блокнот лежит ПОД нижней навигацией (6000): полоса должна
           // оставаться видимой поверх него, как и поверх остальных окон.
-          // На десктопе полосы нет — там блокнот остаётся поверх содержимого.
-          zIndex: isMobile ? 5900 : 20000,
+          // На десктопе полосы нет — там блокнот остаётся поверх содержимого,
+          // НО под модальным окном формы рейса (z-100): иначе он перекрывает
+          // правый край формы — колонку «Круги» и соседние поля.
+          zIndex: isMobile ? 5900 : isModalOpen ? 90 : 20000,
         }}
         className={`bg-white ${isMobile ? "" : "rounded-2xl"} border border-[#E5E7EB] shadow-sm flex flex-col pointer-events-auto overflow-hidden animate-in fade-in zoom-in-95 duration-150`}
       >

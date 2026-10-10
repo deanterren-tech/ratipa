@@ -65,6 +65,32 @@ export interface TripCircleMarks {
   title: string;
 }
 
+/**
+ * Видимые засечки кругов при заданном масштабе: засечка НЕ рисуется, если её
+ * позиция попадает в бейдж «×N» или ближе minGapPx к уже показанной засечке —
+ * иначе на мелком масштабе (день узкий) метки наезжают друг на друга.
+ * Позиции не сдвигаются: засечка либо стоит на своей координате, либо скрыта
+ * (её данные остаются в подсказке полосы — даты кругов).
+ */
+export const visibleCircleTicks = (
+  cm: TripCircleMarks | null | undefined,
+  offsetPxOf: (tick: TripCircleTick) => number,
+  opts?: { badgePx?: number; minGapPx?: number },
+): Array<{ tick: TripCircleTick; x: number }> => {
+  if (!cm || !cm.ticks.length) return [];
+  const badgePx = opts?.badgePx ?? 22;
+  const minGapPx = opts?.minGapPx ?? 16;
+  const out: Array<{ tick: TripCircleTick; x: number }> = [];
+  let lastX = cm.badge ? badgePx : Number.NEGATIVE_INFINITY;
+  cm.ticks.forEach((tick) => {
+    const x = offsetPxOf(tick);
+    if (x < lastX + minGapPx) return;
+    out.push({ tick, x });
+    lastX = x;
+  });
+  return out;
+};
+
 const rangeText = (r: TripCircleRange, mode: 'plan' | 'fact'): string => {
   if (r.a == null || r.b == null) return 'даты не указаны';
   const kind = mode === 'plan' ? 'план' : 'факт';

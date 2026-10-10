@@ -42,6 +42,7 @@ import { buildLegendItems } from './lib/legend';
 import { planBarLabelParts, type PlanBarParts } from './PlanBarLabel';
 import {
   LABEL_MIN_SEG,
+  MIN_LABEL_BOX,
   barLabelSegments,
   labelTextFor,
   labelVariantFor,
@@ -80,6 +81,7 @@ import {
 } from './lib/directions';
 import {
   tripCircleMarksOf,
+  visibleCircleTicks,
   type TripCircleMarks,
 } from './lib/circles';
 import {
@@ -880,14 +882,16 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
    * Занятые зоны подписи от меток кругов рейса (координаты строки): бейдж
    * «×N» в начале полосы и засечки между кругами. Подпись обтекает их по
    * общему правилу lib/barLabels — маркеры никогда не перекрывают текст.
+   * Засечки учитываются только ВИДИМЫЕ при текущем масштабе (visibleCircleTicks):
+   * скрытая засечка не должна «отжимать» подпись.
    */
   const circleMarksObstacles = (cm: TripCircleMarks | null | undefined, barLeft: number): BarObstacle[] => {
     if (!cm) return [];
     const out: BarObstacle[] = [];
     if (cm.badge) out.push({ left: barLeft + 1, right: barLeft + 20 });
-    cm.ticks.forEach((tk) => {
-      const x = Math.round((tk.at - vs) * colW);
-      out.push({ left: x - 6, right: x + 12 });
+    visibleCircleTicks(cm, (tk) => Math.round((tk.at - vs) * colW) - barLeft).forEach(({ x }) => {
+      const abs = barLeft + x;
+      out.push({ left: abs - 6, right: abs + 12 });
     });
     return out;
   };
@@ -895,7 +899,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
    * Метки кругов поверх полосы (слой TL_Z.mark): бейдж «×2»/«×3» в начале
    * полосы и тонкие засечки с номерами между кругами. Слой не перехватывает
    * указатель — клик и наведение остаются у самой полосы/этапов; метки НЕ
-   * перекрывают подпись (та обходит их свободными сегментами).
+   * перекрывают подпись (та обходит их свободными сегментами). На мелком
+   * масштабе засечки, сталкивающиеся с бейджем/соседкой, скрываются
+   * (visibleCircleTicks) — без сдвига и без выдуманных дат.
    */
   const circleMarksLayer = (cm: TripCircleMarks | null | undefined, keyPrefix: string, barLeft: number): React.ReactNode =>
     !cm ? null : (
@@ -910,12 +916,12 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             {cm.badge}
           </span>
         ) : null}
-        {cm.ticks.map((tk) => (
+        {visibleCircleTicks(cm, (tk) => Math.round((tk.at - vs) * colW) - barLeft - 1).map(({ tick: tk, x }) => (
           <span
             key={`${keyPrefix}-ct-${tk.n}`}
             data-tl-circle-tick={tk.n}
             className={TRIP_CIRCLE_TICK_CLS}
-            style={{ left: Math.round((tk.at - vs) * colW) - barLeft - 1 }}
+            style={{ left: x }}
             title={tk.title}
           >
             <i className="w-[2px] h-[9px] rounded-full" style={{ background: TRIP_CIRCLE_TICK_LINE }} />
@@ -1331,6 +1337,47 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     });
     return out;
   }, [factFills, factSec, factBz.marks, row.factOv.markers, row.factItems, vs, colW]);
+  /**
+   * Занятые зоны подписей ПОЛОС БАЗЫ/РЕМОНТА (отдельно от полос рейсов):
+   * к общим зонам строки добавляются полосы РЕЙСОВ этой подстроки (они лежат
+   * выше, z-2 против z-1), их метки кругов (бейдж «×N», засечки) и чип
+   * «Передача: …» в плане — подпись простоя не уходит ни под одну из них.
+   * Полосам рейсов эти зоны НЕ передаются: собственная полоса не должна
+   * отжимать свою же подпись.
+   */
+  const planHandoverObstacles = useMemo<BarObstacle[]>(() => {
+    const out: BarObstacle[] = [];
+    row.planItems.forEach((it) => {
+      if (it.kind !== 'handover') return;
+      const x = Math.round((it.point - vs) * colW);
+      if (x > -200 && x < W + 200) out.push({ left: x + 3, right: x + 3 + 170 });
+    });
+    return out;
+  }, [row.planItems, vs, colW, W]);
+  const planBzObstacles = useMemo<BarObstacle[]>(() => {
+    const out = [...planLabelObstacles, ...planHandoverObstacles];
+    row.planItems.forEach((it) => {
+      if (it.kind === 'handover') return;
+      const p = pos(it.a, it.b);
+      if (!p) return;
+      const r = it.kind === 'plan' ? adjRect(p, row.planOv.tripAdjust.get(it.tripKey) ?? null) ?? p : p;
+      out.push({ left: r.left, right: r.left + r.width });
+      if (it.kind === 'plan') out.push(...circleMarksObstacles(it.circleMarks, r.left));
+    });
+    return out;
+  }, [planLabelObstacles, planHandoverObstacles, row.planItems, row.planOv.tripAdjust, vs, colW]);
+  const factBzObstacles = useMemo<BarObstacle[]>(() => {
+    const out = [...factLabelObstacles];
+    row.factItems.forEach((it) => {
+      if (it.kind === 'event' || it.kind === 'handover') return;
+      const p = pos(it.a, it.b);
+      if (!p) return;
+      const r = adjRect(p, row.factOv.tripAdjust.get(it.tripKey) ?? null) ?? p;
+      out.push({ left: r.left, right: r.left + r.width });
+      if (it.kind === 'fact') out.push(...circleMarksObstacles(it.circleMarks, r.left));
+    });
+    return out;
+  }, [factLabelObstacles, row.factItems, row.factOv.tripAdjust, vs, colW, W]);
   /** Спокойная сетка: слабые вертикальные деления дней на читаемых масштабах. */
   const laneBg = colW >= 12
     ? {
@@ -1373,7 +1420,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             open();
           }
         }}
-        className="absolute top-0 bottom-0 cursor-pointer overflow-hidden whitespace-nowrap flex items-center justify-center px-0.5"
+        className={`absolute top-0 bottom-0 cursor-pointer overflow-hidden whitespace-nowrap flex items-center justify-center ${width >= 20 ? 'px-0.5' : ''}`}
         style={{
           zIndex: TL_Z.stage,
           left,
@@ -1512,7 +1559,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             );
           })}
         </>
-      ) : !labelNoRoom && (o.labelText || o.labelIcon) ? (
+      ) : !labelNoRoom && o.width >= MIN_LABEL_BOX && (o.labelText || o.labelIcon) ? (
         <span
           data-bar-label="1"
           className="inline-flex items-center gap-0.5 min-w-0 px-1 text-[8px] leading-[10px] font-semibold truncate max-w-full"
@@ -1899,7 +1946,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         style={{ width: W, height: planH, backgroundColor: laneRowBg, ...laneBg }}
       >
         {bgPlane('bg', 0.75)}
-        {planBz.stripes.map((s) => renderBzStripe(s, 'pb', row.planOv, planSec, planLabelObstacles))}
+        {planBz.stripes.map((s) => renderBzStripe(s, 'pb', row.planOv, planSec, planBzObstacles))}
         {planBz.marks.map((m) => renderBzMark(m, 'pbm', planSec))}
         {planFills.map((f) => renderStageFill(f, 'pf', planSec))}
         {todayStrip('t', 0.1)}
@@ -1934,6 +1981,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             // направления справа) — подпись никогда не встаёт под метку.
             const obstacles: BarObstacle[] = [
               ...planLabelObstacles,
+              ...planHandoverObstacles,
               ...circleMarksObstacles(it.circleMarks, pr.left),
               ...(chipOn ? [{ left: pr.left + pr.width - 36, right: pr.left + pr.width }] : []),
             ];
@@ -2119,7 +2167,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       >
         {bgPlane('fbg', 0.6)}
         {factBz.stripes.map((s) =>
-          s.kind === 'base-gap' && waitCovers(row.factOv.waitGaps, s) ? null : renderBzStripe(s, 'fb', row.factOv, factSec, factLabelObstacles),
+          s.kind === 'base-gap' && waitCovers(row.factOv.waitGaps, s) ? null : renderBzStripe(s, 'fb', row.factOv, factSec, factBzObstacles),
         )}
         {factBz.marks.map((m) => renderBzMark(m, 'fbm', factSec))}
         {factFills.map((f) => renderStageFill(f, 'ff', factSec))}
