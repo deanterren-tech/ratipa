@@ -24,7 +24,7 @@ import { dbService, pdService } from '../../api';
 import { resolvePermission } from '../../utils/permissions';
 import { buildDispatcherDirectory } from '../../utils/dispatcher';
 import { UI } from '../../ui/kit';
-import { ModalShell, ModuleShell } from '../../ui/components';
+import { ModuleShell } from '../../ui/components';
 import { useToast } from '../ToastProvider';
 import { useHashRoute } from '../../hooks/useHashRoute';
 import TimelineGrid from './tripTimeline/TimelineGrid';
@@ -1159,25 +1159,17 @@ export default function TripTimelineModule({ user, settings }: Props) {
       ) : null}
 
       {/* Новый рейс: создаётся сразу связанная запись «Плана дохода» (тот же id —
-          ключ полосы `pd:<id>`), отдельный ручной рейс не создаётся */}
+          ключ полосы `pd:<id>`), отдельный ручной рейс не создаётся.
+          Окно (ModalShell: шапка, прокручиваемое тело, нижняя панель) форма
+          рисует сама — компоновка «Нового рейса» живёт целиком в NewTripForm. */}
       {showNewTrip && canCreateTrip ? (
-        <ModalShell
-          isOpen
-          onClose={() => setShowNewTrip(false)}
-          title="Новый рейс"
-          subtitle="Рейс создаётся вместе со связанной записью «Плана дохода» — финансовые данные заполняются в плане"
-          icon={<Plus className="w-4 h-4" aria-hidden="true" />}
-          ariaLabel="Новый рейс"
-          maxWidth="max-w-2xl"
-        >
-          <NewTripForm
-            dispatchers={data.dispatchers}
-            defaultDispatcherId={defaultDispatcherId}
-            canWrite={canCreateTrip}
-            onCreate={createTrip}
-            onCancel={() => setShowNewTrip(false)}
-          />
-        </ModalShell>
+        <NewTripForm
+          dispatchers={data.dispatchers}
+          defaultDispatcherId={defaultDispatcherId}
+          canWrite={canCreateTrip}
+          onCreate={createTrip}
+          onCancel={() => setShowNewTrip(false)}
+        />
       ) : null}
 
       {overviewCarKey ? (

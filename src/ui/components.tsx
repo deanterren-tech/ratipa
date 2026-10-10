@@ -355,6 +355,7 @@ export function ModalShell({
   maxWidth = 'max-w-lg',
   ariaLabel,
   closeTitle = 'Закрыть',
+  closeProminent = false,
   hotkeysManaged = false,
 }: {
   isOpen: boolean;
@@ -369,6 +370,11 @@ export function ModalShell({
   ariaLabel?: string;
   /** Подсказка кнопки закрытия (например, «Закрыть · Esc» для окон с этим хоткеем). */
   closeTitle?: string;
+  /**
+   * Заметная кнопка закрытия (крупный крестик с рамкой на компьютере).
+   * По умолчанию выключено — вид прочих окон не меняется.
+   */
+  closeProminent?: boolean;
   /** Окно само управляет Enter/Ctrl+S/Esc (useWindowHotkeys): глобальные хоткеи его не трогают. */
   hotkeysManaged?: boolean;
 }) {
@@ -401,7 +407,17 @@ export function ModalShell({
               </div>
             </div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Закрыть" title={closeTitle} className={UI.modalClose}>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Закрыть"
+            title={closeTitle}
+            className={
+              closeProminent
+                ? `${UI.modalClose} md:bg-white md:border md:border-[#E5E7EB] md:rounded-xl md:p-2 md:text-[#4B5563]`
+                : UI.modalClose
+            }
+          >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
