@@ -18,7 +18,7 @@ import { factSegmentsOf, FACT_SEGMENT_COLORS, type FactSegment } from '../lib/fa
 import { layoutBzFills, bzStripeColor, bzKindColor, type BzMark, type BzStripe } from '../lib/bzFills';
 import type { BasePeriod } from '../lib/sources';
 import { stageColorOf } from '../lib/stageFills';
-import { PLAN_ACCENT, MARKER_TONE, circleBadgeStyle } from '../lib/visuals';
+import { PLAN_ACCENT, MARKER_TONE, TL_Z, circleBadgeStyle } from '../lib/visuals';
 import { directionChipColors, DEFAULT_DIRECTIONS } from '../lib/directions';
 import { vyezdStatusIcon } from '../lib/vyezd';
 import type { TimelineStage } from '../../../../types';
@@ -170,7 +170,7 @@ const PlanBar = ({
         width: p.width,
         top: 3,
         height: PLAN_BAR_H,
-        zIndex: 2,
+        zIndex: TL_Z.tripBar,
         background: PLAN_ACCENT.bg,
         border: `1px solid ${PLAN_ACCENT.border}`,
         borderRadius: 'var(--tl-bar-r)',
@@ -213,7 +213,7 @@ const ReturnMark = ({ day, days }: { day: number; days: number }) => {
     <span
       className="absolute"
       title={`плановое возвращение: ${fmtDM(day)}`}
-      style={{ left: x, top: 3, height: PLAN_BAR_H, width: 3, zIndex: 4, background: '#2563EB', borderRadius: 2 }}
+      style={{ left: x, top: 3, height: PLAN_BAR_H, width: 3, zIndex: TL_Z.mark, background: '#2563EB', borderRadius: 2 }}
     />
   );
 };
@@ -227,6 +227,7 @@ const FactBar = ({ a, b, days, segments }: { a: number; b: number; days: number;
     <div
       className="absolute top-0 bottom-0 overflow-hidden"
       style={{
+        zIndex: TL_Z.tripBar,
         left: p.left,
         width: p.width,
         top: 6,
@@ -281,9 +282,9 @@ const StageDay = ({ day, days, type, name }: { day: number; days: number; type: 
   const x = xOf(day);
   return (
     <span
-      className="absolute top-0 bottom-0 z-[1] flex items-center justify-center overflow-hidden"
-      title={`Этап «${name}» — заливка дня (цвет по типу этапа)`}
-      style={{ left: x, width: COL_W, background: c.bg, borderLeft: `1px solid ${c.border}`, borderRight: `1px solid ${c.border}`, borderRadius: 3 }}
+      className="absolute top-0 bottom-0 flex items-center justify-center overflow-hidden"
+      title={`Этап «${name}» — заливка дня (цвет по типу этапа; всегда поверх полосы)`}
+      style={{ zIndex: TL_Z.stage, left: x, width: COL_W, background: c.bg, borderLeft: `1px solid ${c.border}`, borderRight: `1px solid ${c.border}`, borderRadius: 3 }}
     />
   );
 };
@@ -300,6 +301,7 @@ const BzStripeEl = ({ stripe, days }: { stripe: BzStripe; days: number }) => {
       className="absolute flex items-center gap-0.5 overflow-hidden whitespace-nowrap"
       title={stripe.title}
       style={{
+        zIndex: TL_Z.bz,
         left: p.left,
         width: p.width,
         top: 3,
@@ -324,9 +326,9 @@ const BzMarkEl = ({ mark, days }: { mark: BzMark; days: number }) => {
   const tone = mark.kind === 'ready' ? bzKindColor('ready') : bzKindColor('repair-end');
   return (
     <span
-      className="absolute top-0 bottom-0 z-[2] flex items-center justify-center"
+      className="absolute top-0 bottom-0 flex items-center justify-center"
       title={mark.title}
-      style={{ left: x, width: COL_W, background: tone.bg, border: `1px solid ${tone.border}`, borderRadius: 3, color: tone.text }}
+      style={{ zIndex: TL_Z.stage, left: x, width: COL_W, background: tone.bg, border: `1px solid ${tone.border}`, borderRadius: 3, color: tone.text }}
     >
       <Icon className="w-3 h-3" style={{ color: tone.text }} aria-hidden="true" />
     </span>
@@ -340,9 +342,10 @@ const MarkerEl = ({ day, frac, kind, days, title }: { day: number; frac: number;
   const Icon = kind === 'arrival' ? LogIn : LogOut;
   return (
     <span
-      className="absolute z-[3] flex items-center justify-center rounded-full"
+      className="absolute flex items-center justify-center rounded-full"
       title={title}
       style={{
+        zIndex: TL_Z.mark,
         left: x - 7,
         top: Math.round((ROW_H - 14) / 2),
         width: 14,
@@ -553,19 +556,19 @@ const SameDayDemo = () => {
       <DemoRow label="План · стык в один день" days={days}>
         <div
           className="absolute flex items-center overflow-hidden whitespace-nowrap"
-          style={{ left: tripSpan.left, width: tripSpan.width, top: 3, height: PLAN_BAR_H, zIndex: 2, background: PLAN_ACCENT.bg, border: `1px solid ${PLAN_ACCENT.border}`, borderRadius: 'var(--tl-bar-r) 0 0 var(--tl-bar-r)', color: PLAN_ACCENT.text }}
+          style={{ left: tripSpan.left, width: tripSpan.width, top: 3, height: PLAN_BAR_H, zIndex: TL_Z.tripBar, background: PLAN_ACCENT.bg, border: `1px solid ${PLAN_ACCENT.border}`, borderRadius: 'var(--tl-bar-r) 0 0 var(--tl-bar-r)', color: PLAN_ACCENT.text }}
         >
           <span className="text-[8px] leading-[10px] font-semibold truncate px-1">рейс</span>
         </div>
         <div
           className="absolute flex items-center overflow-hidden whitespace-nowrap"
-          style={{ left: baseSpan.left, width: baseSpan.width, top: 3, height: PLAN_BAR_H, zIndex: 2, background: baseTone.bg, borderTop: `1px solid ${baseTone.border}`, borderBottom: `1px solid ${baseTone.border}`, color: baseTone.text }}
+          style={{ left: baseSpan.left, width: baseSpan.width, top: 3, height: PLAN_BAR_H, zIndex: TL_Z.tripBar, background: baseTone.bg, borderTop: `1px solid ${baseTone.border}`, borderBottom: `1px solid ${baseTone.border}`, color: baseTone.text }}
         >
           <span className="text-[8px] leading-[10px] font-semibold truncate px-0.5">Плановый простой на базе</span>
         </div>
         <div
           className="absolute flex items-center overflow-hidden whitespace-nowrap"
-          style={{ left: nextSpan.left, width: nextSpan.width, top: 3, height: PLAN_BAR_H, zIndex: 2, background: PLAN_ACCENT.bg, border: `1px solid ${PLAN_ACCENT.border}`, borderRadius: '0 var(--tl-bar-r) var(--tl-bar-r) 0', color: PLAN_ACCENT.text }}
+          style={{ left: nextSpan.left, width: nextSpan.width, top: 3, height: PLAN_BAR_H, zIndex: TL_Z.tripBar, background: PLAN_ACCENT.bg, border: `1px solid ${PLAN_ACCENT.border}`, borderRadius: '0 var(--tl-bar-r) var(--tl-bar-r) 0', color: PLAN_ACCENT.text }}
         >
           <span className="text-[8px] leading-[10px] font-semibold truncate px-1">новый рейс</span>
         </div>

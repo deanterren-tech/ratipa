@@ -40,11 +40,22 @@ import {
 import { eventTypeOf, stageFullName } from './lib/catalog';
 import { buildLegendItems } from './lib/legend';
 import { planBarLabelParts, planBarLabelText, type PlanBarParts } from './PlanBarLabel';
+import {
+  barLabelSegments,
+  estimateLabelWidth,
+  labelTextFor,
+  labelVariantFor,
+  obstaclesFromFills,
+  pickActiveSegment,
+  type BarObstacle,
+  type BarLabelSegment,
+} from './lib/barLabels';
 import { eventMarkOf, groupEventMarks, type EventMark } from './lib/eventMarks';
 import {
   layoutStageFills,
   stageColorOf,
   stageFillTitle,
+  stageNeighborLabel,
   stageShortName,
   type StageFillInput,
   type StageFillSection,
@@ -96,14 +107,25 @@ import { AlertTriangle, ArrowRightLeft, CalendarClock, CarFront, ChevronDown, Ch
 // попапа «Обозначения» и интерактивного гайда (guide/).
 // ---------------------------------------------------------------------------
 import {
+  buildRowDaySections,
+  periodMergeKey,
+  stageMergeKeyOf,
+  tripSidesOf,
+  visibleStripeBounds,
+  type RowDaySections,
+  type RowStripeInput,
+} from './lib/dayCellSections';
+import {
   BAR_ICON_CLS,
   CLR,
   MARKER_TONE,
   PLAN_ACCENT,
   PLAN_ACCENT_ARCH,
+  TL_Z,
   circleBadgeStyle,
   conflictHatch,
   hatch45,
+  stageIconOf,
   waitHatch,
 } from './lib/visuals';
 
@@ -889,8 +911,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               }
             : undefined
         }
-        className={`absolute z-[7] flex items-center justify-center rounded-full select-none ${open ? 'cursor-pointer' : ''}`}
+        className={`absolute flex items-center justify-center rounded-full select-none ${open ? 'cursor-pointer' : ''}`}
         style={{
+          zIndex: TL_Z.mark,
           left: x - 7,
           top,
           width: 14,
@@ -920,8 +943,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         data-tl-wait-b={g.b}
         data-tl-wait-days={g.days}
         title={g.title}
-        className="absolute top-0 bottom-0 z-[2] flex items-center overflow-hidden cursor-default"
+        className="absolute top-0 bottom-0 flex items-center overflow-hidden cursor-default"
         style={{
+          zIndex: TL_Z.bz,
           left,
           width,
           background: waitHatch,
@@ -955,8 +979,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         data-tl-conflict="1"
         data-tl-conflict-a={w.a}
         data-tl-conflict-b={w.b}
-        className="absolute top-0 bottom-0 z-[4] pointer-events-none"
-        style={{ left, width }}
+        className="absolute top-0 bottom-0 pointer-events-none"
+        style={{ zIndex: TL_Z.mark, left, width }}
       >
         <div aria-hidden="true" className="absolute inset-0" style={{ background: conflictHatch, borderRadius: 'var(--tl-bar-r)' }} />
         <div
@@ -1138,28 +1162,84 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     [row.bzInputs, row.bzGaps, vs, ve, today],
   );
   /**
-   * Заливки этапов: план — в подстроке «План», факт — в «Факт». Этап с одной
-   * датой закрашивает день; несколько этапов в одном дне делят ячейку на
-   * цветные секции. Пересечение с полосами/отметками базы и ремонта разводится
-   * по секциям дня (dayClaims из layoutBzFills): этапы не перекрывают базу и
-   * ремонт — всё остаётся видимым и кликабельным.
+   * ДОЛИ ЯЧЕЙКИ ДНЯ — единое правило lib/dayCellSections: слева предыдущее
+   * событие дня, справа следующее (например, выгрузка слева, начало
+   * ремонта/простоя справа), с учётом якорей дня смены (срезы полос рейса из
+   * lib/overlap). Полосы строки входят в раскладку со своими ВИДИМЫМИ
+   * границами (укорочение простоя и срезы — как в отрисовке).
    */
+  const stageLabelOf = useCallback((it: StageFillInput) => stageNeighborLabel(stageTypes, it.stage), [stageTypes]);
+  const planStripeInputs = useMemo<RowStripeInput[]>(
+    () =>
+      planBz.stripes.map((s) => {
+        const vis = visibleStripeBounds(s, row.planOv);
+        return { kind: s.kind, a: vis.a, b: vis.b, fracA: vis.fracA, fracB: vis.fracB, periodKey: s.periodKey, label: s.label };
+      }),
+    [planBz.stripes, row.planOv],
+  );
+  const factStripeInputs = useMemo<RowStripeInput[]>(
+    () =>
+      factBz.stripes.map((s) => {
+        const vis = visibleStripeBounds(s, row.factOv);
+        return { kind: s.kind, a: vis.a, b: vis.b, fracA: vis.fracA, fracB: vis.fracB, periodKey: s.periodKey, label: s.label };
+      }),
+    [factBz.stripes, row.factOv],
+  );
+  const planTripSides = useMemo(
+    () =>
+      tripSidesOf(
+        row.planItems.filter((it): it is Extract<PlanItem, { kind: 'plan' }> => it.kind === 'plan').map((it) => ({ tripKey: it.tripKey, a: it.a, b: it.b })),
+        row.planOv,
+      ),
+    [row.planItems, row.planOv],
+  );
+  const factTripSides = useMemo(
+    () =>
+      tripSidesOf(
+        row.factItems
+          .filter((it): it is Extract<FactItem, { kind: 'fact' | 'factNone' }> => it.kind === 'fact' || it.kind === 'factNone')
+          .map((it) => ({ tripKey: it.tripKey, a: it.a, b: it.b })),
+        row.factOv,
+      ),
+    [row.factItems, row.factOv],
+  );
+  const planSec = useMemo(
+    () =>
+      buildRowDaySections({
+        kind: 'plan',
+        vs,
+        ve,
+        stages: row.stageInputs,
+        stageLabelOf,
+        stripes: planStripeInputs,
+        marks: planBz.marks,
+        tripSides: planTripSides,
+      }),
+    [vs, ve, row.stageInputs, stageLabelOf, planStripeInputs, planBz.marks, planTripSides],
+  );
+  const factSec = useMemo(
+    () =>
+      buildRowDaySections({
+        kind: 'fact',
+        vs,
+        ve,
+        stages: row.stageInputs,
+        stageLabelOf,
+        stripes: factStripeInputs,
+        marks: factBz.marks,
+        tripSides: factTripSides,
+      }),
+    [vs, ve, row.stageInputs, stageLabelOf, factStripeInputs, factBz.marks, factTripSides],
+  );
+  /** Заливки этапов: план — в подстроке «План», факт — в «Факт»; доли дня — из единой раскладки. */
   const planFills = useMemo(
-    () => layoutStageFills(row.stageInputs, 'plan', vs, ve, planBz.dayClaims),
-    [row.stageInputs, vs, ve, planBz.dayClaims],
+    () => layoutStageFills(row.stageInputs, 'plan', vs, ve, planSec.slotForStage),
+    [row.stageInputs, vs, ve, planSec],
   );
   const factFills = useMemo(
-    () => layoutStageFills(row.stageInputs, 'fact', vs, ve, factBz.dayClaims),
-    [row.stageInputs, vs, ve, factBz.dayClaims],
+    () => layoutStageFills(row.stageInputs, 'fact', vs, ve, factSec.slotForStage),
+    [row.stageInputs, vs, ve, factSec],
   );
-  /** Число этапов по дням — для разрезки однодневных отметок (готовность/окончание). */
-  const stageDaysOf = (fills: StageFillSection[]): Map<number, number> => {
-    const m = new Map<number, number>();
-    fills.forEach((f) => m.set(f.day, (m.get(f.day) || 0) + 1));
-    return m;
-  };
-  const planStageDays = useMemo(() => stageDaysOf(planFills), [planFills]);
-  const factStageDays = useMemo(() => stageDaysOf(factFills), [factFills]);
   /** Спокойная сетка: слабые вертикальные деления дней на читаемых масштабах. */
   const laneBg = colW >= 12
     ? {
@@ -1167,9 +1247,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       }
     : {};
   /** Секции заливок этапов — на всю высоту подстроки, кликабельны, в новом стиле
-   *  (единое скругление, заливка, hover/focus). Ниже полос рейсов — этапы не
-   *  перекрывают рейсы. */
-  const renderStageFill = (f: StageFillSection, keyPrefix: string) => {
+   *  (единое скругление, заливка, hover/focus). Этапы — ВСЕГДА поверх полос
+   *  (слой TL_Z.stage); доля дня — из единого правила половин ячейки. */
+  const renderStageFill = (f: StageFillSection, keyPrefix: string, sec: RowDaySections) => {
     const color = stageColorOf(f.stage.type);
     const left = dayToX(f.day, vs, colW) + Math.round((f.section * colW) / f.sections);
     const right = dayToX(f.day, vs, colW) + Math.round(((f.section + 1) * colW) / f.sections);
@@ -1180,6 +1260,11 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     const radius = `${f.section === 0 ? `${r}px` : '0px'} ${f.section === f.sections - 1 ? `${r}px` : '0px'} ${
       f.section === f.sections - 1 ? `${r}px` : '0px'
     } ${f.section === 0 ? `${r}px` : '0px'}`;
+    // Подсказка доли: событие этапа + строка о соседнем событии этого дня.
+    const neighbor = sec.neighborsOf(f.day, [stageMergeKeyOf(f.tripKey, f.stage.id)]);
+    const title = neighbor ? `${stageFillTitle(stageTypes, f.stage, f.day, today)}\n${neighbor}` : stageFillTitle(stageTypes, f.stage, f.day, today);
+    // Иконка типа события — в своей доле; мелкий масштаб — только иконка.
+    const StageIcon = stageIconOf(f.stage.type);
     return (
       <div
         key={`${keyPrefix}-${f.tripKey}-${f.stage.id}-${f.day}`}
@@ -1188,6 +1273,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         data-stage-fill="1"
         data-stage={f.stage.id}
         data-trip={f.tripKey}
+        data-stage-section={f.section}
+        data-stage-sections={f.sections}
         onClick={open}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -1195,8 +1282,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             open();
           }
         }}
-        className="absolute top-0 bottom-0 z-[2] cursor-pointer overflow-hidden whitespace-nowrap flex items-center justify-center px-0.5"
+        className="absolute top-0 bottom-0 cursor-pointer overflow-hidden whitespace-nowrap flex items-center justify-center px-0.5"
         style={{
+          zIndex: TL_Z.stage,
           left,
           width,
           background: color.bg,
@@ -1207,10 +1295,15 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           ...(f.stage.isCritical ? { outline: '1px dashed #DC2626', outlineOffset: '-1px' } : {}),
           ...(f.archived ? { opacity: 0.72 } : {}),
         }}
-        title={stageFillTitle(stageTypes, f.stage, f.day, today)}
+        title={title}
       >
         {width >= 44 ? (
-          <span className="text-[8px] leading-[10px] truncate max-w-full">{stageShortName(stageTypes, f.stage)}</span>
+          <span className="inline-flex items-center gap-0.5 min-w-0 max-w-full">
+            <StageIcon className={BAR_ICON_CLS} style={{ color: color.text }} aria-hidden="true" />
+            <span className="text-[8px] leading-[10px] truncate">{stageShortName(stageTypes, f.stage)}</span>
+          </span>
+        ) : width >= 12 ? (
+          <StageIcon className={BAR_ICON_CLS} style={{ color: color.text }} aria-hidden="true" />
         ) : null}
       </div>
     );
@@ -1222,6 +1315,13 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
    * подпись 8px/600 слева по центру, общие hover/focus (index.css). Полоса
    * непрерывна по дням: один элемент на период/участок, без разделителей.
    * Параметры: цвет {bg,border,text}, подпись, иконка, оверлеи (pre/post).
+   *
+   * КОНТЕКСТЫ НАЛОЖЕНИЯ: полоса рендерится в обёртке БЕЗ z-index (z: auto) —
+   * обёртка не создаёт stacking context, поэтому слои barCore (полоса) и
+   * marksOverlay (метки поверх — круги/направления) участвуют в стеке строки
+   * напрямую (шкала TL_Z, lib/visuals). Так метки остаются ПОВЕРХ клеток
+   * этапов, даже когда сама полоса под ними (полоса и метки — разные слои,
+   * их не запирает друг под другом ни порядок отрисовки, ни hover-фильтр).
    */
   const renderPeriodBar = (o: {
     key: string;
@@ -1235,13 +1335,20 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     radius: string;
     title: string;
     labelText?: string;
+    /** Короткий вариант подписи (ступень сокращения: «Простой на базе», «Ремонт»). */
+    labelShort?: string;
     labelIcon?: React.ReactNode;
     labelOnlyIcon?: boolean;
     stickyLabel?: boolean;
+    /** Занятые зоны строки (клетки этапов/отметки/маркеры) в координатах строки. */
+    obstacles?: BarObstacle[];
     mask?: string;
     opacity?: number;
     dashed?: 'tb' | 'all';
-    zClass?: string;
+    /** Слой шкалы TL_Z (lib/visuals); по умолчанию — полосы базы/ремонта. */
+    z?: number;
+    /** Метки поверх полосы (круги, направления) — отдельным слоем TL_Z.mark. */
+    marksOverlay?: React.ReactNode;
     role?: string;
     tabIndex?: number;
     cursor?: boolean;
@@ -1256,19 +1363,60 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   }) => {
     const lanes = o.lanes ?? 1;
     const lane = o.lane ?? 0;
+    const hasLabelIcon = !!o.labelIcon;
+    // ЕДИНОЕ правило подписей: подпись обтекает этапы — свободные сегменты
+    // полосы считаются от занятых зон строки (клетки этапов с долями дня,
+    // отметки, маркеры, служебные зоны краёв). Подпись ставится в свободный
+    // сегмент и остаётся sticky в его пределах (переезд — BarLabelsSweep).
+    const labelSegs: BarLabelSegment[] =
+      o.stickyLabel && o.labelText
+        ? barLabelSegments(
+            o.width,
+            (o.obstacles || []).map((b) => ({ left: b.left - o.left, right: b.right - o.left })),
+          )
+        : [];
     const labelEl =
       o.labelOnlyIcon && o.labelIcon && !o.labelText ? (
         <span data-bz-label="icon" className="w-full h-full flex items-center justify-center" aria-hidden="true">
           {o.labelIcon}
         </span>
+      ) : labelSegs.length ? (
+        <>
+          {labelSegs.map((seg) => {
+            const variant = labelVariantFor(seg.width, o.labelText || '', o.labelShort || '', hasLabelIcon);
+            if (variant === 'none') return null;
+            const text = labelTextFor(variant, o.labelText || '', o.labelShort || '');
+            return (
+              <span
+                key={seg.index}
+                data-tl-labelseg={seg.index}
+                className="absolute"
+                style={{ left: seg.left, width: seg.width, top: 0, bottom: 0, display: 'none', alignItems: 'center', overflow: 'visible' }}
+              >
+                <span
+                  data-bar-label="1"
+                  className="sticky inline-flex items-center gap-0.5 min-w-0 px-1 text-[8px] leading-[10px] font-semibold truncate"
+                  style={{
+                    left: carColW + 8,
+                    marginLeft: 6,
+                    maxWidth: '100%',
+                    background: o.color.bg,
+                    color: o.color.text,
+                    borderRadius: 4,
+                  }}
+                >
+                  {o.labelIcon}
+                  {text}
+                </span>
+              </span>
+            );
+          })}
+        </>
       ) : o.labelText || o.labelIcon ? (
         <span
           data-bar-label="1"
-          className={`inline-flex items-center gap-0.5 min-w-0 px-1 text-[8px] leading-[10px] font-semibold truncate max-w-full ${
-            o.stickyLabel ? 'sticky' : ''
-          }`}
+          className="inline-flex items-center gap-0.5 min-w-0 px-1 text-[8px] leading-[10px] font-semibold truncate max-w-full"
           style={{
-            ...(o.stickyLabel ? { left: carColW + 8, marginLeft: 6 } : {}),
             background: o.color.bg,
             color: o.color.text,
             borderRadius: 4,
@@ -1278,42 +1426,58 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           {o.labelText}
         </span>
       ) : null;
+    // Геометрия подписи для прокрутки (BarLabelsSweep): сегменты и левый край полосы.
+    const labelGeoAttrs: Record<string, string> = labelSegs.length
+      ? {
+          'data-tl-lblsegs': labelSegs.map((sg) => `${sg.index}:${Math.round(sg.left)}:${Math.round(sg.right)}`).join(';'),
+          'data-tl-lblleft': String(Math.round(o.left)),
+        }
+      : {};
     return (
       <div
         key={o.key}
-        role={o.role}
-        tabIndex={o.tabIndex}
-        {...(o.attrKind === 'bz' ? { 'data-bz-stripe': o.kind } : { 'data-bar': o.kind })}
-        {...(o.attrs || {})}
-        onClick={o.onClick}
-        onKeyDown={o.onKeyDown}
-        onMouseEnter={o.onMouseEnter}
-        onMouseLeave={o.onMouseLeave}
-        className={`absolute whitespace-nowrap flex items-center ${o.zClass || 'z-[1]'} ${o.cursor ? 'cursor-pointer' : ''}`}
+        className="absolute"
         style={{
           left: o.left,
           width: o.width,
           top: lanes > 1 ? `calc(${(lane * 100) / lanes}% + 1px)` : 0,
           height: lanes > 1 ? `calc(${100 / lanes}% - 2px)` : undefined,
           bottom: lanes > 1 ? undefined : 0,
-          background: o.color.bg,
-          border: `1px solid ${o.color.border}`,
-          borderRadius: o.radius,
-          color: o.color.text,
-          ...(o.mask ? { WebkitMaskImage: o.mask, maskImage: o.mask } : {}),
-          ...(o.opacity != null ? { opacity: o.opacity } : {}),
-          ...(o.dashed === 'tb'
-            ? { borderTopStyle: 'dashed', borderBottomStyle: 'dashed' }
-            : o.dashed === 'all'
-              ? { borderStyle: 'dashed' }
-              : {}),
-          ...(o.style || {}),
         }}
-        title={o.title}
       >
-        {o.pre}
-        {labelEl}
-        {o.post}
+        <div
+          {...(o.attrKind === 'bz' ? { 'data-bz-stripe': o.kind } : { 'data-bar': o.kind })}
+          {...(o.attrs || {})}
+          {...labelGeoAttrs}
+          role={o.role}
+          tabIndex={o.tabIndex}
+          onClick={o.onClick}
+          onKeyDown={o.onKeyDown}
+          onMouseEnter={o.onMouseEnter}
+          onMouseLeave={o.onMouseLeave}
+          className={`absolute inset-0 whitespace-nowrap flex items-center ${o.cursor ? 'cursor-pointer' : ''}`}
+          style={{
+            zIndex: o.z ?? TL_Z.bz,
+            background: o.color.bg,
+            border: `1px solid ${o.color.border}`,
+            borderRadius: o.radius,
+            color: o.color.text,
+            ...(o.mask ? { WebkitMaskImage: o.mask, maskImage: o.mask } : {}),
+            ...(o.opacity != null ? { opacity: o.opacity } : {}),
+            ...(o.dashed === 'tb'
+              ? { borderTopStyle: 'dashed', borderBottomStyle: 'dashed' }
+              : o.dashed === 'all'
+                ? { borderStyle: 'dashed' }
+                : {}),
+            ...(o.style || {}),
+          }}
+          title={o.title}
+        >
+          {o.pre}
+          {labelEl}
+          {o.post}
+        </div>
+        {o.marksOverlay}
       </div>
     );
   };
@@ -1323,7 +1487,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
    * у полос рейса. Если период продолжается за видимую область — на краю обрыв
    * без скругления с мягким градиентом. Клик и подсказка — на всей полосе.
    */
-  const renderBzStripe = (s: BzStripe, keyPrefix: string, ov: RowOverlapResolution) => {
+  const renderBzStripe = (s: BzStripe, keyPrefix: string, ov: RowOverlapResolution, sec: RowDaySections) => {
     const color = bzStripeColor(s);
     // Полосы простоя, укороченные/разрезанные разрешением наложений (lib/overlap):
     // база обрывается в день выезда по рейсу, день смены делится по горизонтали.
@@ -1331,10 +1495,19 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       (s.kind === 'base-plan' || s.kind === 'base-fact') && s.periodKey ? ov.baseAdjust.get(s.periodKey) : undefined;
     const srcA = adj ? adj.a : s.a;
     const srcB = adj ? adj.b : s.b;
-    const fracA = adj ? adj.fracA : 0;
-    const fracB = adj ? adj.fracB : 1;
+    const baseFracA = adj ? adj.fracA : 0;
+    const baseFracB = adj ? adj.fracB : 1;
     const clipA = Math.max(srcA, vs);
     const clipB = Math.min(srcB, ve);
+    // Край полосы на границе доли дня: если в день своего начала/окончания
+    // полоса делит ячейку с другим событием (выгрузка, рейс — единое правило
+    // lib/dayCellSections), её край встаёт ровно на границе своей доли
+    // (напр. ремонт начинается с середины дня выгрузки и идёт непрерывно).
+    const mk = periodMergeKey(s.periodKey, srcA, srcB);
+    const slotA = clipA === srcA ? sec.slotForPeriod(clipA, mk) : null;
+    const slotB = clipB === srcB ? sec.slotForPeriod(clipB, mk) : null;
+    const fracA = slotA ? Math.max(baseFracA, slotA.left) : baseFracA;
+    const fracB = slotB ? Math.min(baseFracB, slotB.right) : baseFracB;
     const left = dayToX(clipA, vs, colW) + Math.round(fracA * colW);
     const right = dayToX(clipB, vs, colW) + Math.round(colW * fracB);
     const width = Math.max(1, right - left);
@@ -1385,6 +1558,11 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               ? 'Плановый день смены разделён с полосой рейса (рейс и база видны).'
               : 'День смены разделён с полосой рейса (штатный переход, не расхождение).'
             : '';
+    // Подсказка полосы: событие периода + стык с рейсом + строка о соседнем
+    // событии дня (если полоса делит ячейку с этапом/рейсом).
+    const neighborDay = slotA ? clipA : slotB ? clipB : clipA;
+    const neighbor = sec.neighborsOf(neighborDay, [mk]);
+    const titleFull = [s.title, adjLine, neighbor].filter(Boolean).join('\n');
     return renderPeriodBar({
       key: `${keyPrefix}-${s.kind}-${s.periodKey || 'gap'}-${s.a}-${s.b}`,
       attrKind: 'bz',
@@ -1398,7 +1576,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       mask,
       opacity: s.archived ? 0.72 : undefined,
       dashed: s.kind === 'base-gap' ? 'tb' : undefined,
-      title: adjLine ? `${s.title}\n${adjLine}` : s.title,
+      title: titleFull,
       role: s.periodKey ? 'button' : undefined,
       tabIndex: s.periodKey ? 0 : undefined,
       cursor: !!s.periodKey,
@@ -1433,24 +1611,29 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   /**
    * Однодневная отметка базы/ремонта («срок готовности» / «дата окончания
    * ремонта») — заливка ВСЕЙ ячейки дня по ширине и высоте строки с аккуратной
-   * SVG-иконкой по центру. Если день делится с этапами — отметка занимает свою
-   * секцию (каждая секция кликабельна), обе отметки не перекрываются.
+   * SVG-иконкой по центру. Если день делится с другими событиями (этапами,
+   * рейсом) — отметка занимает СВОЮ долю дня из единого правила половин
+   * (lib/dayCellSections), доли не перекрываются.
    */
-  const renderBzMark = (m: BzMark, keyPrefix: string, stageDays: Map<number, number>) => {
+  const renderBzMark = (m: BzMark, keyPrefix: string, sec: RowDaySections) => {
     const color = bzKindColor(m.kind);
-    const stages = stageDays.get(m.day) || 0;
-    const total = m.sections + stages;
-    const left = dayToX(m.day, vs, colW) + Math.round((m.section * colW) / total);
-    const right = dayToX(m.day, vs, colW) + Math.round(((m.section + 1) * colW) / total);
+    const mk = periodMergeKey(m.periodKey);
+    const slot = sec.slotForPeriod(m.day, mk);
+    const section = slot ? slot.section : 0;
+    const total = slot ? slot.sections : 1;
+    const left = dayToX(m.day, vs, colW) + Math.round((section * colW) / total);
+    const right = dayToX(m.day, vs, colW) + Math.round(((section + 1) * colW) / total);
     const width = Math.max(1, right - left);
     const r = 'var(--tl-bar-r)';
     const radius =
       total === 1
         ? r
-        : `${m.section === 0 ? r : '0px'} ${m.section === total - 1 ? r : '0px'} ${
-            m.section === total - 1 ? r : '0px'
-          } ${m.section === 0 ? r : '0px'}`;
+        : `${section === 0 ? r : '0px'} ${section === total - 1 ? r : '0px'} ${
+            section === total - 1 ? r : '0px'
+          } ${section === 0 ? r : '0px'}`;
     const Icon = m.kind === 'ready' ? CarFront : Wrench;
+    const neighbor = sec.neighborsOf(m.day, [mk]);
+    const title = neighbor ? `${m.title}\n${neighbor}` : m.title;
     return (
       <div
         key={`${keyPrefix}-${m.kind}-${m.periodKey}-${m.day}`}
@@ -1458,7 +1641,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         tabIndex={0}
         data-bz-mark={m.kind}
         data-bz-day={m.day}
-        data-bz-section={m.section}
+        data-bz-section={section}
         data-bz-sections={total}
         data-period={m.periodKey}
         onClick={() => onOpenBase(m.periodKey)}
@@ -1468,8 +1651,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             onOpenBase(m.periodKey);
           }
         }}
-        className="absolute top-0 bottom-0 z-[2] overflow-hidden flex items-center justify-center cursor-pointer"
+        className="absolute top-0 bottom-0 overflow-hidden flex items-center justify-center cursor-pointer"
         style={{
+          zIndex: TL_Z.stage,
           left,
           width,
           background: color.bg,
@@ -1478,7 +1662,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           color: color.text,
           ...(m.archived ? { opacity: 0.72 } : {}),
         }}
-        title={m.title}
+        title={title}
       >
         {width >= 14 ? <Icon className="w-3 h-3 shrink-0" style={{ color: color.text }} aria-hidden="true" /> : null}
       </div>
@@ -1489,7 +1673,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     const x = Math.round((it.point - vs) * colW);
     if (x < -4 || x > W + 4) return null;
     return (
-      <div key={`${keyPrefix}-${it.point}`} data-tl-handover="1" className="absolute top-0 bottom-0 z-[6]" style={{ left: x, width: 0 }}>
+      <div key={`${keyPrefix}-${it.point}`} data-tl-handover="1" className="absolute top-0 bottom-0" style={{ zIndex: TL_Z.mark, left: x, width: 0 }}>
         <div
           aria-hidden="true"
           style={{
@@ -1532,6 +1716,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         key={`${keyPrefix}${i}`}
         className="absolute top-0 bottom-0"
         style={{
+          zIndex: TL_Z.bg,
           left: seg.left,
           width: seg.width,
           background: CLR.weekend,
@@ -1545,8 +1730,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       <div
         key={`${keyPrefix}t${i}`}
         data-tl-today="1"
-        className="absolute top-0 bottom-0 z-[5]"
+        className="absolute top-0 bottom-0"
         style={{
+          zIndex: TL_Z.overlay,
           left: seg.left,
           width: seg.width,
           background: CLR.today,
@@ -1584,8 +1770,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         data-tl-colcell="1"
         onMouseEnter={onRowEnter}
         onMouseLeave={onRowLeave}
-        className="sticky left-0 z-[3] border-r border-b px-2 overflow-hidden"
-        style={{ height: planH, width: carColW, minWidth: carColW, background: cellBg, borderRightColor: 'var(--tl-col-edge)', borderBottomColor: 'var(--tl-hairline-faint)' }}
+        className="sticky left-0 border-r border-b px-2 overflow-hidden"
+        style={{ zIndex: TL_Z.colCell, height: planH, width: carColW, minWidth: carColW, background: cellBg, borderRightColor: 'var(--tl-col-edge)', borderBottomColor: 'var(--tl-hairline-faint)' }}
         title={cellTitle}
       >
         <div className="flex items-center justify-between gap-1.5 h-full">
@@ -1611,9 +1797,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         style={{ width: W, height: planH, backgroundColor: laneRowBg, ...laneBg }}
       >
         {bgPlane('bg', 0.75)}
-        {planBz.stripes.map((s) => renderBzStripe(s, 'pb', row.planOv))}
-        {planBz.marks.map((m) => renderBzMark(m, 'pbm', planStageDays))}
-        {planFills.map((f) => renderStageFill(f, 'pf'))}
+        {planBz.stripes.map((s) => renderBzStripe(s, 'pb', row.planOv, planSec))}
+        {planBz.marks.map((m) => renderBzMark(m, 'pbm', planSec))}
+        {planFills.map((f) => renderStageFill(f, 'pf', planSec))}
         {todayStrip('t', 0.1)}
         {row.planItems.map((it, idx) => {
           if (it.kind === 'handover') return renderHandover(it, `ph${idx}`);
@@ -1638,8 +1824,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                     onOpenTrip(it.tripKey);
                   }
                 }}
-                className="absolute z-[2] cursor-pointer"
-                style={{ left: Math.max(0, retX), top: 3, height: planH - 6, width: 3, background: CLR.return, borderRadius: 2 }}
+                className="absolute cursor-pointer"
+                style={{ zIndex: TL_Z.mark, left: Math.max(0, retX), top: 3, height: planH - 6, width: 3, background: CLR.return, borderRadius: 2 }}
                 title={it.title}
               />
             );
@@ -1660,6 +1846,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 : PLAN_ACCENT;
             const lanes = planBarLanes.get(idx) || { lane: 0, lanes: 1 };
             const labelText = it.open ? 'неполный план' : planBarLabelText(it.parts, pr.width, 8);
+            const chipOn = !!chip && pr.width >= 96;
+            const chipCls = 'inline-flex items-center h-[12px] px-1 rounded-[4px] text-[8px] leading-[12px] font-semibold shrink-0';
             return renderPeriodBar({
               key: `p${idx}`,
               attrKind: 'bar',
@@ -1670,7 +1858,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               lane: lanes.lane,
               lanes: lanes.lanes,
               radius: 'var(--tl-bar-r)',
-              zClass: 'z-[3]',
+              z: TL_Z.tripBar,
               title: it.title,
               role: 'button',
               tabIndex: 0,
@@ -1697,12 +1885,30 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   {adj?.overlap ? (
                     <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
                   ) : null}
+                  {/* Место кружка сохраняется в потоке полосы; сам бейдж вынесен
+                      в слой меток (marksOverlay) — он остаётся поверх клеток этапов. */}
+                  {it.circle ? <span aria-hidden="true" className="inline-flex shrink-0 w-[14px] h-[14px] ml-0.5" /> : null}
+                </>
+              ),
+              labelIcon: it.open ? <CircleDashed className={BAR_ICON_CLS} style={{ color: CLR.warn }} aria-hidden="true" /> : undefined,
+              labelText,
+              post: chipOn ? (
+                // Невидимый резерв ширины чипа в потоке полосы (сам чип — в слое меток).
+                <span aria-hidden="true" className={`${chipCls} ml-auto`} style={{ background: chip?.bg, border: `1px solid ${chip?.border}`, color: chip?.text, visibility: 'hidden' }}>
+                  {it.dir?.code}
+                </span>
+              ) : undefined,
+              // МЕТКИ ПОВЕРХ ПОЛОСЫ (шкала TL_Z.mark): цветной акцент направления,
+              // круг рейса и код направления видимы и над клетками этапов.
+              // Слой не перехватывает указатель: клик/наведение принадлежат
+              // верхнему интерактивному элементу (этапу или самой полосе).
+              marksOverlay: (
+                <div aria-hidden="true" className="absolute inset-0 flex items-center pointer-events-none" style={{ zIndex: TL_Z.mark }}>
                   {it.dir ? (
                     <span
-                      aria-hidden="true"
                       data-bar-dir-accent="1"
-                      className="absolute left-0 top-0 bottom-0"
-                      style={{ width: 3, background: it.dir.color, borderTopLeftRadius: 'var(--tl-bar-r)', borderBottomLeftRadius: 'var(--tl-bar-r)' }}
+                      className="absolute top-0 bottom-0"
+                      style={{ left: 1, width: 3, background: it.dir.color, borderTopLeftRadius: 'var(--tl-bar-r)', borderBottomLeftRadius: 'var(--tl-bar-r)' }}
                     />
                   ) : null}
                   {/* Круг рейса — номер виден на любом масштабе (бейдж не сжимается). */}
@@ -1711,32 +1917,26 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                       data-tl-circle-badge={it.circle.n}
                       data-tl-circle-total={it.circle.total}
                       data-tl-circle-ongoing={it.circle.ongoing ? '1' : undefined}
-                      className="inline-flex items-center justify-center shrink-0 w-[14px] h-[14px] rounded-full text-[8px] leading-none font-bold tabular-nums select-none ml-0.5"
+                      className="inline-flex items-center justify-center shrink-0 w-[14px] h-[14px] rounded-full text-[8px] leading-none font-bold tabular-nums select-none ml-[3px]"
                       style={circleBadgeStyle(it.circle.total, it.circle.ongoing)}
                       title={it.circle.title}
                     >
                       {it.circle.n}
                     </span>
                   ) : null}
-                </>
-              ),
-              labelIcon: it.open ? <CircleDashed className={BAR_ICON_CLS} style={{ color: CLR.warn }} aria-hidden="true" /> : undefined,
-              labelText,
-              post: (
-                <>
                   {/* Код направления — только когда есть место; при мелком масштабе
                       остаются цветной акцент и текст (без перегрузки). */}
-                  {chip && pr.width >= 96 ? (
+                  {chipOn ? (
                     <span
                       data-bar-dir-chip="1"
-                      className="inline-flex items-center h-[12px] px-1 rounded-[4px] text-[8px] leading-[12px] font-semibold shrink-0 ml-auto"
-                      style={{ background: chip.bg, border: `1px solid ${chip.border}`, color: chip.text }}
+                      className={`${chipCls} ml-auto mr-px`}
+                      style={{ background: chip?.bg, border: `1px solid ${chip?.border}`, color: chip?.text }}
                       title={`Направление: ${it.dir?.name}`}
                     >
                       {it.dir?.code}
                     </span>
                   ) : null}
-                </>
+                </div>
               ),
             });
           }
@@ -1745,8 +1945,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               <div
                 key={`b${idx}`}
                 data-bar="buffer"
-                className="absolute z-[2]"
-                style={{ left: p.left, width: p.width, top: planTopOf(idx), height: PLAN_BAR_H, background: hatch45, border: '1px solid rgba(217, 119, 6, 0.22)', borderRadius: 'var(--tl-bar-r)' }}
+                className="absolute"
+                style={{ zIndex: TL_Z.tripBar, left: p.left, width: p.width, top: planTopOf(idx), height: PLAN_BAR_H, background: hatch45, border: '1px solid rgba(217, 119, 6, 0.22)', borderRadius: 'var(--tl-bar-r)' }}
                 title={`запас ${it.days} дн`}
               />
             );
@@ -1767,8 +1967,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         data-tl-colcell="1"
         onMouseEnter={onRowEnter}
         onMouseLeave={onRowLeave}
-        className="sticky left-0 z-[3] border-r border-b px-2 overflow-hidden"
-        style={{ height: factH, width: carColW, minWidth: carColW, background: cellBg, borderRightColor: 'var(--tl-col-edge)', borderBottomColor: 'var(--tl-hairline)' }}
+        className="sticky left-0 border-r border-b px-2 overflow-hidden"
+        style={{ zIndex: TL_Z.colCell, height: factH, width: carColW, minWidth: carColW, background: cellBg, borderRightColor: 'var(--tl-col-edge)', borderBottomColor: 'var(--tl-hairline)' }}
         title={cellTitle}
       >
         <div className="flex items-center justify-between gap-1.5 h-full">
@@ -1873,10 +2073,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       >
         {bgPlane('fbg', 0.6)}
         {factBz.stripes.map((s) =>
-          s.kind === 'base-gap' && waitCovers(row.factOv.waitGaps, s) ? null : renderBzStripe(s, 'fb', row.factOv),
+          s.kind === 'base-gap' && waitCovers(row.factOv.waitGaps, s) ? null : renderBzStripe(s, 'fb', row.factOv, factSec),
         )}
-        {factBz.marks.map((m) => renderBzMark(m, 'fbm', factStageDays))}
-        {factFills.map((f) => renderStageFill(f, 'ff'))}
+        {factBz.marks.map((m) => renderBzMark(m, 'fbm', factSec))}
+        {factFills.map((f) => renderStageFill(f, 'ff', factSec))}
         {todayStrip('ft', 0.1)}
         {row.factItems.map((it, idx) => {
           if (it.kind === 'handover') return renderHandover(it, `fh${idx}`);
@@ -1904,7 +2104,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 lanes: lanes.lanes,
                 // Скругление — только на краях полосы: открытый край — без скругления.
                 radius: it.open ? 'var(--tl-bar-r) 0px 0px var(--tl-bar-r)' : 'var(--tl-bar-r)',
-                zClass: 'z-[3]',
+                z: TL_Z.tripBar,
                 mask,
                 title: it.title,
                 role: 'button',
@@ -1966,7 +2166,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 lane: lanesN.lane,
                 lanes: lanesN.lanes,
                 radius: 'var(--tl-bar-r)',
-                zClass: 'z-[2]',
+                z: TL_Z.tripBar,
                 dashed: 'all',
                 title: it.title,
                 role: 'button',
@@ -2028,11 +2228,11 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                         }
                       : undefined
                   }
-                  className={`absolute z-[6] ${linked ? 'cursor-pointer' : ''}`}
+                  className={`absolute ${linked ? 'cursor-pointer' : ''}`}
                   style={
                     grouped
-                      ? { left, top, height: 12, minWidth: 16, padding: '0 3px', background: '#7C3AED', borderRadius: 6, textAlign: 'center', opacity: 0.95 }
-                      : { left, top, width: 9, height: 9, background: it.color, borderRadius: 2, transform: 'rotate(45deg)', opacity: 0.95 }
+                      ? { zIndex: TL_Z.mark, left, top, height: 12, minWidth: 16, padding: '0 3px', background: '#7C3AED', borderRadius: 6, textAlign: 'center', opacity: 0.95 }
+                      : { zIndex: TL_Z.mark, left, top, width: 9, height: 9, background: it.color, borderRadius: 2, transform: 'rotate(45deg)', opacity: 0.95 }
                   }
                   title={it.title}
                 >
@@ -2636,7 +2836,8 @@ export default function TimelineGrid({
                 data-ui="legend-popup"
                 role="dialog"
                 aria-label="Обозначения"
-                className="absolute right-0 top-full mt-2 z-[60] w-[min(620px,92vw)] max-h-[70vh] overflow-y-auto rounded-2xl border border-[var(--tl-hairline)] bg-white shadow-[0_16px_40px_rgba(18,19,22,0.14)] p-4"
+                className="absolute right-0 top-full mt-2 w-[min(620px,92vw)] max-h-[70vh] overflow-y-auto rounded-2xl border border-[var(--tl-hairline)] bg-white shadow-[0_16px_40px_rgba(18,19,22,0.14)] p-4"
+                style={{ zIndex: TL_Z.popup }}
               >
                 <div className="text-[11px] font-semibold text-[var(--tl-text-strong)] mb-2.5">Обозначения таймлайна</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
@@ -2781,12 +2982,12 @@ export default function TimelineGrid({
               Полоса месяцев и дни — в той же ленте, движутся синхронно с полосами. */}
           <div
             data-tl-colcell="1"
-            className="sticky left-0 top-0 z-[6] border-b border-r border-[var(--tl-hairline)] px-2 h-[var(--tl-head-h)] flex items-center"
-            style={{ background: 'var(--tl-head-bg)', borderRightColor: 'var(--tl-col-edge)', width: carColW, minWidth: carColW }}
+            className="sticky left-0 top-0 border-b border-r border-[var(--tl-hairline)] px-2 h-[var(--tl-head-h)] flex items-center"
+            style={{ zIndex: TL_Z.headCorner, background: 'var(--tl-head-bg)', borderRightColor: 'var(--tl-col-edge)', width: carColW, minWidth: carColW }}
           >
             <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--tl-text-dim)]">Автомобили</span>
           </div>
-          <div className="sticky top-0 z-[5] border-b border-[var(--tl-hairline)]" style={{ width: W, background: 'var(--tl-head-bg)' }}>
+          <div className="sticky top-0 border-b border-[var(--tl-hairline)]" style={{ zIndex: TL_Z.head, width: W, background: 'var(--tl-head-bg)' }}>
             <CalendarHeader vs={vs} vn={vn} colW={colW} today={today} pinLeft={carColW + 8} />
           </div>
 
@@ -2811,8 +3012,8 @@ export default function TimelineGrid({
                       data-dgroup={blockKey}
                       data-collapsed={collapsed ? '1' : undefined}
                       data-tl-colcell="1"
-                      className="sticky left-0 z-[4] border-r border-b border-[var(--tl-hairline)] px-2 h-[26px] min-w-0 flex items-center gap-1.5"
-                      style={{ top: 'var(--tl-head-h)', background: 'var(--tl-group-bg)', borderRightColor: 'var(--tl-col-edge)', width: carColW, minWidth: carColW }}
+                      className="sticky left-0 border-r border-b border-[var(--tl-hairline)] px-2 h-[26px] min-w-0 flex items-center gap-1.5"
+                      style={{ zIndex: TL_Z.colSubHead, top: 'var(--tl-head-h)', background: 'var(--tl-group-bg)', borderRightColor: 'var(--tl-col-edge)', width: carColW, minWidth: carColW }}
                     >
                       <button
                         type="button"
@@ -2846,8 +3047,8 @@ export default function TimelineGrid({
                     <div
                       onClick={() => toggleGroup(blockKey)}
                       title={collapsed ? 'Развернуть группу диспетчера' : 'Свернуть группу диспетчера'}
-                      className="sticky z-[1] border-b border-[var(--tl-hairline)] h-[26px] min-w-0 cursor-pointer"
-                      style={{ top: 'var(--tl-head-h)', background: 'var(--tl-group-bg)' }}
+                      className="sticky border-b border-[var(--tl-hairline)] h-[26px] min-w-0 cursor-pointer"
+                      style={{ zIndex: TL_Z.colFill, top: 'var(--tl-head-h)', background: 'var(--tl-group-bg)' }}
                     />
                   </>
                 ) : null}
@@ -2894,8 +3095,8 @@ export default function TimelineGrid({
         title="Потяните, чтобы изменить ширину колонки; двойной клик — вернуть по умолчанию"
         onPointerDown={onColHandleDown}
         onDoubleClick={onColHandleReset}
-        className="absolute top-0 bottom-0 z-[30] w-[7px] cursor-col-resize group"
-        style={{ left: Math.max(0, carColW - 3) }}
+        className="absolute top-0 bottom-0 w-[7px] cursor-col-resize group"
+        style={{ zIndex: TL_Z.resizer, left: Math.max(0, carColW - 3) }}
       >
         <span
           aria-hidden="true"

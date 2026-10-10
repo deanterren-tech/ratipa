@@ -132,13 +132,6 @@ export interface BzStripe {
 export interface BzMark {
   kind: 'ready' | 'repair-end';
   day: number;
-  /**
-   * Индекс секции дня (порядок заявок дня) и число ЗАЯВОК дня — полос/отметок
-   * записей без этапов. Этапы при отрисовке добавляются к sections той же
-   * секционной раскладкой (см. layoutStageFills с claimsByDay).
-   */
-  section: number;
-  sections: number;
   periodKey: string;
   archived: boolean;
   /** Подпись для легенды/подсказки («готовность», «окончание»). */
@@ -150,19 +143,7 @@ export interface BzMark {
 export interface BzLayout {
   stripes: BzStripe[];
   marks: BzMark[];
-  /** День → число заявок (полос/отметок записей) в этой подстроке. Для разрезки этапов. */
-  dayClaims: Record<number, number>;
 }
-
-/** Порядок заявок внутри дня (секции слева направо): база → ремонт → отметки → промежуток. */
-const CLAIM_TIER: Record<string, number> = {
-  'base-plan': 0,
-  'base-fact': 0,
-  repair: 1,
-  ready: 2,
-  'repair-end': 2,
-  'base-gap': 3,
-};
 
 /**
  * Под-дорожки для пересекающихся полос ОДНОГО вида (разные записи). Одиночная
@@ -214,8 +195,8 @@ const assignLanes = (stripes: BzStripe[]): void => {
 /**
  * Раскладка отметок базы/ремонта по окну [vs, ve] для указанной подстроки.
  * Возвращает непрерывные полосы периодов (один элемент на период) и
- * однодневные отметки, а также число заявок по дням (для секционной раскладки
- * этапов). Пустая подстрока — пустой результат.
+ * однодневные отметки; доли ячейки дня считает единое правило
+ * lib/dayCellSections. Пустая подстрока — пустой результат.
  */
 export const layoutBzFills = (
   inputs: BzFillInput[],
@@ -226,7 +207,7 @@ export const layoutBzFills = (
   today: number,
 ): BzLayout => {
   const stripes: BzStripe[] = [];
-  const marksRaw: Array<Omit<BzMark, 'section' | 'sections'>> = [];
+  const marksRaw: BzMark[] = [];
   const inWindow = (a: number, b: number): boolean => b >= vs && a <= ve;
 
   inputs.forEach(({ period: p, withRepairEnd = true, tripRanges = [] }) => {
@@ -409,38 +390,9 @@ export const layoutBzFills = (
 
   assignLanes(stripes);
 
-  // Заявки по дням: каждая запись — одна заявка; отметка (готовность/окончание)
-  // «перекрывает» полосу своей же записи в своём дне — та же заявка, не вторая.
-  const claimKeysByDay = new Map<number, Map<string, number>>();
-  const addClaim = (day: number, key: string, tier: number) => {
-    let byKey = claimKeysByDay.get(day);
-    if (!byKey) {
-      byKey = new Map<string, number>();
-      claimKeysByDay.set(day, byKey);
-    }
-    const prev = byKey.get(key);
-    if (prev == null || tier > prev) byKey.set(key, tier);
-  };
-  stripes.forEach((s) => {
-    const key = s.periodKey || `gap|${s.a}|${s.b}`;
-    const tier = CLAIM_TIER[s.kind] ?? 0;
-    for (let d = Math.max(s.a, vs); d <= Math.min(s.b, ve); d += 1) addClaim(d, key, tier);
-  });
-  marksRaw.forEach((m) => addClaim(m.day, m.periodKey, CLAIM_TIER[m.kind] ?? 2));
+  // Отметки отдаются как есть: доли дня (половины/трети) раскладывает ЕДИНОЕ
+  // правило lib/dayCellSections — здесь секций больше не считается.
+  const marks: BzMark[] = marksRaw;
 
-  const dayClaims: Record<number, number> = {};
-  const claimIndexByKey = new Map<number, Map<string, number>>();
-  claimKeysByDay.forEach((byKey, day) => {
-    const sorted = Array.from(byKey.entries()).sort((x, y) => x[1] - y[1] || x[0].localeCompare(y[0]));
-    dayClaims[day] = sorted.length;
-    claimIndexByKey.set(day, new Map(sorted.map(([k], i) => [k, i])));
-  });
-
-  const marks: BzMark[] = marksRaw.map((m) => ({
-    ...m,
-    section: claimIndexByKey.get(m.day)?.get(m.periodKey) ?? 0,
-    sections: dayClaims[m.day] ?? 1,
-  }));
-
-  return { stripes, marks, dayClaims };
+  return { stripes, marks };
 };

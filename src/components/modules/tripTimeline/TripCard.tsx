@@ -51,10 +51,24 @@ import TripEventsJournal from './TripEventsJournal';
 import { PlanBarLabel, planBarLabelParts } from './PlanBarLabel';
 import { FACT_SEGMENT_COLORS, factSegmentsOfTrip } from './lib/factSegments';
 import { eventMarkOf, groupEventMarks, type EventMark } from './lib/eventMarks';
+// Z-шкала слоёв полотна — единый источник (lib/visuals): встроенный таймлайн
+// использует те же слои, что основное полотно (этапы всегда поверх полос).
+import { BAR_ICON_CLS, TL_Z, stageIconOf } from './lib/visuals';
+// Единое правило долей ячейки дня (половины/трети событий) — общее с полотном.
+import {
+  buildRowDaySections,
+  periodMergeKey,
+  stageMergeKeyOf,
+  tripSidesOf,
+  visibleStripeBounds,
+  type RowDaySections,
+  type RowStripeInput,
+} from './lib/dayCellSections';
 import {
   layoutStageFills,
   stageColorOf,
   stageFillTitle,
+  stageNeighborLabel,
   stageShortName,
   type StageFillInput,
   type StageFillSection,
@@ -622,22 +636,73 @@ export function CarMiniTimeline({
     () => carTrips.flatMap((t) => (t.stages || []).map((s) => ({ tripKey: t.key, stage: s, archived: !!t.archived }))),
     [carTrips],
   );
+  /**
+   * Доли ячейки дня встроенного таймлайна — ТА ЖЕ единая функция, что на
+   * основном полотне (lib/dayCellSections): слева предыдущее событие, справа
+   * следующее, якоря дня смены — из тех же разрешений наложений.
+   */
+  const miniStageLabelOf = useCallback((it: StageFillInput) => stageNeighborLabel(stageTypes, it.stage), [stageTypes]);
+  const miniPlanStripeInputs = useMemo<RowStripeInput[]>(
+    () =>
+      miniPlanBz.stripes.map((s) => {
+        const vis = visibleStripeBounds(s, miniPlanOv);
+        return { kind: s.kind, a: vis.a, b: vis.b, fracA: vis.fracA, fracB: vis.fracB, periodKey: s.periodKey, label: s.label };
+      }),
+    [miniPlanBz.stripes, miniPlanOv],
+  );
+  const miniFactStripeInputs = useMemo<RowStripeInput[]>(
+    () =>
+      miniFactBz.stripes.map((s) => {
+        const vis = visibleStripeBounds(s, miniFactOv);
+        return { kind: s.kind, a: vis.a, b: vis.b, fracA: vis.fracA, fracB: vis.fracB, periodKey: s.periodKey, label: s.label };
+      }),
+    [miniFactBz.stripes, miniFactOv],
+  );
+  const miniPlanTripSides = useMemo(
+    () => tripSidesOf(miniPlanInts.map((it) => ({ tripKey: it.key, a: it.a, b: it.b })), miniPlanOv),
+    [miniPlanInts, miniPlanOv],
+  );
+  const miniFactTripSides = useMemo(
+    () => tripSidesOf(miniFactInts.map((it) => ({ tripKey: it.key, a: it.a, b: it.b })), miniFactOv),
+    [miniFactInts, miniFactOv],
+  );
+  const miniPlanSec = useMemo(
+    () =>
+      buildRowDaySections({
+        kind: 'plan',
+        vs: renderVs,
+        ve,
+        stages: miniFillInputs,
+        stageLabelOf: miniStageLabelOf,
+        stripes: miniPlanStripeInputs,
+        marks: miniPlanBz.marks,
+        tripSides: miniPlanTripSides,
+      }),
+    [renderVs, ve, miniFillInputs, miniStageLabelOf, miniPlanStripeInputs, miniPlanBz.marks, miniPlanTripSides],
+  );
+  const miniFactSec = useMemo(
+    () =>
+      buildRowDaySections({
+        kind: 'fact',
+        vs: renderVs,
+        ve,
+        stages: miniFillInputs,
+        stageLabelOf: miniStageLabelOf,
+        stripes: miniFactStripeInputs,
+        marks: miniFactBz.marks,
+        tripSides: miniFactTripSides,
+      }),
+    [renderVs, ve, miniFillInputs, miniStageLabelOf, miniFactStripeInputs, miniFactBz.marks, miniFactTripSides],
+  );
   const miniPlanFills = useMemo(
-    () => layoutStageFills(miniFillInputs, 'plan', renderVs, ve, miniPlanBz.dayClaims),
-    [miniFillInputs, renderVs, ve, miniPlanBz.dayClaims],
+    () => layoutStageFills(miniFillInputs, 'plan', renderVs, ve, miniPlanSec.slotForStage),
+    [miniFillInputs, renderVs, ve, miniPlanSec],
   );
   const miniFactFills = useMemo(
-    () => layoutStageFills(miniFillInputs, 'fact', renderVs, ve, miniFactBz.dayClaims),
-    [miniFillInputs, renderVs, ve, miniFactBz.dayClaims],
+    () => layoutStageFills(miniFillInputs, 'fact', renderVs, ve, miniFactSec.slotForStage),
+    [miniFillInputs, renderVs, ve, miniFactSec],
   );
-  const miniStageDaysOf = (fills: StageFillSection[]): Map<number, number> => {
-    const m = new Map<number, number>();
-    fills.forEach((f) => m.set(f.day, (m.get(f.day) || 0) + 1));
-    return m;
-  };
-  const miniPlanStageDays = useMemo(() => miniStageDaysOf(miniPlanFills), [miniPlanFills]);
-  const miniFactStageDays = useMemo(() => miniStageDaysOf(miniFactFills), [miniFactFills]);
-  const renderMiniFill = (f: StageFillSection, keyPrefix: string) => {
+  const renderMiniFill = (f: StageFillSection, keyPrefix: string, sec: RowDaySections) => {
     const color = stageColorOf(f.stage.type);
     const left = dayToX(f.day, renderVs, colW) + Math.round((f.section * colW) / f.sections);
     const right = dayToX(f.day, renderVs, colW) + Math.round(((f.section + 1) * colW) / f.sections);
@@ -647,6 +712,8 @@ export function CarMiniTimeline({
     const radius = `${f.section === 0 ? '4px' : '0px'} ${f.section === f.sections - 1 ? '4px' : '0px'} ${
       f.section === f.sections - 1 ? '4px' : '0px'
     } ${f.section === 0 ? '4px' : '0px'}`;
+    const MiniStageIcon = stageIconOf(f.stage.type);
+    const neighborMini = sec.neighborsOf(f.day, [stageMergeKeyOf(f.tripKey, f.stage.id)]);
     return (
       <div
         key={`${keyPrefix}-${f.tripKey}-${f.stage.id}-${f.day}`}
@@ -666,8 +733,9 @@ export function CarMiniTimeline({
               }
             : undefined
         }
-        className={`absolute top-0 bottom-0 z-[2] overflow-hidden whitespace-nowrap flex items-center justify-center px-0.5 ${clickable ? 'cursor-pointer' : ''}`}
+        className={`absolute top-0 bottom-0 overflow-hidden whitespace-nowrap flex items-center justify-center px-0.5 ${clickable ? 'cursor-pointer' : ''}`}
         style={{
+          zIndex: TL_Z.stage,
           left,
           width,
           background: color.bg,
@@ -678,9 +746,16 @@ export function CarMiniTimeline({
           ...(f.stage.isCritical ? { outline: '1px dashed #DC2626', outlineOffset: '-1px' } : {}),
           ...(f.archived ? { opacity: 0.72 } : {}),
         }}
-        title={`${stageFillTitle(stageTypes, f.stage, f.day, today)}${clickable ? '' : ' · (только просмотр)'}`}
+        title={`${stageFillTitle(stageTypes, f.stage, f.day, today)}${neighborMini ? `\n${neighborMini}` : ''}${clickable ? '' : ' · (только просмотр)'}`}
       >
-        {width >= 40 ? <span className="text-[8px] leading-[10px] truncate max-w-full">{stageShortName(stageTypes, f.stage)}</span> : null}
+        {width >= 40 ? (
+          <span className="inline-flex items-center gap-0.5 min-w-0 max-w-full">
+            <MiniStageIcon className={BAR_ICON_CLS} style={{ color: color.text }} aria-hidden="true" />
+            <span className="text-[8px] leading-[10px] truncate">{stageShortName(stageTypes, f.stage)}</span>
+          </span>
+        ) : width >= 10 ? (
+          <MiniStageIcon className={BAR_ICON_CLS} style={{ color: color.text }} aria-hidden="true" />
+        ) : null}
       </div>
     );
   };
@@ -689,17 +764,24 @@ export function CarMiniTimeline({
    * основном таймлайне: на всю высоту подстроки, скругление только на реальных
    * концах, «продолжающийся» край — обрыв с мягким градиентом.
    */
-  const renderMiniBzStripe = (s: BzStripe, keyPrefix: string, ov: RowOverlapResolution) => {
+  const renderMiniBzStripe = (s: BzStripe, keyPrefix: string, ov: RowOverlapResolution, sec: RowDaySections) => {
     const color = bzStripeColor(s);
     // Те же правила разрешения наложений, что в основном таймлайне.
     const adj =
       (s.kind === 'base-plan' || s.kind === 'base-fact') && s.periodKey ? ov.baseAdjust.get(s.periodKey) : undefined;
     const srcA = adj ? adj.a : s.a;
     const srcB = adj ? adj.b : s.b;
-    const fracA = adj ? adj.fracA : 0;
-    const fracB = adj ? adj.fracB : 1;
+    const baseFracA = adj ? adj.fracA : 0;
+    const baseFracB = adj ? adj.fracB : 1;
     const clipA = Math.max(srcA, renderVs);
     const clipB = Math.min(srcB, ve);
+    // Край полосы на границе доли дня — та же единая раскладка, что на полотне.
+    const mk = periodMergeKey(s.periodKey, srcA, srcB);
+    const slotA = clipA === srcA ? sec.slotForPeriod(clipA, mk) : null;
+    const slotB = clipB === srcB ? sec.slotForPeriod(clipB, mk) : null;
+    const fracA = slotA ? Math.max(baseFracA, slotA.left) : baseFracA;
+    const fracB = slotB ? Math.min(baseFracB, slotB.right) : baseFracB;
+    const neighborMini = sec.neighborsOf(slotA ? clipA : slotB ? clipB : clipA, [mk]);
     const left = dayToX(clipA, renderVs, colW) + Math.round(fracA * colW);
     const right = dayToX(clipB, renderVs, colW) + Math.round(colW * fracB);
     const width = Math.max(1, right - left);
@@ -767,8 +849,9 @@ export function CarMiniTimeline({
               }
             : undefined
         }
-        className={`absolute z-[1] whitespace-nowrap flex items-center ${clickable ? 'cursor-pointer' : ''}`}
+        className={`absolute whitespace-nowrap flex items-center ${clickable ? 'cursor-pointer' : ''}`}
         style={{
+          zIndex: TL_Z.bz,
           left,
           width,
           top: s.lanes > 1 ? `calc(${(s.lane * 100) / s.lanes}% + 1px)` : 0,
@@ -782,7 +865,7 @@ export function CarMiniTimeline({
           ...(s.archived ? { opacity: 0.72 } : {}),
           ...(s.kind === 'base-gap' ? { borderTopStyle: 'dashed', borderBottomStyle: 'dashed' } : {}),
         }}
-        title={`${s.title}${
+        title={`${s.title}${neighborMini ? `\n${neighborMini}` : ''}${
           adj && adj.truncatedDays > 0
             ? `\nСтык с рейсом: простой укорочен до ${fmtDM(adj.b)} — машина выехала на ${adj.truncatedDays} дн. раньше учётного срока (данные учёта не изменены).`
             : adj && (adj.cutA || adj.cutB)
@@ -806,8 +889,9 @@ export function CarMiniTimeline({
     return (
       <div
         data-mini-period-band="1"
-        className="absolute top-0 bottom-0 z-0 pointer-events-none"
+        className="absolute top-0 bottom-0 pointer-events-none"
         style={{
+          zIndex: TL_Z.bg,
           left: l,
           width: w,
           background: 'var(--accent-8)',
@@ -818,21 +902,24 @@ export function CarMiniTimeline({
     );
   };
   /** Однодневная отметка на всю ячейку (готовность / окончание ремонта) с иконкой. */
-  const renderMiniBzMark = (m: BzMark, keyPrefix: string, stageDays: Map<number, number>) => {
+  const renderMiniBzMark = (m: BzMark, keyPrefix: string, sec: RowDaySections) => {
     const color = bzKindColor(m.kind);
-    const stages = stageDays.get(m.day) || 0;
-    const total = m.sections + stages;
-    const left = dayToX(m.day, renderVs, colW) + Math.round((m.section * colW) / total);
-    const right = dayToX(m.day, renderVs, colW) + Math.round(((m.section + 1) * colW) / total);
+    const mk = periodMergeKey(m.periodKey);
+    const slot = sec.slotForPeriod(m.day, mk);
+    const mSection = slot ? slot.section : 0;
+    const total = slot ? slot.sections : 1;
+    const left = dayToX(m.day, renderVs, colW) + Math.round((mSection * colW) / total);
+    const right = dayToX(m.day, renderVs, colW) + Math.round(((mSection + 1) * colW) / total);
     const width = Math.max(1, right - left);
     const r = 'var(--tl-bar-r)';
     const radius =
       total === 1
         ? r
-        : `${m.section === 0 ? r : '0px'} ${m.section === total - 1 ? r : '0px'} ${
-            m.section === total - 1 ? r : '0px'
-          } ${m.section === 0 ? r : '0px'}`;
+        : `${mSection === 0 ? r : '0px'} ${mSection === total - 1 ? r : '0px'} ${
+            mSection === total - 1 ? r : '0px'
+          } ${mSection === 0 ? r : '0px'}`;
     const Icon = m.kind === 'ready' ? CarFront : Wrench;
+    const neighborMark = sec.neighborsOf(m.day, [mk]);
     const clickable = !!onOpenBasePeriod;
     const open = clickable ? () => onOpenBasePeriod?.(m.periodKey) : undefined;
     return (
@@ -842,7 +929,7 @@ export function CarMiniTimeline({
         tabIndex={clickable ? 0 : undefined}
         data-bz-mark={m.kind}
         data-bz-day={m.day}
-        data-bz-section={m.section}
+        data-bz-section={mSection}
         data-bz-sections={total}
         data-period={m.periodKey}
         onClick={open}
@@ -856,8 +943,9 @@ export function CarMiniTimeline({
               }
             : undefined
         }
-        className={`absolute top-0 bottom-0 z-[2] overflow-hidden flex items-center justify-center ${clickable ? 'cursor-pointer' : ''}`}
+        className={`absolute top-0 bottom-0 overflow-hidden flex items-center justify-center ${clickable ? 'cursor-pointer' : ''}`}
         style={{
+          zIndex: TL_Z.stage,
           left,
           width,
           background: color.bg,
@@ -866,7 +954,7 @@ export function CarMiniTimeline({
           color: color.text,
           ...(m.archived ? { opacity: 0.72 } : {}),
         }}
-        title={`${m.title}${clickable ? '' : ' · (только просмотр)'}`}
+        title={`${m.title}${neighborMark ? `\n${neighborMark}` : ''}${clickable ? '' : ' · (только просмотр)'}`}
       >
         {width >= 14 ? <Icon className="w-3 h-3 shrink-0" style={{ color: color.text }} aria-hidden="true" /> : null}
       </div>
@@ -916,8 +1004,9 @@ export function CarMiniTimeline({
               }
             : undefined
         }
-        className={`absolute z-[7] flex items-center justify-center rounded-full select-none ${open ? 'cursor-pointer' : ''}`}
+        className={`absolute flex items-center justify-center rounded-full select-none ${open ? 'cursor-pointer' : ''}`}
         style={{
+          zIndex: TL_Z.mark,
           left: x - 7,
           top: Math.max(1, Math.round((rowH - 14) / 2)),
           width: 14,
@@ -947,8 +1036,9 @@ export function CarMiniTimeline({
         data-tl-wait-b={g.b}
         data-tl-wait-days={g.days}
         title={g.title}
-        className="absolute top-0 bottom-0 z-[2] flex items-center overflow-hidden cursor-default"
+        className="absolute top-0 bottom-0 flex items-center overflow-hidden cursor-default"
         style={{
+          zIndex: TL_Z.bz,
           left,
           width,
           background: waitHatchMini,
@@ -982,8 +1072,8 @@ export function CarMiniTimeline({
         data-tl-conflict="1"
         data-tl-conflict-a={w.a}
         data-tl-conflict-b={w.b}
-        className="absolute top-0 bottom-0 z-[4] pointer-events-none"
-        style={{ left, width }}
+        className="absolute top-0 bottom-0 pointer-events-none"
+        style={{ zIndex: TL_Z.mark, left, width }}
       >
         <div aria-hidden="true" className="absolute inset-0" style={{ background: conflictHatchMini, borderRadius: 'var(--tl-bar-r)' }} />
         <div
@@ -1093,16 +1183,16 @@ export function CarMiniTimeline({
 .tl-scroll::-webkit-scrollbar-track{background:#F3F4F6;border-radius:8px;}
 .tl-scroll::-webkit-scrollbar-thumb{background:#C3C8CF;border-radius:8px;border:2px solid #F3F4F6;}`}</style>
         <div className="grid min-w-max" style={{ gridTemplateColumns: `96px ${W}px` }}>
-          <div className="sticky left-0 top-0 z-[6] bg-[#F9FAFB] border-b border-r border-[#E5E7EB] px-2 py-1 w-[96px] min-w-[96px]">
+          <div className="sticky left-0 top-0 bg-[#F9FAFB] border-b border-r border-[#E5E7EB] px-2 py-1 w-[96px] min-w-[96px]" style={{ zIndex: TL_Z.headCorner }}>
             <span className="text-[9px] font-semibold uppercase tracking-wider text-[#9CA3AF]">План</span>
           </div>
-          <div className="sticky top-0 z-[5] bg-[#F9FAFB] border-b border-[#E5E7EB]" style={{ width: W }}>
+          <div className="sticky top-0 bg-[#F9FAFB] border-b border-[#E5E7EB]" style={{ zIndex: TL_Z.head, width: W }}>
             {/* Та же календарная шапка (месяцы + дни), что и в основном таймлайне */}
             <CalendarHeader vs={renderVs} vn={renderVn} colW={colW} today={today} pinLeft={104} dense />
           </div>
 
           {/* План */}
-          <div className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#EEF0F3] px-2 w-[96px] min-w-[96px] text-[9px] leading-[12px] text-[#9CA3AF] overflow-hidden" style={{ height: miniPlanH, borderRightColor: '#D1D5DB' }}>
+          <div className="sticky left-0 bg-[#F9FAFB] border-r border-b border-[#EEF0F3] px-2 w-[96px] min-w-[96px] text-[9px] leading-[12px] text-[#9CA3AF] overflow-hidden" style={{ zIndex: TL_Z.colCell, height: miniPlanH, borderRightColor: '#D1D5DB' }}>
             {focus ? formatPlate(focus.carNumber) : ''} · план
           </div>
           <div data-lane="plan" className="relative z-0 border-b border-[#EEF0F3]" style={{ width: W, height: miniPlanH }}>
@@ -1114,15 +1204,15 @@ export function CarMiniTimeline({
               />
             ))}
             {periodBand()}
-            {miniPlanBz.stripes.map((s) => renderMiniBzStripe(s, 'mpbz', miniPlanOv))}
-            {miniPlanBz.marks.map((m) => renderMiniBzMark(m, 'mpbm', miniPlanStageDays))}
-            {miniPlanFills.map((f) => renderMiniFill(f, 'mpf'))}
+            {miniPlanBz.stripes.map((s) => renderMiniBzStripe(s, 'mpbz', miniPlanOv, miniPlanSec))}
+            {miniPlanBz.marks.map((m) => renderMiniBzMark(m, 'mpbm', miniPlanSec))}
+            {miniPlanFills.map((f) => renderMiniFill(f, 'mpf', miniPlanSec))}
             {bgSegs.filter((s) => s.today).map((s, i) => (
               <div
                 key={`wt${i}`}
                 data-tl-today="1"
-                className="absolute top-0 bottom-0 z-[5]"
-                style={{ left: s.left, width: s.width, background: '#F43F5E', opacity: 0.14, pointerEvents: 'none' }}
+                className="absolute top-0 bottom-0"
+                style={{ zIndex: TL_Z.overlay, left: s.left, width: s.width, background: '#F43F5E', opacity: 0.14, pointerEvents: 'none' }}
               />
             ))}
             {carTrips.map((t) => {
@@ -1149,8 +1239,9 @@ export function CarMiniTimeline({
                   data-bar-frac-b={adj && adj.fracB !== 1 ? `${adj.fracB}` : undefined}
                   data-overlap={adj?.overlap ? '1' : undefined}
                   onClick={() => t.key !== focusKey && onSelectTrip(t.key)}
-                  className="absolute z-[3] overflow-hidden whitespace-nowrap text-[9px] leading-[16px] cursor-pointer px-1"
+                  className="absolute overflow-hidden whitespace-nowrap text-[9px] leading-[16px] cursor-pointer px-1"
                   style={{
+                    zIndex: TL_Z.tripBar,
                     left: qa.left,
                     width: qa.width,
                     top,
@@ -1184,8 +1275,8 @@ export function CarMiniTimeline({
                 <div
                   key={`buf-${t.key}`}
                   data-bar="buffer"
-                  className="absolute z-[2]"
-                  style={{ left: q.left, width: q.width, top, height: MINI_PLAN_BAR_H, background: hatchBuffer, borderRadius: 3 }}
+                  className="absolute"
+                  style={{ zIndex: TL_Z.tripBar, left: q.left, width: q.width, top, height: MINI_PLAN_BAR_H, background: hatchBuffer, borderRadius: 3 }}
                   title={`запас ${t.bufferDays} дн`}
                 />
               );
@@ -1194,7 +1285,7 @@ export function CarMiniTimeline({
             {miniPlanOv.warnings.map((w) => renderMiniConflict(w, 'mpc', miniPlanH))}
             {miniPlanOv.markers.map((m) => renderMiniOvMarker(m, 'mpm', miniPlanH))}
           </div>
-          <div className="sticky left-0 z-[3] bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2 w-[96px] min-w-[96px] text-[9px] leading-[12px] text-[#9CA3AF] overflow-hidden" style={{ height: miniFactH, borderRightColor: '#D1D5DB' }}>
+          <div className="sticky left-0 bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2 w-[96px] min-w-[96px] text-[9px] leading-[12px] text-[#9CA3AF] overflow-hidden" style={{ zIndex: TL_Z.colCell, height: miniFactH, borderRightColor: '#D1D5DB' }}>
             факт · база · ремонт
           </div>
           <div data-lane="fact" className="relative z-0 border-b border-[#E5E7EB]" style={{ width: W, height: miniFactH }}>
@@ -1206,15 +1297,15 @@ export function CarMiniTimeline({
               />
             ))}
             {periodBand()}
-            {miniFactBz.stripes.map((s) => renderMiniBzStripe(s, 'mfbz', miniFactOv))}
-            {miniFactBz.marks.map((m) => renderMiniBzMark(m, 'mfbm', miniFactStageDays))}
-            {miniFactFills.map((f) => renderMiniFill(f, 'mff'))}
+            {miniFactBz.stripes.map((s) => renderMiniBzStripe(s, 'mfbz', miniFactOv, miniFactSec))}
+            {miniFactBz.marks.map((m) => renderMiniBzMark(m, 'mfbm', miniFactSec))}
+            {miniFactFills.map((f) => renderMiniFill(f, 'mff', miniFactSec))}
             {bgSegs.filter((s) => s.today).map((s, i) => (
               <div
                 key={`fwt${i}`}
                 data-tl-today="1"
-                className="absolute top-0 bottom-0 z-[5]"
-                style={{ left: s.left, width: s.width, background: '#F43F5E', opacity: 0.14, pointerEvents: 'none' }}
+                className="absolute top-0 bottom-0"
+                style={{ zIndex: TL_Z.overlay, left: s.left, width: s.width, background: '#F43F5E', opacity: 0.14, pointerEvents: 'none' }}
               />
             ))}
             {(() => {
@@ -1253,11 +1344,11 @@ export function CarMiniTimeline({
                     data-event={gEv}
                     data-trip={gTrip}
                     onClick={gTrip && gEv ? () => onOpenEventTrip?.(gTrip, gEv) : undefined}
-                    className={`absolute z-[6] ${linked ? 'cursor-pointer' : ''}`}
+                    className={`absolute ${linked ? 'cursor-pointer' : ''}`}
                     style={
                       grouped
-                        ? { left, top, height: 12, minWidth: 16, padding: '0 3px', background: '#7C3AED', borderRadius: 6, textAlign: 'center', opacity: 0.95 }
-                        : { left, top, width: 9, height: 9, background: g.items[0].color, borderRadius: 2, transform: 'rotate(45deg)', opacity: 0.95 }
+                        ? { zIndex: TL_Z.mark, left, top, height: 12, minWidth: 16, padding: '0 3px', background: '#7C3AED', borderRadius: 6, textAlign: 'center', opacity: 0.95 }
+                        : { zIndex: TL_Z.mark, left, top, width: 9, height: 9, background: g.items[0].color, borderRadius: 2, transform: 'rotate(45deg)', opacity: 0.95 }
                     }
                     title={g.title}
                   >
@@ -1293,8 +1384,9 @@ export function CarMiniTimeline({
                   data-bar-frac-b={adjF && adjF.fracB !== 1 ? `${adjF.fracB}` : undefined}
                   data-overlap={adjF?.overlap ? '1' : undefined}
                   onClick={() => t.key !== focusKey && onSelectTrip(t.key)}
-                  className="absolute z-[3] cursor-pointer overflow-hidden"
+                  className="absolute cursor-pointer overflow-hidden"
                   style={{
+                    zIndex: TL_Z.tripBar,
                     left: qf.left,
                     width: qf.width,
                     top,
@@ -1356,8 +1448,8 @@ export function CarMiniTimeline({
                   data-bar-frac-a={adjN && adjN.fracA !== 0 ? `${adjN.fracA}` : undefined}
                   data-bar-frac-b={adjN && adjN.fracB !== 1 ? `${adjN.fracB}` : undefined}
                   data-overlap={adjN?.overlap ? '1' : undefined}
-                  className="absolute z-[2] text-[8px] leading-[14px] text-ellipsis text-[#9CA3AF] px-1 overflow-hidden whitespace-nowrap"
-                  style={{ left: qn.left, width: qn.width, top, height: MINI_FACT_NONE_H, border: '1px dashed #9CA3AF', borderRadius: 2, background: '#F9FAFB' }}
+                  className="absolute text-[8px] leading-[14px] text-ellipsis text-[#9CA3AF] px-1 overflow-hidden whitespace-nowrap"
+                  style={{ zIndex: TL_Z.tripBar, left: qn.left, width: qn.width, top, height: MINI_FACT_NONE_H, border: '1px dashed #9CA3AF', borderRadius: 2, background: '#F9FAFB' }}
                   title="Фактические данные не указаны"
                 >
                   {adjN?.overlap ? (
