@@ -48,6 +48,8 @@ export interface TimelineLinkedPlanPayload {
   dispatcher?: string;
   dispatcherName?: string;
   dispatcherId?: string;
+  /** Количество кругов рейса — целое от 1 (единое поле записи «Плана дохода»). */
+  circles?: number;
 }
 
 

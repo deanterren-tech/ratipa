@@ -21,6 +21,7 @@ import { buildDispatcherDirectory, type DispatcherDirectory } from '../../../uti
 import type { TimelineStageType, TimelineTrip, TimelineVehicleEvent } from '../../../types';
 import { dayNum, normalizeStages, withFallbackStages } from './lib/timeline';
 import { effectiveStageTypes } from './lib/catalog';
+import { normalizeCircles } from './lib/circles';
 import { mergeDirections, type DirectionDef } from './lib/directions';
 import {
   bazaToBasePeriods,
@@ -98,6 +99,8 @@ const normalizeManualTrip = (raw: TimelineTrip, carIndex: Map<string, CarRef>, d
     dispatcherName,
     planDraftFromTimeline: true,
     spanOverride,
+    // Круги ручного рейса — поле его собственной записи (отсутствие = 1).
+    circles: normalizeCircles(raw.circles),
     warnings: [],
   };
 };

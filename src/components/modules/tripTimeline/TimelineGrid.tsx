@@ -73,14 +73,15 @@ import { tripRangeOf, VYEZD_STATUS, vyezdStatusIcon } from './lib/vyezd';
 import { resolveRowOverlaps, type RowOverlapResolution, type RowTripAdjust, type RowTripInterval } from './lib/overlapRow';
 import type { ResolvedMarker, ResolvedWarning, WaitGap } from './lib/overlap';
 import {
-  circleTitleOf,
-  circlesOf,
   directionChipColors,
   directionOfTrip,
   mixHex,
   type DirectionDef,
-  type TripCircle,
 } from './lib/directions';
+import {
+  tripCircleMarksOf,
+  type TripCircleMarks,
+} from './lib/circles';
 import {
   FACT_SEGMENT_COLORS,
   factSegmentsOfTrip,
@@ -98,7 +99,6 @@ import {
 } from './lib/sources';
 import DateInput from './DateInput';
 import CalendarHeader from './CalendarHeader';
-import { plural } from '../../../ui/kit';
 import { AlertTriangle, ArrowRightLeft, CalendarClock, CarFront, ChevronDown, ChevronLeft, ChevronRight, CircleDashed, LogIn, LogOut, Maximize2, Minimize2, Palette, TriangleAlert, Wrench } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -122,10 +122,14 @@ import {
   PLAN_ACCENT,
   PLAN_ACCENT_ARCH,
   TL_Z,
-  circleBadgeStyle,
+  TRIP_CIRCLE_BADGE_CLS,
+  TRIP_CIRCLE_TICK_CLS,
+  TRIP_CIRCLE_TICK_LINE,
+  TRIP_CIRCLE_TICK_TEXT,
   conflictHatch,
   hatch45,
   stageIconOf,
+  tripCircleBadgeStyle,
   waitHatch,
 } from './lib/visuals';
 import { useCrosshair } from './lib/useCrosshair';
@@ -152,8 +156,8 @@ type PlanItem =
       title: string;
       warn: boolean;
       dir?: DirectionDef | null;
-      /** Круг рейса (правило directions.circlesOf): номер на полосе. */
-      circle?: { n: number; total: number; ongoing: boolean; title: string } | null;
+      /** Круги рейса (поле «Круги» записи): бейдж ×N и засечки на полосе. */
+      circleMarks?: TripCircleMarks | null;
     }
   | { kind: 'buffer'; a: number; b: number; days: number }
   | { kind: 'handover'; point: number; from: string; to: string; note: string; title: string; chip: boolean };
@@ -161,7 +165,7 @@ type PlanItem =
 type DeadlineStatusKind = 'none' | 'ok' | 'risk' | 'violated' | 'missed';
 
 type FactItem =
-  | { kind: 'fact'; a: number; b: number; open: boolean; tripKey: string; title: string; segments: FactSegment[]; noPlan: boolean; missedCount: number; parts: PlanBarParts }
+  | { kind: 'fact'; a: number; b: number; open: boolean; tripKey: string; title: string; segments: FactSegment[]; noPlan: boolean; missedCount: number; parts: PlanBarParts; circleMarks?: TripCircleMarks | null }
   | { kind: 'factNone'; a: number; b: number; tripKey: string; title: string }
   | { kind: 'event'; day: number; lastDay: number; count: number; color: string; title: string; tripKey?: string; eventId?: string }
   | { kind: 'handover'; point: number; from: string; to: string; note: string; title: string; chip: boolean };
@@ -194,8 +198,6 @@ interface CarRowModel {
   factOv: RowOverlapResolution;
   /** Направления рейсов машины в окне (для мини-чипа в левой колонке). */
   directions: DirectionDef[];
-  /** Круги машины (правило directions.circlesOf) — бейдж в колонке и на полосе. */
-  circles: TripCircle[];
 }
 
 /** Маркер стыка смены диспетчера: точка между двумя рейсами разных диспетчеров. */
@@ -304,8 +306,10 @@ const factSegSummaryOf = (segs: FactSegment[]): string => {
     .join('; ');
 };
 
-/** Единый стиль бейджа круга — в lib/visuals (circleBadgeStyle): один источник
- *  с гайдом и справочником. */
+/**
+ * Единый стиль бейджа «×N» и засечек кругов рейса — в lib/visuals
+ * (tripCircleBadgeStyle / TRIP_CIRCLE_*): один источник с легендой и гайдом.
+ */
 
 /**
  * Дорожки полос по интервалам (жадная раскладка, как у полос базы): при
@@ -353,10 +357,6 @@ const buildRows = (
   const from = vs - WINDOW_MARGIN;
   const to = ve + WINDOW_MARGIN;
   const visibleTrips = trips.filter((t) => showArchived || !t.archived);
-  /** Круги машин — правило владельца (lib/directions, circlesOf): один рейс на
-   *  внешнем направлении = один круг; считаются по всем рейсам вкладки (включая
-   *  архивные — номер не зависит от галочки «архивные данные»). */
-  const circlesByCar = circlesOf(trips, directions, bases);
   // Уникальность — по СТАБИЛЬНЫМ ключам исходных записей (`pd:` / `tl:` / `bz:`):
   // повторные записи одного источника не создают вторую полосу, а смена
   // диспетчера у машины не порождает дубликатов.
@@ -414,7 +414,6 @@ const buildRows = (
 
   const rows: CarRowModel[] = [];
   carMap.forEach((car) => {
-    const carCircles = circlesByCar.get(car.carKey) || [];
     const myTrips = tripCandidates
       .filter((t) => t.carKey === car.carKey)
       .sort((a, b) => ((a.spanOverride?.pMin ?? tripSpan(a).pMin) ?? 0) - ((b.spanOverride?.pMin ?? tripSpan(b).pMin) ?? 0));
@@ -444,9 +443,14 @@ const buildRows = (
       const deadline = getDeadlineStatus(t, today, (s) => stageFullName(stageTypes, s));
       const dir = directionOfTrip(t, directions);
       const parts = planBarLabelParts(t);
+      // Круги рейса — поле записи («circles», lib/circles): счётчик у обоих
+      // полос одинаковый; засечки ПЛАН строятся по плановым датам этапов,
+      // ФАКТ — по фактическим (даты не выдумываются; этапы без привязки к
+      // кругу в разметку не попадают).
+      const circleMarksPlan = tripCircleMarksOf(t.circles, t.stages, 'plan');
+      const circleMarksFact = tripCircleMarksOf(t.circles, t.stages, 'fact');
       if (visible(pMin, planEnd)) {
         const shown: PlanBarParts = openPlan ? { ...parts, main: 'неполный план', meta: '' } : parts;
-        const circ = carCircles.find((c) => c.tripKey === t.key) || null;
         planItems.push({
           kind: 'plan',
           a: pMin,
@@ -458,8 +462,8 @@ const buildRows = (
           open: openPlan,
           warn: false,
           dir,
-          circle: circ ? { n: circ.n, total: carCircles.length, ongoing: circ.ongoing, title: circleTitleOf(circ, carCircles.length) } : null,
-          title: `${formatPlate(car.carNumber)} · ${parts.titleText} · ${t.dispatcherName || 'без диспетчера'}${dir ? ` · направление: ${dir.name}` : ''}${circ ? ` · круг ${circ.n} из ${carCircles.length}${circ.ongoing ? ' (идёт)' : ''}` : ''}${t.kind === 'plan' ? ' · из плана дохода' : ''}${t.archived ? ' · архив' : ''}${openPlan ? ' · неполный план (нет даты возвращения)' : ` · плановое возвращение: ${fmtDM(planEnd)}`} · ${deadline.label}`,
+          circleMarks: circleMarksPlan,
+          title: `${formatPlate(car.carNumber)} · ${parts.titleText} · ${t.dispatcherName || 'без диспетчера'}${dir ? ` · направление: ${dir.name}` : ''}${circleMarksPlan ? ` · ${circleMarksPlan.title}` : ''}${t.kind === 'plan' ? ' · из плана дохода' : ''}${t.archived ? ' · архив' : ''}${openPlan ? ' · неполный план (нет даты возвращения)' : ` · плановое возвращение: ${fmtDM(planEnd)}`} · ${deadline.label}`,
         });
       }
       planInts.push({ key: t.key, a: pMin, b: planEnd, open: openPlan, label: tripLabel });
@@ -491,7 +495,10 @@ const buildRows = (
             noPlan: segRes.noPlan,
             missedCount: segRes.missed.length,
             parts,
+            circleMarks: circleMarksFact,
             title: `${formatPlate(car.carNumber)} · факт: ${fmtDM(span.fMin)} – ${ongoing ? 'продолжается (окончание не указано)' : fmtDM(fEnd)} · ${factSegSummaryOf(segRes.segments)}${
+              circleMarksFact ? ` · ${circleMarksFact.title}` : ''
+            }${
               segRes.noPlan ? ' · план не указан' : ''
             }${segRes.missed.length ? ` · пропущено этапов: ${segRes.missed.length} (${segRes.missed.map((m) => m.label).join(', ')})` : ''}`,
           });
@@ -713,7 +720,6 @@ const buildRows = (
       planOv,
       factOv,
       directions: rowDirs,
-      circles: carCircles,
     });
   });
 
@@ -848,9 +854,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   /** Та же единая функция «дата → координата», что у шапки и сетки. */
   const pos = (a: number, b: number): { left: number; width: number } | null => barRectInWindow(a, b, vs, ve, colW);
   /** Единая визуальная система: выбранный (открытый) рейс — тёмное кольцо,
-   *  соседние при наведении — мягкий контур. Кольцо НАВЕДЁННОЙ полосы даёт
-   *  общий CSS-токен --tl-hov-ring (та же подсветка у базы, ремонта и учёта
-   *  выезда — значения не дублируются в компонентах). */
+   *  соседние при наведении — мягкий контур. Наведение полосы — НЕЙТРАЛЬНОЕ
+   *  лёгкое затемнение (общий CSS-токен --tl-hov-dim в index.css: одинаково
+   *  у рейса, базы, ремонта и учёта выезда — значения не дублируются). */
   const link = (tripKey: string): React.CSSProperties => {
     if (selectedTripKey && selectedTripKey === tripKey) {
       return { boxShadow: hoverTrip === tripKey ? 'inset 0 0 0 2px var(--accent), var(--tl-hov-sel)' : 'var(--tl-hov-sel)' };
@@ -870,6 +876,56 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     const r = p.left + p.width - Math.round((1 - adj.fracB) * colW);
     return { left: l, width: Math.max(1, r - l) };
   };
+  /**
+   * Занятые зоны подписи от меток кругов рейса (координаты строки): бейдж
+   * «×N» в начале полосы и засечки между кругами. Подпись обтекает их по
+   * общему правилу lib/barLabels — маркеры никогда не перекрывают текст.
+   */
+  const circleMarksObstacles = (cm: TripCircleMarks | null | undefined, barLeft: number): BarObstacle[] => {
+    if (!cm) return [];
+    const out: BarObstacle[] = [];
+    if (cm.badge) out.push({ left: barLeft + 1, right: barLeft + 20 });
+    cm.ticks.forEach((tk) => {
+      const x = Math.round((tk.at - vs) * colW);
+      out.push({ left: x - 6, right: x + 12 });
+    });
+    return out;
+  };
+  /**
+   * Метки кругов поверх полосы (слой TL_Z.mark): бейдж «×2»/«×3» в начале
+   * полосы и тонкие засечки с номерами между кругами. Слой не перехватывает
+   * указатель — клик и наведение остаются у самой полосы/этапов; метки НЕ
+   * перекрывают подпись (та обходит их свободными сегментами).
+   */
+  const circleMarksLayer = (cm: TripCircleMarks | null | undefined, keyPrefix: string, barLeft: number): React.ReactNode =>
+    !cm ? null : (
+      <div aria-hidden="true" className="absolute inset-0 flex items-center pointer-events-none" style={{ zIndex: TL_Z.mark }}>
+        {cm.badge ? (
+          <span
+            data-tl-trip-circles={cm.count}
+            className={`${TRIP_CIRCLE_BADGE_CLS} ml-0.5`}
+            style={tripCircleBadgeStyle()}
+            title={cm.title}
+          >
+            {cm.badge}
+          </span>
+        ) : null}
+        {cm.ticks.map((tk) => (
+          <span
+            key={`${keyPrefix}-ct-${tk.n}`}
+            data-tl-circle-tick={tk.n}
+            className={TRIP_CIRCLE_TICK_CLS}
+            style={{ left: Math.round((tk.at - vs) * colW) - barLeft - 1 }}
+            title={tk.title}
+          >
+            <i className="w-[2px] h-[9px] rounded-full" style={{ background: TRIP_CIRCLE_TICK_LINE }} />
+            <b className="text-[7px] leading-none font-bold" style={{ color: TRIP_CIRCLE_TICK_TEXT }}>
+              {tk.n}
+            </b>
+          </span>
+        ))}
+      </div>
+    );
   /** Маркер стыка (выезд / прибытие / выехала раньше): SVG-иконка на срезе дня.
    *  Клик — окно «Учёта выезда» через единый хелпер (onOpenBase → openVyezdPeriod). */
   const renderOvMarker = (m: ResolvedMarker, keyPrefix: string, rowH: number): React.ReactNode => {
@@ -1874,11 +1930,11 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             const chipOn = !!chip && pr.width >= 96;
             const chipCls = 'inline-flex items-center h-[12px] px-1 rounded-[4px] text-[8px] leading-[12px] font-semibold shrink-0';
             // Занятые зоны полосы: клетки этапов и метки строки + служебные
-            // зоны краёв (кружок рейса слева, чип направления справа) — подпись
-            // никогда не встаёт под метку и не обрезается её краем.
+            // зоны краёв (бейдж «×N» и засечки кругов слева/по полосе, чип
+            // направления справа) — подпись никогда не встаёт под метку.
             const obstacles: BarObstacle[] = [
               ...planLabelObstacles,
-              ...(it.circle ? [{ left: pr.left + 1, right: pr.left + 18 }] : []),
+              ...circleMarksObstacles(it.circleMarks, pr.left),
               ...(chipOn ? [{ left: pr.left + pr.width - 36, right: pr.left + pr.width }] : []),
             ];
             return renderPeriodBar({
@@ -1918,9 +1974,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   {adj?.overlap ? (
                     <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
                   ) : null}
-                  {/* Место кружка сохраняется в потоке полосы; сам бейдж вынесен
-                      в слой меток (marksOverlay) — он остаётся поверх клеток этапов. */}
-                  {it.circle ? <span aria-hidden="true" className="inline-flex shrink-0 w-[14px] h-[14px] ml-0.5" /> : null}
+                  {/* Место бейджа «×N» сохраняется в потоке полосы; сам бейдж
+                      вынесен в слой меток (marksOverlay) — он остаётся поверх
+                      клеток этапов. */}
+                  {it.circleMarks?.badge ? <span aria-hidden="true" className="inline-flex shrink-0 w-[18px] h-[13px] ml-0.5" /> : null}
                 </>
               ),
               labelIcon: it.open ? <CircleDashed className={BAR_ICON_CLS} style={{ color: CLR.warn }} aria-hidden="true" /> : undefined,
@@ -1933,41 +1990,31 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   {it.dir?.code}
                 </span>
               ) : undefined,
-              // МЕТКИ ПОВЕРХ ПОЛОСЫ (шкала TL_Z.mark): круг рейса и код
-              // направления видны и над клетками этапов. Слой не перехватывает
-              // указатель: клик/наведение принадлежат верхнему интерактивному
-              // элементу (этапу или самой полосе). Цветное «ребро» направления
-              // у левого края полосы УБРАНО — форма полосы цельная, начало и
-              // конец одинаковые; направление видно кодом (CN/TR), подсказкой
-              // и мини-чипом в колонке.
+              // МЕТКИ ПОВЕРХ ПОЛОСЫ (шкала TL_Z.mark): бейдж «×N»/засечки
+              // кругов рейса и код направления видны и над клетками этапов.
+              // Слои не перехватывают указатель: клик/наведение принадлежат
+              // верхнему интерактивному элементу (этапу или самой полосе).
+              // Цветное «ребро» направления у левого края полосы УБРАНО —
+              // форма полосы цельная; направление видно кодом (CN/TR),
+              // подсказкой и мини-чипом в колонке.
               marksOverlay: (
-                <div aria-hidden="true" className="absolute inset-0 flex items-center pointer-events-none" style={{ zIndex: TL_Z.mark }}>
-                  {/* Круг рейса — номер виден на любом масштабе (бейдж не сжимается). */}
-                  {it.circle ? (
-                    <span
-                      data-tl-circle-badge={it.circle.n}
-                      data-tl-circle-total={it.circle.total}
-                      data-tl-circle-ongoing={it.circle.ongoing ? '1' : undefined}
-                      className="inline-flex items-center justify-center shrink-0 w-[14px] h-[14px] rounded-full text-[8px] leading-none font-bold tabular-nums select-none ml-[3px]"
-                      style={circleBadgeStyle(it.circle.total, it.circle.ongoing)}
-                      title={it.circle.title}
-                    >
-                      {it.circle.n}
-                    </span>
-                  ) : null}
+                <>
+                  {circleMarksLayer(it.circleMarks, `p${idx}`, pr.left)}
                   {/* Код направления — только когда есть место; при мелком масштабе
                       направление остаётся в подсказке и мини-чипе колонки. */}
                   {chipOn ? (
-                    <span
-                      data-bar-dir-chip="1"
-                      className={`${chipCls} ml-auto mr-px`}
-                      style={{ background: chip?.bg, border: `1px solid ${chip?.border}`, color: chip?.text }}
-                      title={`Направление: ${it.dir?.name}`}
-                    >
-                      {it.dir?.code}
-                    </span>
+                    <div aria-hidden="true" className="absolute inset-0 flex items-center pointer-events-none" style={{ zIndex: TL_Z.mark }}>
+                      <span
+                        data-bar-dir-chip="1"
+                        className={`${chipCls} ml-auto mr-px`}
+                        style={{ background: chip?.bg, border: `1px solid ${chip?.border}`, color: chip?.text }}
+                        title={`Направление: ${it.dir?.name}`}
+                      >
+                        {it.dir?.code}
+                      </span>
+                    </div>
                   ) : null}
-                </div>
+                </>
               ),
             });
           }
@@ -2012,38 +2059,6 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               >
                 <span className="w-1 h-1 rounded-full" style={{ background: badge.dot }} aria-hidden="true" />
                 {badge.label}
-              </span>
-            ) : null}
-            {/* Круги машины (правило directions.circlesOf): у одного круга бейдж
-                приглушённый, у двух+ — заметный; незавершённый — «круг идёт»
-                (пунктирная обводка). Полный список с датами — в подсказке. */}
-            {row.circles.length ? (
-              <span
-                data-tl-circles={row.circles.length}
-                data-tl-circles-ongoing={row.circles.some((c) => c.ongoing) ? '1' : undefined}
-                className="inline-flex items-center gap-1 h-[14px] rounded-full px-1.5 text-[9px] leading-[14px] font-semibold whitespace-nowrap shrink-0 select-none"
-                style={
-                  row.circles.length > 1
-                    ? { background: 'var(--accent-10)', border: '1px solid var(--accent-40)', color: '#8A4A12' }
-                    : { background: '#F3F4F6', border: '1px solid #D7DBE1', color: '#5B6472' }
-                }
-                title={`Круги машины: ${row.circles.length} (круг = рейс на внешнем направлении; номер — порядок внутри периода учёта выезда)\n${row.circles
-                  .map((c) => `• Круг ${c.n} — ${c.dir ? c.dir.name : 'направление не определено'}${c.ongoing ? ' — круг идёт' : ''}`)
-                  .join('\n')}`}
-              >
-                <span
-                  className="inline-flex items-center justify-center w-[10px] h-[10px] rounded-full text-[7px] font-bold"
-                  style={
-                    row.circles.length > 1
-                      ? { border: `1px ${row.circles.some((c) => c.ongoing) ? 'dashed' : 'solid'} var(--accent-40)`, color: '#8A4A12' }
-                      : { border: `1px ${row.circles.some((c) => c.ongoing) ? 'dashed' : 'solid'} #C3C8CF`, color: '#5B6472' }
-                  }
-                  aria-hidden="true"
-                >
-                  {row.circles.length}
-                </span>
-                {row.circles.length} {plural(row.circles.length, 'круг', 'круга', 'кругов')}
-                {row.circles.some((c) => c.ongoing) ? ' · идёт' : ''}
               </span>
             ) : null}
             {/* Мини-чипы направлений машины (приглушённая палитра; полное имя — в подсказке) */}
@@ -2170,12 +2185,15 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 // Подпись — как у базы: маршрут на фоне первого сегмента; у
                 // нейтральной полосы — «План не указан» (зелёного без плана нет).
                 // Единая раскладка: полный текст → маршрут → многоточие, sticky
-                // в свободном сегменте полосы (обтекает этапы).
+                // в свободном сегменте полосы (обтекает этапы и метки кругов).
                 labelText: it.noPlan
                   ? 'Факт · план не указан'
                   : `${it.parts.main}${it.parts.meta}`,
                 labelShort: it.noPlan ? '' : it.parts.main,
-                obstacles: factLabelObstacles,
+                obstacles: [...factLabelObstacles, ...circleMarksObstacles(it.circleMarks, prF.left)],
+                // Круги рейса на полосе ФАКТ: бейдж «×N» и засечки (по
+                // фактическим датам распределённых этапов).
+                marksOverlay: circleMarksLayer(it.circleMarks, `f${idx}`, prF.left),
               });
             }
             case 'factNone': {
@@ -2914,8 +2932,9 @@ export default function TimelineGrid({
                   База и ремонт — непрерывные полосы от первого до последнего дня периода (без делений на дни): плановый простой на базе и
                   плановое окончание базы (срок готовности) — в строке «План», фактический простой на базе (открытый — «Готовится к выезду»),
                   ремонт и окончание ремонта — в «Факт»; окончание базы и дата ремонта заливают всю ячейку дня, при пересечении с этапами день
-                  делится на кликабельные секции — всё видно и открывается. Круги машины: номер на полосе и счётчик в колонке (2+ — заметный,
-                  1 — приглушённый; пунктир — «круг идёт»).
+                  делится на кликабельные секции — всё видно и открывается. Круги рейса: «×2»/«×3» в начале полосы (число
+                  кругов у рейса; задаётся полем «Круги» в окне рейса и в «Плане дохода»), засечки с номерами — границы кругов,
+                  если этапы распределены по кругам; подсказка — число кругов и даты каждого.
                   Прокрутка — тачпад, Shift+колесо, полоса; масштаб — «−/+/ползунок» или Ctrl+колесо над календарём (дата под курсором
                   остаётся на месте). Прокрутка догружает даты влево и вправо; выходные подсвечены фоном. Границу колонки «Автомобили»
                   можно перетаскивать (двойной клик — вернуть ширину по умолчанию).

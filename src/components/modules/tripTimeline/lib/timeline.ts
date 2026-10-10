@@ -296,10 +296,11 @@ export const sortMonthLabelsDesc = (labels: string[]): string[] =>
 
 /**
  * Уровни масштаба — ширина дня в px. Единый параметр масштаба для сетки,
- * полос, маркеров и шапки. От 6px (обзор: несколько месяцев) до 48px
- * (подробно: отдельные дни и события). Ноль/отрицательная ширина невозможны.
+ * полос, маркеров и шапки. От 6px (обзор: несколько месяцев) до 140px
+ * (крупно: полные подписи, даты и события; день занимает 120–200px+).
+ * Ноль/отрицательная ширина невозможны.
  */
-export const ZOOM_LEVELS: number[] = [6, 8, 10, 12, 16, 20, 24, 30, 36, 42, 48];
+export const ZOOM_LEVELS: number[] = [6, 8, 10, 12, 16, 20, 24, 30, 36, 42, 48, 80, 140];
 export const DEFAULT_ZOOM = 30;
 export const MIN_ZOOM = ZOOM_LEVELS[0];
 export const MAX_ZOOM = ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
@@ -325,6 +326,7 @@ export const zoomColW = (index: number): number =>
 /** Сегодня-независимая подпись уровня для подсказок ползунка. */
 export const zoomLabel = (index: number): string => {
   const w = zoomColW(index);
+  if (w >= 80) return 'крупно: полные подписи, даты и иконки с текстом';
   if (w >= 30) return 'подробно: дни и события';
   if (w >= 16) return 'обычный: недели и дни';
   return 'обзорно: месяцы и недели';

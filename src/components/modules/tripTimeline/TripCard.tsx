@@ -76,6 +76,7 @@ import {
   type StageFillSection,
 } from './lib/stageFills';
 import { computePlanStageChanges, resolvePlanLock, type PlanStageChanges } from './lib/planLock';
+import { normalizeCircles } from './lib/circles';
 import { hasPlanFinancials } from './lib/planFromDraft';
 import {
   WEEKEND_HINT,
@@ -198,6 +199,8 @@ interface Draft {
   stages: TimelineStage[];
   planStart: string;
   planEnd: string;
+  /** Количество кругов рейса — целое от 1 (по умолчанию 1). */
+  circles: number;
 }
 
 const toDraft = (t: WholeTrip): Draft => {
@@ -217,9 +220,11 @@ const toDraft = (t: WholeTrip): Draft => {
       reason: s.reason || '',
       action: s.action || '',
       order: s.order ?? 0,
+      circle: s.circle && s.circle >= 1 ? s.circle : undefined,
     })),
     planStart: isoOf(t.spanOverride?.pMin ?? span.pMin ?? null),
     planEnd: isoOf(t.spanOverride?.pMax ?? span.pMax ?? null),
+    circles: normalizeCircles(t.circles),
   };
 };
 
@@ -1292,7 +1297,7 @@ export function CarMiniTimeline({
               );
             })}
             {miniPlanOv.waitGaps.map((g) => renderMiniWaitGap(g, 'mpw'))}
-            {miniPlanOv.warnings.map((w) => renderMiniConflict(w, 'mpc', miniPlanH))}
+            {miniPlanOv.warnings.map((w, wi) => renderMiniConflict(w, `mpc${wi}`, miniPlanH))}
             {miniPlanOv.markers.map((m) => renderMiniOvMarker(m, 'mpm', miniPlanH))}
           </div>
           <div className="sticky left-0 bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2 w-[96px] min-w-[96px] text-[9px] leading-[12px] text-[#9CA3AF] overflow-hidden" style={{ zIndex: TL_Z.colCell, height: miniFactH, borderRightColor: '#D1D5DB' }}>
@@ -1470,7 +1475,7 @@ export function CarMiniTimeline({
               );
             })}
             {miniFactOv.waitGaps.map((g) => renderMiniWaitGap(g, 'mfw'))}
-            {miniFactOv.warnings.map((w) => renderMiniConflict(w, 'mfc', miniFactH))}
+            {miniFactOv.warnings.map((w, wi) => renderMiniConflict(w, `mfc${wi}`, miniFactH))}
             {miniFactOv.markers.map((m) => renderMiniOvMarker(m, 'mfm', miniFactH))}
           </div>
           {/* Host перекрёстной подсветки встроенного таймлайна — тот же
@@ -1666,6 +1671,7 @@ export default function TripCard({
     if (draft.bufferDays !== od.bufferDays) out.push('запас дней');
     if (draft.planStart !== od.planStart) out.push('плановый старт');
     if (draft.planEnd !== od.planEnd) out.push('плановое возвращение');
+    if (draft.circles !== od.circles) out.push('количество кругов');
     if (draft.stages.length !== od.stages.length) out.push('состав этапов');
     else if (
       draft.stages.some(
@@ -1673,7 +1679,8 @@ export default function TripCard({
           s.label !== od.stages[i].label ||
           s.plannedDate !== od.stages[i].plannedDate ||
           s.actualDate !== od.stages[i].actualDate ||
-          s.type !== od.stages[i].type,
+          s.type !== od.stages[i].type ||
+          (s.circle || 0) !== (od.stages[i].circle || 0),
       )
     ) {
       out.push('поля этапов');
@@ -1864,13 +1871,22 @@ export default function TripCard({
           `${st ? stageFullName(stageTypes, st) : u.id}: план ${u.before ? fmtFull(u.before) : 'не указана'} → ${u.plannedDate ? fmtFull(u.plannedDate) : 'не указана'}`,
         );
       });
+      changes.circleUpdates.forEach((u) => {
+        const st = draft.stages.find((s) => s.id === u.id) || trip.stages.find((s) => s.id === u.id);
+        parts.push(
+          `${st ? stageFullName(stageTypes, st) : u.id}: круг ${u.before ?? 'не указан'} → ${u.circle ?? 'не указан'}`,
+        );
+      });
+      if (changes.circlesChanged) {
+        parts.push(`количество кругов рейса: ${normalizeCircles(trip.circles)} → ${draft.circles}`);
+      }
       changes.adds.forEach((s) =>
         parts.push(`добавлен этап «${stageFullName(stageTypes, s)}»${dayNum(s.plannedDate) != null ? ` (план ${fmtFull(s.plannedDate)})` : ''}`),
       );
       changes.removes.forEach((s) => parts.push(`удалён этап «${stageFullName(stageTypes, s)}»`));
       return parts.join('; ') || 'без изменений';
     },
-    [draft.stages, trip.stages, stageTypes],
+    [draft.stages, draft.circles, trip.stages, trip.circles, stageTypes],
   );
 
   /**
@@ -1881,7 +1897,12 @@ export default function TripCard({
   const savePlanStages = async () => {
     if (!showSavePlanStages || planSaving) return;
     setPlanSaveError('');
-    const changes = computePlanStageChanges(trip.stages, draft.stages);
+    // Изменение количества кругов — тоже изменение плана (участвует в счёте
+    // изменений: разовое разрешение расходуется осознанно).
+    const changes = computePlanStageChanges(trip.stages, draft.stages, {
+      stored: normalizeCircles(trip.circles),
+      draft: draft.circles,
+    });
     if (planState === 'draft') {
       const ok = await showConfirm(
         'Сохранить план этапов? После сохранения изменение плановых дат этапов будет доступно только с разового разрешения администратора.',
@@ -1955,6 +1976,21 @@ export default function TripCard({
       changes.plannedUpdates.forEach((u) => {
         updates[`${base}/${u.id}/plannedDate`] = u.plannedDate;
       });
+      changes.circleUpdates.forEach((u) => {
+        updates[`${base}/${u.id}/circle`] = u.circle ?? null;
+      });
+      // Количество кругов хранится в САМОЙ ЗАПИСИ рейса (одна запись для
+      // таймлайна и «Плана дохода»): для связанного рейса — trips_dashboard,
+      // для ручного — его ветка. Копий нет.
+      if (changes.circlesChanged) {
+        if (isPlan) {
+          updates[`trips_dashboard/${planSourceId}/circles`] = draft.circles;
+          updates[`trips_dashboard/${planSourceId}/updatedAt`] = new Date().toLocaleString('ru-RU');
+          updates[`trips_dashboard/${planSourceId}/updatedBy`] = user.name;
+        } else {
+          updates[`tripTimeline/trips/${trip.id}/circles`] = draft.circles;
+        }
+      }
       changes.removes.forEach((s) => {
         updates[`${base}/${s.id}`] = null;
       });
@@ -2059,6 +2095,7 @@ export default function TripCard({
       dispatcherName: draft.dispatcherName,
       bufferDays: Math.max(0, Number(String(draft.bufferDays).replace(',', '.')) || 0),
       stages: draft.stages,
+      circles: draft.circles,
       spanOverride: {
         pMin: dayNum(draft.planStart) ?? trip.spanOverride?.pMin ?? null,
         pMax: dayNum(draft.planEnd) ?? trip.spanOverride?.pMax ?? null,
@@ -2197,6 +2234,59 @@ export default function TripCard({
       if (field === 'plannedDate' || field === 'actualDate') {
         saver.queueTrip(trip.id, computeStoredRange({ ...trip, stages: nextStages }));
       }
+    }
+  };
+
+  /**
+   * Привязка ЭТАПА к кругу рейса (номер 1..N; 0 — снять привязку). Это часть
+   * плана: в черновике сохраняется сразу, после сохранения плана — только
+   * кнопкой «Сохранить план этапов» (разовое разрешение/администратор).
+   */
+  const onStageCircle = (stageId: string, n: number) => {
+    if (readOnly || !canEditPlanned) return;
+    markDirty();
+    const value = Number.isFinite(n) && n >= 1 ? Math.floor(n) : null;
+    const apply = (s: TimelineStage): TimelineStage =>
+      s.id === stageId ? { ...s, circle: value != null ? value : undefined } : s;
+    setDraft((d) => ({ ...d, stages: d.stages.map(apply) }));
+    if (!autoSavePlanned) {
+      planDirtyRef.current = true;
+      setPlanDirty(true);
+      return;
+    }
+    ensureDraftMarker();
+    // В RTDB null у поля этапа снимает привязку (update: null = удаление).
+    const patch: Record<string, unknown> = { circle: value };
+    if (isPlan) saver.queueAutoStage(planSourceId, stageId, patch);
+    else saver.queueStage(trip.id, stageId, patch);
+  };
+
+  /**
+   * «Количество кругов» рейса — целое от 1. Изменение количества кругов
+   * считается изменением ПЛАНА (существующий механизм): в черновике пишется
+   * сразу в ту же запись рейса («План дохода» trips_dashboard / ручной рейс),
+   * после сохранения плана — только кнопкой «Сохранить план этапов» с разовым
+   * разрешением администратора. Копий поля нет — таймлайн и «План дохода»
+   * показывают одну запись.
+   */
+  const onCirclesChange = (next: number) => {
+    if (readOnly || !canEditPlanned) return;
+    const n = Math.max(1, Math.floor(Number(next)) || 1);
+    if (n === draft.circles) return;
+    markDirty();
+    setDraft((d) => ({ ...d, circles: n }));
+    if (!autoSavePlanned) {
+      planDirtyRef.current = true;
+      setPlanDirty(true);
+      return;
+    }
+    ensureDraftMarker();
+    if (isPlan) {
+      // Существующий сервис «Плана дохода»: та же запись, метаданные и лог —
+      // правка сразу видна и в «Плане дохода», и на таймлайне.
+      void pdService.updateTrip(planSourceId, { circles: n }, user.name, user.role);
+    } else {
+      saver.queueTrip(trip.id, { circles: n });
     }
   };
 
@@ -2636,6 +2726,66 @@ export default function TripCard({
           </div>
         ) : null}
 
+        {/* Круги рейса: количество кругов — часть плана (изменение считается
+            изменением плана). ОДНО поле записи рейса: правится и здесь, и в
+            «Плане дохода» — копий нет. Для рейса с 2+ кругами этапы
+            распределяются по кругам в колонке «Круг» таблицы этапов ниже. */}
+        <div
+          data-ui="trip-circles"
+          data-circles={draft.circles}
+          className="border border-[#E5E7EB] rounded-xl px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]"
+        >
+          <span className="font-semibold text-[#121316]">Круги рейса</span>
+          {!readOnly && canEditPlanned ? (
+            <span className="inline-flex items-center gap-1">
+              <button
+                type="button"
+                data-ui="circles-dec"
+                aria-label="Уменьшить количество кругов"
+                disabled={draft.circles <= 1}
+                onClick={() => onCirclesChange(draft.circles - 1)}
+                className="inline-flex items-center justify-center w-6 h-6 rounded-lg border border-[#E5E7EB] bg-white text-[#4B5563] text-sm font-semibold hover:bg-[#F3F4F6] disabled:opacity-40 disabled:cursor-default transition-colors cursor-pointer"
+              >
+                −
+              </button>
+              <span
+                data-ui="circles-value"
+                aria-live="polite"
+                className="inline-flex items-center justify-center min-w-[26px] h-6 rounded-lg border border-[#E5E7EB] bg-white text-xs font-semibold text-[#121316] tabular-nums"
+              >
+                {draft.circles}
+              </span>
+              <button
+                type="button"
+                data-ui="circles-inc"
+                aria-label="Увеличить количество кругов"
+                onClick={() => onCirclesChange(draft.circles + 1)}
+                className="inline-flex items-center justify-center w-6 h-6 rounded-lg border border-[#E5E7EB] bg-white text-[#4B5563] text-sm font-semibold hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+              >
+                +
+              </button>
+            </span>
+          ) : (
+            <span
+              data-ui="circles-value"
+              className="inline-flex items-center justify-center min-w-[26px] h-6 px-2 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] text-xs font-semibold text-[#121316] tabular-nums"
+            >
+              {draft.circles}
+            </span>
+          )}
+          <span className="text-[#6B7280]">
+            {draft.circles >= 2
+              ? 'этапы распределяются по кругам — колонка «Круг» в таблице этапов ниже'
+              : 'количество кругов у рейса; задаётся здесь и в «Плане дохода» — одна запись, без копий'}
+          </span>
+          {!readOnly && planEnabled && planState === 'saved' && !canEditPlanned ? (
+            <span className="text-amber-700">изменение количества кругов — изменение плана: нужно разовое разрешение администратора</span>
+          ) : null}
+          {!readOnly && planEnabled && planState !== 'draft' && canEditPlanned ? (
+            <span className="text-[#6B7280]">изменение сохранится кнопкой «Сохранить план этапов»</span>
+          ) : null}
+        </div>
+
         {/* План и факт: границы и сравнение */}
         <div data-ui="trip-bounds" className="border border-[#E5E7EB] rounded-xl overflow-hidden">
           <div className="grid grid-cols-1 sm:grid-cols-3 text-[11px]">
@@ -2737,6 +2887,11 @@ export default function TripCard({
                 <th className={UI.th}>Факт</th>
                 <th className={UI.th}>Отклонение / состояние</th>
                 <th className={UI.th}>Крит. срок</th>
+                {draft.circles >= 2 ? (
+                  <th className={UI.th} title="Привязка этапа к кругу рейса (для рейса с 2+ кругами): засечки кругов на полосе строятся по датам распределённых этапов">
+                    Круг
+                  </th>
+                ) : null}
                 <th className={UI.th}>События этапа</th>
                 <th className={UI.th}>{''}</th>
               </tr>
@@ -2836,6 +2991,30 @@ export default function TripCard({
                           ) : null}
                         </label>
                       </td>
+                      {draft.circles >= 2 ? (
+                        <td className="px-2 py-1.5 align-middle">
+                          <select
+                            data-ui="stage-circle"
+                            data-stage-circle={s.id}
+                            value={s.circle && s.circle >= 1 && s.circle <= draft.circles ? String(s.circle) : ''}
+                            disabled={readOnly || !canEditPlanned}
+                            title={
+                              readOnly || canEditPlanned
+                                ? 'Круг этапа: номер круга рейса (пусто — этап не распределён по кругам)'
+                                : 'Распределение этапов по кругам — часть плана: после сохранения доступно только с разового разрешения администратора'
+                            }
+                            onChange={(e) => onStageCircle(s.id, e.target.value ? Number(e.target.value) : 0)}
+                            className="bg-white border border-[#E5E7EB] rounded-lg px-2 py-1.5 text-[11px] text-[#121316] outline-none cursor-pointer focus:border-[var(--accent)] disabled:opacity-60"
+                          >
+                            <option value="">—</option>
+                            {Array.from({ length: draft.circles }, (_, i) => i + 1).map((n) => (
+                              <option key={n} value={n}>
+                                {n}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      ) : null}
                       <td className="px-2 py-1.5 align-middle">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {stageEvents > 0 ? (
@@ -2881,7 +3060,7 @@ export default function TripCard({
               })}
               {draft.stages.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-2 py-4 text-center text-[11px] text-[#6B7280]">
+                  <td colSpan={draft.circles >= 2 ? 9 : 8} className="px-2 py-4 text-center text-[11px] text-[#6B7280]">
                     У рейса пока нет этапов — добавьте первый (граница, загрузка, выгрузка…).
                   </td>
                 </tr>

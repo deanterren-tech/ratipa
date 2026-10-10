@@ -318,6 +318,12 @@ export interface TripPlan {
   needsFill?: boolean;
   /** Происхождение записи: 'timeline' — создана из таймлайна (справочно, в расчётах не участвует). */
   createdFrom?: string;
+  /**
+   * Количество кругов рейса — целое от 1 (миграция: отсутствие поля = 1).
+   * Одно поле на запись: редактируется и в «Плане дохода», и в таймлайне
+   * (lib/circles, normalizeCircles) — копий нет.
+   */
+  circles?: number;
 }
 
 // ---- Таймлайн рейсов по машинам (модуль tripTimeline) ----
@@ -344,6 +350,11 @@ export interface TimelineStage {
   action?: string;
   /** Порядок этапа в рейсе. */
   order: number;
+  /**
+   * Опциональная привязка этапа к кругу рейса (номер круга 1..N, где N —
+   * «Количество кругов» рейса). Отсутствие — этап не распределён по кругам.
+   */
+  circle?: number;
 }
 
 /** Рейс для таймлайна машин (ветка RTDB: tripTimeline/trips/{id}). */
@@ -369,6 +380,8 @@ export interface TimelineTrip {
   createdAt?: string;
   updatedAt?: string;
   stages: TimelineStage[];
+  /** Количество кругов рейса — целое от 1 (отсутствие = 1, см. lib/circles). */
+  circles?: number;
 }
 
 /** Событие машины: ремонт / на базе / простой / другое (tripTimeline/vehicleEvents/{id}). */

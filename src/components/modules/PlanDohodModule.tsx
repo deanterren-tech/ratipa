@@ -15,6 +15,9 @@ import {
 } from "../../types";
 import {calculateTripFinances} from '../../utils/financeCalculators'
 import { buildDispatcherDirectory, dispatcherFieldsFor, resolvePersonName, DispatcherRef } from '../../utils/dispatcher'
+// Круги рейса — единое правило хранения/нормализации (одно поле записи,
+// общее с модулем «Таймлайн рейсов»; отсутствие поля = 1, без пересчёта).
+import { normalizeCircles } from './tripTimeline/lib/circles'
 import {dbService, directoryService} from '../../api';
 import {pdService} from '../../api';
 import CouplingPicker from "../common/CouplingPicker";
@@ -1116,6 +1119,8 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [direction, setDirection] = useState("");
   const [dateStart, setDateStart] = useState("");
   const [dateEnd, setDateEnd] = useState("");
+  /** Круги рейса: целое от 1 (поле ЗАПИСИ — общее с таймлайном). */
+  const [circles, setCircles] = useState(1);
   const [extraExpense, setExtraExpense] = useState<number>(0);
   const [extraExpenseNote, setExtraExpenseNote] = useState("");
   
@@ -1472,6 +1477,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     setDirection(defaultDir);
     setDateStart("");
     setDateEnd("");
+    setCircles(1);
     setExtraExpense(0);
     setExtraExpenseNote("");
     
@@ -1517,6 +1523,9 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     setDirection(trip.direction || "");
     setDateStart(trip.dateStart || "");
     setDateEnd(trip.dateEnd || "");
+    // Круги — то же поле записи, что правит таймлайн (lib/circles):
+    // отсутствие поля = 1, миграция без пересчёта.
+    setCircles(normalizeCircles(trip.circles));
     setExtraExpense(trip.extraExpense || 0);
     setExtraExpenseNote(trip.extraExpenseNote || "");
     
@@ -1689,6 +1698,8 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
         direction,
         dateStart,
         dateEnd,
+        // Круги рейса — одно поле записи: правится здесь и в таймлайне.
+        circles: Math.max(1, Math.floor(circles) || 1),
         days: totals.days,
         totalKm: totals.totalKm,
         totalFreight: totals.totalFreight,
@@ -1915,7 +1926,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                       <FileText className="w-4 h-4 text-[#9CA3AF]"/>
                       Основные реквизиты
                     </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
                       <div>
                         <label className="text-[11px] font-medium text-[#6B7280] mb-1.5 block">Автомобиль</label>
                         <CouplingPicker
@@ -1968,6 +1979,36 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                           onChange={(e) => setDateEnd(e.target.value)}
                           className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 text-sm font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors min-h-[44px]"
                         />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-medium text-[#6B7280] mb-1.5 block">Круги</label>
+                        <div className="inline-flex items-center gap-1.5 min-h-[44px]" data-ui="plan-circles">
+                          <button
+                            type="button"
+                            aria-label="Уменьшить количество кругов"
+                            disabled={circles <= 1}
+                            onClick={() => setCircles((c) => Math.max(1, c - 1))}
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-[#E5E7EB] bg-white text-[#4B5563] text-sm font-semibold hover:bg-[#F3F4F6] disabled:opacity-40 disabled:cursor-default transition-colors cursor-pointer"
+                          >
+                            −
+                          </button>
+                          <span
+                            data-ui="plan-circles-value"
+                            aria-live="polite"
+                            title="Количество кругов рейса: целое от 1; то же поле правит таймлайн — одна запись"
+                            className="inline-flex items-center justify-center min-w-[36px] h-9 rounded-xl border border-[#E5E7EB] bg-white text-sm font-semibold text-[#121316] tabular-nums"
+                          >
+                            {circles}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label="Увеличить количество кругов"
+                            onClick={() => setCircles((c) => c + 1)}
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-xl border border-[#E5E7EB] bg-white text-[#4B5563] text-sm font-semibold hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>

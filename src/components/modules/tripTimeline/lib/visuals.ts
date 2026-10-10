@@ -111,8 +111,9 @@ export const stageIconOf = (type: string): React.ComponentType<{ className?: str
  *   stage   — КЛЕТКИ И ИКОНКИ ЭТАПОВ и однодневные отметки базы/ремонта:
  *             этапы ВСЕГДА поверх полос плана и факта, независимо от порядка
  *             отрисовки и hover;
- *   mark    — метки: круги, направления, плановое возвращение, стыки смены,
- *             события, конфликты данных, маркеры «выехала раньше» и др.;
+ *   mark    — метки: бейдж «×N» и засечки кругов рейса, направления,
+ *             плановое возвращение, стыки смены, события, конфликты данных,
+ *             маркеры «выехала раньше» и др.;
  *   overlay — сегодняшняя линия и служебные подсветки (не перехватывают клик).
  *
  * Хром полотна (вне подстрок): закреплённая колонка машин и липкие шапки —
@@ -144,9 +145,20 @@ export const TL_Z = {
   popup: 60,
 } as const;
 
-/** Единый стиль бейджа круга: у одного круга — приглушённый, у двух+ — заметный;
- *  незавершённый («круг идёт») — пунктирная обводка. */
-export const circleBadgeStyle = (total: number, ongoing: boolean): React.CSSProperties =>
-  total >= 2
-    ? { background: 'var(--accent-10)', border: `1px ${ongoing ? 'dashed' : 'solid'} var(--accent-40)`, color: '#8A4A12' }
-    : { background: 'rgba(255,255,255,0.9)', border: `1px ${ongoing ? 'dashed' : 'solid'} #C3C8CF`, color: '#5B6472' };
+/** Единый стиль бейджа кругов рейса «×N» — ОДИН источник для полотна
+ *  (marksOverlay полос ПЛАН/ФАКТ), легенды и демо-фрагментов гайда. */
+export const tripCircleBadgeStyle = (): React.CSSProperties => ({
+  background: 'rgba(255,255,255,0.78)',
+  border: '1px solid rgba(18,19,22,0.28)',
+  color: '#2E3440',
+});
+
+/** Классы бейджа «×N» (шрифт/размер — общие для всех мест). */
+export const TRIP_CIRCLE_BADGE_CLS =
+  'inline-flex items-center justify-center shrink-0 h-[13px] px-1 rounded-[4px] text-[8px] leading-none font-bold tabular-nums select-none';
+
+/** Тонкая засечка начала круга на полосе (линия + номер круга). */
+export const TRIP_CIRCLE_TICK_CLS = 'absolute top-0 bottom-0 flex items-center gap-[2px] pointer-events-none';
+/** Цвета засечки — нейтральные (серый графит), без акцентных оттенков. */
+export const TRIP_CIRCLE_TICK_LINE = 'rgba(18,19,22,0.35)';
+export const TRIP_CIRCLE_TICK_TEXT = 'rgba(18,19,22,0.60)';

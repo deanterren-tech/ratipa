@@ -535,13 +535,13 @@ input:focus, select:focus, textarea:focus, button:focus {
    менять не нужно. */
 .tl-scope,
 .tl-mini {
-  /* hover: одна длительность и один эффект для всех полос */
+  /* hover: одна длительность и один НЕЙТРАЛЬНЫЙ эффект для всех полос —
+     простое затемнение ≈10% (brightness 0.9), без акцентной подсветки,
+     свечения и цветных колец. Сегменты факта затемняются вместе со своей
+     полосой (фильтр родителя): отдельного двойного фильтра на сегментах
+     нет — все типы полос и сегментов выглядят одинаково. */
   --tl-hov-ms: 120ms;
-  --tl-hov-filter: brightness(0.97) saturate(1.05);
-  /* сегмент факта под курсором — чуть сильнее общей подсветки полосы */
-  --tl-hov-filter-seg: brightness(0.945) saturate(1.09);
-  /* кольцо наведённой полосы (внутреннее — не смещает полосу) */
-  --tl-hov-ring: inset 0 0 0 2px var(--accent);
+  --tl-hov-dim: brightness(0.9);
   /* мягкий контур соседних полос той же связи (план↔факт) */
   --tl-hov-ring-soft: inset 0 0 0 1px rgba(18, 19, 22, 0.25);
   /* тёмное кольцо выбранного (открытого) рейса */
@@ -553,6 +553,13 @@ input:focus, select:focus, textarea:focus, button:focus {
   /* выделение дня в шапке — «пилюлей», другим цветом, чем «Сегодня» */
   --tl-cross-head-bg: rgba(78, 116, 190, 0.16);
   --tl-cross-head-fg: #2F4F94;
+}
+
+/* Тёмная тема (когда появится): тот же нейтральный hover, но лёгкое
+   ОСВЕТЛЕНИЕ вместо затемнения — токен переопределяется здесь, компоненты
+   менять не нужно. Акцентных цветов в hover нет ни в одной теме. */
+[data-theme='dark'] :is(.tl-scope, .tl-mini) {
+  --tl-hov-dim: brightness(1.08);
 }
 
 /* Полосы: доступный фокус с клавиатуры (единый контур по бренду).
@@ -568,35 +575,22 @@ input:focus, select:focus, textarea:focus, button:focus {
 }
 
 /* ВСЕ полосы (рейс ПЛАН/ФАКТ, база, ремонт, готовность, учёт выезда) —
-   ЕДИНЫЙ мягкий hover по общим токенам: та же яркость/насыщенность, то же
-   акцентное кольцо (внутреннее — полоса не смещается и высота строки не
-   меняется), та же длительность. Клик и подсказки самих полос не меняются. */
+   ЕДИНЫЙ НЕЙТРАЛЬНЫЙ hover по общему токену --tl-hov-dim: простое лёгкое
+   затемнение полосы без акцентного цвета, свечения и цветного кольца; та же
+   длительность. Сегменты факта затемняются вместе с полосой (один фильтр
+   родителя — двойной подсветки сегмента нет). Клик и подсказки самих полос
+   не меняются. */
 :is(.tl-scope, .tl-mini) [data-bar],
 :is(.tl-scope, .tl-mini) [data-stage-fill],
 :is(.tl-scope, .tl-mini) [data-bz-stripe],
 :is(.tl-scope, .tl-mini) [data-bz-mark] {
   transition: filter var(--tl-hov-ms) ease, box-shadow var(--tl-hov-ms) ease;
 }
-:is(.tl-scope, .tl-mini) [data-bar="plan"]:hover,
-:is(.tl-scope, .tl-mini) [data-bar="fact"]:hover,
-:is(.tl-scope, .tl-mini) [data-bar="fact-none"]:hover,
+:is(.tl-scope, .tl-mini) [data-bar]:hover,
 :is(.tl-scope, .tl-mini) [data-bz-stripe]:hover,
-:is(.tl-scope, .tl-mini) [data-bz-mark]:hover {
-  filter: var(--tl-hov-filter);
-  box-shadow: var(--tl-hov-ring);
-}
+:is(.tl-scope, .tl-mini) [data-bz-mark]:hover,
 :is(.tl-scope, .tl-mini) [data-stage-fill]:hover {
-  filter: var(--tl-hov-filter);
-}
-/* У многосегментной полосы ФАКТ подсвечивается сегмент ПОД КУРСОРОМ
-   (чуть сильнее общей подсветки полосы); подсказка — про сегмент. */
-:is(.tl-scope, .tl-mini) [data-fact-seg],
-:is(.tl-scope, .tl-mini) [data-fact-seg-mini] {
-  transition: filter var(--tl-hov-ms) ease;
-}
-:is(.tl-scope, .tl-mini) [data-bar="fact"]:hover [data-fact-seg]:hover,
-:is(.tl-scope, .tl-mini) [data-bar="fact"]:hover [data-fact-seg-mini]:hover {
-  filter: var(--tl-hov-filter-seg);
+  filter: var(--tl-hov-dim);
 }
 
 /* ─── Перекрёстная подсветка столбца дня (задача «подсветка столбца») ───────

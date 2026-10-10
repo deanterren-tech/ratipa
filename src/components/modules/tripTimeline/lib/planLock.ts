@@ -102,19 +102,32 @@ export interface PlanStageChanges {
   adds: TimelineStage[];
   plannedUpdates: Array<{ id: string; plannedDate: string; before: string }>;
   removes: TimelineStage[];
+  /** Правки привязки этапов к кругам (null — привязка снята). */
+  circleUpdates: Array<{ id: string; circle: number | null; before: number | null }>;
+  /** Изменилось ли КОЛИЧЕСТВО кругов рейса (поле «Круги» — часть плана). */
+  circlesChanged: boolean;
   /** Сколько записей реально изменится. */
   count: number;
 }
 
+/** Круг этапа: целое от 1 либо null (привязки нет). */
+const circleValueOf = (v: unknown): number | null => {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) && n >= 1 ? n : null;
+};
+
 export const computePlanStageChanges = (
   stored: TimelineStage[] | undefined,
   draft: TimelineStage[] | undefined,
+  /** Круги рейса: сохранённое и черновое «Количество кругов» (часть плана). */
+  circles?: { stored?: number; draft?: number },
 ): PlanStageChanges => {
   const storedById = new Map((stored || []).map((s) => [s.id, s]));
   const draftById = new Map((draft || []).map((s) => [s.id, s]));
   const adds: TimelineStage[] = [];
   const plannedUpdates: PlanStageChanges['plannedUpdates'] = [];
   const removes: TimelineStage[] = [];
+  const circleUpdates: PlanStageChanges['circleUpdates'] = [];
   (draft || []).forEach((s) => {
     const before = storedById.get(s.id);
     if (!before) {
@@ -124,9 +137,31 @@ export const computePlanStageChanges = (
     if ((before.plannedDate || '') !== (s.plannedDate || '')) {
       plannedUpdates.push({ id: s.id, plannedDate: s.plannedDate || '', before: before.plannedDate || '' });
     }
+    const beforeCircle = circleValueOf(before.circle);
+    const draftCircle = circleValueOf(s.circle);
+    if (beforeCircle !== draftCircle) {
+      circleUpdates.push({ id: s.id, circle: draftCircle, before: beforeCircle });
+    }
   });
   (stored || []).forEach((s) => {
     if (!draftById.has(s.id) && !isFallbackStage(s)) removes.push(s);
   });
-  return { adds, plannedUpdates, removes, count: adds.length + plannedUpdates.length + removes.length };
+  // Изменение количества кругов — изменение плана: количество кругов
+  // участвует в счётчике изменений (разовое разрешение расходуется осознанно).
+  const storedCircles = circles ? Math.max(1, Math.floor(Number(circles.stored)) || 1) : null;
+  const draftCircles = circles ? Math.max(1, Math.floor(Number(circles.draft)) || 1) : null;
+  const circlesChanged = storedCircles != null && draftCircles != null && storedCircles !== draftCircles;
+  return {
+    adds,
+    plannedUpdates,
+    removes,
+    circleUpdates,
+    circlesChanged,
+    count:
+      adds.length +
+      plannedUpdates.length +
+      removes.length +
+      circleUpdates.length +
+      (circlesChanged ? 1 : 0),
+  };
 };

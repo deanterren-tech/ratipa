@@ -18,7 +18,7 @@ import { factSegmentsOf, FACT_SEGMENT_COLORS, type FactSegment } from '../lib/fa
 import { layoutBzFills, bzStripeColor, bzKindColor, type BzMark, type BzStripe } from '../lib/bzFills';
 import type { BasePeriod } from '../lib/sources';
 import { stageColorOf } from '../lib/stageFills';
-import { PLAN_ACCENT, MARKER_TONE, TL_Z, circleBadgeStyle } from '../lib/visuals';
+import { PLAN_ACCENT, MARKER_TONE, TL_Z, TRIP_CIRCLE_BADGE_CLS, TRIP_CIRCLE_TICK_LINE, TRIP_CIRCLE_TICK_TEXT, tripCircleBadgeStyle } from '../lib/visuals';
 import { directionChipColors, DEFAULT_DIRECTIONS } from '../lib/directions';
 import { vyezdStatusIcon } from '../lib/vyezd';
 import type { TimelineStage } from '../../../../types';
@@ -145,8 +145,8 @@ const PlanBar = ({
   b,
   days,
   label,
-  circle,
-  circleTotal = 2,
+  circles = 1,
+  ticks = [],
   dirCode,
   dirColor,
 }: {
@@ -154,8 +154,10 @@ const PlanBar = ({
   b: number;
   days: number;
   label: string;
-  circle?: number;
-  circleTotal?: number;
+  /** Количество кругов рейса: бейдж «×N» — только для 2+ (как на полотне). */
+  circles?: number;
+  /** Засечки кругов между кругами: номер круга и позиция долей ширины (демо). */
+  ticks?: Array<{ n: number; frac: number }>;
   dirCode?: string;
   dirColor?: string;
 }) => {
@@ -180,12 +182,9 @@ const PlanBar = ({
       {dirColor ? (
         <span aria-hidden="true" className="absolute left-0 top-0 bottom-0" style={{ width: 3, background: dirColor }} />
       ) : null}
-      {circle != null ? (
-        <span
-          className="inline-flex items-center justify-center shrink-0 w-[14px] h-[14px] rounded-full text-[8px] leading-none font-bold tabular-nums select-none ml-0.5"
-          style={circleBadgeStyle(circleTotal, false)}
-        >
-          {circle}
+      {circles >= 2 ? (
+        <span className={`${TRIP_CIRCLE_BADGE_CLS} ml-0.5`} style={tripCircleBadgeStyle()}>
+          ×{circles}
         </span>
       ) : null}
       <span
@@ -202,6 +201,18 @@ const PlanBar = ({
           {dirCode}
         </span>
       ) : null}
+      {ticks.map((tk) => (
+        <span
+          key={tk.n}
+          className="absolute top-0 bottom-0 flex items-center gap-[2px] pointer-events-none"
+          style={{ left: Math.round(p.width * tk.frac) - 1 }}
+        >
+          <i className="w-[2px] h-[9px] rounded-full" style={{ background: TRIP_CIRCLE_TICK_LINE }} />
+          <b className="text-[7px] leading-none font-bold" style={{ color: TRIP_CIRCLE_TICK_TEXT }}>
+            {tk.n}
+          </b>
+        </span>
+      ))}
     </div>
   );
 };
@@ -574,17 +585,30 @@ const DirectionsCirclesDemo = () => {
   const cn = dirs.find((d) => d.name === 'Китай') || dirs[1] || dirs[0];
   return (
     <DemoFrame
-      title="Круги и направления"
-      caption="Круг — один рейс машины на внешнем направлении; номер на начале полосы, счётчик — в колонке машины (у двух и больше бейдж заметный, «круг идёт» — пунктир). Направление: код в правом углу полосы и мини-чип в колонке машины."
+      title="Круги рейса и направления"
+      caption="Круги относятся к РЕЙСУ: «×2»/«×3» в начале полосы — количество кругов (поле «Круги» в окне рейса и в «Плане дохода», одна запись). Засечка с номером — начало круга 2 (и далее), ставится по датам этапов, распределённых по кругам (колонка «Круг»). Направление: код в правом углу полосы и мини-чип в колонке машины."
       days={days}
     >
+      <DemoRow label="План · 2 круга" days={days}>
+        <PlanBar a={D0} b={D0 + 9} days={days} label="Турция" circles={2} ticks={[{ n: 2, frac: 0.55 }]} dirCode={tr.code} dirColor={tr.color} />
+      </DemoRow>
       <DemoRow label="План · 3 круга" days={days}>
-        <PlanBar a={D0} b={D0 + 4} days={days} label="Турция 1" circle={1} circleTotal={3} dirCode={tr.code} dirColor={tr.color} />
-        <PlanBar a={D0 + 5} b={D0 + 9} days={days} label="Турция 2" circle={2} circleTotal={3} dirCode={tr.code} dirColor={tr.color} />
-        <PlanBar a={D0 + 10} b={D0 + 15} days={days} label="Китай 3" circle={3} circleTotal={3} dirCode={cn.code} dirColor={cn.color} />
+        <PlanBar
+          a={D0 + 1}
+          b={D0 + 15}
+          days={days}
+          label="Китай"
+          circles={3}
+          ticks={[
+            { n: 2, frac: 0.34 },
+            { n: 3, frac: 0.67 },
+          ]}
+          dirCode={cn.code}
+          dirColor={cn.color}
+        />
       </DemoRow>
       <DemoRow label="План · 1 круг" days={days}>
-        <PlanBar a={D0 + 1} b={D0 + 7} days={days} label="рейс" circle={1} circleTotal={1} />
+        <PlanBar a={D0 + 2} b={D0 + 8} days={days} label="рейс" circles={1} />
       </DemoRow>
     </DemoFrame>
   );

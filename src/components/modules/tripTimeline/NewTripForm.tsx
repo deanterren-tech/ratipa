@@ -31,6 +31,8 @@ export interface NewTripDraft {
   startDate: string;
   /** Плановая дата возвращения; пусто — план открыт (неполный), дата не выдумывается. */
   endDate: string;
+  /** Количество кругов рейса — целое от 1 (по умолчанию 1). */
+  circles: number;
 }
 
 /** Результат создания: ошибку форма показывает сама, данные не теряются. */
@@ -55,6 +57,8 @@ export default function NewTripForm({ dispatchers, defaultDispatcherId, canWrite
   const [dispatcherId, setDispatcherId] = useState(defaultDispatcherId);
   const [startDate, setStartDate] = useState(todayStr());
   const [endDate, setEndDate] = useState('');
+  /** Круги рейса: целое от 1; по умолчанию 1 (один внешний круг). */
+  const [circles, setCircles] = useState(1);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -64,6 +68,7 @@ export default function NewTripForm({ dispatchers, defaultDispatcherId, canWrite
     setRoute('');
     setEndDate('');
     setStartDate(todayStr());
+    setCircles(1);
     setError('');
   };
 
@@ -90,6 +95,7 @@ export default function NewTripForm({ dispatchers, defaultDispatcherId, canWrite
       dispatcherName: disp ? disp.name : '',
       startDate: startDate || todayStr(),
       endDate,
+      circles: Math.max(1, Math.floor(circles) || 1),
     });
     setSubmitting(false);
     if (!res.ok) {
@@ -108,7 +114,7 @@ export default function NewTripForm({ dispatchers, defaultDispatcherId, canWrite
           Рейс создаётся вместе с записью «Плана дохода»; фрахт и расходы заполняются в плане (статус «Требует заполнения»)
         </span>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
         <div className="flex flex-col gap-1.5">
           <label className={UI.fieldLabel}>Машина (из базы сцепок) *</label>
           <CouplingPicker
@@ -162,6 +168,36 @@ export default function NewTripForm({ dispatchers, defaultDispatcherId, canWrite
         <div className="flex flex-col gap-1.5">
           <label className={UI.fieldLabel}>Возвращение (план)</label>
           <DateInput value={endDate} onChange={setEndDate} ariaLabel="Возвращение рейса (план)" />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className={UI.fieldLabel}>Круги</label>
+          <div className="inline-flex items-center gap-1" data-ui="new-trip-circles">
+            <button
+              type="button"
+              aria-label="Уменьшить количество кругов"
+              disabled={circles <= 1}
+              onClick={() => setCircles((c) => Math.max(1, c - 1))}
+              className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-[#E5E7EB] bg-white text-[#4B5563] text-sm font-semibold hover:bg-[#F3F4F6] disabled:opacity-40 disabled:cursor-default transition-colors cursor-pointer"
+            >
+              −
+            </button>
+            <span
+              className="inline-flex items-center justify-center min-w-[28px] h-7 rounded-lg border border-[#E5E7EB] bg-white text-xs font-semibold text-[#121316] tabular-nums"
+              data-circles-value={circles}
+              aria-live="polite"
+              title="Количество кругов рейса: целое от 1 (по умолчанию 1)"
+            >
+              {circles}
+            </span>
+            <button
+              type="button"
+              aria-label="Увеличить количество кругов"
+              onClick={() => setCircles((c) => c + 1)}
+              className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-[#E5E7EB] bg-white text-[#4B5563] text-sm font-semibold hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+            >
+              +
+            </button>
+          </div>
         </div>
       </div>
       {error ? <div className={UI.errorBox} role="alert" data-ui="new-trip-error">{error}</div> : null}

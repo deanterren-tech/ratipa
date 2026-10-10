@@ -16,6 +16,7 @@
 import type { TimelineLinkedPlanPayload } from '../../../../firebase/planDohodService';
 import { calculateTripFinances } from '../../../../utils/financeCalculators';
 import { dayNum } from './timeline';
+import { normalizeCircles } from './circles';
 
 /**
  * Разделители городов в свободном тексте маршрута: длинное/короткое тире,
@@ -60,6 +61,8 @@ export interface TimelinePlanDraftInput {
   route: string;
   startDate: string;
   endDate: string;
+  /** Количество кругов рейса (целое от 1; отсутствие = 1). */
+  circles?: number;
 }
 
 export interface TimelinePlanPayloadContext {
@@ -92,6 +95,9 @@ export const buildTimelinePlanPayload = (
   if (days != null) payload.days = days;
   if (legs.length) payload.legs = legs;
   if (route) payload.tripNote = route;
+  // Круги рейса — ОДНО поле записи (та же «План дохода», тот же id): хранится
+  // всегда числом от 1, читатели нормализуют отсутствие в 1 (lib/circles).
+  payload.circles = normalizeCircles(draft.circles);
   if (ctx.dispatcher && ctx.dispatcher.id) {
     payload.dispatcher = ctx.dispatcher.name || ctx.dispatcher.id;
     payload.dispatcherName = ctx.dispatcher.name || ctx.dispatcher.id;

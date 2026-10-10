@@ -25,6 +25,7 @@ import {
   type DispatcherDirectory,
 } from '../../../../utils/dispatcher';
 import { dayNum, normalizeStages, todayNum, type SpanOverride } from './timeline';
+import { normalizeCircles } from './circles';
 import { dedupeBazaRecords } from '../../baza/lib/bazaDedupe';
 
 const normKey = (s: unknown): string => String(s ?? '').toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '');
@@ -193,6 +194,12 @@ export interface WholeTrip extends TimelineTrip {
   hiddenInfo?: HiddenTripInfo;
   /** Понятные предупреждения по данным (конфликты не исправляются автоматически). */
   warnings: string[];
+  /**
+   * Количество кругов рейса — поле ЗАПИСИ рейса («circles»): у связанных
+   * рейсов это trips_dashboard/<planId>, у ручных — tripTimeline/trips.
+   * Отсутствие поля = 1 (миграция без пересчёта, lib/circles.normalizeCircles).
+   */
+  circles: number;
 }
 
 const num = (v: unknown): number | undefined => {
@@ -286,6 +293,9 @@ export const planTripsToWholeTrips = (
         openPlan: pMin != null && pMax == null,
         spanOverride: { pMin, pMax },
         planRaw: rec,
+        // Круги рейса — поле записи «Плана дохода» (отсутствие = 1, миграция
+        // без пересчёта; правило единое — lib/circles).
+        circles: normalizeCircles(rec.circles),
         // Черновик формы таймлайна (маркер planGuard.draftCreated действителен):
         // запись создана «Новым рейсом» и ещё «Требует заполнения».
         planDraftFromTimeline: rec.createdFrom === 'timeline' || rec.needsFill === true,

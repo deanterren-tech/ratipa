@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import { CarFront, CircleCheck, CircleDashed, Hourglass, LogIn, LogOut, OctagonX, TriangleAlert, Wrench } from 'lucide-react';
-import { BAR_ICON_CLS, CLR, PLAN_ACCENT, conflictHatch, hatch45, waitHatch } from './visuals';
+import { BAR_ICON_CLS, CLR, PLAN_ACCENT, TRIP_CIRCLE_BADGE_CLS, TRIP_CIRCLE_TICK_LINE, TRIP_CIRCLE_TICK_TEXT, conflictHatch, hatch45, tripCircleBadgeStyle, waitHatch } from './visuals';
 import { FACT_SEGMENT_COLORS, type FactSegColor } from './factSegments';
 import { bzKindColor } from './bzFills';
 import { VYEZD_STATUS } from './vyezd';
@@ -70,9 +70,10 @@ export const buildLegendItems = (directions: DirectionDef[]): LegendItem[] => [
   { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('repair').bg, border: `1px solid ${bzKindColor('repair').border}`, borderRadius: 4 }} />, label: 'ремонт (внутри базы) — сплошная полоса, подпись внутри' },
   { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: bzKindColor('repair-end').bg, border: `1px solid ${bzKindColor('repair-end').border}`, borderRadius: 4 }}><Wrench className="w-2.5 h-2.5" style={{ color: bzKindColor('repair-end').text }} aria-hidden="true" /></i>, label: 'дата окончания ремонта — вся ячейка дня (иконка)' },
   { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: bzKindColor('base-gap').bg, border: `1px dashed ${bzKindColor('base-gap').border}`, borderRadius: 4 }} />, label: 'простой на базе между рейсами (записи учёта нет)' },
-  // Круги машины (правило lib/directions.circlesOf):
-  { swatch: <i className="inline-flex items-center justify-center w-[14px] h-[14px] rounded-full text-[8px] font-bold" style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid #C3C8CF', color: '#5B6472' }}>1</i>, label: 'круг: один рейс машины на внешнем направлении; номер — порядок внутри периода учёта выезда (приезд→выезд); у одного круга бейдж приглушённый' },
-  { swatch: <i className="inline-flex items-center justify-center w-[14px] h-[14px] rounded-full text-[8px] font-bold" style={{ background: 'var(--accent-10)', border: '1px solid var(--accent-40)', color: '#8A4A12' }}>2</i>, label: 'два круга и больше — бейдж заметный: номер на начале полосы, счётчик в колонке; незавершённый рейс — пунктирный бейдж «круг идёт»' },
+  // Круги рейса (единое правило lib/circles): количество кругов — поле записи
+  // рейса, задаётся в окне рейса и в «Плане дохода»; бейдж и засечки — на полосе.
+  { swatch: <i className={TRIP_CIRCLE_BADGE_CLS} style={tripCircleBadgeStyle()}>×2</i>, label: 'круги рейса: бейдж «×2»/«×3» в начале полосы — количество кругов у рейса (поле «Круги» в окне рейса и в «Плане дохода»); для одного круга бейдж не показывается' },
+  { swatch: <i className="inline-flex items-center gap-[2px]"><i className="inline-block w-[2px] h-[12px] rounded-full" style={{ background: TRIP_CIRCLE_TICK_LINE }} /><b className="text-[8px] leading-none font-bold" style={{ color: TRIP_CIRCLE_TICK_TEXT }}>2</b></i>, label: 'засечка с номером между кругами — начало круга 2 (и далее), ставится только если этапы распределены по кругам (колонка «Круг» в таблице этапов); подсказка — число кругов и даты каждого' },
   // Направления — отдельная приглушённая палитра (сине-фиолетовые, бирюзовые):
   // не конфликтует со статусами; различие подкреплено кодом (CN, TR…).
   ...directions.map((d) => {
