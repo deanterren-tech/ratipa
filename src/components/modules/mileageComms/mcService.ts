@@ -6,15 +6,25 @@
  */
 
 import { ref, onValue, update, set, remove, push, get } from 'firebase/database';
-import { database, useFirebase, dbService } from '../../../api';
+import { database, useFirebase, dbService, ensureAuth } from '../../../api';
 import { UserProfile } from '../../../types';
 import type {
-  McConfig, McCurrent, McIntegration, McMapping, McMappingHistoryEntry,
+  McCheckNoteRecord, McCheckRecords, McConfig, McCurrent, McIntegration, McMapping, McMappingHistoryEntry,
   McNavbyObject, McRequest, McRequestJournalEntry, McRfEntry,
 } from './mcTypes';
 import { MC_CONFIG_DEFAULTS } from './mcTypes';
+import { MC_CHECK_DEFAULTS, mergeCheckParams, type CheckParams } from './engine/params';
+import { normalizeSample, type HistoryNodeRaw } from './engine/samples';
+import type { BoundsOverride, MeasureSample, ParkingIntervalRaw, TechMarkRecord } from './engine/types';
 
 const ROOT = 'telemetry';
+
+/** Ключ дня YYYYMMDD в поясе API (+03) — как navbyDayKey на сервере. */
+const dayKeyOf = (ms: number): string => {
+  const shifted = new Date(ms + 180 * 60_000);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${shifted.getUTCFullYear()}${p(shifted.getUTCMonth() + 1)}${p(shifted.getUTCDate())}`;
+};
 
 /**
  * Firebase RTDB `set()/update()` падает при `undefined` в значении.
@@ -237,4 +247,224 @@ export const mcService = {
     await update(ref(database, `${ROOT}_config`), stripUndef({ ...patch, updatedAt: new Date().toISOString(), updatedBy: user.name }));
     dbService.logAction(user.name, user.role, 'Настройки «Пробег и связь»', 'MileageComms', 'config', JSON.stringify(patch).slice(0, 200));
   },
+
+  // ─────────────── Проверка пробега по рейсу (этап 2) ───────────────
+
+  /** Параметры проверки (пороги/окна) — общие, хранятся в telemetry_check_config. */
+  subscribeCheckConfig: (cb: (v: CheckParams) => void) =>
+    sub<Partial<CheckParams>>(`${ROOT}_check_config`, (v) => cb(mergeCheckParams(v))),
+
+  async saveCheckConfig(params: { patch: Partial<CheckParams>; user: UserProfile }): Promise<void> {
+    const { patch, user } = params;
+    if (!useFirebase) return;
+    await update(
+      ref(database, `${ROOT}_check_config`),
+      stripUndef({ ...patch, updatedAt: new Date().toISOString(), updatedBy: user.name }),
+    );
+    dbService.logAction(user.name, user.role, 'Параметры проверки пробега', 'MileageComms', 'check_config', JSON.stringify(patch).slice(0, 200));
+  },
+
+  /** Записи проверки конкретного рейса: границы, журнал, техотметки, закрытые события. */
+  subscribeCheckRecords: (carKey: string, tripKey: string, cb: (v: McCheckRecords) => void): (() => void) =>
+    sub<McCheckRecords>(`${ROOT}_checks/${carKey}/${tripKey}`, (v) => cb(v || {})),
+
+  /**
+   * История измерений за диапазон: чтение дневных папок telemetry_history
+   * (ключи дней в поясе +03) + «хвост» telemetry_current, если он новее.
+   * Загружается ТОЛЬКО выбранная машина и её окно — не весь автопарк.
+   */
+  async readHistoryRange(carKey: string, fromMs: number, toMs: number): Promise<MeasureSample[]> {
+    if (!useFirebase || !carKey) return [];
+    const padMs = 36 * 3_600_000;
+    const start = fromMs - padMs;
+    const end = Math.max(toMs, Date.now()) + padMs;
+    const days: string[] = [];
+    for (let t = start; t <= end + 86_400_000; t += 12 * 3_600_000) {
+      const k = dayKeyOf(t);
+      if (!days.includes(k)) days.push(k);
+      if (days.length > 135) break; // больше срока хранения не читаем
+    }
+    const list: MeasureSample[] = [];
+    const chunks = await Promise.all(
+      days.map(async (d) => {
+        try {
+          const snap = await get(ref(database, `${ROOT}_history/${carKey}/${d}`));
+          return snap.val() as Record<string, HistoryNodeRaw> | null;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    for (const chunk of chunks) {
+      if (!chunk) continue;
+      for (const node of Object.values(chunk)) {
+        const s = normalizeSample(node);
+        if (s) list.push(s);
+      }
+    }
+    try {
+      const snap = await get(ref(database, `${ROOT}_current/${carKey}`));
+      const cur = snap.val();
+      const s = cur ? normalizeSample(cur as HistoryNodeRaw) : null;
+      if (s && s.atMs >= start && s.atMs <= end) list.push(s);
+    } catch {
+      /* нет текущего состояния — не страшно */
+    }
+    return list;
+  },
+
+  /** Отчёт Nav.by «Стоянка-движение» через серверный прокси (токен Nav.by в браузер не попадает). */
+  async fetchParkingReport(carKey: string, fromMs: number, toMs: number): Promise<{
+    ok: boolean;
+    reason?: string;
+    intervals?: ParkingIntervalRaw[];
+    fetchedAt?: string;
+    cached?: boolean;
+  }> {
+    try {
+      const authUser = useFirebase ? await ensureAuth() : null;
+      if (!authUser) return { ok: false, reason: 'нет авторизации Firebase' };
+      const token = await authUser.getIdToken();
+      const url = `/api/navby/parking-report?carKey=${encodeURIComponent(carKey)}&from=${Math.round(fromMs)}&to=${Math.round(toMs)}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const data = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        reason?: string;
+        intervals?: ParkingIntervalRaw[];
+        fetchedAt?: string;
+        cached?: boolean;
+      } | null;
+      if (data && data.ok === false) return { ok: false, reason: parkingReasonLabel(data.reason) };
+      if (!res.ok || !data) return { ok: false, reason: `HTTP ${res.status}` };
+      return { ok: true, intervals: data.intervals || [], fetchedAt: data.fetchedAt, cached: data.cached };
+    } catch (e) {
+      return { ok: false, reason: String(e instanceof Error ? e.message : e).slice(0, 120) };
+    }
+  },
+
+  /** Комментарий проверяющего (журнал рейса; опционально — к стоянке). */
+  async addCheckNote(params: {
+    carKey: string;
+    tripKey: string;
+    action: string;
+    note?: string;
+    stopId?: string | null;
+    user: UserProfile;
+  }): Promise<void> {
+    const { carKey, tripKey, action, note, stopId, user } = params;
+    if (!useFirebase) return;
+    const entry: McCheckNoteRecord = {
+      at: new Date().toISOString(),
+      atMs: Date.now(),
+      by: user.name,
+      byId: user.uid,
+      action,
+      note: note?.trim() || undefined,
+      stopId: stopId || undefined,
+    };
+    await set(push(ref(database, `${ROOT}_checks/${carKey}/${tripKey}/notes`)), stripUndef(entry));
+    dbService.logAction(user.name, user.role, 'Проверка пробега: комментарий', 'MileageComms', `${carKey}/${tripKey}`, action);
+  },
+
+  /** Техническая отметка (работы, замена трекера, настройка счётчика). */
+  async addTechMark(params: {
+    carKey: string;
+    tripKey: string;
+    atMs: number;
+    kind: TechMarkRecord['kind'];
+    comment?: string;
+    user: UserProfile;
+  }): Promise<void> {
+    const { carKey, tripKey, atMs, kind, comment, user } = params;
+    if (!useFirebase) return;
+    const id = `tm_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+    const record: TechMarkRecord = {
+      id,
+      atMs,
+      kind,
+      label: kind === 'works' ? 'Технические работы' : kind === 'tracker_replace' ? 'Замена трекера' : 'Изменение настройки счётчика',
+      comment: comment?.trim() || undefined,
+      by: user.name,
+      byId: user.uid,
+    };
+    await set(ref(database, `${ROOT}_checks/${carKey}/${tripKey}/tech/${id}`), stripUndef(record));
+    await this.addCheckNote({
+      carKey, tripKey, user,
+      action: `Техническая отметка: ${record.label}`,
+      note: comment,
+    });
+  },
+
+  /** Уточнение границ анализа (уполномоченный сотрудник) + запись в историю изменения. */
+  async saveBoundsOverride(params: {
+    carKey: string;
+    tripKey: string;
+    fromMs: number;
+    toMs: number;
+    comment?: string;
+    user: UserProfile;
+  }): Promise<void> {
+    const { carKey, tripKey, fromMs, toMs, comment, user } = params;
+    if (!useFirebase) return;
+    const at = new Date().toISOString();
+    const record: BoundsOverride = { fromMs, toMs, by: user.name, byId: user.uid, at, comment: comment?.trim() || undefined };
+    await set(ref(database, `${ROOT}_checks/${carKey}/${tripKey}/bounds`), stripUndef(record));
+    await this.addCheckNote({
+      carKey, tripKey, user,
+      action: 'Границы анализа уточнены вручную',
+      note: comment,
+    });
+  },
+
+  /** Возврат к границам источника (сброс ручного уточнения). */
+  async clearBoundsOverride(params: { carKey: string; tripKey: string; user: UserProfile }): Promise<void> {
+    const { carKey, tripKey, user } = params;
+    if (!useFirebase) return;
+    await remove(ref(database, `${ROOT}_checks/${carKey}/${tripKey}/bounds`));
+    await this.addCheckNote({ carKey, tripKey, user, action: 'Границы анализа возвращены к источнику' });
+  },
+
+  /** Отметка события проверенным («принято к сведению»). Техотметка событие НЕ закрывает. */
+  async resolveEvent(params: {
+    carKey: string;
+    tripKey: string;
+    eventId: string;
+    note?: string;
+    user: UserProfile;
+  }): Promise<void> {
+    const { carKey, tripKey, eventId, note, user } = params;
+    if (!useFirebase) return;
+    await set(
+      ref(database, `${ROOT}_checks/${carKey}/${tripKey}/resolved/${eventId.replace(/[.#$/[\]]/g, '_')}`),
+      stripUndef({ at: new Date().toISOString(), atMs: Date.now(), by: user.name, byId: user.uid, note: note?.trim() || undefined }),
+    );
+    await this.addCheckNote({
+      carKey, tripKey, user,
+      action: 'Событие отмечено проверенным',
+      note: note,
+      stopId: eventId.startsWith('ev:') ? eventId.slice(3) : null,
+    });
+  },
+
+  async unresolveEvent(params: { carKey: string; tripKey: string; eventId: string; user: UserProfile }): Promise<void> {
+    const { carKey, tripKey, eventId, user } = params;
+    if (!useFirebase) return;
+    await remove(ref(database, `${ROOT}_checks/${carKey}/${tripKey}/resolved/${eventId.replace(/[.#$/[\]]/g, '_')}`));
+    await this.addCheckNote({ carKey, tripKey, user, action: 'Событие возвращено в проверку' });
+  },
 };
+
+function parkingReasonLabel(reason?: string): string {
+  switch (reason) {
+    case 'navby_unconfigured': return 'доступы Nav.by не заданы на сервере';
+    case 'no_mapping': return 'объект Nav.by не сопоставлен';
+    case 'auth': return 'ошибка авторизации Nav.by';
+    case 'forbidden': return 'нет прав у учётной записи Nav.by';
+    case 'rate_limit': return 'превышен лимит запросов Nav.by';
+    case 'timeout': return 'таймаут запроса к Nav.by';
+    case 'network': return 'сеть недоступна';
+    case 'bad_token': return 'сессия устарела — обновите страницу';
+    case 'rate_limited': return 'слишком частые запросы — подождите минуту';
+    default: return reason || 'отчёт недоступен';
+  }
+}

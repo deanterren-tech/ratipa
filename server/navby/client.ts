@@ -17,9 +17,11 @@ import {
   NAVBY_HTTP_TIMEOUT_MS,
   NAVBY_RETRY,
   NAVBY_SELF_RATE_PER_MIN,
+  navbyDateTimeString,
 } from './config.ts';
 import type { NormalizedNavbyObject, TelemetrySample } from './parse.ts';
 import { normalizeNavbyObject, normalizePosition } from './parse.ts';
+import { normalizeParkingItems, type ParkingReport } from './parking.ts';
 
 export type NavbyErrorKind =
   | 'not_configured'
@@ -284,6 +286,21 @@ export class NavbyClient {
       }
       return { samples, skipped: skippedCount };
     });
+  }
+
+  /**
+   * Отчёт «Стоянка-движение» по одному IMEI (подтверждено живым вызовом
+   * 10.10.2026: интервалы стоянка/движение с одометром на границах). Дата-время —
+   * строки «YYYY-MM-DD HH:MM:SS» в поясе API (+03). Метод для одного объекта
+   * за вызов: вызывается по требованию (открытие анализа рейса), а не поллером.
+   */
+  async getParkingReport(imei: string, fromMs: number, toMs: number): Promise<NavbyResult<ParkingReport>> {
+    const params: Record<string, string> = {
+      imei: String(imei),
+      date_from: navbyDateTimeString(fromMs),
+      date_to: navbyDateTimeString(toMs),
+    };
+    return this.request(NAVBY_PATHS.parkingReport, params, (items) => normalizeParkingItems(items));
   }
 }
 

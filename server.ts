@@ -10,6 +10,8 @@ import { agentAuthMiddleware } from "./agentAuth.ts";
 import { handleUserRequest } from "./server/ai/orchestrator.ts";
 import { loadDriveFolder, extractFolderId } from "./server/driveList";
 import { startNavbyPoller } from "./server/navby/poller.ts";
+import { adminAuth, adminDb } from "./firebaseAdmin.ts";
+import { navbyClientFromEnv } from "./server/navby/client.ts";
 
 // Initialize Gemini safely
 let ai: GoogleGenAI | null = null;
@@ -1440,6 +1442,7 @@ async function startServer() {
   });
 
   // API Route for reverse geocoding when dragging map markers
+  // API Route for reverse geocoding (Nominatim) — используется модулем «Пробег и связь»
   app.get("/api/reverse-geocode", async (req, res) => {
     try {
       const lat = parseFloat(req.query.lat as string);
@@ -1495,6 +1498,116 @@ async function startServer() {
     } catch (e: any) {
       console.error("Reverse geocoding error:", e);
       res.status(500).json({ error: e.message || "Reverse geocoding failed" });
+    }
+  });
+
+  // ─────────── «Пробег и связь»: прокси отчёта Nav.by «Стоянка-движение» ───────────
+  // Bearer-токен Nav.by живёт только на сервере; браузер получает разобранные
+  // интервалы. Доступ: валидный ID-токен проекта (тот же уровень, что чтение RTDB)
+  // + carKey обязан существовать в telemetry_mapping. Лимит на IP и короткий
+  // TTL-кэш против повторов при переключении рейсов в интерфейсе.
+  const mcParkingCache = new Map<string, { atMs: number; payload: Record<string, unknown> }>();
+  const mcParkingInflight = new Map<string, Promise<Record<string, unknown>>>();
+  const MC_PARKING_TTL_MS = 10 * 60_000;
+  const MC_PARKING_CACHE_MAX = 120;
+  const mcParkingRate = new Map<string, number[]>();
+  const MC_PARKING_RATE_PER_MIN = 60;
+  let mcNavbyClient: ReturnType<typeof navbyClientFromEnv> | null = null;
+
+  app.get("/api/navby/parking-report", async (req, res) => {
+    try {
+      if (!adminAuth || !adminDb) {
+        return res.status(503).json({ ok: false, reason: "firebase_admin_unavailable" });
+      }
+      const header = req.headers["authorization"] || "";
+      const tokenMatch = header.match(/^Bearer\s+(.+)$/i);
+      if (!tokenMatch) return res.status(401).json({ ok: false, reason: "no_token" });
+      try {
+        await adminAuth.verifyIdToken(tokenMatch[1].trim());
+      } catch {
+        return res.status(401).json({ ok: false, reason: "bad_token" });
+      }
+
+      const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "?").split(",")[0].trim();
+      const nowMs = Date.now();
+
+      const carKey = String(req.query.carKey || "").trim();
+      const fromMs = Number(req.query.from);
+      const toMs = Number(req.query.to);
+      if (!carKey) return res.status(400).json({ ok: false, reason: "no_car" });
+      if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
+        return res.status(400).json({ ok: false, reason: "bad_range" });
+      }
+      if (toMs - fromMs > 92 * 86_400_000) {
+        return res.status(400).json({ ok: false, reason: "range_too_long" });
+      }
+
+      const mapSnap = await adminDb.ref(`telemetry_mapping/${carKey}`).once("value");
+      const mapping = mapSnap.val() as { navbyObjectId?: string; imei?: string | null } | null;
+      let imei = mapping && typeof mapping.imei === "string" ? mapping.imei : null;
+      if (!imei && mapping?.navbyObjectId) {
+        const uidSnap = await adminDb.ref(`telemetry_navby_objects/${mapping.navbyObjectId}/uid`).once("value");
+        imei = typeof uidSnap.val() === "string" ? uidSnap.val() : null;
+      }
+      // Без сопоставления объекта внешний вызов не делается — лимит не расходуется.
+      if (!imei) return res.status(200).json({ ok: false, reason: "no_mapping" });
+      const imeiStr = imei;
+
+      // Лимит на IP — только для запросов, доходящих до Nav.by (или кэша).
+      const calls = (mcParkingRate.get(ip) || []).filter((t) => nowMs - t < 60_000);
+      if (calls.length >= MC_PARKING_RATE_PER_MIN) {
+        return res.status(429).json({ ok: false, reason: "rate_limited" });
+      }
+      calls.push(nowMs);
+      mcParkingRate.set(ip, calls);
+      if (mcParkingRate.size > 500) {
+        for (const [k, v] of mcParkingRate) {
+          if (!v.some((t) => nowMs - t < 60_000)) mcParkingRate.delete(k);
+        }
+      }
+
+      const cacheKey = `${imeiStr}|${Math.round(fromMs / 60000)}|${Math.round(toMs / 60000)}`;
+      const cached = mcParkingCache.get(cacheKey);
+      if (cached && nowMs - cached.atMs < MC_PARKING_TTL_MS) {
+        return res.json({ ...cached.payload, cached: true });
+      }
+      const inflight = mcParkingInflight.get(cacheKey);
+      if (inflight) return res.json(await inflight);
+
+      const task = (async (): Promise<Record<string, unknown>> => {
+        const client = (mcNavbyClient ||= navbyClientFromEnv(process.env));
+        if (!client.hasCredentials()) return { ok: false, reason: "navby_unconfigured" };
+        const result = await client.getParkingReport(imeiStr, fromMs, toMs);
+        if (!result.ok || !result.data) {
+          return { ok: false, reason: result.error?.kind || "navby_error" };
+        }
+        return {
+          ok: true,
+          fetchedAt: new Date().toISOString(),
+          imei,
+          discarded: result.data.discarded,
+          intervals: result.data.intervals,
+        };
+      })();
+
+      mcParkingInflight.set(cacheKey, task);
+      let payload: Record<string, unknown>;
+      try {
+        payload = await task;
+      } finally {
+        mcParkingInflight.delete(cacheKey);
+      }
+      if (payload.ok === true) {
+        mcParkingCache.set(cacheKey, { atMs: Date.now(), payload });
+        if (mcParkingCache.size > MC_PARKING_CACHE_MAX) {
+          const firstKey = mcParkingCache.keys().next().value;
+          if (firstKey) mcParkingCache.delete(firstKey);
+        }
+      }
+      return res.json(payload);
+    } catch (e) {
+      console.warn("[navby] parking-report proxy error:", String(e).slice(0, 200));
+      return res.status(500).json({ ok: false, reason: "internal" });
     }
   });
 

@@ -4,6 +4,8 @@
  * Здесь дублируются только те поля, которые читает UI.
  */
 
+import type { MeasureSample, TechMarkRecord } from './engine/types';
+
 export interface McMapping {
   navbyObjectId: string;
   imei: string | null;
@@ -77,6 +79,36 @@ export interface McConfig {
   updatedAt?: string;
   updatedBy?: string;
 }
+
+/* ─────────────── Проверка пробега по рейсу (этап 2) ─────────────── */
+
+/** Узел проверки рейса: telemetry_checks/<carKey>/<tripKey>. */
+export interface McCheckNoteRecord {
+  at: string;
+  atMs: number;
+  by: string;
+  byId?: string;
+  action: string;
+  note?: string;
+  stopId?: string;
+}
+
+export interface McCheckRecords {
+  bounds?: {
+    fromMs: number;
+    toMs: number;
+    by?: string;
+    byId?: string;
+    at: string;
+    comment?: string;
+  } | null;
+  notes?: Record<string, McCheckNoteRecord>;
+  tech?: Record<string, TechMarkRecord>;
+  resolved?: Record<string, { at: string; atMs: number; by: string; byId?: string; note?: string }>;
+}
+
+/** Измерение портала — единый тип движка проверки (без дублирования полей). */
+export type McEngineSample = MeasureSample;
 
 export const MC_CONFIG_DEFAULTS: McConfig = {
   enabled: true,

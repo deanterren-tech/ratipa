@@ -15,6 +15,7 @@
     "test:day-sections": "tsx scripts/test-day-sections.ts",
     "typecheck": "tsc --noEmit && node scripts/check-any.mjs",
     "test:labels": "tsx scripts/test-bar-labels.ts",
+    "test:mileage": "tsx scripts/test-mileage-engine.ts",
     "navby:poll": "tsx scripts/navby-poll.ts",
     "navby:poller": "tsx scripts/navby-poll.ts --loop",
     "test:navby": "tsx scripts/test-navby.ts"

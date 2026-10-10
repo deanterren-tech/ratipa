@@ -49,6 +49,12 @@
     },
     "telemetry_requests": {
       ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'root_admin' || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'manager' || root.child('users').child(auth.uid).child('role').val() === 'dispatcher')"
+    },
+    "telemetry_checks": {
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'root_admin' || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'manager')"
+    },
+    "telemetry_check_config": {
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'root_admin' || root.child('users').child(auth.uid).child('role').val() === 'admin')"
     }
   }
 }

@@ -9,11 +9,12 @@
 /** Базовый хост API. Меняется только через env (NAVBY_BASE). */
 export const NAVBY_DEFAULT_BASE = 'https://nav.by';
 
-/** Пути методов (подтверждены). */
+/** Пути методов (подтверждены). parkingReport подтверждён живым вызовом 10.10.2026. */
 export const NAVBY_PATHS = {
   token: '/lumen/integration/get-token',
   vehicleList: '/lumen/integration/vehicle-list',
   currentPosition: '/lumen/integration/current-position',
+  parkingReport: '/lumen/integration/parking-movement-report',
 } as const;
 
 /**
@@ -105,4 +106,11 @@ export function navbyTimeKey(ms: number): string {
   const shifted = new Date(ms + NAVBY_TZ_OFFSET_MINUTES * 60_000);
   const p = (n: number) => String(n).padStart(2, '0');
   return `${p(shifted.getUTCHours())}${p(shifted.getUTCMinutes())}${p(shifted.getUTCSeconds())}${String(shifted.getUTCMilliseconds()).padStart(3, '0')}`;
+}
+
+/** Строка даты-времени в формате API «YYYY-MM-DD HH:MM:SS» (пояс +03) из epoch мс. */
+export function navbyDateTimeString(ms: number): string {
+  const shifted = new Date(ms + NAVBY_TZ_OFFSET_MINUTES * 60_000);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${shifted.getUTCFullYear()}-${p(shifted.getUTCMonth() + 1)}-${p(shifted.getUTCDate())} ${p(shifted.getUTCHours())}:${p(shifted.getUTCMinutes())}:${p(shifted.getUTCSeconds())}`;
 }

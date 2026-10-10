@@ -48,6 +48,8 @@ export default function MileageCommsModule({ user, settings }: Props) {
   const canView = resolvePermission(user, 'mileageComms', rolePerms) !== 'none';
   const canRequests = resolvePermission(user, 'mileageCommsRequests', rolePerms) === 'write';
   const canIntegration = resolvePermission(user, 'mileageCommsIntegration', rolePerms) === 'write';
+  const canEvents = resolvePermission(user, 'mileageCommsEvents', rolePerms) === 'write';
+  const canRules = resolvePermission(user, 'mileageCommsRules', rolePerms) === 'write';
 
   const [tab, setTab] = useState<TabKey>('noUpdates');
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -262,12 +264,16 @@ export default function MileageCommsModule({ user, settings }: Props) {
 
         {tab === 'check' && (
           <MileageCheckTab
+            user={user}
+            canEvents={canEvents}
+            canRules={canRules}
             mapping={mapping}
             current={current}
             config={config}
             integration={integration}
             cars={cars}
             nowMs={nowTick}
+            onCreateRequest={(carKey, problem) => handleCreateRequest(carKey, problem)}
           />
         )}
       </ModuleShell>
