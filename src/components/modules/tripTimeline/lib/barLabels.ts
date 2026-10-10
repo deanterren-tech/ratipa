@@ -41,7 +41,8 @@ export const LABEL_GAP = 5;
 /** Метрика текста подписи (8px semibold): px на символ. */
 export const LABEL_CHAR_W = 4.7;
 /** Минимальная ширина сегмента, который вообще считается свободным. */
-const MIN_SEG = 18;
+export const LABEL_MIN_SEG = 18;
+const MIN_SEG = LABEL_MIN_SEG;
 
 /** Оценка ширины подписи: иконка (если есть) + текст + внутренние отступы. */
 export const estimateLabelWidth = (text: string, hasIcon: boolean): number =>
@@ -130,6 +131,58 @@ export const labelTextFor = (variant: LabelVariant, fullText: string, shortText:
   if (variant === 'short') return short;
   if (variant === 'icon') return (short.split(/[\s·/]+/).filter(Boolean)[0] || short || '').slice(0, 12) + '…';
   return '';
+};
+
+/**
+ * Разбор геометрии сегментов из атрибута `data-tl-lblsegs`
+ * («индекс:лево:право;…» в координатах внутри полосы).
+ */
+export const parseLabelSegsAttr = (raw: string): BarLabelSegment[] =>
+  (raw || '')
+    .split(';')
+    .map((part) => part.split(':').map(Number))
+    .filter((p) => p.length === 3 && p.every((n) => Number.isFinite(n)))
+    .map(([index, left, right]) => ({ index, left, right, width: Math.max(0, right - left) }));
+
+export interface BarLabelSweepOpts {
+  /** Ширина закреплённой колонки машин (подпись прилипает сразу справа от неё). */
+  carColW: number;
+  /** Минимальная видимая ширина активного сегмента, дальше — переезд. */
+  minVisible?: number;
+}
+
+/**
+ * ПОЛОЖЕНИЕ ПОДПИСИ ПРИ ПРОКРУТКЕ (единый мини-движок для обоих полотен).
+ *
+ * Вызывается из rAF на событие прокрутки/масштаба. Для каждой полосы с
+ * размеченными сегментами (`data-tl-lblsegs`) выбирает активный свободный
+ * сегмент по видимой области и показывает подпись ТОЛЬКО в нём: пока сегмент
+ * виден, подпись держится sticky у левого края календаря в его пределах
+ * (это делает CSS position: sticky с left = колонка+отступ); когда сегмент
+ * уходит из видимой части (или уходит за закреплённую колонку) — подпись
+ * ПЕРЕЕЗЖАЕТ в другой свободный сегмент. DOM трогается точечно (display
+ * сегментов), перерисовки React и всех клеток нет; повторные вызовы с той же
+ * геометрией ничего не пишут.
+ */
+export const sweepBarLabels = (scrollEl: HTMLElement | null, opts: BarLabelSweepOpts): void => {
+  if (!scrollEl) return;
+  const minVisible = opts.minVisible ?? 28;
+  // Видимая область КАЛЕНДАРЯ в координатах внутри полос (правее колонки).
+  const viewLeft = scrollEl.scrollLeft;
+  const viewRight = scrollEl.scrollLeft + scrollEl.clientWidth - opts.carColW;
+  scrollEl.querySelectorAll<HTMLElement>('[data-tl-lblsegs]').forEach((bar) => {
+    const segs = parseLabelSegsAttr(bar.getAttribute('data-tl-lblsegs') || '');
+    if (!segs.length) return;
+    const barLeft = Number(bar.getAttribute('data-tl-lblleft')) || 0;
+    const active = pickActiveSegment(segs, viewLeft - barLeft, viewRight - barLeft, minVisible);
+    if (active < 0) return;
+    const actStr = String(active);
+    if (bar.getAttribute('data-tl-lblact') !== actStr) bar.setAttribute('data-tl-lblact', actStr);
+    bar.querySelectorAll<HTMLElement>('[data-tl-labelseg]').forEach((w) => {
+      const want = w.getAttribute('data-tl-labelseg') === actStr ? 'flex' : 'none';
+      if (w.style.display !== want) w.style.display = want;
+    });
+  });
 };
 
 /**

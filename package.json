@@ -13,7 +13,8 @@
     "test:segments": "tsx scripts/test-fact-segments.ts",
     "test:overlap": "tsx scripts/test-overlap.ts",
     "test:day-sections": "tsx scripts/test-day-sections.ts",
-    "typecheck": "tsc --noEmit && node scripts/check-any.mjs"
+    "typecheck": "tsc --noEmit && node scripts/check-any.mjs",
+    "test:labels": "tsx scripts/test-bar-labels.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

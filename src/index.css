@@ -523,31 +523,144 @@ input:focus, select:focus, textarea:focus, button:focus {
   --tl-bar-r: 6px;               /* скругление полос рейсов */
 }
 
-/* Полосы: доступный фокус с клавиатуры (единый контур по бренду) */
-.tl-scope [data-bar]:focus-visible,
-.tl-scope [data-stage-fill]:focus-visible,
-.tl-scope [data-bz-stripe]:focus-visible,
-.tl-scope [data-bz-mark]:focus-visible {
-  outline: 2px solid var(--accent);
+/* ─── Единые токены состояний полос и перекрёстной подсветки ────────────────
+   ОДНО место для всего модуля (основное полотно .tl-scope и встроенный
+   мини-таймлайн .tl-mini — один и тот же набор): hover/focus/выбранный/архив
+   выглядят одинаково у ВСЕХ типов полос — рейс ПЛАН/ФАКТ, база, ремонт,
+   готовность, учёт выезда. Отсюда же берёт цвета перекрёстная подсветка
+   столбца дня (задача «подсветка столбца»). Правки этих значений меняют все
+   полосы сразу — значения в компонентах не дублируются.
+   Тёмная тема (когда появится): переопределить эти токены в
+   `[data-theme='dark'] .tl-scope, [data-theme='dark'] .tl-mini` — компоненты
+   менять не нужно. */
+.tl-scope,
+.tl-mini {
+  /* hover: одна длительность и один эффект для всех полос */
+  --tl-hov-ms: 120ms;
+  --tl-hov-filter: brightness(0.97) saturate(1.05);
+  /* сегмент факта под курсором — чуть сильнее общей подсветки полосы */
+  --tl-hov-filter-seg: brightness(0.945) saturate(1.09);
+  /* кольцо наведённой полосы (внутреннее — не смещает полосу) */
+  --tl-hov-ring: inset 0 0 0 2px var(--accent);
+  /* мягкий контур соседних полос той же связи (план↔факт) */
+  --tl-hov-ring-soft: inset 0 0 0 1px rgba(18, 19, 22, 0.25);
+  /* тёмное кольцо выбранного (открытого) рейса */
+  --tl-hov-sel: 0 0 0 2px rgba(18, 19, 22, 0.55);
+  /* перекрёстная подсветка столбца дня: нейтральный холодный акцент,
+     низкая непрозрачность; сильнее — пересечение строки и столбца */
+  --tl-cross: rgba(78, 116, 190, 0.070);
+  --tl-cross-strong: rgba(78, 116, 190, 0.125);
+  /* выделение дня в шапке — «пилюлей», другим цветом, чем «Сегодня» */
+  --tl-cross-head-bg: rgba(78, 116, 190, 0.16);
+  --tl-cross-head-fg: #2F4F94;
+}
+
+/* Полосы: доступный фокус с клавиатуры (единый контур по бренду).
+   Важно: глобальное правило портала `*:focus {outline:none !important}` глушит
+   любые обычные контуры — контур модуля тоже помечается !important (специфичность
+   выше глобального, действует только на полосы/этапы таймлайна). */
+:is(.tl-scope, .tl-mini) [data-bar]:focus-visible,
+:is(.tl-scope, .tl-mini) [data-stage-fill]:focus-visible,
+:is(.tl-scope, .tl-mini) [data-bz-stripe]:focus-visible,
+:is(.tl-scope, .tl-mini) [data-bz-mark]:focus-visible {
+  outline: 2px solid var(--accent) !important;
   outline-offset: 1px;
 }
 
-/* ВСЕ полосы (рейс ПЛАН/ФАКТ, база, ремонт, отметки) — единый мягкий hover:
-   одна высота/скругление/подпись задаются общим компонентом, hover тоже общий
-   (compositor-only, без «поднятия» — полоса остаётся непрерывной по дням). */
-.tl-scope [data-bar],
-.tl-scope [data-stage-fill],
-.tl-scope [data-bz-stripe],
-.tl-scope [data-bz-mark] {
-  transition: filter 120ms ease;
+/* ВСЕ полосы (рейс ПЛАН/ФАКТ, база, ремонт, готовность, учёт выезда) —
+   ЕДИНЫЙ мягкий hover по общим токенам: та же яркость/насыщенность, то же
+   акцентное кольцо (внутреннее — полоса не смещается и высота строки не
+   меняется), та же длительность. Клик и подсказки самих полос не меняются. */
+:is(.tl-scope, .tl-mini) [data-bar],
+:is(.tl-scope, .tl-mini) [data-stage-fill],
+:is(.tl-scope, .tl-mini) [data-bz-stripe],
+:is(.tl-scope, .tl-mini) [data-bz-mark] {
+  transition: filter var(--tl-hov-ms) ease, box-shadow var(--tl-hov-ms) ease;
 }
-.tl-scope [data-bar="plan"]:hover,
-.tl-scope [data-bar="fact"]:hover,
-.tl-scope [data-bar="fact-none"]:hover,
-.tl-scope [data-stage-fill]:hover,
-.tl-scope [data-bz-stripe]:hover,
-.tl-scope [data-bz-mark]:hover {
-  filter: brightness(0.97) saturate(1.05);
+:is(.tl-scope, .tl-mini) [data-bar="plan"]:hover,
+:is(.tl-scope, .tl-mini) [data-bar="fact"]:hover,
+:is(.tl-scope, .tl-mini) [data-bar="fact-none"]:hover,
+:is(.tl-scope, .tl-mini) [data-bz-stripe]:hover,
+:is(.tl-scope, .tl-mini) [data-bz-mark]:hover {
+  filter: var(--tl-hov-filter);
+  box-shadow: var(--tl-hov-ring);
+}
+:is(.tl-scope, .tl-mini) [data-stage-fill]:hover {
+  filter: var(--tl-hov-filter);
+}
+/* У многосегментной полосы ФАКТ подсвечивается сегмент ПОД КУРСОРОМ
+   (чуть сильнее общей подсветки полосы); подсказка — про сегмент. */
+:is(.tl-scope, .tl-mini) [data-fact-seg],
+:is(.tl-scope, .tl-mini) [data-fact-seg-mini] {
+  transition: filter var(--tl-hov-ms) ease;
+}
+:is(.tl-scope, .tl-mini) [data-bar="fact"]:hover [data-fact-seg]:hover,
+:is(.tl-scope, .tl-mini) [data-bar="fact"]:hover [data-fact-seg-mini]:hover {
+  filter: var(--tl-hov-filter-seg);
+}
+
+/* ─── Перекрёстная подсветка столбца дня (задача «подсветка столбца») ───────
+   Один оверлей-столбец + полоса строки (внутри host-контейнера строки),
+   положение задаёт хук lib/useCrosshair математикой по X — БЕЗ перерисовки
+   клеток. Оверлей лежит ПОД полосами/этапами/подписями (слой TL_Z.crosshair)
+   и не перехватывает указатель. */
+.tl-cross-col {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  background: var(--tl-cross);
+  pointer-events: none;
+  will-change: transform;
+}
+.tl-cross-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 0;
+  background: var(--tl-cross-strong);
+  pointer-events: none;
+}
+/* День в шапке: мягкая заливка + «пилюля» числа цветом подсветки —
+   ДРУГИМ, чем красная «Сегодня» (день «сегодня» сохраняет свой вид). */
+:is(.tl-scope, .tl-mini) [data-day][data-tl-cross]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--tl-cross-head-bg);
+  pointer-events: none;
+}
+:is(.tl-scope, .tl-mini) [data-day][data-tl-cross] {
+  position: relative;
+}
+:is(.tl-scope, .tl-mini) [data-day][data-tl-cross] b {
+  position: relative;
+  z-index: 1;
+  color: var(--tl-cross-head-fg);
+}
+:is(.tl-scope, .tl-mini) [data-day][data-tl-cross]:not([data-tl-day-today]) b {
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+  padding: 0 4px;
+}
+/* Плавающая метка даты у курсора — вне .tl-scope (fixed, поверх полотна). */
+.tl-cross-label {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 80;
+  pointer-events: none;
+  background: rgba(23, 25, 29, 0.92);
+  color: #FFFFFF;
+  font-size: 11px;
+  line-height: 16px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(18, 19, 22, 0.28);
+  will-change: transform;
 }
 
 /* Тень у границы закреплённой колонки «Автомобили» — только при горизонтальной

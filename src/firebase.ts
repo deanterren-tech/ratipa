@@ -3985,6 +3985,23 @@ export const dbService = {
     }
   },
 
+  /**
+   * Настройки отображения «Таймлайна рейсов» в ПРОФИЛЕ пользователя
+   * (merge-апдейт users_list/{uid}/tlPrefs): «Подсветка столбца» и другие
+   * переключатели переживают перезагрузку и действуют на всех устройствах.
+   */
+  saveTimelinePrefs: (uid: string, data: { columnHighlight?: boolean }) => {
+    if (useFirebase) {
+      const patch: Record<string, any> = {};
+      if (typeof data.columnHighlight === 'boolean') {
+        patch['tlPrefs/columnHighlight'] = data.columnHighlight;
+      }
+      update(ref(database, `users_list/${uid}`), patch).catch((err) =>
+        console.warn("Failed to save timeline prefs:", err)
+      );
+    }
+  },
+
   saveUserSheetZoom: (uid: string, moduleKey: string, zoom: number) => {
     if (useFirebase) {
       const patch: Record<string, any> = {};

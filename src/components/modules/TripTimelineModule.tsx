@@ -35,6 +35,7 @@ import CarOverviewModal from './tripTimeline/CarOverviewModal';
 import { useTimelineData } from './tripTimeline/useTimelineData';
 import { sortMonthLabelsDesc, todayNum, zoomColW, zoomIndexOf } from './tripTimeline/lib/timeline';
 import { plateKeyOf } from './tripTimeline/lib/sources';
+import { setColumnHighlight } from './tripTimeline/lib/timelinePrefs';
 import {
   openDepartureAccountingPanel,
   parseDeparturePanelHash,
@@ -241,6 +242,23 @@ export default function TripTimelineModule({ user, settings }: Props) {
       /* не критично */
     }
   }, [vs, dispatcherTab, archiveMonth, extL, extR]);
+
+  /**
+   * «Подсветка столбца» — настройка ПОЛЬЗОВАТЕЛЯ (users_list/{uid}/tlPrefs):
+   * при входе значение берётся из профиля (по умолчанию включено), переключатель
+   * лежит в панели управления полотна и пишется обратно в профиль — выбор
+   * действует на всех устройствах и во встроенных таймлайнах.
+   */
+  useEffect(() => {
+    setColumnHighlight(user.tlPrefs?.columnHighlight !== false);
+  }, [user.uid, user.tlPrefs?.columnHighlight]);
+  const changeColumnHighlight = useCallback(
+    (v: boolean) => {
+      setColumnHighlight(v);
+      if (user.uid) dbService.saveTimelinePrefs(user.uid, { columnHighlight: v });
+    },
+    [user.uid],
+  );
 
   const matchesTab = useCallback(
     (dispatcherId: string): boolean => {
@@ -1058,6 +1076,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
             directions={data.directions}
             fullscreen={fullscreen}
             onToggleFullscreen={toggleFullscreen}
+            onColumnHighlightChange={changeColumnHighlight}
           />
         </div>
       </div>

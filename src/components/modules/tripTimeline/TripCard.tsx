@@ -51,6 +51,8 @@ import TripEventsJournal from './TripEventsJournal';
 import { PlanBarLabel, planBarLabelParts } from './PlanBarLabel';
 import { FACT_SEGMENT_COLORS, factSegmentsOfTrip } from './lib/factSegments';
 import { eventMarkOf, groupEventMarks, type EventMark } from './lib/eventMarks';
+import { useCrosshair } from './lib/useCrosshair';
+import { useColumnHighlight } from './lib/timelinePrefs';
 // Z-шкала слоёв полотна — единый источник (lib/visuals): встроенный таймлайн
 // использует те же слои, что основное полотно (этапы всегда поверх полос).
 import { BAR_ICON_CLS, TL_Z, stageIconOf } from './lib/visuals';
@@ -318,6 +320,13 @@ export function CarMiniTimeline({
   const [extL, setExtL] = useState(0);
   const [extR, setExtR] = useState(0);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * Перекрёстная подсветка столбца дня во встроенном таймлайне — ТОТ ЖЕ
+   * механизм, что на основном полотне (lib/useCrosshair), флаг — из настроек
+   * пользователя (lib/timelinePrefs, переключатель в панели полотна).
+   */
+  const columnHighlight = useColumnHighlight();
+  const crossHostRef = useRef<HTMLDivElement | null>(null);
   const prevExtL = useRef(0);
   const prevColW = useRef(colW);
   const pendingAnchor = useRef<{ day: number; frac: number } | null>(null);
@@ -328,6 +337,7 @@ export function CarMiniTimeline({
   const renderVn = vn + extL + extR;
   const ve = renderVs + renderVn - 1;
   const W = renderVn * colW;
+  useCrosshair({ scrollRef, hostRef: crossHostRef, enabled: columnHighlight, vs: renderVs, vn: renderVn, colW, carColW: TIMELINE_MINI_COL_W });
   /** Та же единая функция «дата → координата», что в основном таймлайне. */
   const pos = (a: number, b: number) => barRectInWindow(a, b, renderVs, ve, colW);
 
@@ -1176,13 +1186,13 @@ export function CarMiniTimeline({
         ref={scrollRef}
         onScroll={handleScroll}
         data-ui="mini-timeline"
-        className="tl-scroll overflow-auto overscroll-x-contain border border-[#E5E7EB] rounded-xl bg-[#F9FAFB] max-h-[300px]"
+        className="tl-mini tl-scroll overflow-auto overscroll-x-contain border border-[#E5E7EB] rounded-xl bg-[#F9FAFB] max-h-[300px]"
       >
         <style>{`.tl-scroll{scrollbar-width:thin;scrollbar-color:#B6BBC2 #F3F4F6;}
 .tl-scroll::-webkit-scrollbar{height:12px;width:12px;}
 .tl-scroll::-webkit-scrollbar-track{background:#F3F4F6;border-radius:8px;}
 .tl-scroll::-webkit-scrollbar-thumb{background:#C3C8CF;border-radius:8px;border:2px solid #F3F4F6;}`}</style>
-        <div className="grid min-w-max" style={{ gridTemplateColumns: `96px ${W}px` }}>
+        <div className="grid min-w-max relative" style={{ gridTemplateColumns: `96px ${W}px` }}>
           <div className="sticky left-0 top-0 bg-[#F9FAFB] border-b border-r border-[#E5E7EB] px-2 py-1 w-[96px] min-w-[96px]" style={{ zIndex: TL_Z.headCorner }}>
             <span className="text-[9px] font-semibold uppercase tracking-wider text-[#9CA3AF]">План</span>
           </div>
@@ -1195,7 +1205,7 @@ export function CarMiniTimeline({
           <div className="sticky left-0 bg-[#F9FAFB] border-r border-b border-[#EEF0F3] px-2 w-[96px] min-w-[96px] text-[9px] leading-[12px] text-[#9CA3AF] overflow-hidden" style={{ zIndex: TL_Z.colCell, height: miniPlanH, borderRightColor: '#D1D5DB' }}>
             {focus ? formatPlate(focus.carNumber) : ''} · план
           </div>
-          <div data-lane="plan" className="relative z-0 border-b border-[#EEF0F3]" style={{ width: W, height: miniPlanH }}>
+          <div data-lane="plan" className="relative border-b border-[#EEF0F3]" style={{ width: W, height: miniPlanH }}>
             {bgSegs.filter((s) => !s.today).map((s, i) => (
               <div
                 key={`w${i}`}
@@ -1288,7 +1298,7 @@ export function CarMiniTimeline({
           <div className="sticky left-0 bg-[#F9FAFB] border-r border-b border-[#E5E7EB] px-2 w-[96px] min-w-[96px] text-[9px] leading-[12px] text-[#9CA3AF] overflow-hidden" style={{ zIndex: TL_Z.colCell, height: miniFactH, borderRightColor: '#D1D5DB' }}>
             факт · база · ремонт
           </div>
-          <div data-lane="fact" className="relative z-0 border-b border-[#E5E7EB]" style={{ width: W, height: miniFactH }}>
+          <div data-lane="fact" className="relative border-b border-[#E5E7EB]" style={{ width: W, height: miniFactH }}>
             {bgSegs.filter((s) => !s.today).map((s, i) => (
               <div
                 key={`fw${i}`}
@@ -1463,6 +1473,9 @@ export function CarMiniTimeline({
             {miniFactOv.warnings.map((w) => renderMiniConflict(w, 'mfc', miniFactH))}
             {miniFactOv.markers.map((m) => renderMiniOvMarker(m, 'mfm', miniFactH))}
           </div>
+          {/* Host перекрёстной подсветки встроенного таймлайна — тот же
+              механизм lib/useCrosshair, что на основном полотне. */}
+          <div ref={crossHostRef} aria-hidden="true" className="pointer-events-none" style={{ position: 'absolute', inset: 0, zIndex: TL_Z.crosshair }} />
         </div>
       </div>
       <p className="text-[10px] text-[#9CA3AF]">

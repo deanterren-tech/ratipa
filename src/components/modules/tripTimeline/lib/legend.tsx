@@ -51,7 +51,6 @@ export const segSw = (c: FactSegColor, extra?: React.ReactNode): React.ReactNode
  */
 export const buildLegendItems = (directions: DirectionDef[]): LegendItem[] => [
   { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: PLAN_ACCENT.bg, border: `1px solid ${PLAN_ACCENT.border}`, borderRadius: 4 }} />, label: 'рейс (ПЛАН): вся полоса — акцентный цвет приложения, без индикации сроков' },
-  { swatch: <i className="inline-block w-[3px] h-[12px]" style={{ background: CLR.return, borderRadius: 2 }} />, label: 'плановое возвращение' },
   { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: hatch45, border: '1px solid rgba(217,119,6,0.25)', borderRadius: 4 }} />, label: 'запас на риски' },
   // ФАКТ рейса — сегменты по отставанию (пороги в lib/factSegments):
   { swatch: segSw('green'), label: 'факт: участок выполнен в срок или раньше плана' },
@@ -89,7 +88,7 @@ export const buildLegendItems = (directions: DirectionDef[]): LegendItem[] => [
           </span>
         </i>
       ),
-      label: `направление «${d.name}» — код ${d.code}: акцент по краю полосы и мини-чип в колонке`,
+      label: `направление «${d.name}» — код ${d.code}: мини-чип в колонке машины и код в правом углу полосы (при достаточной ширине)`,
     };
   }),
   { swatch: <i className="inline-block w-[9px] h-[9px] rotate-45" style={{ background: '#7C3AED', opacity: 0.95, borderRadius: 2 }} />, label: 'событие машины / журнала рейса (клик — к записи)' },

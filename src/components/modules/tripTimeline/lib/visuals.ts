@@ -31,7 +31,6 @@ export const CLR = {
   weekend: 'var(--tl-weekend)',
   today: '#F43F5E',
   warn: '#D97706',
-  return: '#2563EB',
 };
 
 /**
@@ -105,6 +104,8 @@ export const stageIconOf = (type: string): React.ComponentType<{ className?: str
  *
  * Шкала (снизу вверх, внутри подстроки машины — своего стека у каждой строки):
  *   bg      — фон/сетка/выходные/зебра и подложки-подсветки периодов;
+ *   crosshair — перекрёстная подсветка столбца дня (мягкий оверлей под
+ *             полосами; обновляется без перерисовки, pointer-events: none);
  *   bz      — полосы базы/ремонта и промежутки «Ожидание выезда»;
  *   tripBar — полосы рейса ПЛАН и ФАКТ (цветные сегменты факта — внутри полосы);
  *   stage   — КЛЕТКИ И ИКОНКИ ЭТАПОВ и однодневные отметки базы/ремонта:
@@ -120,6 +121,8 @@ export const stageIconOf = (type: string): React.ComponentType<{ className?: str
  */
 export const TL_Z = {
   bg: 0,
+  /** Перекрёстная подсветка столбца дня — ПОД полосами, поверх фона/сетки. */
+  crosshair: 0.5,
   bz: 1,
   tripBar: 2,
   stage: 3,
