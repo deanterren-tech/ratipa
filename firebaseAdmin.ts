@@ -14,8 +14,10 @@ import { initializeApp, cert, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
 import { getDatabase, type Database } from "firebase-admin/database";
 import { config as dotenvConfig } from "dotenv";
+import { readFileSync } from "node:fs";
 
-dotenvConfig();
+// .env.local перекрывает .env; уже заданные переменные процесса не трогаем.
+dotenvConfig({ path: [".env.local", ".env"], override: false, quiet: true });
 
 // Определяем окружение: staging или prod
 const isStaging =
@@ -37,6 +39,18 @@ function buildCredential(): any | null {
     } catch (e) {
       console.warn(
         "[firebaseAdmin] FIREBASE_SERVICE_ACCOUNT невалидный JSON:",
+        (e as Error).message,
+      );
+    }
+  }
+  // 1б. Путь к JSON-файлу service-account (удобно для локального поллера)
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
+    try {
+      const raw = readFileSync(process.env.FIREBASE_SERVICE_ACCOUNT_PATH, "utf8");
+      return cert(JSON.parse(raw));
+    } catch (e) {
+      console.warn(
+        "[firebaseAdmin] FIREBASE_SERVICE_ACCOUNT_PATH не прочитан:",
         (e as Error).message,
       );
     }

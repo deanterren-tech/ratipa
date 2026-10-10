@@ -1,3 +1,4 @@
+import "./server/navby/env.ts"; // ПЕРВЫМ: .env.local/.env до инициализации firebase-admin и поллера
 import express from "express";
 import path from "path";
 import multer from "multer";
@@ -8,6 +9,7 @@ import { agentRouter } from "./agentApi.ts";
 import { agentAuthMiddleware } from "./agentAuth.ts";
 import { handleUserRequest } from "./server/ai/orchestrator.ts";
 import { loadDriveFolder, extractFolderId } from "./server/driveList";
+import { startNavbyPoller } from "./server/navby/poller.ts";
 
 // Initialize Gemini safely
 let ai: GoogleGenAI | null = null;
@@ -1737,6 +1739,13 @@ Do not return Markdown. Return raw JSON array only.
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+
+  // Единый серверный поллер «Пробег и связь» (Nav.by → RTDB).
+  // Включается переменной окружения NAVBY_POLLER_ENABLED=1; расписание и
+  // статус — см. docs/module-mileage-comms.md. Браузер Nav.by не опрашивает.
+  if (process.env.NAVBY_POLLER_ENABLED === "1") {
+    startNavbyPoller();
+  }
 }
 
 startServer();

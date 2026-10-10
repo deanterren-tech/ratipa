@@ -47,6 +47,7 @@ const MdpJournalModule = lazy(() => import('./modules/MdpJournalModule'));
 const DriverExpensesModule = lazy(() => import('./modules/DriverExpensesModule'));
 const BookIssueRRModule = lazy(() => import('./modules/BookIssueRRModule'));
 const TripTimelineModule = lazy(() => import('./modules/TripTimelineModule'));
+const MileageCommsModule = lazy(() => import('./modules/mileageComms/MileageCommsModule'));
 const AgentAuditModule = lazy(() => import('./modules/AgentAuditModule'));
 const NotFoundPage = lazy(() => import('./common/NotFoundPage'));
 
@@ -596,6 +597,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     { key: 'planZagruzok', label: 'План Загрузок', icon: FileSpreadsheet, permissionKey: 'planZagruzok' },
     { key: 'currentPlanning', label: 'Текущее планирование', icon: Calendar, permissionKey: 'currentPlanning' },
     { key: 'tripTimeline', label: 'Таймлайн рейсов', icon: CalendarRange, permissionKey: 'tripTimeline' },
+    { key: 'mileageComms', label: 'Пробег и связь', icon: Radio, permissionKey: 'mileageComms' },
     { key: 'baza', label: 'Учет выезда', icon: Truck, permissionKey: 'baza' },
     { key: 'vehicleDriverData', label: 'Авто и Водители', icon: FileText, permissionKey: 'vehicleDriverData' },
     { key: 'dozvola', label: 'Учет Дозволов', icon: FileText, permissionKey: 'dozvola' },
@@ -615,7 +617,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
   const allowedModules = useMemo(() => {
     if (user.role === 'mechanic') {
-      return allModules.filter(mod => mod.key === 'baza');
+      // Механик исторически видит только «Учёт выезда»; «Пробег и связь»
+      // добавляется, если право явно выдано (по умолчанию read — осмотры).
+      return allModules.filter(mod =>
+        mod.key === 'baza' ||
+        (mod.key === 'mileageComms' && resolvePermission(user, mod.permissionKey, settings?.rolePermissions) !== 'none')
+      );
     }
     return allModules.filter(mod => {
       // Доступ root — только по роли. Проверки по имени и почте убраны:
@@ -668,7 +675,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     }
     return [
       { id: 'g_home', label: 'Главная', isDropdown: false, singleModuleKey: 'dashboard' },
-      { id: 'g_ops', label: 'Текущее', isDropdown: true, subtabKeys: ['disposition', 'baza', 'documents', 'vehicleDriverData', 'dozvola', 'instructions'] },
+      { id: 'g_ops', label: 'Текущее', isDropdown: true, subtabKeys: ['disposition', 'baza', 'documents', 'vehicleDriverData', 'dozvola', 'instructions', 'mileageComms'] },
       { id: 'g_planning', label: 'Планирование', isDropdown: true, subtabKeys: ['planZagruzok', 'planDohod', 'currentPlanning', 'tripTimeline', 'dohod'] },
       { id: 'g_report', label: 'Отчетность', isDropdown: true, subtabKeys: ['salary', 'bookIssue', 'tabel', 'mdpJournal', 'driverExpenses', 'bookIssueRR'] },
       { id: 'g_settings', label: 'Настройки', isDropdown: true, subtabKeys: ['settings', 'appSettings', 'admin'] }
@@ -890,6 +897,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         return <CurrentPlanningModule user={user} />;
       case 'tripTimeline':
         return <TripTimelineModule user={user} settings={settings} />;
+      case 'mileageComms':
+        return <MileageCommsModule user={user} settings={settings} />;
       case 'dohod':
         return <DohodModule user={user} />;
       case 'salary':

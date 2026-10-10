@@ -125,6 +125,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
     { key: 'planDohod', label: 'План Дохода', icon: Layers },
     { key: 'planZagruzok', label: 'План Загрузок', icon: Layers },
     { key: 'currentPlanning', label: 'Текущее Планирование', icon: Layers },
+    { key: 'mileageComms', label: 'Пробег и связь', icon: Layers },
     { key: 'baza', label: 'Учет выезда', icon: Layers },
     { key: 'dozvola', label: 'Учет Дозволов', icon: Layers },
     { key: 'disposition', label: 'Диспозиция', icon: Layers },

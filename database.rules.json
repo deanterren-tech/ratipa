@@ -34,6 +34,21 @@
       ".read": "auth != null",
       ".write": "auth != null",
       ".indexOn": ["isArchived"]
+    },
+    "telemetry_config": {
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'root_admin' || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'manager')"
+    },
+    "telemetry_mapping": {
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'root_admin' || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+    },
+    "telemetry_mapping_history": {
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'root_admin' || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+    },
+    "telemetry_rf_entry": {
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'root_admin' || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'manager' || root.child('users').child(auth.uid).child('role').val() === 'dispatcher' || root.child('users').child(auth.uid).child('role').val() === 'mechanic')"
+    },
+    "telemetry_requests": {
+      ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'root_admin' || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'manager' || root.child('users').child(auth.uid).child('role').val() === 'dispatcher')"
     }
   }
 }

@@ -14,7 +14,10 @@
     "test:overlap": "tsx scripts/test-overlap.ts",
     "test:day-sections": "tsx scripts/test-day-sections.ts",
     "typecheck": "tsc --noEmit && node scripts/check-any.mjs",
-    "test:labels": "tsx scripts/test-bar-labels.ts"
+    "test:labels": "tsx scripts/test-bar-labels.ts",
+    "navby:poll": "tsx scripts/navby-poll.ts",
+    "navby:poller": "tsx scripts/navby-poll.ts --loop",
+    "test:navby": "tsx scripts/test-navby.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
