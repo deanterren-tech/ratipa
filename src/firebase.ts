@@ -2212,6 +2212,53 @@ export const dbService = {
     dbService.logAction(user, role, 'Изменение плана этапов', 'TripTimeline', Object.keys(updates).find((p) => p.startsWith('tripTimeline/planGuard/'))?.split('/').pop() || '', details);
   },
 
+  /**
+   * Окончательная запись содержимого окна рейса (единая кнопка «Сохранить»):
+   * ОДИН атомарный multi-path update по всем путям — поля рейса, плановые даты
+   * «Плана дохода», этапы и состояние плана этапов. Либо записывается всё, либо
+   * ничего: при ошибке (нет соединения, отказ записи, истёкшее ожидание
+   * подтверждения) промис отклоняется — вызывающий оставляет введённые значения
+   * в окне и показывает понятную ошибку с «Повторить». Частичной записи не
+   * бывает. Повторный вызов с теми же значениями безопасен: запись абсолютных
+   * значений идемпотентна и дублей не создаёт.
+   */
+  saveTimelineWindowCommit: async (updates: Record<string, unknown>, user: string, role: string, details: string) => {
+    const paths = Object.keys(updates || {});
+    if (!paths.length) return;
+    const clean: Record<string, unknown> = {};
+    paths.forEach((path) => {
+      const v = updates[path];
+      clean[path] = v === null ? null : stripUndefinedDeep(v);
+    });
+    if (useFirebase) {
+      // Без сети не ставим правку в очередь «в никуда»: сразу понятная ошибка,
+      // данные остаются в окне, повтор — после восстановления связи.
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        throw new Error('нет соединения с интернетом');
+      }
+      // Ожидание подтверждения записи ограничено: «зависшее» соединение не
+      // должно оставлять кнопку в вечном «Сохраняется…» — показываем ошибку и
+      // «Повторить» (запись тех же значений повторно безопасна).
+      const TIMEOUT_MS = 8000;
+      let timer: number | undefined;
+      try {
+        await Promise.race([
+          update(ref(database), clean),
+          new Promise<never>((_, reject) => {
+            timer = window.setTimeout(() => reject(new Error('время ожидания подтверждения записи истекло')), TIMEOUT_MS);
+          }),
+        ]);
+      } finally {
+        if (timer !== undefined) window.clearTimeout(timer);
+      }
+    }
+    const target =
+      paths.find((p) => p.startsWith('trips_dashboard/'))?.split('/')[1] ||
+      paths.find((p) => p.startsWith('tripTimeline/trips/'))?.split('/')[2] ||
+      '';
+    dbService.logAction(user, role, 'Сохранение окна рейса', 'TripTimeline', target, details);
+  },
+
   /** Выдача разового разрешения (одно на пару «рейс + пользователь»; повторная выдача заменяет его). */
   grantTimelinePlanPermission: (
     tripKey: string,

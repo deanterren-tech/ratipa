@@ -23,7 +23,7 @@ export interface UnsavedDialogOptions {
 }
 
 /** Выбор в брендированном подтверждении выхода. */
-export type UnsavedChoice = 'save' | 'discard' | 'stay';
+export type UnsavedChoice = 'discard' | 'stay';
 
 interface DialogOptions extends DialogVariantOptions {
   title?: string;
@@ -44,10 +44,12 @@ interface DialogContextType {
   showConfirm: (message: string, title?: string, options?: DialogVariantOptions) => Promise<boolean>;
   showPrompt: (message: string, defaultValue?: string, title?: string, options?: DialogVariantOptions) => Promise<string | null>;
   /**
-   * Единое брендированное окно «Выйти без сохранения?» для всех окон с
-   * несохранёнными данными: «Сохранить и выйти» (основное), «Выйти без
-   * сохранения» (опасное, вторичное), «Остаться» (фокус по умолчанию).
-   * Esc и клик по фону равны «Остаться»; Tab/Shift+Tab ходят только внутри окна.
+   * Единое брендированное окно «Есть несохранённые изменения» для всех окон с
+   * несохранёнными данными — РОВНО две кнопки: «Отмена» (основная, в фокусе по
+   * умолчанию, ничего не теряется) и «Выйти без сохранения» (опасное действие,
+   * оформлено деструктивно). Кнопки «Сохранить и выйти» нет: сохранение
+   * выполняется единственной кнопкой «Сохранить» в самом окне.
+   * Esc и клик по фону равны «Отмена»; Tab/Shift+Tab ходят только внутри окна.
    */
   showUnsaved: (options?: UnsavedDialogOptions) => Promise<UnsavedChoice>;
 }
@@ -125,7 +127,7 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
       open({
         type: 'unsaved',
         title: 'Выйти без сохранения?',
-        message: options?.message || 'В окне есть несохранённые изменения.',
+        message: options?.message || 'Есть несохранённые изменения.',
         changed: options?.changed || [],
         inputValue: '',
         variant: 'danger',
@@ -142,10 +144,10 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const cancelValue = dialog.type === 'prompt' ? null : dialog.type === 'confirm' ? false : dialog.type === 'unsaved' ? 'stay' : undefined;
-  const confirmValue = dialog.type === 'prompt' ? dialog.inputValue : dialog.type === 'unsaved' ? 'save' : true;
+  const confirmValue = dialog.type === 'prompt' ? dialog.inputValue : dialog.type === 'unsaved' ? 'discard' : true;
   const isDanger = dialog.variant === 'danger';
   // Enter подтверждает только безопасное и однозначное действие; в окне выхода
-  // Enter активирует кнопку с фокусом (по умолчанию «Остаться») нативно.
+  // Enter активирует кнопку с фокусом (по умолчанию «Отмена») нативно.
   const enterConfirms = !isDanger && dialog.type !== 'unsaved';
 
   useEffect(() => {
@@ -255,12 +257,12 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
                 <div className="px-5 py-4 mt-4 flex flex-wrap justify-end gap-2.5 border-t border-[#E5E7EB]">
                   <button
                     type="button"
-                    data-ui="unsaved-stay"
+                    data-ui="unsaved-cancel"
                     autoFocus
                     onClick={() => handleClose('stay')}
-                    className="px-4 py-2 text-xs font-medium text-[#4B5563] bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]"
+                    className="px-4 py-2 text-xs font-semibold text-[var(--accent-on)] bg-[var(--accent-ui)] hover:bg-[var(--accent-ui-hover)] rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]"
                   >
-                    Остаться
+                    Отмена
                   </button>
                   <button
                     type="button"
@@ -269,14 +271,6 @@ export const DialogProvider = ({ children }: { children: ReactNode }) => {
                     className="px-4 py-2 text-xs font-medium text-rose-600 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
                   >
                     Выйти без сохранения
-                  </button>
-                  <button
-                    type="button"
-                    data-ui="unsaved-save"
-                    onClick={() => handleClose('save')}
-                    className="px-4 py-2 text-xs font-semibold text-[var(--accent-on)] bg-[var(--accent-ui)] hover:bg-[var(--accent-ui-hover)] rounded-lg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]"
-                  >
-                    Сохранить и выйти
                   </button>
                 </div>
               ) : (

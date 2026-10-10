@@ -5,14 +5,21 @@ import {CheckCircle2, AlertCircle, AlertTriangle, Info, X} from 'lucide-react'
 
 type ToastType = 'success' | 'error' | 'info' | 'warning';
 
+/** Действие в уведомлении (например, «Повторить» после ошибки сохранения). */
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface ToastOptions {
   id: string;
   message: string;
   type: ToastType;
+  action?: ToastAction;
 }
 
 interface ToastContextType {
-  toast: (message: string, type?: ToastType) => void;
+  toast: (message: string, type?: ToastType, action?: ToastAction) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -79,7 +86,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
     schedule(id, remaining.current[id]);
   };
 
-  const toast = useCallback((message: string, type: ToastType = 'info') => {
+  const toast = useCallback((message: string, type: ToastType = 'info', action?: ToastAction) => {
     const text = String(message || '').trim();
     if (!text) return; // пустое уведомление не показываем
 
@@ -88,8 +95,9 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
       if (prev.some(t => t.message === text && t.type === type)) return prev;
 
       const id = Math.random().toString(36).substring(2, 9);
-      schedule(id, DURATION[type]);
-      return [...prev, { id, message: text, type }].slice(-4);
+      // Уведомление с действием держим дольше — его нужно успеть прочитать и нажать.
+      schedule(id, action ? 20000 : DURATION[type]);
+      return [...prev, { id, message: text, type, ...(action ? { action } : {}) }].slice(-4);
     });
   }, [schedule]);
 
@@ -121,6 +129,8 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
               <motion.div
                 key={t.id}
                 role={isError ? 'alert' : 'status'}
+                data-ui="toast"
+                data-toast-type={t.type}
                 onMouseEnter={() => pauseToast(t.id)}
                 onMouseLeave={() => resumeToast(t.id)}
                 initial={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -8, scale: 0.97, x: 16 }}
@@ -133,6 +143,20 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
                 <div className={`absolute left-0 top-0 bottom-0 w-1 ${bar}`} />
                 <IconComponent className={`${iconColor} w-4 h-4 shrink-0 mt-0.5 ml-1`} aria-hidden="true" />
                 <p className="flex-1 text-xs leading-relaxed text-[#121316] break-words">{t.message}</p>
+                {t.action ? (
+                  <button
+                    type="button"
+                    data-ui="toast-action"
+                    onClick={() => {
+                      const act = t.action;
+                      removeToast(t.id);
+                      act?.onClick();
+                    }}
+                    className="shrink-0 px-2.5 py-1 text-[11px] font-semibold text-[var(--accent-on)] bg-[var(--accent-ui)] hover:bg-[var(--accent-ui-hover)] rounded-lg transition-colors cursor-pointer"
+                  >
+                    {t.action.label}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => removeToast(t.id)}
