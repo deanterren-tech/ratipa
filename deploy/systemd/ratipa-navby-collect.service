@@ -1,0 +1,29 @@
+# systemd-юнит регулярного сбора «Пробег и связь» + история одометра
+# (перенос на Linux-сервер; на текущей macOS-машине работает launchd-агент —
+# см. deploy/launchd/com.ratipa.navby-collect.plist.template).
+#
+# Установка (на сервере):
+#   1. Разместите проект в __PROJECT_DIR__ (например /opt/ratipa),
+#      задайте секреты в .env.local (NAVBY_*, FIREBASE_SERVICE_ACCOUNT_PATH).
+#   2. Подставьте пути: sed -e 's|__PROJECT_DIR__|/opt/ratipa|g' \
+#        -e 's|__NODE_BIN__|/usr/bin/node|g' deploy/systemd/ratipa-navby-collect.service \
+#        > /etc/systemd/system/ratipa-navby-collect.service
+#   3. Скопируйте timer: cp deploy/systemd/ratipa-navby-collect.timer /etc/systemd/system/
+#   4. systemctl daemon-reload && systemctl enable --now ratipa-navby-collect.timer
+#   5. Проверка: systemctl list-timers ratipa-navby-collect; journalctl -u ratipa-navby-collect -n 50
+#
+# Юнит выполняет ОДИН цикл сбора (снимки + почасовой съём + суточная
+# догрузка); расписание задаёт timer (по умолчанию каждые 5 минут).
+# Single-flight lock в RTDB исключает пересечения с ручными запусками.
+[Unit]
+Description=RATIPA Nav.by collector (снимки + история одометра/CAN)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=__PROJECT_DIR__
+ExecStart=__NODE_BIN__ ./node_modules/tsx/dist/cli.mjs scripts/navby-collect.ts
+# Секреты — из __PROJECT_DIR__/.env.local (см. server/navby/env.ts)
+TimeoutStartSec=1500
+Nice=10

@@ -15,6 +15,19 @@ export const NAVBY_PATHS = {
   vehicleList: '/lumen/integration/vehicle-list',
   currentPosition: '/lumen/integration/current-position',
   parkingReport: '/lumen/integration/parking-movement-report',
+  /**
+   * Исторические методы (подтверждены ЖИВЫМИ вызовами 11.10.2026, см. отчёт
+   * «История CAN-пробега»):
+   *  - objectStatData: агрегат за период с одометром и РЕАЛЬНЫМИ временами
+   *    измерений на границах (odom_start/s_odo_dt, odom_finish/e_odo_dt;
+   *    s_odo_dt/e_odo_dt — epoch-СЕКУНДЫ UTC). Без from/to отдаёт текущее
+   *    значение и datetime последнего измерения.
+   *  - cityOrTrack (can_needed=true): сегменты город/трасса; у сегментов
+   *    движения start_odometer/end_odometer (float, км) и их времена.
+   *  - getPlanFact: у нашего аккаунта 403 (нет прав) — НЕ используем.
+   */
+  objectStatData: '/lumen/integration/object-stat-data',
+  cityOrTrack: '/lumen/integration/city-or-track',
 } as const;
 
 /**
@@ -52,6 +65,56 @@ export const NAVBY_ODO_SOURCE = 'navby.odom_can';
 export const NAVBY_ODO_VIRT_SOURCE = 'navby.odom_virt';
 /** Реальная шкала одометра в км. */
 export const NAVBY_ODO_UNIT = 'km';
+
+/**
+ * Источники измерений одометра («История CAN-пробега»). Имя источника —
+ * подтверждённый живым вызовом метод API, из которого получено измерение:
+ *  - stat_window: object-stat-data за окно; значение — целые км (округление
+ *    источника), время измерения s_odo_dt/e_odo_dt — РЕАЛЬНОЕ (epoch секунды);
+ *  - city_segment: city-or-track, can_needed=true; start_odometer/end_odometer
+ *    (float, км) на границах сегментов движения;
+ *  - parking_segment: parking-movement-report; s_odo_can/e_odo_can (float, км)
+ *    на границах интервалов стоянка/движение;
+ *  - snapshot: снимок current-position портала (время измерения одометра в
+ *    API отсутствует — честно помечается «время измерения неизвестно»;
+ *    хранится как проекция telemetry_history, отдельно не дублируется).
+ */
+export const NAVBY_CAN_SOURCES = {
+  statWindow: 'navby.stat_window',
+  citySegment: 'navby.city_segment',
+  parkingSegment: 'navby.parking_segment',
+  snapshot: 'navby.current_position',
+} as const;
+export type NavbyCanSource = typeof NAVBY_CAN_SOURCES[keyof typeof NAVBY_CAN_SOURCES];
+/** Короткие теги для ключей узлов RTDB. */
+export const NAVBY_CAN_SRC_TAG: Record<string, string> = {
+  [NAVBY_CAN_SOURCES.statWindow]: 'sw',
+  [NAVBY_CAN_SOURCES.citySegment]: 'cs',
+  [NAVBY_CAN_SOURCES.parkingSegment]: 'ps',
+  [NAVBY_CAN_SOURCES.snapshot]: 'cp',
+};
+/** Точность значения: int — целые км (object-stat-data), 3 — три знака (float-источники). */
+export type NavbyCanPrecision = 'km_int' | 'km_3dec';
+
+/** Дополнения конфигурации модуля для постоянного сбора истории. */
+export const CAN_COLLECT_DEFAULTS = {
+  /** Включён ли постоянный сбор измерений CAN. */
+  canCollectEnabled: true,
+  /** Окно запроса object-stat-data при почасовом съёме, мин (2 точки на окно). */
+  canWindowMin: 60,
+  /** Как часто делать почасовой съём (мин от последнего). */
+  canSweepMin: 60,
+  /** Максимум окон к догону за один цикл (ограничение темпа запросов). */
+  canSweepMaxWindows: 3,
+  /** Как часто выполнять суточную догрузку сегментов (часов). */
+  canBackfillHours: 24,
+  /** Сколько последних полных дней догружать каждый раз (идемпотентно). */
+  canBackfillDays: 2,
+  /** Максимум дней в запросе city-or-track/parking за один вызов (защита от таймаута). */
+  canChunkDays: 31,
+  /** Сколько машин обрабатывать за цикл догрузки (курсор продолжит со следующего). */
+  canBackfillCarsPerRun: 50,
+} as const;
 
 /** Поля позиции, которые модуль забирает с current-position (подтверждены). */
 export const NAVBY_CP_FLAGS: Record<string, string> = {

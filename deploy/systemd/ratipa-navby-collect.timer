@@ -1,0 +1,14 @@
+# Таймер регулярного сбора RATIPA (см. ratipa-navby-collect.service).
+# Интервал по умолчанию — 5 минут; изменить: OnUnitActiveSec.
+[Unit]
+Description=RATIPA Nav.by collector timer (каждые 5 минут)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=true
+Unit=ratipa-navby-collect.service
+
+[Install]
+WantedBy=timers.target

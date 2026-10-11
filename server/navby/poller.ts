@@ -21,6 +21,7 @@ import { adminDb } from '../../firebaseAdmin.ts';
 import { NavbyClient, navbyClientFromEnv, type NavbyClientOptions } from './client.ts';
 import { TelemetryStore, matchFleet, type TelemetryConfig } from './store.ts';
 import { planAlerts, type AlertCarInput, type RfEntryLite } from './alerts.ts';
+import { runCanCollectionOnce } from './collector.ts';
 
 export interface PollSummary {
   mode: 'ok' | 'degraded' | 'skipped' | 'unconfigured' | 'dry_run';
@@ -315,11 +316,22 @@ export function startNavbyPoller(opts?: { log?: (s: string) => void }): void {
   if (loopStarted) return;
   loopStarted = true;
   const log = opts?.log || ((s: string) => console.log(s));
+  // Один HTTP-клиент Nav.by на процесс: снимки и съём истории делят один
+  // бюджет self-лимита (40 req/min при аккаунтных 100) — вместе с другими
+  // интеграциями аккаунта лимит не выбивается.
+  const sharedClient = navbyClientFromEnv(process.env);
   const tick = async () => {
     let intervalMs = 300_000;
     try {
-      const summary = await runPollCycle({ log });
+      const summary = await runPollCycle({ log, client: sharedClient });
       log(`[navby] цикл: mode=${summary.mode} новых=${summary.samplesNew} совпало=${summary.samplesSame} старее=${summary.samplesOlder} матч=${summary.matchedCars} уведомл=${summary.alertsUpserted}/${summary.alertsRemoved} (${summary.durationMs} мс)`);
+      // История одометра («CAN-пробег»): почасовой съём измерений + суточная
+      // догрузка сегментов. Соблюдает расписание в telemetry_config, отдельная
+      // single-flight блокировка исключает дубли с launchd-агентом и CLI.
+      const can = await runCanCollectionOnce({ log, client: sharedClient });
+      if (can.mode !== 'skipped' || can.reason !== 'locked') {
+        log(`[navby] история CAN: mode=${can.mode} окон=${can.sweepWindows} точек=${can.sweepPoints + can.backfillPoints} новых=${can.sweepNew + can.backfillNew} (${can.durationMs} мс)`);
+      }
       intervalMs = (await getPollIntervalSec()) * 1000;
     } catch (e) {
       log(`[navby] цикл завершился ошибкой: ${String(e).slice(0, 200)}`);

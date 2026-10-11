@@ -18,7 +18,10 @@
     "test:mileage": "tsx scripts/test-mileage-engine.ts",
     "navby:poll": "tsx scripts/navby-poll.ts",
     "navby:poller": "tsx scripts/navby-poll.ts --loop",
-    "test:navby": "tsx scripts/test-navby.ts"
+    "navby:collect": "tsx scripts/navby-collect.ts",
+    "navby:backfill": "tsx scripts/navby-backfill.ts",
+    "test:navby": "tsx scripts/test-navby.ts",
+    "test:canseries": "tsx scripts/test-can-series.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

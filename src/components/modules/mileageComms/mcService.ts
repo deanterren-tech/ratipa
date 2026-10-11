@@ -16,8 +16,59 @@ import { MC_CONFIG_DEFAULTS } from './mcTypes';
 import { MC_CHECK_DEFAULTS, mergeCheckParams, type CheckParams } from './engine/params';
 import { normalizeSample, type HistoryNodeRaw } from './engine/samples';
 import type { BoundsOverride, MeasureSample, ParkingIntervalRaw, TechMarkRecord } from './engine/types';
+import { canDayKeysInRange, normalizeCanRecord, type CanPoint } from './engine/canSeries';
 
 const ROOT = 'telemetry';
+
+/**
+ * Клиентский кэш серверных прокси-запросов (parking-report / can-backfill):
+ * ключ — (carKey, границы диапазона с шагом 5 мин). Один запрос на диапазон:
+ * повторные открытия того же дня/рейса и штормы перерисовок не шлют HTTP
+ * повторно; действующие одновременные запросы разделяются (inflight).
+ * Лимит Nav.by на аккаунт общий с другими интеграциями — экономим запросы.
+ */
+const PROXY_CACHE_TTL_MS = 10 * 60_000;
+const PROXY_NEGATIVE_TTL_MS = 30_000;
+const proxyCache = new Map<string, { atMs: number; payload: unknown; negative?: boolean }>();
+const proxyInflight = new Map<string, Promise<unknown>>();
+
+const proxyKey = (kind: string, carKey: string, fromMs: number, toMs: number): string =>
+  `${kind}|${carKey}|${Math.round(fromMs / 300_000)}|${Math.round(toMs / 300_000)}`;
+
+async function cachedProxy<T>(kind: string, carKey: string, fromMs: number, toMs: number, fetcher: () => Promise<T>, fallback: (reason: string) => T): Promise<T> {
+  const key = proxyKey(kind, carKey, fromMs, toMs);
+  const hit = proxyCache.get(key);
+  if (hit) {
+    const ttl = hit.negative ? PROXY_NEGATIVE_TTL_MS : PROXY_CACHE_TTL_MS;
+    if (Date.now() - hit.atMs < ttl) {
+      return { ...(hit.payload as T), ...(typeof hit.payload === 'object' && hit.payload ? { cached: true, ...(hit.negative ? { negativeCache: true } : {}) } : {}) };
+    }
+  }
+  const inflight = proxyInflight.get(key) as Promise<T> | undefined;
+  if (inflight) return inflight;
+  const task = (async () => {
+    try {
+      const res = await fetcher();
+      const ok = (res as { ok?: boolean }).ok === true;
+      // Успех кэшируем надолго; ошибку (включая «лимит запросов») — коротко,
+      // чтобы не долбить сервер повторами во время разбора лимита.
+      proxyCache.set(key, { atMs: Date.now(), payload: res, negative: !ok });
+      if (proxyCache.size > 200) {
+        const first = proxyCache.keys().next().value;
+        if (first) proxyCache.delete(first);
+      }
+      return res;
+    } catch (e) {
+      const out = fallback(String(e instanceof Error ? e.message : e).slice(0, 120));
+      proxyCache.set(key, { atMs: Date.now(), payload: out, negative: true });
+      return out;
+    } finally {
+      proxyInflight.delete(key);
+    }
+  })();
+  proxyInflight.set(key, task);
+  return task;
+}
 
 /** Ключ дня YYYYMMDD в поясе API (+03) — как navbyDayKey на сервере. */
 const dayKeyOf = (ms: number): string => {
@@ -321,25 +372,108 @@ export const mcService = {
     fetchedAt?: string;
     cached?: boolean;
   }> {
-    try {
-      const authUser = useFirebase ? await ensureAuth() : null;
-      if (!authUser) return { ok: false, reason: 'нет авторизации Firebase' };
-      const token = await authUser.getIdToken();
-      const url = `/api/navby/parking-report?carKey=${encodeURIComponent(carKey)}&from=${Math.round(fromMs)}&to=${Math.round(toMs)}`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      const data = (await res.json().catch(() => null)) as {
-        ok?: boolean;
-        reason?: string;
-        intervals?: ParkingIntervalRaw[];
-        fetchedAt?: string;
-        cached?: boolean;
-      } | null;
-      if (data && data.ok === false) return { ok: false, reason: parkingReasonLabel(data.reason) };
-      if (!res.ok || !data) return { ok: false, reason: `HTTP ${res.status}` };
-      return { ok: true, intervals: data.intervals || [], fetchedAt: data.fetchedAt, cached: data.cached };
-    } catch (e) {
-      return { ok: false, reason: String(e instanceof Error ? e.message : e).slice(0, 120) };
+    return cachedProxy('parking', carKey, fromMs, toMs,
+      async () => {
+        try {
+          const authUser = useFirebase ? await ensureAuth() : null;
+          if (!authUser) return { ok: false as const, reason: 'нет авторизации Firebase' };
+          const token = await authUser.getIdToken();
+          const url = `/api/navby/parking-report?carKey=${encodeURIComponent(carKey)}&from=${Math.round(fromMs)}&to=${Math.round(toMs)}`;
+          const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+          const data = (await res.json().catch(() => null)) as {
+            ok?: boolean;
+            reason?: string;
+            intervals?: ParkingIntervalRaw[];
+            fetchedAt?: string;
+            cached?: boolean;
+          } | null;
+          if (data && data.ok === false) return { ok: false as const, reason: parkingReasonLabel(data.reason) };
+          if (!res.ok || !data) return { ok: false as const, reason: res.status === 429 ? parkingReasonLabel('rate_limited') : `HTTP ${res.status}` };
+          return { ok: true as const, intervals: data.intervals || [], fetchedAt: data.fetchedAt, cached: data.cached };
+        } catch (e) {
+          return { ok: false as const, reason: String(e instanceof Error ? e.message : e).slice(0, 120) };
+        }
+      },
+      (reason) => ({ ok: false, reason }),
+    );
+  },
+
+  /* ─────────────── История одометра («CAN-пробег», карточка машины) ───────────────
+   * UI читает измерения напрямую из RTDB (как telemetry_history), секретов
+   * здесь нет; догрузка за период — через серверный прокси (token Nav.by
+   * остаётся на сервере).
+   */
+
+  /** Измерения одометра за диапазон: telemetry_can_history по дневным папкам (+03). */
+  async readCanHistoryRange(carKey: string, fromMs: number, toMs: number): Promise<CanPoint[]> {
+    if (!useFirebase || !carKey) return [];
+    const days = canDayKeysInRange(fromMs - 12 * 3_600_000, toMs + 12 * 3_600_000, 100);
+    const chunks = await Promise.all(
+      days.map(async (d) => {
+        try {
+          const snap = await get(ref(database, `${ROOT}_can_history/${carKey}/${d}`));
+          return snap.val() as Record<string, Record<string, unknown>> | null;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    const out: CanPoint[] = [];
+    for (const chunk of chunks) {
+      if (!chunk) continue;
+      for (const node of Object.values(chunk)) {
+        const p = normalizeCanRecord(node);
+        if (p && p.xMs >= fromMs && p.xMs <= toMs) out.push(p);
+      }
     }
+    return out;
+  },
+
+  /** Покрытие измерениями по дням (какие методы отработали/что дали). */
+  async readCanCoverage(carKey: string): Promise<Record<string, Record<string, unknown>>> {
+    if (!useFirebase || !carKey) return {};
+    try {
+      const snap = await get(ref(database, `${ROOT}_can_coverage/${carKey}`));
+      return (snap.val() as Record<string, Record<string, unknown>>) || {};
+    } catch {
+      return {};
+    }
+  },
+
+  /** Состояние постоянного сбора истории (частота, последний цикл). */
+  subscribeCanCollectState: (cb: (v: Record<string, unknown> | null) => void) =>
+    sub<Record<string, unknown>>(`${ROOT}_can_collect`, cb),
+
+  /** Догрузка истории за период (сервер вызывает исторические методы Nav.by). */
+  async fetchCanBackfill(carKey: string, fromMs: number, toMs: number): Promise<{
+    ok: boolean;
+    reason?: string;
+    days?: number;
+    statPoints?: number;
+    segPoints?: number;
+    written?: number;
+    duplicates?: number;
+  }> {
+    return cachedProxy('canbackfill', carKey, fromMs, toMs,
+      async () => {
+        try {
+          const authUser = useFirebase ? await ensureAuth() : null;
+          if (!authUser) return { ok: false as const, reason: 'нет авторизации Firebase' };
+          const token = await authUser.getIdToken();
+          const url = `/api/navby/can-backfill?carKey=${encodeURIComponent(carKey)}&from=${Math.round(fromMs)}&to=${Math.round(toMs)}`;
+          const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+          const data = (await res.json().catch(() => null)) as {
+            ok?: boolean; reason?: string; days?: number; statPoints?: number; segPoints?: number; written?: number; duplicates?: number;
+          } | null;
+          if (!data) return { ok: false as const, reason: res.status === 429 ? parkingReasonLabel('rate_limited') : `HTTP ${res.status}` };
+          if (data.ok === false) return { ok: false as const, reason: parkingReasonLabel(data.reason) };
+          return { ok: true as const, days: data.days, statPoints: data.statPoints, segPoints: data.segPoints, written: data.written, duplicates: data.duplicates };
+        } catch (e) {
+          return { ok: false as const, reason: String(e instanceof Error ? e.message : e).slice(0, 120) };
+        }
+      },
+      (reason) => ({ ok: false, reason }),
+    );
   },
 
   /** Комментарий проверяющего (журнал рейса; опционально — к стоянке). */

@@ -19,6 +19,7 @@ import { fmtDMY, fmtKm } from './engine/format';
 import { mcService } from './mcService';
 import type { McConfig, McCurrent, McIntegration, McMapping } from './mcTypes';
 import TripCheckCard from './TripCheckCard';
+import CanHistoryBlock from './CanHistoryBlock';
 import type { TripResultBrief } from './TripCheckView';
 
 interface Props {
@@ -245,8 +246,19 @@ export default function MileageCheckTab(props: Props) {
           const openRow = rows.find((r) => r.carKey === expanded) || null;
           if (!openRow) return null;
           return (
-            <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3" data-testid="mc-expanded-block">
-              <div className="text-[11px] font-semibold text-[#121316] mb-2 flex items-center justify-between gap-2 flex-wrap">
+            <div className="bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl p-3 flex flex-col gap-3" data-testid="mc-expanded-block">
+              <CanHistoryBlock
+                carKey={openRow.carKey}
+                plate={openRow.plate}
+                mapping={mapping[openRow.carKey] || null}
+                trips={openRow.trips}
+                stagesStore={stagesStore}
+                nowMs={nowMs}
+                params={checkParams}
+                current={current[openRow.carKey]}
+                config={config}
+              />
+              <div className="text-[11px] font-semibold text-[#121316] flex items-center justify-between gap-2 flex-wrap">
                 <span>{openRow.plate} — подробный анализ рейса</span>
                 <button type="button" className={UI.buttonLink} onClick={() => setExpanded(null)}>Свернуть</button>
               </div>

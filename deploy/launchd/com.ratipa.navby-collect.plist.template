@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Шаблон launchd-агента регулярного сбора «Пробег и связь» + история
+  одометра (CAN-пробег). НЕ загружайте его напрямую: плейсхолдеры
+  (__PROJECT_DIR__, __NODE_BIN__, __LOG_FILE__, __INTERVAL_SEC__)
+  подставляет scripts/install-navby-collect.sh.
+
+  Агент запускает ОДИН цикл сбора каждые __INTERVAL_SEC__ секунд (по
+  умолчанию 300 = 5 минут):
+    - снимки позиций/одометра (single-flight lock в RTDB — параллельные
+      дубли исключены, в том числе с ручными запусками);
+    - почасовой съём измерений истории (object-stat-data);
+    - суточную догрузку сегментов (city-or-track + parking) — не чаще
+      canBackfillHours (настройка модуля).
+  Браузер не участвует; секреты берутся из .env.local проекта.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.ratipa.navby-collect</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>cd "__PROJECT_DIR__" && exec "__NODE_BIN__" ./node_modules/tsx/dist/cli.mjs scripts/navby-collect.ts</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__PROJECT_DIR__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__NODE_DIR__:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>__INTERVAL_SEC__</integer>
+  <key>ThrottleInterval</key>
+  <integer>60</integer>
+  <key>StandardOutPath</key>
+  <string>__LOG_FILE__</string>
+  <key>StandardErrorPath</key>
+  <string>__LOG_FILE__.err</string>
+</dict>
+</plist>

@@ -10,6 +10,8 @@ import { agentAuthMiddleware } from "./agentAuth.ts";
 import { handleUserRequest } from "./server/ai/orchestrator.ts";
 import { loadDriveFolder, extractFolderId } from "./server/driveList";
 import { startNavbyPoller } from "./server/navby/poller.ts";
+import { backfillCanRange } from "./server/navby/collector.ts";
+import { TelemetryStore } from "./server/navby/store.ts";
 import { adminAuth, adminDb } from "./firebaseAdmin.ts";
 import { navbyClientFromEnv } from "./server/navby/client.ts";
 
@@ -1554,9 +1556,12 @@ async function startServer() {
       const imeiStr = imei;
 
       // Лимит на IP — только для запросов, доходящих до Nav.by (или кэша).
+      // Достигнут лимит — отвечаем 200 {ok:false,reason:'rate_limited'}: UI
+      // показывает спокойное состояние «слишком частые запросы», а браузер
+      // не пишет ошибку ресурса в консоль (HTTP 429 в консоли выглядит шумом).
       const calls = (mcParkingRate.get(ip) || []).filter((t) => nowMs - t < 60_000);
       if (calls.length >= MC_PARKING_RATE_PER_MIN) {
-        return res.status(429).json({ ok: false, reason: "rate_limited" });
+        return res.status(200).json({ ok: false, reason: "rate_limited" });
       }
       calls.push(nowMs);
       mcParkingRate.set(ip, calls);
@@ -1607,6 +1612,84 @@ async function startServer() {
       return res.json(payload);
     } catch (e) {
       console.warn("[navby] parking-report proxy error:", String(e).slice(0, 200));
+      return res.status(500).json({ ok: false, reason: "internal" });
+    }
+  });
+
+  // ── Догрузка истории одометра («CAN-пробег») по требованию ──
+  // UI вызывает при открытии дня/рейса, для которых видно «история ещё не
+  // загружена»; сервер идёт в исторические методы Nav.by и пополняет
+  // telemetry_can_history (идемпотентно: дедупликация по идентичности).
+  const mcCanBackfillInflight = new Map<string, Promise<Record<string, unknown>>>();
+  const mcCanBackfillRate = new Map<string, number[]>();
+  const MC_CAN_BACKFILL_RATE_PER_MIN = 12;
+  app.get("/api/navby/can-backfill", async (req, res) => {
+    try {
+      if (!adminAuth || !adminDb) {
+        return res.status(503).json({ ok: false, reason: "firebase_admin_unavailable" });
+      }
+      const header = req.headers["authorization"] || "";
+      const tokenMatch = header.match(/^Bearer\s+(.+)$/i);
+      if (!tokenMatch) return res.status(401).json({ ok: false, reason: "no_token" });
+      try {
+        await adminAuth.verifyIdToken(tokenMatch[1].trim());
+      } catch {
+        return res.status(401).json({ ok: false, reason: "bad_token" });
+      }
+      const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "?").split(",")[0].trim();
+      const nowMs = Date.now();
+      const calls = (mcCanBackfillRate.get(ip) || []).filter((t) => nowMs - t < 60_000);
+      if (calls.length >= MC_CAN_BACKFILL_RATE_PER_MIN) {
+        // Спокойный статус вместо HTTP 429 (см. parking-report).
+        return res.status(200).json({ ok: false, reason: "rate_limited" });
+      }
+      calls.push(nowMs);
+      mcCanBackfillRate.set(ip, calls);
+
+      const carKey = String(req.query.carKey || "").trim();
+      const fromMs = Number(req.query.from);
+      const toMs = Number(req.query.to);
+      if (!carKey) return res.status(400).json({ ok: false, reason: "no_car" });
+      if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
+        return res.status(400).json({ ok: false, reason: "bad_range" });
+      }
+      if (toMs - fromMs > 92 * 86_400_000) return res.status(400).json({ ok: false, reason: "range_too_long" });
+
+      const mapSnap = await adminDb.ref(`telemetry_mapping/${carKey}`).once("value");
+      const mapping = mapSnap.val() as { navbyObjectId?: string; imei?: string | null } | null;
+      let imei = mapping && typeof mapping.imei === "string" ? mapping.imei : null;
+      const objectId = mapping?.navbyObjectId ? String(mapping.navbyObjectId) : "";
+      if (!imei && objectId) {
+        const uidSnap = await adminDb.ref(`telemetry_navby_objects/${objectId}/uid`).once("value");
+        imei = typeof uidSnap.val() === "string" ? uidSnap.val() : null;
+      }
+      if (!imei) return res.status(200).json({ ok: false, reason: "no_mapping" });
+      const client = (mcNavbyClient ||= navbyClientFromEnv(process.env));
+      if (!client.hasCredentials()) return res.status(200).json({ ok: false, reason: "navby_unconfigured" });
+
+      const inflightKey = `${carKey}|${Math.floor(fromMs / 3_600_000)}|${Math.ceil(toMs / 3_600_000)}`;
+      const inflight = mcCanBackfillInflight.get(inflightKey);
+      if (inflight) return res.json(await inflight);
+
+      const task = (async (): Promise<Record<string, unknown>> => {
+        const store = new TelemetryStore(adminDb, {});
+        const r = await backfillCanRange({
+          carKey, objectId, imei: imei as string, fromMs, toMs, store, client,
+          log: (line) => console.log(line),
+        });
+        return { ok: r.ok, days: r.days, statPoints: r.statPoints, segPoints: r.segPoints, written: r.written, duplicates: r.duplicates, errors: r.errors, fetchedAt: new Date().toISOString() };
+      })();
+      mcCanBackfillInflight.set(inflightKey, task);
+      let payload: Record<string, unknown>;
+      try {
+        payload = await task;
+      } finally {
+        mcCanBackfillInflight.delete(inflightKey);
+        if (mcCanBackfillInflight.size === 0 && mcCanBackfillRate.size > 500) mcCanBackfillRate.clear();
+      }
+      return res.json(payload);
+    } catch (e) {
+      console.warn("[navby] can-backfill error:", String(e).slice(0, 200));
       return res.status(500).json({ ok: false, reason: "internal" });
     }
   });

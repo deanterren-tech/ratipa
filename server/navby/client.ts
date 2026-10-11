@@ -22,6 +22,11 @@ import {
 import type { NormalizedNavbyObject, TelemetrySample } from './parse.ts';
 import { normalizeNavbyObject, normalizePosition } from './parse.ts';
 import { normalizeParkingItems, type ParkingReport } from './parking.ts';
+import {
+  measurementsFromCityTrackItem,
+  measurementsFromStatItem,
+  type CanMeasurement,
+} from './canHistory.ts';
 
 export type NavbyErrorKind =
   | 'not_configured'
@@ -301,6 +306,55 @@ export class NavbyClient {
       date_to: navbyDateTimeString(toMs),
     };
     return this.request(NAVBY_PATHS.parkingReport, params, (items) => normalizeParkingItems(items));
+  }
+
+  /**
+   * Статистика по пробегу за период (object-stat-data; подтверждено живым
+   * вызовом 11.10.2026). Возвращает до двух измерений одометра за окно
+   * (начало/конец) с РЕАЛЬНЫМИ временами s_odo_dt/e_odo_dt (epoch-секунды).
+   * Машина без движения в окне — измерений нет (0/null не превращаем в точки).
+   */
+  async getStatData(imei: string, fromMs: number, toMs: number): Promise<NavbyResult<CanMeasurement[]>> {
+    const params: Record<string, string> = {
+      imei: String(imei),
+      from: navbyDateTimeString(fromMs),
+      to: navbyDateTimeString(toMs),
+    };
+    const receivedAt = new Date(this.now()).toISOString();
+    return this.request(NAVBY_PATHS.objectStatData, params, (items) => {
+      const out: CanMeasurement[] = [];
+      for (const raw of items) {
+        const item = (raw || {}) as Record<string, unknown>;
+        const objectId = item.object_id != null ? String(item.object_id) : null;
+        const itemImei = item.object_uid != null ? String(item.object_uid) : null;
+        out.push(...measurementsFromStatItem(item, { objectId, imei: itemImei || String(imei), receivedAt }));
+      }
+      return out;
+    });
+  }
+
+  /**
+   * Сегменты «Город-трасса» с CAN (can_needed=true; подтверждено живым
+   * вызовом 11.10.2026): границы сегментов движения с start_odometer/
+   * end_odometer (float км) и реальными временами границ.
+   */
+  async getCityOrTrack(imei: string, fromMs: number, toMs: number): Promise<NavbyResult<CanMeasurement[]>> {
+    const params: Record<string, string> = {
+      imei: String(imei),
+      date_from: navbyDateTimeString(fromMs),
+      date_to: navbyDateTimeString(toMs),
+      can_needed: 'true',
+    };
+    const receivedAt = new Date(this.now()).toISOString();
+    return this.request(NAVBY_PATHS.cityOrTrack, params, (items) => {
+      const out: CanMeasurement[] = [];
+      for (const raw of items) {
+        const item = (raw || {}) as Record<string, unknown>;
+        const itemImei = item.imei != null ? String(item.imei) : null;
+        out.push(...measurementsFromCityTrackItem(item, { objectId: null, imei: itemImei || String(imei), receivedAt }));
+      }
+      return out;
+    });
   }
 }
 
