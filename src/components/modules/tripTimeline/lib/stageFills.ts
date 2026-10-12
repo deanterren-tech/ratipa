@@ -173,13 +173,28 @@ export const stageNeighborLabel = (types: TimelineStageType[], s: TimelineStage)
  * переходу. Точность — календарные дни; время в данных этапов не хранится и
  * не выдумывается.
  */
+
+/** Сведения о запасе этапа (из планового графика lib/stageSchedule). */
+export interface StageBufferInfo {
+  bufferDays: number;
+  cumBufferDays: number;
+  effectiveIso: string | null;
+  stateLabel?: string | null;
+}
+
+/** Строка запаса этапа — ОДИН текст для подсказки доли этапа и сегмента «Риски». */
+export const stageBufferLine = (buffer: StageBufferInfo): string =>
+  `запас этапа: ${buffer.bufferDays} дн (накопленный по маршруту: ${buffer.cumBufferDays} дн)${
+    buffer.effectiveIso ? ` · плановая дата с запасом: ${fmtDM(dayNum(buffer.effectiveIso))}` : ''
+  }`;
+
 export const stageFillTitle = (
   types: TimelineStageType[],
   s: TimelineStage,
   day: number,
   today: number,
   /** Сведения о запасе этапа (из планового графика lib/stageSchedule). */
-  buffer?: { bufferDays: number; cumBufferDays: number; effectiveIso: string | null; stateLabel?: string | null } | null,
+  buffer?: StageBufferInfo | null,
 ): string => {
   const t = types.find((x) => x.key === s.type);
   const typeName = t ? t.name : s.type || 'Этап';
@@ -191,11 +206,7 @@ export const stageFillTitle = (
   if (dev != null) parts.push(dev > 0 ? `позже плана на ${dev} дн` : dev < 0 ? `раньше плана на ${-dev} дн` : 'по плану');
   else parts.push(st.label);
   if (buffer && buffer.bufferDays > 0) {
-    parts.push(
-      `запас этапа: ${buffer.bufferDays} дн (накопленный по маршруту: ${buffer.cumBufferDays} дн)${
-        buffer.effectiveIso ? ` · плановая дата с запасом: ${fmtDM(dayNum(buffer.effectiveIso))}` : ''
-      }`,
-    );
+    parts.push(stageBufferLine(buffer));
     if (buffer.stateLabel) parts.push(`состояние: ${buffer.stateLabel}`);
   }
   if (dayNum(s.plannedDate) == null && dayNum(s.actualDate) != null) parts.push('плановая дата не указана');
@@ -204,3 +215,26 @@ export const stageFillTitle = (
   parts.push('клик — открыть рейс и выделить этап в карточке');
   return parts.join(' · ');
 };
+
+/**
+ * Подсказка СЕГМЕНТА «РИСКИ» — буферный текст этапа (запас, накопленный,
+ * плановая дата с запасом, состояние) + назначение сегмента. Тот же буферный
+ * текст, что у доли этапа (stageBufferLine) — источник один.
+ */
+export const stageRiskTitle = (
+  types: TimelineStageType[],
+  s: TimelineStage,
+  buffer: StageBufferInfo,
+): string => {
+  const parts: string[] = [`Риски «${stageShortName(types, s)}»: +${buffer.bufferDays} дн`, stageBufferLine(buffer)];
+  if (buffer.stateLabel) parts.push(`состояние: ${buffer.stateLabel}`);
+  parts.push('клик — открыть рейс и выделить этап в карточке');
+  return parts.join(' · ');
+};
+
+/**
+ * Подсказка сегмента «Риски» ЗАПАСА ЗАПИСИ ручного рейса (trip.bufferDays —
+ * «сверх запасов этапов»; TripCard показывает то же словами).
+ */
+export const tripRiskTitle = (days: number): string =>
+  `Риски записи: +${days} дн — запас на риски записи (сверх запасов этапов) · клик — открыть карточку рейса`;

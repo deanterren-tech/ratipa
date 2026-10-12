@@ -91,7 +91,8 @@ import { useCrosshair } from './lib/useCrosshair';
 import { useColumnHighlight } from './lib/timelinePrefs';
 // Z-шкала слоёв полотна — единый источник (lib/visuals): встроенный таймлайн
 // использует те же слои, что основное полотно (этапы всегда поверх полос).
-import { BAR_ICON_CLS, TL_Z, TRIP_CIRCLE_BADGE_CLS, TRIP_CIRCLE_TICK_CLS, TRIP_CIRCLE_TICK_LINE, TRIP_CIRCLE_TICK_TEXT, conflictHatch, hatch45, stageIconOf, tripCircleBadgeStyle, waitHatch } from './lib/visuals';
+import { BAR_ICON_CLS, RISK_COLORS, TL_Z, TRIP_CIRCLE_BADGE_CLS, TRIP_CIRCLE_TICK_CLS, TRIP_CIRCLE_TICK_LINE, TRIP_CIRCLE_TICK_TEXT, conflictHatch, riskHatch, stageIconOf, tripCircleBadgeStyle, waitHatch } from './lib/visuals';
+import { riskSegmentTextOf } from './lib/riskSegments';
 // Единое правило долей ячейки дня (половины/трети событий) — общее с полотном.
 import {
   buildRowDaySections,
@@ -1456,14 +1457,38 @@ export function CarMiniTimeline({
               if (!q) return null;
               const ti = miniPlanTrack.bufferSlot.get(t.key);
               const top = ti == null ? 5 : miniPlanTrack.layout.tops[ti];
+              const riskText = riskSegmentTextOf(t.bufferDays, q.width);
               return (
                 <div
                   key={`buf-${t.key}`}
                   data-bar="buffer"
-                  className="absolute"
-                  style={{ zIndex: TL_Z.tripBar, left: q.left, width: q.width, top, height: MINI_PLAN_BAR_H, background: hatch45, borderRadius: 3 }}
-                  title={`запас ${t.bufferDays} дн`}
-                />
+                  data-risk-seg="1"
+                  data-risk-kind="trip"
+                  data-risk-days={t.bufferDays}
+                  data-risk-text={riskText || undefined}
+                  className="absolute flex items-center"
+                  style={{
+                    zIndex: TL_Z.risk,
+                    left: q.left,
+                    width: q.width,
+                    top,
+                    height: MINI_PLAN_BAR_H,
+                    backgroundImage: riskHatch,
+                    border: `1px solid ${RISK_COLORS.border}`,
+                    borderLeft: `2px solid ${RISK_COLORS.edge}`,
+                    borderRadius: '0 4px 4px 0',
+                  }}
+                  title={`Риски +${t.bufferDays} дн · запас на риски записи (сверх запасов этапов)`}
+                >
+                  {riskText ? (
+                    <span
+                      className="min-w-0 px-1 overflow-hidden text-ellipsis whitespace-nowrap text-[8px] leading-[10px] font-semibold"
+                      style={{ color: RISK_COLORS.text }}
+                    >
+                      {riskText}
+                    </span>
+                  ) : null}
+                </div>
               );
             })}
             {miniPlanOv.waitGaps.map((g) => renderMiniWaitGap(g, 'mpw'))}

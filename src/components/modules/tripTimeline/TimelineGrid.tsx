@@ -57,8 +57,10 @@ import {
   stageColorOf,
   stageFillTitle,
   stageNeighborLabel,
-  stagePlanRange,
+  stageRiskTitle,
   stageShortName,
+  tripRiskTitle,
+  type StageBufferInfo,
   type StageFillInput,
   type StageFillSection,
 } from './lib/stageFills';
@@ -73,7 +75,8 @@ import {
 } from './lib/bzFills';
 import { tripRangeOf, VYEZD_STATUS, vyezdStatusIcon } from './lib/vyezd';
 import { layoutEventDots, repairEventDotColor, repairEventLabel, type RepairEvent } from './lib/repairEvents';
-import { buildStageSchedule, stageBufferOf, stageBufferStateOf, stageRouteCmp, type StageBufferStateInfo, type StageSchedule } from './lib/stageSchedule';
+import { buildStageSchedule, stageBufferOf, stageBufferStateOf, stageRouteCmp, stageSeqOf, type StageBufferStateInfo, type StageSchedule } from './lib/stageSchedule';
+import { layoutRiskSegments, riskSegmentTextOf, riskTextBudgetWithChip, type RiskSegment, type RiskSegmentInput } from './lib/riskSegments';
 import { resolveRowOverlaps, type RowOverlapResolution, type RowTripAdjust, type RowTripInterval } from './lib/overlapRow';
 import type { ResolvedMarker, ResolvedWarning, WaitGap } from './lib/overlap';
 import {
@@ -126,13 +129,14 @@ import {
   MARKER_TONE,
   PLAN_ACCENT,
   PLAN_ACCENT_ARCH,
+  RISK_COLORS,
   TL_Z,
   TRIP_CIRCLE_BADGE_CLS,
   TRIP_CIRCLE_TICK_CLS,
   TRIP_CIRCLE_TICK_LINE,
   TRIP_CIRCLE_TICK_TEXT,
   conflictHatch,
-  hatch45,
+  riskHatch,
   stageIconOf,
   tripCircleBadgeStyle,
   waitHatch,
@@ -164,7 +168,6 @@ type PlanItem =
       /** Круги рейса (поле «Круги» записи): бейдж ×N и засечки на полосе. */
       circleMarks?: TripCircleMarks | null;
     }
-  | { kind: 'buffer'; a: number; b: number; days: number }
   | { kind: 'handover'; point: number; from: string; to: string; note: string; title: string; chip: boolean };
 
 type DeadlineStatusKind = 'none' | 'ok' | 'risk' | 'violated' | 'missed';
@@ -191,6 +194,8 @@ interface CarRowModel {
   empty: boolean;
   planItems: PlanItem[];
   factItems: FactItem[];
+  /** Запасы ЗАПИСИ ручных рейсов (trip.bufferDays) — сегменты «Риски» после полосы. */
+  tripBuffers: Array<{ tripKey: string; days: number; anchorDay: number }>;
   /** Этапы всех рейсов машины в окне — источник заливок «План»/«Факт». */
   stageInputs: StageFillInput[];
   /** Записи «Учёта выезда» машины в окне — источник заливок базы/ремонта. */
@@ -437,6 +442,8 @@ const buildRows = (
 
     const planItems: PlanItem[] = [];
     const factItems: FactItem[] = [];
+    /** Запасы ЗАПИСИ ручных рейсов (trip.bufferDays) — в единый слой «Риски». */
+    const tripBuffers: CarRowModel['tripBuffers'] = [];
     /** Интервалы, ОТОБРАЖАЕМЫЕ в подстроках, — вход разрешения наложений (lib/overlap). */
     const planInts: RowTripInterval[] = [];
     const factInts: RowTripInterval[] = [];
@@ -489,8 +496,11 @@ const buildRows = (
       // Плановое возвращение — это ПРАВЫЙ КРАЙ плановой полосы (дата возвращения
       // в подсказке полосы): отдельной синей «полоски» в конце полосы нет —
       // форма полосы остаётся цельной, начало и конец одинаковые.
-      if (t.kind === 'manual' && pMax != null && t.bufferDays > 0 && visible(pMax + 1, pMax + t.bufferDays)) {
-        planItems.push({ kind: 'buffer', a: pMax + 1, b: pMax + t.bufferDays, days: t.bufferDays });
+      // Запас ЗАПИСИ ручного рейса (trip.bufferDays) больше НЕ отдельный
+      // механизм полосы: он входит в единый слой «Риски» (lib/riskSegments) —
+      // тем же сегментом, что и запасы этапов, поэтому «двух механизмов» нет.
+      if (t.kind === 'manual' && pMax != null && t.bufferDays > 0) {
+        tripBuffers.push({ tripKey: t.key, days: t.bufferDays, anchorDay: pMax + 1 });
       }
       // Факт: только реально заполненные фактические даты; ничего не копируется из плана.
       // Незавершённый рейс показываем открытым периодом до текущей даты с пометкой
@@ -735,6 +745,7 @@ const buildRows = (
       empty,
       planItems,
       factItems,
+      tripBuffers,
       stageInputs,
       bzInputs: myBases.map((p) => ({ period: p, tripRanges: carTripRanges })),
       bzGaps,
@@ -917,6 +928,29 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     });
     return m;
   }, [row.stageInputs, stageSchedules, today]);
+  /** Этапы строки по ключу «рейс|этап» — для подсказок и кликов сегментов «Риски». */
+  const stageByKey = useMemo(() => {
+    const m = new Map<string, StageFillInput>();
+    row.stageInputs.forEach((it) => m.set(`${it.tripKey}|${it.stage.id}`, it));
+    return m;
+  }, [row.stageInputs]);
+  /**
+   * Сведения о запасе этапа (для подсказок доли этапа и сегмента «Риски») —
+   * из ОДНОГО планового графика строки (lib/stageSchedule); null — запаса нет.
+   * Тот же текст, что и раньше: запас, накопленный, дата с запасом, состояние.
+   */
+  const bufferInfoFor = (tripKey: string, stage: TimelineStage): StageBufferInfo | null => {
+    const buf = stageBufferOf(stage);
+    if (buf <= 0) return null;
+    const chain = stageSchedules.get(tripKey)?.byId.get(stage.id) || null;
+    const state = stageStateByKey.get(`${tripKey}|${stage.id}`) || null;
+    return {
+      bufferDays: buf,
+      cumBufferDays: chain ? chain.cumBufferDays : buf,
+      effectiveIso: chain ? chain.effectiveIso : stage.plannedDate || null,
+      stateLabel: state ? state.label : null,
+    };
+  };
   /** Та же единая функция «дата → координата», что у шапки и сетки. */
   const pos = (a: number, b: number): { left: number; width: number } | null => barRectInWindow(a, b, vs, ve, colW);
   /** Единая визуальная система: выбранный (открытый) рейс — тёмное кольцо,
@@ -1146,7 +1180,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   const planTrack = useMemo(() => {
     const items: LaneTrackItem[] = [];
     const slot: Array<number | null> = row.planItems.map((it) => {
-      if (it.kind === 'plan' || it.kind === 'buffer') {
+      if (it.kind === 'plan') {
         items.push({ group: 0, a: it.a, b: it.b, h: PLAN_BAR_H });
         return items.length - 1;
       }
@@ -1190,7 +1224,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     const idxs: number[] = [];
     const itv: Array<{ a: number; b: number }> = [];
     row.planItems.forEach((it, i) => {
-      if (it.kind === 'plan' || it.kind === 'buffer') {
+      if (it.kind === 'plan') {
         idxs.push(i);
         itv.push({ a: it.a, b: it.b });
       }
@@ -1377,6 +1411,50 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     [row.stageInputs, vs, ve, factSec],
   );
   /**
+   * СЕГМЕНТЫ «РИСКИ» (запас дней bufferDays) — ЕДИНЫЙ механизм для ВСЕХ
+   * рейсов: сразу после сегмента КАЖДОГО этапа с запасом > 0 на подстроке
+   * «План» (ширина = запас × ширина дня текущего масштаба), плюс у ручных
+   * рейсов — запас ЗАПИСИ (trip.bufferDays) после полосы. Порядок, урезание
+   * (сегменты не накладываются; при частичной видимости анкер — по последней
+   * видимой доле этапа, сегмент урезается вместе с ним) и пороги текста
+   * («Риски +N дн» / «+N» / без текста) — чистая функция lib/riskSegments.
+   */
+  const planRiskSegs = useMemo<RiskSegment[]>(() => {
+    const lastFill = new Map<string, StageFillSection>();
+    planFills.forEach((f) => {
+      const k = `${f.tripKey}|${f.stage.id}`;
+      const prev = lastFill.get(k);
+      if (!prev || f.day > prev.day) lastFill.set(k, f);
+    });
+    const inputs: RiskSegmentInput[] = [];
+    lastFill.forEach((f) => {
+      const days = stageBufferOf(f.stage);
+      if (days <= 0) return;
+      inputs.push({
+        tripKey: f.tripKey,
+        stageId: f.stage.id,
+        seq: stageSeqOf(f.stage, 0),
+        anchor: dayToX(f.day, vs, colW) + Math.round(((f.section + 1) * colW) / f.sections),
+        days,
+      });
+    });
+    row.tripBuffers.forEach((b) => {
+      inputs.push({ tripKey: b.tripKey, seq: 0, anchor: dayToX(b.anchorDay, vs, colW), days: b.days });
+    });
+    return layoutRiskSegments(inputs, W, colW);
+  }, [planFills, row.tripBuffers, vs, colW, W]);
+  /** Зоны сегментов «Риски» по рейсу — подписи (полосы и клеток этапов) их обтекают. */
+  const planRiskZonesByTrip = useMemo(() => {
+    const m = new Map<string, BarObstacle[]>();
+    planRiskSegs.forEach((s) => {
+      const zone: BarObstacle = { left: s.left, right: s.right };
+      const arr = m.get(s.tripKey);
+      if (arr) arr.push(zone);
+      else m.set(s.tripKey, [zone]);
+    });
+    return m;
+  }, [planRiskSegs]);
+  /**
    * ЗАНЯТЫЕ ЗОНЫ ПОДПИСЕЙ подстрок — единое правило lib/barLabels: подпись
    * полосы «обтекает» клетки этапов (в день с половинами занятой считается
    * вся ячейка дня), однодневные отметки базы/ремонта и 14-пиксельные маркеры
@@ -1385,6 +1463,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   const planLabelObstacles = useMemo<BarObstacle[]>(() => {
     const daySlots = (day: number): number => planSec.byDay.get(day)?.length || 1;
     const out = obstaclesFromFills(planFills, daySlots, (d) => dayToX(d, vs, colW), colW);
+    // Сегменты «Риски» — тоже занятые зоны: подпись полосы (и подписи полос
+    // базы/ремонта) не заходят под штриховку запаса.
+    planRiskSegs.forEach((s) => out.push({ left: s.left, right: s.right }));
     planBz.marks.forEach((m) => {
       const l = dayToX(m.day, vs, colW);
       out.push({ left: l, right: l + colW });
@@ -1394,7 +1475,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       out.push({ left: x - 7, right: x + 7 });
     });
     return out;
-  }, [planFills, planSec, planBz.marks, row.planOv.markers, vs, colW]);
+  }, [planFills, planSec, planRiskSegs, planBz.marks, row.planOv.markers, vs, colW]);
   const factLabelObstacles = useMemo<BarObstacle[]>(() => {
     const daySlots = (day: number): number => factSec.byDay.get(day)?.length || 1;
     const out = obstaclesFromFills(factFills, daySlots, (d) => dayToX(d, vs, colW), colW);
@@ -1461,42 +1542,91 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       }
     : {};
   /**
-   * Штриховка ЗАПАСА этапа — справа от последней секции этапа, ширина = запас
-   * в днях (в днях колонки), не перекрывает сроки: это визуальный «буфер»
-   * плана, тот же жёлтый hatch45, что у запаса на риски. Клики сквозь
-   * штриховку проходят к полосам (pointer-events: none).
+   * СЕГМЕНТ «РИСКИ» (запас дней, lib/riskSegments) — ОДИН механизм для всех
+   * рейсов: заметная жёлто-оранжевая диагональная штриховка, чёткая граница
+   * со стороны этапа (2px), текст «Риски +N дн» (узкий — «+N», полный текст —
+   * в подсказке), слой TL_Z.risk ПОВЕРХ полосы «План» и клеток этапов (запас
+   * больше не прячется под полосой), ниже меток. Геометрия — только из
+   * lib/riskSegments (сегменты не накладываются, урезаются с этапом).
+   * Клик: открыть карточку рейса и выделить этап (у запаса записи — карточку).
    */
-  const renderStageBuffer = (f: StageFillSection, keyPrefix: string) => {
-    const days = stageBufferOf(f.stage);
-    if (days <= 0) return null;
-    const range = stagePlanRange(f.stage);
-    // Штриховка — один раз, у последнего дня диапазона этапа (не у каждой доли).
-    if (!range || f.day !== Math.min(range.b, ve)) return null;
-    const anchor = dayToX(f.day, vs, colW) + Math.round(((f.section + 1) * colW) / f.sections);
-    const left = Math.max(anchor, 0);
-    const width = Math.min(days * colW, W - left);
-    if (width < 3) return null;
+  const renderRiskSegment = (r: RiskSegment) => {
+    const idx = row.planItems.findIndex((it) => it.kind === 'plan' && it.tripKey === r.tripKey);
+    const planItem = idx >= 0 ? row.planItems[idx] : null;
+    const lanes = idx >= 0 ? planBarLanes.get(idx) : undefined;
+    const twoLane = !!lanes && lanes.lanes > 1;
+    const stageInput = r.stageId ? stageByKey.get(`${r.tripKey}|${r.stageId}`) || null : null;
+    const buffer = stageInput ? bufferInfoFor(r.tripKey, stageInput.stage) : null;
+    const title = stageInput && buffer ? stageRiskTitle(stageTypes, stageInput.stage, buffer) : tripRiskTitle(r.days);
+    const open = () => {
+      if (stageInput) onOpenTripStage(r.tripKey, stageInput.stage.id);
+      else onOpenTrip(r.tripKey);
+    };
+    const archived = planItem && planItem.kind === 'plan' ? planItem.archived : false;
+    // Чип направления полосы (слой меток) стоит у правого края полосы и может
+    // попасть ВНУТРЬ сегмента запаса, если буфер выходит за конец рейса —
+    // текст сегмента не заходит под чип: бюджет ширины → «+N» → без текста
+    // (тот же принцип, что у подписей полос; правило — riskTextBudgetWithChip).
+    let chipZone: { left: number; right: number } | null = null;
+    if (planItem && planItem.kind === 'plan') {
+      const chip = planItem.dir ? directionChipColors(planItem.dir.color) : null;
+      const p = pos(planItem.a, planItem.b);
+      const adj = row.planOv.tripAdjust.get(r.tripKey) ?? null;
+      const pr = p ? adjRect(p, adj) ?? p : null;
+      if (chip && pr && pr.width >= 96) chipZone = { left: pr.left + pr.width - 36, right: pr.left + pr.width };
+    }
+    const riskText = riskSegmentTextOf(r.days, riskTextBudgetWithChip(r.width, r.left, r.right, chipZone));
     return (
       <div
-        key={`${keyPrefix}-buf-${f.tripKey}-${f.stage.id}-${f.day}`}
-        aria-hidden="true"
-        data-stage-buffer={days}
-        data-trip={f.tripKey}
-        data-stage={f.stage.id}
-        className="absolute pointer-events-none"
-        style={{
-          zIndex: TL_Z.tripBar,
-          left,
-          width,
-          top: planTopOf(0),
-          height: PLAN_BAR_H,
-          background: hatch45,
-          border: '1px solid rgba(217, 119, 6, 0.22)',
-          borderLeft: 'none',
-          borderRadius: '0 var(--tl-bar-r) var(--tl-bar-r) 0',
-          ...(f.archived ? { opacity: 0.72 } : {}),
+        key={`risk-${r.tripKey}-${r.stageId || 'trip'}`}
+        role="button"
+        tabIndex={0}
+        data-risk-seg="1"
+        data-risk-kind={r.stageId ? 'stage' : 'trip'}
+        data-risk-days={r.days}
+        data-risk-text={riskText || undefined}
+        data-stage-buffer={r.days}
+        data-stage={r.stageId || undefined}
+        data-trip={r.tripKey}
+        onClick={open}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            open();
+          }
         }}
-      />
+        onMouseEnter={() => setHoverTrip(r.tripKey)}
+        onMouseLeave={() => setHoverTrip((v) => (v === r.tripKey ? null : v))}
+        className={`absolute flex items-center cursor-pointer ${twoLane ? '' : 'top-0 bottom-0'}`}
+        style={{
+          zIndex: TL_Z.risk,
+          left: r.left,
+          width: r.width,
+          ...(twoLane
+            ? {
+                top: `calc(${(lanes!.lane * 100) / lanes!.lanes}% + 1px)`,
+                height: `calc(${100 / lanes!.lanes}% - 2px)`,
+              }
+            : {}),
+          backgroundImage: riskHatch,
+          border: `1px solid ${RISK_COLORS.border}`,
+          borderLeft: `2px solid ${RISK_COLORS.edge}`,
+          borderRadius: '0 var(--tl-bar-r) var(--tl-bar-r) 0',
+          ...(archived ? { opacity: RISK_COLORS.archivedOpacity } : {}),
+          ...link(r.tripKey),
+        }}
+        title={title}
+      >
+        {riskText ? (
+          <span
+            data-risk-label="1"
+            className="min-w-0 px-1 overflow-hidden text-ellipsis whitespace-nowrap text-[8px] leading-[10px] font-semibold"
+            style={{ color: RISK_COLORS.text }}
+          >
+            {riskText}
+          </span>
+        ) : null}
+      </div>
     );
   };
   /** Секции заливок этапов — на всю высоту подстроки, кликабельны, в новом стиле
@@ -1514,18 +1644,11 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       f.section === f.sections - 1 ? `${r}px` : '0px'
     } ${f.section === 0 ? `${r}px` : '0px'}`;
     // Запас этапа (lib/stageSchedule): в подсказке — размер и дата с запасом;
-    // сам запас нарисован светлой штриховкой СПРАВА от секции (renderStageBuffer).
-    const buf = stageBufferOf(f.stage);
+    // сам запас нарисован сегментом «Риски» СПРАВА от секции этапа
+    // (renderRiskSegment, слой TL_Z.risk). Тот же буферный текст — в подсказке
+    // сегмента (stageRiskTitle) — источник один: bufferInfoFor.
     const state = stageStateByKey.get(`${f.tripKey}|${f.stage.id}`) || null;
-    const bufferInfo =
-      buf > 0
-        ? {
-            bufferDays: buf,
-            cumBufferDays: f.cumBufferDays ?? buf,
-            effectiveIso: f.effectiveIso ?? null,
-            stateLabel: state ? state.label : null,
-          }
-        : null;
+    const bufferInfo = bufferInfoFor(f.tripKey, f.stage);
     // Подсказка доли: событие этапа + строка о соседнем событии этого дня.
     const neighbor = sec.neighborsOf(f.day, [stageMergeKeyOf(f.tripKey, f.stage.id)]);
     const titleBase = stageFillTitle(stageTypes, f.stage, f.day, today, bufferInfo);
@@ -1536,6 +1659,17 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     const stateTone = stateCode === 'within' ? '#D97706' : stateCode === 'beyond' || stateCode === 'planned-overdue' ? '#E11D48' : null;
     // Иконка типа события — в своей доле; мелкий масштаб — только иконка.
     const StageIcon = stageIconOf(f.stage.type);
+    // Подпись этапа — СТРОГО в границах своей доли: не шире клетки этапа и не
+    // под сегментом «Риски» (сегмент соседнего этапа может заходить на эту
+    // клетку, слой TL_Z.risk выше). Text-overflow ellipsis, без переноса;
+    // полный текст — в подсказке (title). Плановые и фактовые доли считаются
+    // раздельно (у «Факта» сегментов «Риски» нет).
+    const riskZones = lane === 'plan' ? planRiskZonesByTrip.get(f.tripKey) || [] : [];
+    const labelRight = riskZones.reduce(
+      (acc, z) => (z.left < right && z.right > left + 2 ? Math.min(acc, Math.max(left, z.left)) : acc),
+      right,
+    );
+    const avail = Math.max(0, labelRight - left);
     return (
       <div
         key={`${keyPrefix}-${f.tripKey}-${f.stage.id}-${f.day}`}
@@ -1569,10 +1703,12 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         }}
         title={title}
       >
-        {width >= 44 ? (
-          <span className="inline-flex items-center gap-0.5 min-w-0 max-w-full">
+        {avail >= 44 ? (
+          <span className="inline-flex items-center gap-0.5 min-w-0" style={{ maxWidth: Math.max(0, avail - 4) }}>
             <StageIcon className={BAR_ICON_CLS} style={{ color: color.text }} aria-hidden="true" />
-            <span className="text-[8px] leading-[10px] truncate">{stageShortName(stageTypes, f.stage)}</span>
+            <span className="min-w-0 text-[8px] leading-[10px] truncate" style={{ maxWidth: Math.max(0, avail - 20) }}>
+              {stageShortName(stageTypes, f.stage)}
+            </span>
           </span>
         ) : width >= 12 ? (
           <StageIcon className={BAR_ICON_CLS} style={{ color: color.text }} aria-hidden="true" />
@@ -2164,12 +2300,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         {bgPlane('bg', 0.75)}
         {planBz.stripes.map((s) => renderBzStripe(s, 'pb', row.planOv, planSec, planBzObstacles))}
         {planBz.marks.map((m) => renderBzMark(m, 'pbm', planSec))}
-        {planFills.map((f) => (
-          <React.Fragment key={`pf-${f.tripKey}-${f.stage.id}-${f.day}`}>
-            {renderStageFill(f, 'pf', planSec, 'plan')}
-            {renderStageBuffer(f, 'pf')}
-          </React.Fragment>
-        ))}
+        {planFills.map((f) => renderStageFill(f, 'pf', planSec, 'plan'))}
+        {planRiskSegs.map((r) => renderRiskSegment(r))}
         {todayStrip('t', 0.1)}
         {row.planItems.map((it, idx) => {
           if (it.kind === 'handover') return renderHandover(it, `ph${idx}`);
@@ -2286,17 +2418,6 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 </>
               ),
             });
-          }
-          if (it.kind === 'buffer') {
-            return (
-              <div
-                key={`b${idx}`}
-                data-bar="buffer"
-                className="absolute"
-                style={{ zIndex: TL_Z.tripBar, left: p.left, width: p.width, top: planTopOf(idx), height: PLAN_BAR_H, background: hatch45, border: '1px solid rgba(217, 119, 6, 0.22)', borderRadius: 'var(--tl-bar-r)' }}
-                title={`запас ${it.days} дн`}
-              />
-            );
           }
           return null;
         })}

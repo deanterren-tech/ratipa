@@ -25,6 +25,7 @@
     "test:canseries": "tsx scripts/test-can-series.ts",
     "test:repair-events": "tsx scripts/test-repair-events.ts",
     "test:stage-buffer": "tsx scripts/test-stage-buffer.ts",
+    "test:risk-segments": "tsx scripts/test-risk-segments.ts",
     "test:cities": "tsx scripts/test-city-directory.ts",
     "migrate:cities": "tsx scripts/migrate-cities.ts",
     "migrate:stage-seq": "tsx scripts/migrate-stage-seq.ts",

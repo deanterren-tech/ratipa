@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import { CarFront, CircleCheck, CircleDashed, Hourglass, LogIn, LogOut, OctagonX, TriangleAlert, Wrench } from 'lucide-react';
-import { BAR_ICON_CLS, CLR, PLAN_ACCENT, TRIP_CIRCLE_BADGE_CLS, TRIP_CIRCLE_TICK_LINE, TRIP_CIRCLE_TICK_TEXT, conflictHatch, hatch45, tripCircleBadgeStyle, waitHatch } from './visuals';
+import { BAR_ICON_CLS, CLR, PLAN_ACCENT, RISK_COLORS, TRIP_CIRCLE_BADGE_CLS, TRIP_CIRCLE_TICK_LINE, TRIP_CIRCLE_TICK_TEXT, conflictHatch, riskHatch, tripCircleBadgeStyle, waitHatch } from './visuals';
 import { FACT_SEGMENT_COLORS, type FactSegColor } from './factSegments';
 import { bzKindColor } from './bzFills';
 import { stageColorOf } from './stageFills';
@@ -52,10 +52,10 @@ export const segSw = (c: FactSegColor, extra?: React.ReactNode): React.ReactNode
  */
 export const buildLegendItems = (directions: DirectionDef[]): LegendItem[] => [
   { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: PLAN_ACCENT.bg, border: `1px solid ${PLAN_ACCENT.border}`, borderRadius: 4 }} />, label: 'рейс (ПЛАН): вся полоса — акцентный цвет приложения; при включённом режиме «Раскрасить по направлению» (по умолчанию) полоса окрашена приглушённым цветом направления рейса, сроки на ней по-прежнему не индицируются' },
-  { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: hatch45, border: '1px solid rgba(217,119,6,0.25)', borderRadius: 4 }} />, label: 'запас на риски' },
-  // Запас ЭТАПА (lib/stageSchedule): светлая штриховка СПРАВА от этапа на
+  { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ backgroundImage: riskHatch, border: `1px solid ${RISK_COLORS.border}`, borderLeft: `2px solid ${RISK_COLORS.edge}`, borderRadius: '0 4px 4px 0' }} />, label: 'запас на риски записи (ручной рейс): сегмент «Риски +N дн» сразу после полосы рейса — тот же вид и механика, что у запасов этапов' },
+  // Запас ЭТАПА (lib/stageSchedule): сегмент «Риски» сразу СПРАВА от этапа на
   // плановой подстроке — дни буфера; тянет за собой эффективный срок.
-  { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: hatch45, border: '1px solid rgba(217,119,6,0.22)', borderLeft: 'none', borderRadius: '0 4px 4px 0' }} />, label: 'запас этапа, дней — светлая штриховка справа от этапа на полосе «План»: сдвигает эффективный срок этого этапа и всех последующих, «крит. срок» считается от даты с запасом (Σ запасов — строка «план без запаса / запас / итого» в карточке; шаблоны по типам — Настройки → «Шаблоны запасов этапов») ' },
+  { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ backgroundImage: riskHatch, border: `1px solid ${RISK_COLORS.border}`, borderLeft: `2px solid ${RISK_COLORS.edge}`, borderRadius: '0 4px 4px 0' }} />, label: 'сегмент «Риски» (запас дней этапа, bufferDays): сразу после сегмента этапа на подстроке «План», ширина — запас в днях текущего масштаба; текст «Риски +N дн» (узкий — «+N»), в подсказке — запас/накопленный/дата с запасом/состояние; клик открывает рейс с выделением этапа. Запас сдвигает эффективный срок этого этапа и всех последующих, «крит. срок» считается от даты с запасом (Σ запасов — строка «план без запаса / запас / итого» в карточке; шаблоны по типам — Настройки → «Шаблоны запасов этапов») ' },
   // ФАКТ рейса — сегменты по отставанию (пороги в lib/factSegments):
   { swatch: segSw('green'), label: 'факт: участок выполнен в срок или раньше плана' },
   { swatch: segSw('yellow'), label: 'факт: опоздание 1–2 дня' },
