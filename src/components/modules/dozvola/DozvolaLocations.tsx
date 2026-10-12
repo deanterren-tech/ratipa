@@ -10,6 +10,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import {useDialog} from '../../DialogProvider'
 import { BackButton } from '../../../ui/components'
+import CityAutocomplete from '../../common/CityAutocomplete'
 
 interface DozvolaLocationsProps {
   user: UserProfile;
@@ -594,10 +595,13 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
                       </div>
                       <div className="flex flex-col gap-1">
                         <label className="text-[10px] font-semibold text-[#9CA3AF] uppercase">Название локации</label>
-                        <input 
-                          type="text" 
+                        <CityAutocomplete
                           value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
+                          onChange={setEditName}
+                          cities={[]}
+                          author={user.name}
+                          authorRole={user.role}
+                          placeholder="Город/граница/терминал…"
                           className="w-full text-xs font-semibold bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl px-2 py-1 outline-none focus:border-[var(--accent-ui)] focus:ring-2 focus:ring-[var(--accent-30)] transition"
                         />
                       </div>

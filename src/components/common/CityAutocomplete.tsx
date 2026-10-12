@@ -121,10 +121,21 @@ export default function CityAutocomplete({
     return out.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   }, [dirCities, cities]);
 
+  const rankOf = (e: SuggestionEntry): number[] => [e.city?.usageCount || 0, e.city?.population || 0];
+
   const filtered = useMemo(() => {
     const q = query.trim();
-    if (!q || showAll) return entries.slice(0, 60);
-    return findSimilarCities(q, entries, 60).map((s) => s.entry);
+    if (!q || showAll) {
+      // полный список — тоже по рангу (чаще используемые и крупные выше)
+      return [...entries]
+        .sort((a, b) => {
+          const ra = rankOf(a), rb = rankOf(b);
+          return rb[0] - ra[0] || rb[1] - ra[1] || a.name.localeCompare(b.name, 'ru');
+        })
+        .slice(0, 80);
+    }
+    return findSimilarCities(q, entries, 60, rankOf).map((s) => s.entry);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, query, showAll]);
 
   /** Нормализованные формы всех подсказок (справочник + старые строки). */

@@ -6,6 +6,7 @@ import {Navigation, Trash2, Plus, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Globe
 import {UserProfile, DistancePreset} from '../../../types'
 import {UI} from '../../../ui/kit'
 import {SectionHeader, SearchField, FilterPills, EmptyState, ModalShell} from '../../../ui/components'
+import CityAutocomplete from '../../common/CityAutocomplete'
 
 interface Props { user: UserProfile }
 
@@ -578,7 +579,12 @@ export default function DistanceDirectoryBlock({ user }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <label className={UI.fieldLabel}>Город A</label>
-              <input type="text" value={draft.from || ''} onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))}
+              <CityAutocomplete
+                value={draft.from || ''}
+                onChange={(v) => setDraft((d) => ({ ...d, from: v }))}
+                cities={[]}
+                author={user.name}
+                authorRole={user.role}
                 placeholder="Откуда" className={UI.input} />
               <select value={draft.countryFrom || (getCountry(draft.from || '') !== '—' ? getCountry(draft.from || '') : '')}
                 onChange={(e) => setDraft((d) => ({ ...d, countryFrom: e.target.value }))}
@@ -591,7 +597,12 @@ export default function DistanceDirectoryBlock({ user }: Props) {
             </div>
             <div className="flex flex-col gap-2">
               <label className={UI.fieldLabel}>Город B</label>
-              <input type="text" value={draft.to || ''} onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
+              <CityAutocomplete
+                value={draft.to || ''}
+                onChange={(v) => setDraft((d) => ({ ...d, to: v }))}
+                cities={[]}
+                author={user.name}
+                authorRole={user.role}
                 placeholder="Куда" className={UI.input} />
               <select value={draft.countryTo || (getCountry(draft.to || '') !== '—' ? getCountry(draft.to || '') : '')}
                 onChange={(e) => setDraft((d) => ({ ...d, countryTo: e.target.value }))}

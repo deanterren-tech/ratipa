@@ -7,6 +7,8 @@ import {ref, set, push, remove} from 'firebase/database'
 import CouplingDirectoryEditor from './CouplingDirectoryEditor';
 import DirectoriesModule from './DirectoriesModule';
 import DriverDirectoryBlock from './directories/DriverDirectoryBlock';
+import CitiesSettingsBlock from './cities/CitiesSettingsBlock';
+import { isCityAdmin } from '../../firebase/citiesService';
 import DistanceDirectoryBlock from './directories/DistanceDirectoryBlock';
 import {effectiveStageTypes} from './tripTimeline/lib/catalog';
 import {Lock, Wallet, Layers, AlertTriangle, Timer} from 'lucide-react';
@@ -128,7 +130,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
   const [pdSettings, setPdSettings] = useState<any>({ useDistanceLookup: false, googleMapsApiKey: '' });
   
   // Navigation Tab State
-  const [activeTab, setActiveTab] = useState<'fleet' | 'drivers' | 'system' | 'directories' | 'distances'>('fleet');
+  const [activeTab, setActiveTab] = useState<'fleet' | 'drivers' | 'system' | 'directories' | 'distances' | 'cities'>('fleet');
 
   // Search states for directories
   const [carSearch, setCarSearch] = useState('');
@@ -991,6 +993,8 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     { id: 'drivers', label: 'База водителей', count: filteredDrivers.length },
     { id: 'distances', label: 'Расстояния', count: distances.length },
     { id: 'directories', label: 'Реестры данных', count: 0 },
+    // Справочник городов и настройки GeoNames — только администратор
+    ...(isCityAdmin(user.role) ? [{ id: 'cities', label: 'Города и GeoNames', count: 0 }] : []),
     { id: 'system', label: 'Системные Настройки', count: 0 }
   ] as const;
 
@@ -1022,6 +1026,11 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
         {/* TAB CONTENT: DISTANCES */}
         {activeTab === 'distances' && (
           <DistanceDirectoryBlock user={user} />
+        )}
+
+        {/* TAB CONTENT: CITIES + GEONAMES (администратор) */}
+        {activeTab === 'cities' && (
+          <CitiesSettingsBlock user={user} />
         )}
 
         {/* TAB CONTENT 3: SYSTEM SETTINGS */}

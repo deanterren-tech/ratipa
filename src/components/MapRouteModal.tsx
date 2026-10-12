@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import {DistancePreset} from '../types'
 import { BackButton } from '../ui/components'
+import CityAutocomplete from './common/CityAutocomplete'
 
 interface MapRouteModalProps {
   isOpen: boolean;
@@ -22,6 +23,8 @@ interface MapRouteModalProps {
   saveToDirectoryChecked?: boolean;
   setSaveToDirectoryChecked?: (val: boolean) => void;
   onApply: () => void;
+  /** Текущий пользователь — автор при добавлении города из CityInput. */
+  user?: { name: string; role: string };
 }
 
 // 9. Realize in code: buildYandexMapUrl(...)
@@ -40,6 +43,7 @@ const MapRouteModal = ({
   saveToDirectoryChecked = false,
   setSaveToDirectoryChecked,
   onApply,
+  user,
 }: MapRouteModalProps) => {
   const [localOrigin, setLocalOrigin] = useState("");
   const [localDestination, setLocalDestination] = useState("");
@@ -184,10 +188,12 @@ const MapRouteModal = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
                 Откуда
               </label>
-              <input
-                type="text"
+              <CityAutocomplete
                 value={localOrigin}
-                onChange={(e) => handleOriginChange(e.target.value)}
+                onChange={handleOriginChange}
+                cities={[]}
+                author={user?.name}
+                authorRole={user?.role}
                 placeholder="Город отправления..."
                 className="w-full bg-white text-slate-800 font-bold border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-[var(--accent)] transition shadow-2xs"
               />
@@ -217,16 +223,18 @@ const MapRouteModal = ({
               ) : (
                 <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
                   {localWaypoints.map((wp, idx) => (
-                    <div key={wp + idx} className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200">
+                    <div key={`waypoint-${idx}`} className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200">
                       <span className="text-[9px] font-bold text-slate-400 font-mono w-4 text-center">
                         {idx + 1}
                       </span>
-                      <input
-                        type="text"
+                      <CityAutocomplete
                         value={wp}
-                        onChange={(e) => handleWaypointChange(idx, e.target.value)}
+                        onChange={(v) => handleWaypointChange(idx, v)}
+                        cities={[]}
+                        author={user?.name}
+                        authorRole={user?.role}
                         placeholder="Введите город заезда..."
-                        className="flex-1 bg-white border-none rounded-md px-1 py-1 text-xs font-bold text-slate-700 outline-none"
+                        className="flex-1 min-w-0 bg-white border-none rounded-md px-1 py-1 text-xs font-bold text-slate-700 outline-none"
                       />
                       <button
                         type="button"
@@ -247,10 +255,12 @@ const MapRouteModal = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block"></span>
                 Куда
               </label>
-              <input
-                type="text"
+              <CityAutocomplete
                 value={localDestination}
-                onChange={(e) => handleDestinationChange(e.target.value)}
+                onChange={handleDestinationChange}
+                cities={[]}
+                author={user?.name}
+                authorRole={user?.role}
                 placeholder="Город назначения..."
                 className="w-full bg-white text-slate-800 font-bold border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-[var(--accent)] transition shadow-2xs"
               />

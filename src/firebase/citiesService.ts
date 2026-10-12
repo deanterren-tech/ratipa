@@ -12,9 +12,15 @@
  * Старые данные и сами города никуда не переносятся: справочник независим,
  * текстовые значения рейсов/этапов остаются как были.
  */
-import { ref, set } from 'firebase/database';
+import { ref, set, update, remove } from 'firebase/database';
 import { database, useFirebase, onValue, getLocalStorageData, dbService } from '../firebase';
 import { citySlug, normalizeCityName, CITY_KINDS, type CityKind } from '../utils/cityDirectory';
+import { resolveGeonamesSettings, type GeonamesSettings } from '../utils/geonames';
+import { isCityAdmin, canAddCity, DENY_ADMIN_ONLY, DENY_ADD } from '../utils/cityRights';
+
+/** Административные роли: удаление и объединение дублей — только им. */
+export const ADMIN_ROLES = ['root_admin', 'admin'];
+export { isCityAdmin };
 
 const writeLocal = <T,>(key: string, value: T): void => {
   try {
@@ -32,9 +38,17 @@ export interface CityRecord {
   type: CityKind | string;
   usageCount: number;
   createdAt: string;
-  /** 'migration' — из миграции, 'user' — добавлен пользователем. */
+  /** 'migration' — из миграции, 'user' — добавлен пользователем, 'geonames' — импорт GeoNames. */
   source: string;
   author?: string;
+  /** GeoNames-поля (заполняются импортом; могут отсутствовать). */
+  geonameId?: number;
+  lat?: number;
+  lng?: number;
+  population?: number;
+  updatedAt?: string;
+  /** id записей, объединённых в эту (история объединения, только admin). */
+  mergedFrom?: string[];
 }
 
 export interface AddCityInput {
@@ -64,7 +78,13 @@ const toRecord = (id: string, raw: Record<string, unknown>): CityRecord => ({
   usageCount: Number(raw.usageCount) || 0,
   createdAt: String(raw.createdAt ?? ''),
   source: String(raw.source ?? ''),
-  author: raw.author != null ? String(raw.author) : undefined,
+  author: raw.author != null && raw.author !== '' ? String(raw.author) : undefined,
+  geonameId: raw.geonameId != null ? Number(raw.geonameId) || undefined : undefined,
+  lat: raw.lat != null ? Number(raw.lat) : undefined,
+  lng: raw.lng != null ? Number(raw.lng) : undefined,
+  population: raw.population != null ? Number(raw.population) || 0 : undefined,
+  updatedAt: raw.updatedAt != null ? String(raw.updatedAt) : undefined,
+  mergedFrom: Array.isArray(raw.mergedFrom) ? (raw.mergedFrom as unknown[]).map(String) : undefined,
 });
 
 // ---------------------------------------------------------------------------
@@ -151,6 +171,7 @@ export const findCityByName = (value: string, cities?: CityRecord[]): CityRecord
  * есть — новая НЕ создаётся, возвращается существующая.
  */
 export const addCity = (input: AddCityInput, author: string, role = 'dispatcher'): AddCityResult => {
+  if (!canAddCity(role)) return { ok: false, error: DENY_ADD };
   const name = String(input.name || '').trim().replace(/\s+/g, ' ');
   const norm = normalizeCityName(name);
   if (!norm) return { ok: false, error: 'Пустое название города' };
@@ -216,4 +237,198 @@ export const addCity = (input: AddCityInput, author: string, role = 'dispatcher'
 export const __setCitiesForTests = (list: CityRecord[] | null): void => {
   cache = list;
   emit();
+};
+
+// ---------------------------------------------------------------------------
+// Удаление и объединение дублей — ТОЛЬКО администратор (роль проверяется здесь)
+// ---------------------------------------------------------------------------
+
+export interface CityAdminResult {
+  ok: boolean;
+  error?: string;
+  city?: CityRecord;
+}
+
+/**
+ * Удалить запись справочника. Разрешено только администратору
+ * (root_admin/admin) — и в UI, и здесь (сервисная проверка).
+ */
+export const deleteCity = (id: string, user: string, role: string): CityAdminResult => {
+  if (!isCityAdmin(role)) {
+    return { ok: false, error: DENY_ADMIN_ONLY };
+  }
+  const rec = (cache || []).find((c) => c.id === id);
+  if (!rec) return { ok: false, error: 'Запись не найдена' };
+  try {
+    if (useFirebase) {
+      remove(ref(database, `cities/${id}`)).catch((err) => {
+        console.error('[citiesService] deleteCity failed:', err);
+      });
+    } else {
+      const local = getLocalStorageData<CityRecord[]>(LS_KEY, []).filter((c) => c.id !== id);
+      writeLocal(LS_KEY, local);
+    }
+    cache = (cache || []).filter((c) => c.id !== id);
+    emit();
+    dbService.logAction(user, role, 'Удаление города', 'cities', id, `Справочник городов: удалён ${rec.name}`);
+    return { ok: true, city: rec };
+  } catch (err) {
+    return { ok: false, error: (err as Error)?.message || String(err) };
+  }
+};
+
+export interface MergeCitiesResult extends CityAdminResult {
+  /** Сколько записей объединено (удалено) в целевую. */
+  mergedCount?: number;
+}
+
+/**
+ * Объединить дубли: алиасы и usageCount переносятся в целевую запись,
+ * объединяемые записи УДАЛЯЮТСЯ (дубли не плодятся), к целевой добавляется
+ * след mergedFrom. Имя/тип/страна/источник целевой записи не меняются.
+ * Разрешено только администратору.
+ */
+export const mergeCities = (keepId: string, mergeIds: string[], user: string, role: string): MergeCitiesResult => {
+  if (!isCityAdmin(role)) {
+    return { ok: false, error: DENY_ADMIN_ONLY };
+  }
+  const list = cache || [];
+  const keep = list.find((c) => c.id === keepId);
+  if (!keep) return { ok: false, error: 'Целевая запись не найдена' };
+  const toMerge = mergeIds
+    .filter((id) => id && id !== keepId)
+    .map((id) => list.find((c) => c.id === id))
+    .filter((c): c is CityRecord => !!c);
+  if (!toMerge.length) return { ok: false, error: 'Нет записей для объединения' };
+
+  const haveNorms = new Set([keep, ].flatMap((c) => [c.name, ...c.aliases]).map((v) => normalizeCityName(v)));
+  const addAliases: string[] = [];
+  toMerge.forEach((m) => {
+    [m.name, ...m.aliases].forEach((f) => {
+      const norm = normalizeCityName(f);
+      if (norm && !haveNorms.has(norm)) {
+        haveNorms.add(norm);
+        addAliases.push(f);
+      }
+    });
+  });
+  const now = new Date().toISOString();
+  const mergedFrom = Array.from(new Set([...(keep.mergedFrom || []), ...toMerge.map((m) => m.id)]));
+  const updatedKeep: CityRecord = {
+    ...keep,
+    aliases: [...keep.aliases, ...addAliases.filter((a) => !keep.aliases.includes(a))],
+    usageCount: keep.usageCount + toMerge.reduce((s, m) => s + (m.usageCount || 0), 0),
+    mergedFrom,
+    updatedAt: now,
+  };
+
+  try {
+    if (useFirebase) {
+      const patches: Record<string, unknown> = {
+        [`cities/${keep.id}/aliases`]: updatedKeep.aliases,
+        [`cities/${keep.id}/usageCount`]: updatedKeep.usageCount,
+        [`cities/${keep.id}/mergedFrom`]: mergedFrom,
+        [`cities/${keep.id}/updatedAt`]: now,
+      };
+      toMerge.forEach((m) => { patches[`cities/${m.id}`] = null; });
+      update(ref(database), patches).catch((err) => {
+        console.error('[citiesService] mergeCities failed:', err);
+      });
+    } else {
+      const local = getLocalStorageData<CityRecord[]>(LS_KEY, [])
+        .filter((c) => !toMerge.some((m) => m.id === c.id))
+        .map((c) => (c.id === keepId ? updatedKeep : c));
+      writeLocal(LS_KEY, local);
+    }
+    cache = list.filter((c) => !toMerge.some((m) => m.id === c.id)).map((c) => (c.id === keepId ? updatedKeep : c));
+    emit();
+    dbService.logAction(
+      user, role, 'Объединение дублей городов', 'cities', keepId,
+      `«${keep.name}» ← ${toMerge.map((m) => `«${m.name}»(${m.id})`).join(', ')}; алиасов +${addAliases.length}`,
+    );
+    return { ok: true, city: updatedKeep, mergedCount: toMerge.length };
+  } catch (err) {
+    return { ok: false, error: (err as Error)?.message || String(err) };
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Настройки GeoNames (appSettings/geonames): чтение и запись (admin)
+// ---------------------------------------------------------------------------
+
+const GEONAMES_SETTINGS_PATH = 'appSettings/geonames';
+const GEONAMES_LS_KEY = 'ratipa_geonames_settings';
+let geonamesCache: GeonamesSettings | null = null;
+const geonamesListeners = new Set<(s: GeonamesSettings) => void>();
+let geonamesUnsub: (() => void) | null = null;
+
+const emitGeonames = (): void => {
+  const s = geonamesCache || resolveGeonamesSettings(null);
+  geonamesListeners.forEach((cb) => cb(s));
+};
+
+/** Подписка на настройки GeoNames (страны ISO + пороги населения). */
+export const subscribeGeonamesSettings = (cb: (s: GeonamesSettings) => void): (() => void) => {
+  geonamesListeners.add(cb);
+  if (geonamesCache) cb(geonamesCache);
+  if (!geonamesUnsub) {
+    if (!useFirebase) {
+      geonamesCache = resolveGeonamesSettings(getLocalStorageData<GeonamesSettings | null>(GEONAMES_LS_KEY, null));
+      queueMicrotask(emitGeonames);
+    } else {
+      geonamesUnsub = onValue(
+        ref(database, GEONAMES_SETTINGS_PATH),
+        (snap: { val: () => unknown }) => {
+          geonamesCache = resolveGeonamesSettings(snap.val());
+          emitGeonames();
+        },
+        () => {
+          geonamesCache = geonamesCache || resolveGeonamesSettings(null);
+          emitGeonames();
+        },
+      );
+    }
+  }
+  return () => {
+    geonamesListeners.delete(cb);
+  };
+};
+
+export const geonamesSettingsSnapshot = (): GeonamesSettings => geonamesCache || resolveGeonamesSettings(null);
+
+/** Сохранить настройки GeoNames. Только администратор. */
+export const saveGeonamesSettings = (
+  settings: GeonamesSettings,
+  user: string,
+  role: string,
+): { ok: boolean; error?: string; settings?: GeonamesSettings } => {
+  if (!isCityAdmin(role)) {
+    return { ok: false, error: 'Недостаточно прав: настройки GeoNames — только администратор' };
+  }
+  const clean = resolveGeonamesSettings(settings);
+  try {
+    const payload = {
+      countries: clean.countries,
+      threshold: clean.threshold,
+      smallThreshold: clean.smallThreshold,
+      updatedAt: new Date().toISOString(),
+      updatedBy: user,
+    };
+    if (useFirebase) {
+      update(ref(database, GEONAMES_SETTINGS_PATH), payload).catch((err) => {
+        console.error('[citiesService] saveGeonamesSettings failed:', err);
+      });
+    } else {
+      writeLocal(GEONAMES_LS_KEY, payload);
+    }
+    geonamesCache = clean;
+    emitGeonames();
+    dbService.logAction(
+      user, role, 'Настройки GeoNames', GEONAMES_SETTINGS_PATH, 'geonames',
+      `Страны: ${clean.countries.join(', ')}; порог ${clean.threshold}/${clean.smallThreshold}`,
+    );
+    return { ok: true, settings: clean };
+  } catch (err) {
+    return { ok: false, error: (err as Error)?.message || String(err) };
+  }
 };

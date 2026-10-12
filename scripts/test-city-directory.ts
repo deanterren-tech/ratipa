@@ -63,6 +63,11 @@ eq('неразрывный пробел', normalizeCityName('Великие\u00A
 eq('точка с запятой по краям', normalizeCityName('Хоргос;'), 'хоргос');
 eq('пустая строка', normalizeCityName('   '), '');
 eq('точка внутри «К. Горка»', normalizeCityName('К. Горка'), 'к. горка');
+eq('код страны в скобках снимается «Минск (BY)»', normalizeCityName('Минск (BY)'), 'минск');
+eq('код страны кириллицей снимается «Достык (КЗ)»', normalizeCityName('Достык (КЗ)'), 'достык');
+eq('код страны в низком регистре НЕ снимается', normalizeCityName('Минск (by)'), 'минск (by)');
+eq('скобки со словом сохраняются «Козловичи (Брест)»', normalizeCityName('Козловичи (Брест)'), 'козловичи (брест)');
+eq('«Минск (BY)» ↔ «Минск» — одна форма', normalizeCityName('Минск (BY)') === normalizeCityName('Минск') ? 'ok' : 'diff', 'ok');
 
 console.log('\n2. Транслит');
 eq('ruToLatin', ruToLatin('Алашанькоу'), 'alashankou');

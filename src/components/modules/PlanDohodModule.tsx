@@ -3966,6 +3966,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
         saveToDirectoryChecked={saveToDirectoryChecked}
         setSaveToDirectoryChecked={setSaveToDirectoryChecked}
         onApply={handleApplyMapRoute}
+        user={user}
       />
 
       {/* Global City Dropdown Portal */}

@@ -770,6 +770,7 @@ function MapRouteDialog({
   saveToDirectoryChecked = false,
   setSaveToDirectoryChecked,
   onApply,
+  user,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -779,6 +780,7 @@ function MapRouteDialog({
   saveToDirectoryChecked?: boolean;
   setSaveToDirectoryChecked?: (val: boolean) => void;
   onApply: () => void;
+  user?: { name: string; role: string };
 }) {
   const [localOrigin, setLocalOrigin] = useState("");
   const [localDestination, setLocalDestination] = useState("");
@@ -911,10 +913,12 @@ function MapRouteDialog({
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <span className={UI.fieldLabel}>Откуда</span>
-            <input
-              type="text"
+            <CityAutocomplete
               value={localOrigin}
-              onChange={(e) => handleOriginChange(e.target.value)}
+              onChange={handleOriginChange}
+              cities={[]}
+              author={user?.name}
+              authorRole={user?.role}
               placeholder="Город отправления…"
               className={UI.input}
             />
@@ -939,16 +943,18 @@ function MapRouteDialog({
               <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto custom-scrollbar pr-1">
                 {localWaypoints.map((wp, idx) => (
                   <div
-                    key={wp + idx}
+                    key={`waypoint-${idx}`}
                     className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-[#E5E7EB] focus-within:border-[var(--accent-ui)] transition-colors"
                   >
                     <span className="text-[10px] font-mono text-[#9CA3AF] w-4 text-center select-none">
                       {idx + 1}
                     </span>
-                    <input
-                      type="text"
+                    <CityAutocomplete
                       value={wp}
-                      onChange={(e) => handleWaypointChange(idx, e.target.value)}
+                      onChange={(v) => handleWaypointChange(idx, v)}
+                      cities={[]}
+                      author={user?.name}
+                      authorRole={user?.role}
                       placeholder="Город заезда…"
                       className="flex-1 min-w-0 bg-transparent border-none px-1 py-1 text-xs font-medium text-[#121316] outline-none"
                     />
@@ -968,10 +974,12 @@ function MapRouteDialog({
 
           <div className="flex flex-col gap-1.5">
             <span className={UI.fieldLabel}>Куда</span>
-            <input
-              type="text"
+            <CityAutocomplete
               value={localDestination}
-              onChange={(e) => handleDestinationChange(e.target.value)}
+              onChange={handleDestinationChange}
+              cities={[]}
+              author={user?.name}
+              authorRole={user?.role}
               placeholder="Город назначения…"
               className={UI.input}
             />
@@ -4011,6 +4019,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
         saveToDirectoryChecked={saveToDirectoryChecked}
         setSaveToDirectoryChecked={setSaveToDirectoryChecked}
         onApply={applyMapRoute}
+        user={user}
       />
 
       <ModalShell

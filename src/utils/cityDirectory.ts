@@ -107,6 +107,11 @@ export function normalizeCityName(raw: string): string {
       break;
     }
   }
+  // Код страны в конце — НЕ часть названия: «Минск (BY)» = «Минск», «Достык (КЗ)»
+  // = «Достык». Скобки со словами («Козловичи (Брест)») сохраняются: уточнение значимо.
+  s = s.replace(/\s*[(\[]\s*([A-Za-zА-ЯЁа-яё]{2,3})\s*[)\]]\s*$/, (m, code: string) =>
+    code === code.toUpperCase() && code.length <= 3 ? '' : m,
+  );
   // скобочные уточнения НЕ выкидываем (могут быть значимы: «Козловичи (Брест)»),
   // но пунктуацию и пробелы приводим к единому виду
   s = s.replace(/\s+([,;:"'()])/g, '$1').replace(/\s*\(\s*/g, ' (').replace(/\s*\)/g, ')');
@@ -578,14 +583,28 @@ export interface CitySuggestion<T extends CityCatalogEntry = CityCatalogEntry> {
  * Похожие записи справочника для введённого текста — по имени и алиасам,
  * без учёта регистра и ё, с транслит- и Левенштейн-терпимостью.
  * Сначала точные и префиксные совпадения, затем «похожие».
+ * `rank` — необязательное ранжирование внутри корзин (например
+ * [usageCount, population]: чаще используемые и крупные — выше); при равенстве
+ * ранга — по алфавиту.
  */
 export function findSimilarCities<T extends CityCatalogEntry>(
   query: string,
   entries: T[],
   limit = 8,
+  rank?: (e: T) => number[],
 ): CitySuggestion<T>[] {
   const q = normalizeCityName(query);
   if (!q) return [];
+  const rankOf = (e: T): number[] => (rank ? rank(e) : []);
+  const cmp = (a: CitySuggestion<T>, b: CitySuggestion<T>): number => {
+    const ra = rankOf(a.entry);
+    const rb = rankOf(b.entry);
+    for (let i = 0; i < Math.max(ra.length, rb.length); i += 1) {
+      const d = (rb[i] || 0) - (ra[i] || 0);
+      if (d !== 0) return d;
+    }
+    return ruCompare(a.entry.name, b.entry.name);
+  };
   const exact: CitySuggestion<T>[] = [];
   const prefix: CitySuggestion<T>[] = [];
   const substring: CitySuggestion<T>[] = [];
@@ -626,6 +645,9 @@ export function findSimilarCities<T extends CityCatalogEntry>(
       bucket.push(best);
     }
   });
-  similar.sort((a, b) => (a.score ?? 0) - (b.score ?? 0) || ruCompare(a.entry.name, b.entry.name));
+  similar.sort((a, b) => (a.score ?? 0) - (b.score ?? 0) || cmp(a, b));
+  exact.sort(cmp);
+  prefix.sort(cmp);
+  substring.sort(cmp);
   return [...exact, ...prefix, ...substring, ...similar].slice(0, limit);
 }

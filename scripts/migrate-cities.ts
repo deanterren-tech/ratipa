@@ -24,7 +24,10 @@
  *  - Каноническое имя — по частоте; при равенстве — больше вхождений в
  *    реальные рейсы (см. TRIP_BRANCHES), затем кириллица.
  *  - По умолчанию — только ОТЧЁТ (dry-run): текст + JSON в каталог отчётов
- *    (по умолчанию /Users/sergei/.hermes/cache/scratch/cities).
+ *    (по умолчанию /Users/sergei/.hermes/cache/scratch/cities2).
+ *  - С `--verify` — ПРОВЕРКА ПОСЛЕ ПРИМЕНЕНИЯ (только чтение): повторный обход,
+ *    сверка cityId рядом со старыми текстами и явный список остатка непривязанных
+ *    с причинами. Ничего не пишет.
  *  - С `--apply` (и подтверждением владельца) — БЭКАП затронутых веток в файл,
  *    затем запись справочника `cities` (верхний уровень) и ТОЛЬКО добавление
  *    полей cityId/fromCityId/toCityId рядом со старыми текстовыми значениями
@@ -35,6 +38,7 @@
  *   npx tsx scripts/migrate-cities.ts                          # отчёт (ничего не пишет)
  *   npx tsx scripts/migrate-cities.ts --json                   # только машинный отчёт
  *   npx tsx scripts/migrate-cities.ts --out=DIR                # каталог отчётов
+ *   npx tsx scripts/migrate-cities.ts --verify                 # проверка после применения
  *   npx tsx scripts/migrate-cities.ts --apply                  # запись (спросит подтверждение)
  *   npx tsx scripts/migrate-cities.ts --apply --yes --match=X  # без вопроса, только id с X
  */
@@ -56,6 +60,7 @@ import {
 
 const ARGS = process.argv.slice(2);
 const APPLY = ARGS.includes('--apply');
+const VERIFY = ARGS.includes('--verify');
 const SAY_YES = ARGS.includes('--yes');
 const ONLY_JSON = ARGS.includes('--json');
 /** Ограничение прогона: только записи, в id которых есть этот текст. */
@@ -63,11 +68,39 @@ const MATCH = (ARGS.find((a) => a.startsWith('--match=')) || '').split('=')[1] |
 /** Каталог отчётов (текст + JSON + бэкап). */
 const OUT_DIR =
   (ARGS.find((a) => a.startsWith('--out=')) || '').split('=').slice(1).join('=') ||
-  '/Users/sergei/.hermes/cache/scratch/cities';
+  '/Users/sergei/.hermes/cache/scratch/cities2';
 const matched = (id: string): boolean => !MATCH || id.includes(MATCH);
 
 /** Ветки «реальных рейсов» — вес тай-брейка канонического имени. */
 const TRIP_BRANCHES = ['trips_dashboard', 'trips', 'tripTimeline/tripStages', 'tripTimeline/trips'];
+
+/**
+ * Имя поля-ссылки рядом со старым текстом — по имени исходного поля.
+ * Старое текстовое поле НЕ переименовывается и НЕ перезаписывается.
+ */
+function sideFieldOf(field: string): string {
+  switch (field) {
+    case 'from':
+    case 'fromName':
+      return 'fromCityId';
+    case 'to':
+    case 'toName':
+      return 'toCityId';
+    case 'fromPoint':
+      return 'fromPointCityId';
+    case 'toPoint':
+      return 'toPointCityId';
+    case 'origin':
+      return 'originCityId';
+    case 'destination':
+      return 'destinationCityId';
+    case 'name':
+    case 'label':
+      return 'cityId';
+    default:
+      return `${field}CityId`;
+  }
+}
 
 /** Ветки, которые может затронуть --apply: бэкап и чтение текущих значений. */
 const AFFECTED_BRANCHES = [
@@ -78,11 +111,15 @@ const AFFECTED_BRANCHES = [
   'tripTimeline/tripStages',
   'tripTimeline/trips',
   'tripTimeline/vehicleEvents',
+  'multiTemplates',
   'knownDistancesList',
   'directories/standardDistances',
   'distanceDb',
   'checkpoints',
   'locationsDB',
+  'ratipa_loading_plan',
+  'routedesk',
+  'driverTasks',
   'baza',
   'baza_cars',
   'archive',
@@ -100,6 +137,8 @@ interface Occurrence {
   /** Страна рядом (BY/RU/… или «Турция»), если есть. */
   country?: string;
   typeHint?: CityKind;
+  /** Значение из массива строк: в справочник попадает, cityId рядом не пишется. */
+  noRef?: boolean;
 }
 
 interface SourceStat {
@@ -107,6 +146,18 @@ interface SourceStat {
   field: string;
   values: number;
   nonEmpty: number;
+  /** Просмотрено записей (рейсов/строк справочника/периодов) этой ветки. */
+  records: number;
+}
+
+interface CollectResult {
+  occurrences: Occurrence[];
+  statsList: SourceStat[];
+  freeText: Array<{ value: string; path: string; branch: string }>;
+  /** Пустых значений (ещё до кандидатов). */
+  emptyOcc: number;
+  /** Все сырые (trim) значения со счётчиками — «уникальных до нормализации». */
+  rawDistinct: Map<string, number>;
 }
 
 const str = (v: unknown): string => (v == null ? '' : String(v).trim());
@@ -128,16 +179,17 @@ const HINT_BY_STAGE_TYPE: Record<string, CityKind> = {
   cust_out: 'таможня',
 };
 
-async function main(): Promise<number> {
-  if (!adminDb) {
-    console.error('[migrate-cities] Firebase Admin недоступен: задайте FIREBASE_SERVICE_ACCOUNT (или FIREBASE_SERVICE_ACCOUNT_PATH) в .env/.env.local');
-    return 2;
-  }
+type Reader = (path: string) => Promise<unknown>;
 
+/**
+ * Полный обход источников мест. Используется всеми режимами (dry-run/--verify/
+ * --apply), чтобы списки и счётчики совпадали. Ничего не пишет.
+ */
+async function collectSources(read: Reader): Promise<CollectResult> {
   const occurrences: Occurrence[] = [];
   const statMap = new Map<string, SourceStat>();
   const freeText: Array<{ value: string; path: string; branch: string }> = [];
-  /** Значения, отброшенные как пустые (ещё до кандидатов). */
+  const rawDistinct = new Map<string, number>();
   let emptyOcc = 0;
 
   const push = (o: Occurrence): void => {
@@ -146,27 +198,28 @@ async function main(): Promise<number> {
       return;
     }
     occurrences.push(o);
+    rawDistinct.set(o.value, (rawDistinct.get(o.value) || 0) + 1);
   };
-  const pushFree = (o: Omit<Occurrence, 'klass'> & { klass?: CitySourceClass }, keepLong = false): void => {
+  const pushFree = (o: Omit<Occurrence, 'klass'> & { klass?: CitySourceClass }): void => {
     const v = o.value;
     if (!v) return;
     if (isShortPlaceText(v)) {
       push({ ...o, klass: o.klass || 'free-text' });
     } else if (v.length <= 200) {
       // длинные фразы — только в отчёт (в справочник не попадают)
-      if (keepLong || freeText.length < 500) freeText.push({ value: v, path: o.path, branch: o.branch });
+      if (freeText.length < 500) freeText.push({ value: v, path: o.path, branch: o.branch });
     }
   };
 
-  const read = async (path: string): Promise<unknown> => (await adminDb!.ref(path).get()).val();
-  const stat = (branch: string, field: string, values: number, nonEmpty: number): void => {
+  const stat = (branch: string, field: string, values: number, nonEmpty: number, records: number): void => {
     const key = `${branch}|${field}`;
     const prev = statMap.get(key);
     if (prev) {
       prev.values += values;
       prev.nonEmpty += nonEmpty;
+      prev.records += records;
     } else {
-      statMap.set(key, { branch, field, values, nonEmpty });
+      statMap.set(key, { branch, field, values, nonEmpty, records });
     }
   };
 
@@ -178,7 +231,7 @@ async function main(): Promise<number> {
     id: string,
     rawLegs: unknown,
     kindOfSource: CitySourceClass,
-  ): void => {
+  ): number => {
     let values = 0;
     let nonEmpty = 0;
     listOf(rawLegs).forEach((legRaw, i) => {
@@ -196,21 +249,69 @@ async function main(): Promise<number> {
         });
       });
     });
-    if (values) stat(branch, 'legs.from/to', values, nonEmpty);
+    if (values) stat(branch, 'legs.from/to', values, nonEmpty, 1);
+    return values ? 1 : 0;
   };
 
   const tripsDashboard = objOf(await read('trips_dashboard'));
   let dashboardTrips = 0;
-  Object.entries(tripsDashboard).forEach(([id, recRaw]) => {
-    if (!matched(id)) return;
-    const rec = objOf(recRaw);
-    dashboardTrips += 1;
-    collectLegs('trips_dashboard', id, rec.legs, 'place');
-  });
+  {
+    let plValues = 0;
+    let plNonEmpty = 0;
+    let plRecords = 0;
+    let wpValues = 0;
+    let wpNonEmpty = 0;
+    Object.entries(tripsDashboard).forEach(([id, recRaw]) => {
+      if (!matched(id)) return;
+      const rec = objOf(recRaw);
+      dashboardTrips += 1;
+      collectLegs('trips_dashboard', id, rec.legs, 'place');
+      // промежуточные точки плеча (массив строк) — значения в справочник, без cityId
+      listOf(rec.legs).forEach((legRaw, i) => {
+        listOf(objOf(legRaw).waypoints).forEach((w, wi) => {
+          wpValues += 1;
+          const v = str(w);
+          if (v) wpNonEmpty += 1;
+          push({
+            branch: 'trips_dashboard',
+            path: `trips_dashboard/${id}/legs/${i}/waypoints/${wi}`,
+            field: '_waypoint',
+            value: v,
+            klass: 'place',
+            noRef: true,
+          });
+        });
+      });
+      // потенциальные грузы: legs[].from/to
+      listOf(rec.potentialLoads).forEach((plRaw, pi) => {
+        const pl = objOf(plRaw);
+        if (listOf(pl.legs).length) plRecords += 1;
+        listOf(pl.legs).forEach((legRaw, li) => {
+          const leg = objOf(legRaw);
+          (['from', 'to'] as const).forEach((side) => {
+            plValues += 1;
+            const v = str(leg[side]);
+            if (v) plNonEmpty += 1;
+            push({
+              branch: 'trips_dashboard',
+              path: `trips_dashboard/${id}/potentialLoads/${pi}/legs/${li}`,
+              field: side,
+              value: v,
+              klass: 'place',
+            });
+          });
+        });
+      });
+    });
+    stat('trips_dashboard', 'legs.waypoints[]', wpValues, wpNonEmpty, dashboardTrips);
+    stat('trips_dashboard', 'potentialLoads[].legs.from/to', plValues, plNonEmpty, plRecords);
+  }
 
   const legacyTrips = objOf(await read('trips'));
+  let legacyCount = 0;
   Object.entries(legacyTrips).forEach(([id, recRaw]) => {
     if (!matched(id)) return;
+    legacyCount += 1;
     const rec = objOf(recRaw);
     collectLegs('trips', id, rec.legs, 'place');
     let values = 0;
@@ -224,20 +325,85 @@ async function main(): Promise<number> {
         push({ branch: 'trips', path: `trips/${id}/routes/${i}`, field: side, value: v, klass: 'place' });
       });
     });
-    if (values) stat('trips', 'routes.from/to', values, nonEmpty);
+    if (values) stat('trips', 'routes.from/to', values, nonEmpty, 1);
   });
 
   const currentTrips = objOf(await read('current_trips'));
+  let currentCount = 0;
   Object.entries(currentTrips).forEach(([id, recRaw]) => {
     if (!matched(id)) return;
+    currentCount += 1;
     collectLegs('current_trips', id, objOf(recRaw).legs, 'place');
   });
 
   const calcHistory = objOf(await read('calculationsHistory'));
-  Object.entries(calcHistory).forEach(([id, recRaw]) => {
-    if (!matched(id)) return;
-    collectLegs('calculationsHistory', id, objOf(recRaw).legs, 'place');
-  });
+  let calcCount = 0;
+  {
+    let odValues = 0;
+    let odNonEmpty = 0;
+    let segValues = 0;
+    let segNonEmpty = 0;
+    let rsegValues = 0;
+    let rsegNonEmpty = 0;
+    Object.entries(calcHistory).forEach(([id, recRaw]) => {
+      if (!matched(id)) return;
+      calcCount += 1;
+      const rec = objOf(recRaw);
+      collectLegs('calculationsHistory', id, rec.legs, 'place');
+      listOf(rec.legs).forEach((legRaw, i) => {
+        const leg = objOf(legRaw);
+        // origin/destination — те же места, что from/to (другое имя поля)
+        ([['origin', 'origin'], ['destination', 'destination']] as const).forEach(([field]) => {
+          odValues += 1;
+          const v = str(leg[field]);
+          if (v) odNonEmpty += 1;
+          push({
+            branch: 'calculationsHistory',
+            path: `calculationsHistory/${id}/legs/${i}`,
+            field,
+            value: v,
+            klass: 'place',
+          });
+        });
+        // сегменты расчёта (плоские и внутри routes[])
+        listOf(leg.segments).forEach((sRaw, si) => {
+          const s = objOf(sRaw);
+          (['from', 'to'] as const).forEach((side) => {
+            segValues += 1;
+            const v = str(s[side]);
+            if (v) segNonEmpty += 1;
+            push({
+              branch: 'calculationsHistory',
+              path: `calculationsHistory/${id}/legs/${i}/segments/${si}`,
+              field: side,
+              value: v,
+              klass: 'place',
+            });
+          });
+        });
+        listOf(leg.routes).forEach((rRaw, ri) => {
+          listOf(objOf(rRaw).segments).forEach((sRaw, si) => {
+            const s = objOf(sRaw);
+            (['from', 'to'] as const).forEach((side) => {
+              rsegValues += 1;
+              const v = str(s[side]);
+              if (v) rsegNonEmpty += 1;
+              push({
+                branch: 'calculationsHistory',
+                path: `calculationsHistory/${id}/legs/${i}/routes/${ri}/segments/${si}`,
+                field: side,
+                value: v,
+                klass: 'place',
+              });
+            });
+          });
+        });
+      });
+    });
+    stat('calculationsHistory', 'legs.origin/destination', odValues, odNonEmpty, calcCount);
+    stat('calculationsHistory', 'legs.segments.from/to', segValues, segNonEmpty, calcCount);
+    stat('calculationsHistory', 'legs.routes.segments.from/to', rsegValues, rsegNonEmpty, calcCount);
+  }
 
   // -------------------------------------------------------------------------
   // 2. Этапы (tripTimeline/tripStages, tripTimeline/trips/*/stages)
@@ -246,8 +412,10 @@ async function main(): Promise<number> {
   {
     let values = 0;
     let nonEmpty = 0;
+    let tripRecords = 0;
     Object.entries(stagesStore).forEach(([tripId, storeRaw]) => {
       if (!matched(tripId)) return;
+      tripRecords += 1;
       Object.entries(objOf(storeRaw)).forEach(([stageId, stageRaw]) => {
         const stage = objOf(stageRaw);
         const label = str(stage.label);
@@ -264,24 +432,34 @@ async function main(): Promise<number> {
         });
       });
     });
-    stat('tripTimeline/tripStages', 'label', values, nonEmpty);
+    stat('tripTimeline/tripStages', 'label', values, nonEmpty, tripRecords);
   }
 
   const manualTrips = objOf(await read('tripTimeline/trips'));
-  Object.entries(manualTrips).forEach(([tripId, tripRaw]) => {
-    if (!matched(tripId)) return;
-    listOf(objOf(tripRaw).stages).forEach((sRaw, i) => {
-      const stage = objOf(sRaw);
-      push({
-        branch: 'tripTimeline/trips',
-        path: `tripTimeline/trips/${tripId}/stages/${i}`,
-        field: 'label',
-        value: str(stage.label),
-        klass: 'place',
-        typeHint: HINT_BY_STAGE_TYPE[str(stage.type)],
+  {
+    let values = 0;
+    let nonEmpty = 0;
+    let tripRecords = 0;
+    Object.entries(manualTrips).forEach(([tripId, tripRaw]) => {
+      if (!matched(tripId)) return;
+      tripRecords += 1;
+      listOf(objOf(tripRaw).stages).forEach((sRaw, i) => {
+        const stage = objOf(sRaw);
+        values += 1;
+        const v = str(stage.label);
+        if (v) nonEmpty += 1;
+        push({
+          branch: 'tripTimeline/trips',
+          path: `tripTimeline/trips/${tripId}/stages/${i}`,
+          field: 'label',
+          value: v,
+          klass: 'place',
+          typeHint: HINT_BY_STAGE_TYPE[str(stage.type)],
+        });
       });
     });
-  });
+    if (values || tripRecords) stat('tripTimeline/trips', 'stages.label', values, nonEmpty, tripRecords);
+  }
 
   // -------------------------------------------------------------------------
   // 3. Справочники мест (только чтение)
@@ -290,8 +468,12 @@ async function main(): Promise<number> {
   {
     let values = 0;
     let nonEmpty = 0;
+    let records = 0;
+    let cpValues = 0;
+    let cpNonEmpty = 0;
     Object.entries(known).forEach(([id, recRaw]) => {
       if (!matched(id)) return;
+      records += 1;
       const rec = objOf(recRaw);
       (['from', 'to'] as const).forEach((side) => {
         values += 1;
@@ -306,15 +488,45 @@ async function main(): Promise<number> {
           country: side === 'from' ? countryOf(rec.countryFrom) : countryOf(rec.countryTo),
         });
       });
+      // пары КПП (массив строк) — значения в справочник, без cityId
+      listOf(rec.checkpoints).forEach((cpRaw, ci) => {
+        cpValues += 1;
+        const v = str(cpRaw);
+        if (v) cpNonEmpty += 1;
+        push({
+          branch: 'knownDistancesList',
+          path: `knownDistancesList/${id}/checkpoints/${ci}`,
+          field: '_checkpoint',
+          value: v,
+          klass: 'checkpoint',
+          typeHint: 'граница',
+          noRef: true,
+        });
+      });
+      // cpInput — одиночная строка КПП
+      values += 1;
+      const cpi = str(rec.cpInput);
+      if (cpi) nonEmpty += 1;
+      push({
+        branch: 'knownDistancesList',
+        path: `knownDistancesList/${id}`,
+        field: 'cpInput',
+        value: cpi,
+        klass: 'checkpoint',
+        typeHint: 'граница',
+      });
     });
-    stat('knownDistancesList', 'from/to', values, nonEmpty);
+    stat('knownDistancesList', 'from/to', values, nonEmpty, records);
+    stat('knownDistancesList', 'checkpoints[]/cpInput', cpValues, cpNonEmpty, records);
   }
 
   const standardDistances = objOf(await read('directories/standardDistances'));
   {
     let values = 0;
     let nonEmpty = 0;
+    let records = 0;
     Object.entries(standardDistances).forEach(([id, recRaw]) => {
+      records += 1;
       const rec = objOf(recRaw);
       (['from', 'to'] as const).forEach((side) => {
         values += 1;
@@ -323,15 +535,17 @@ async function main(): Promise<number> {
         push({ branch: 'directories/standardDistances', path: `directories/standardDistances/${id}`, field: side, value: v, klass: 'place' });
       });
     });
-    stat('directories/standardDistances', 'from/to', values, nonEmpty);
+    stat('directories/standardDistances', 'from/to', values, nonEmpty, records);
   }
 
   const distanceDb = objOf(await read('distanceDb'));
   {
     let values = 0;
     let nonEmpty = 0;
+    let records = 0;
     Object.entries(distanceDb).forEach(([id, recRaw]) => {
       if (!matched(id)) return;
+      records += 1;
       const rec = objOf(recRaw);
       (['from', 'to'] as const).forEach((side) => {
         values += 1;
@@ -347,73 +561,311 @@ async function main(): Promise<number> {
         });
       });
     });
-    stat('distanceDb', 'fromName/toName', values, nonEmpty);
+    stat('distanceDb', 'fromName/toName', values, nonEmpty, records);
   }
 
   const checkpoints = objOf(await read('checkpoints'));
-  Object.entries(checkpoints).forEach(([id, recRaw]) => {
-    if (!matched(id)) return;
-    const rec = objOf(recRaw);
-    push({
-      branch: 'checkpoints',
-      path: `checkpoints/${id}`,
-      field: 'name',
-      value: str(rec.name),
-      klass: 'checkpoint',
-      country: countryOf(rec.countryFrom) || countryOf(rec.countryTo),
-      typeHint: 'граница',
+  {
+    let values = 0;
+    let nonEmpty = 0;
+    Object.entries(checkpoints).forEach(([id, recRaw]) => {
+      if (!matched(id)) return;
+      const rec = objOf(recRaw);
+      values += 1;
+      const v = str(rec.name);
+      if (v) nonEmpty += 1;
+      push({
+        branch: 'checkpoints',
+        path: `checkpoints/${id}`,
+        field: 'name',
+        value: v,
+        klass: 'checkpoint',
+        country: countryOf(rec.countryFrom) || countryOf(rec.countryTo),
+        typeHint: 'граница',
+      });
     });
-  });
+    stat('checkpoints', 'name', values, nonEmpty, values);
+  }
 
   const locations = objOf(await read('locationsDB'));
-  Object.entries(locations).forEach(([id, recRaw]) => {
-    if (!matched(id)) return;
-    push({
-      branch: 'locationsDB',
-      path: `locationsDB/${id}`,
-      field: 'name',
-      value: str(objOf(recRaw).name),
-      klass: 'location',
-      typeHint: 'терминал',
+  {
+    let values = 0;
+    let nonEmpty = 0;
+    Object.entries(locations).forEach(([id, recRaw]) => {
+      if (!matched(id)) return;
+      values += 1;
+      const v = str(objOf(recRaw).name);
+      if (v) nonEmpty += 1;
+      push({
+        branch: 'locationsDB',
+        path: `locationsDB/${id}`,
+        field: 'name',
+        value: v,
+        klass: 'location',
+        typeHint: 'терминал',
+      });
     });
-  });
+    stat('locationsDB', 'name', values, nonEmpty, values);
+  }
 
   // -------------------------------------------------------------------------
   // 4. Периоды базы и события (свободные тексты — короткие значения-места)
   // -------------------------------------------------------------------------
   for (const branch of ['baza', 'baza_cars', 'archive']) {
     const store = objOf(await read(branch));
+    let records = 0;
+    let values = 0;
+    let nonEmpty = 0;
     Object.entries(store).forEach(([id, recRaw]) => {
       if (!matched(id)) return;
+      records += 1;
       const rec = objOf(recRaw);
-      pushFree({ branch, path: `${branch}/${id}`, field: 'comment', value: str(rec.comment) });
+      values += 1;
+      const c = str(rec.comment);
+      if (c) nonEmpty += 1;
+      pushFree({ branch, path: `${branch}/${id}`, field: 'comment', value: c });
       Object.entries(objOf(rec.events)).forEach(([evId, evRaw]) => {
         const ev = objOf(evRaw);
-        pushFree({ branch, path: `${branch}/${id}/events/${evId}`, field: 'text', value: str(ev.text) });
+        values += 1;
+        const t = str(ev.text);
+        if (t) nonEmpty += 1;
+        pushFree({ branch, path: `${branch}/${id}/events/${evId}`, field: 'text', value: t });
       });
     });
+    if (records) stat(branch, 'comment/events[].text', values, nonEmpty, records);
   }
 
   const vehicleEvents = objOf(await read('tripTimeline/vehicleEvents'));
-  Object.entries(vehicleEvents).forEach(([id, evRaw]) => {
-    if (!matched(id)) return;
-    pushFree({ branch: 'tripTimeline/vehicleEvents', path: `tripTimeline/vehicleEvents/${id}`, field: 'note', value: str(objOf(evRaw).note) });
-  });
+  {
+    let values = 0;
+    let nonEmpty = 0;
+    Object.entries(vehicleEvents).forEach(([id, evRaw]) => {
+      if (!matched(id)) return;
+      values += 1;
+      const v = str(objOf(evRaw).note);
+      if (v) nonEmpty += 1;
+      pushFree({ branch: 'tripTimeline/vehicleEvents', path: `tripTimeline/vehicleEvents/${id}`, field: 'note', value: v });
+    });
+    stat('tripTimeline/vehicleEvents', 'note', values, nonEmpty, values);
+  }
 
   const driverTasks = objOf(await read('driverTasks'));
-  Object.entries(driverTasks).forEach(([id, taskRaw]) => {
-    if (!matched(id)) return;
-    const t = objOf(taskRaw);
-    pushFree({ branch: 'driverTasks', path: `driverTasks/${id}`, field: 'customsDest', value: str(t.customsDest) });
-    pushFree({ branch: 'driverTasks', path: `driverTasks/${id}`, field: 'customsSend', value: str(t.customsSend) });
-  });
+  {
+    let values = 0;
+    let nonEmpty = 0;
+    let records = 0;
+    let rpValues = 0;
+    let rpNonEmpty = 0;
+    Object.entries(driverTasks).forEach(([id, taskRaw]) => {
+      if (!matched(id)) return;
+      records += 1;
+      const t = objOf(taskRaw);
+      ([['customsDest', str(t.customsDest)], ['customsSend', str(t.customsSend)]] as const).forEach(([field, v]) => {
+        values += 1;
+        if (v) nonEmpty += 1;
+        pushFree({ branch: 'driverTasks', path: `driverTasks/${id}`, field, value: v });
+      });
+      // точки маршрута задания водителю (routePoints[].name)
+      listOf(t.routePoints).forEach((pRaw, pi) => {
+        const p = objOf(pRaw);
+        rpValues += 1;
+        const v = str(p.name);
+        if (v) rpNonEmpty += 1;
+        const typeHint: CityKind | undefined =
+          str(p.type) === 'border' ? 'граница' : str(p.type) === 'port' ? 'терминал' : undefined;
+        push({
+          branch: 'driverTasks',
+          path: `driverTasks/${id}/routePoints/${pi}`,
+          field: 'name',
+          value: v,
+          klass: 'place',
+          typeHint,
+        });
+      });
+    });
+    if (records) stat('driverTasks', 'customsDest/customsSend', values, nonEmpty, records);
+    stat('driverTasks', 'routePoints[].name', rpValues, rpNonEmpty, records);
+  }
+
+  // -------------------------------------------------------------------------
+  // 4б. Мультишаблоны, «План загрузок» и RouteDesk (источники мест по инвентарю)
+  // -------------------------------------------------------------------------
+  {
+    // multiTemplates/<id>/legs[].from/.to («Минск (BY)» и т.п.)
+    const multi = objOf(await read('multiTemplates'));
+    let values = 0;
+    let nonEmpty = 0;
+    let records = 0;
+    Object.entries(multi).forEach(([id, tRaw]) => {
+      if (!matched(id)) return;
+      records += 1;
+      const t = objOf(tRaw);
+      listOf(t.legs).forEach((legRaw, i) => {
+        const leg = objOf(legRaw);
+        (['from', 'to'] as const).forEach((side) => {
+          values += 1;
+          const v = str(leg[side]);
+          if (v) nonEmpty += 1;
+          push({ branch: 'multiTemplates', path: `multiTemplates/${id}/legs/${i}`, field: side, value: v, klass: 'place' });
+        });
+      });
+    });
+    if (records) stat('multiTemplates', 'legs.from/to', values, nonEmpty, records);
+  }
+  {
+    // ratipa_loading_plan: items[].rounds[r][s].from/.to (+loadFrom/loadTo как заметки) и taken_loads.*.from/.to
+    const lp = objOf(await read('ratipa_loading_plan'));
+    const items = objOf(lp.items);
+    let values = 0;
+    let nonEmpty = 0;
+    let records = 0;
+    let notesValues = 0;
+    let notesNonEmpty = 0;
+    Object.entries(items).forEach(([id, itRaw]) => {
+      if (!matched(id)) return;
+      records += 1;
+      const it = objOf(itRaw);
+      listOf(it.rounds).forEach((roundRaw, ri) => {
+        listOf(roundRaw).forEach((stepRaw, si) => {
+          const step = objOf(stepRaw);
+          (['from', 'to'] as const).forEach((side) => {
+            values += 1;
+            const v = str(step[side]);
+            if (v) nonEmpty += 1;
+            push({
+              branch: 'ratipa_loading_plan',
+              path: `ratipa_loading_plan/items/${id}/rounds/${ri}/${si}`,
+              field: side,
+              value: v,
+              klass: 'place',
+            });
+          });
+          ([['loadFrom', str(step.loadFrom)], ['loadTo', str(step.loadTo)]] as const).forEach(([field, v]) => {
+            notesValues += 1;
+            if (v) notesNonEmpty += 1;
+            pushFree({
+              branch: 'ratipa_loading_plan',
+              path: `ratipa_loading_plan/items/${id}/rounds/${ri}/${si}`,
+              field,
+              value: v,
+            });
+          });
+        });
+      });
+    });
+    const taken = objOf(lp.taken_loads);
+    let tkValues = 0;
+    let tkNonEmpty = 0;
+    let tkRecords = 0;
+    Object.entries(taken).forEach(([id, tRaw]) => {
+      if (!matched(id)) return;
+      tkRecords += 1;
+      const t = objOf(tRaw);
+      (['from', 'to'] as const).forEach((side) => {
+        tkValues += 1;
+        const v = str(t[side]);
+        if (v) tkNonEmpty += 1;
+        push({ branch: 'ratipa_loading_plan', path: `ratipa_loading_plan/taken_loads/${id}`, field: side, value: v, klass: 'place' });
+      });
+    });
+    if (records) stat('ratipa_loading_plan', 'items.rounds.from/to', values, nonEmpty, records);
+    stat('ratipa_loading_plan', 'items.rounds.loadFrom/loadTo (заметки)', notesValues, notesNonEmpty, records);
+    stat('ratipa_loading_plan', 'taken_loads.from/to', tkValues, tkNonEmpty, tkRecords);
+  }
+  {
+    // routedesk: справочники и задания (fromPoint/toPoint, city контрагента, таможни)
+    const rd = objOf(await read('routedesk'));
+    const refs = objOf(rd.references);
+    let values = 0;
+    let nonEmpty = 0;
+    let records = 0;
+    const pointPair = (owner: Record<string, unknown>, path: string): void => {
+      (['fromPoint', 'toPoint'] as const).forEach((side) => {
+        values += 1;
+        const v = str(owner[side]);
+        if (v) nonEmpty += 1;
+        push({ branch: 'routedesk', path, field: side, value: v, klass: 'place' });
+      });
+    };
+    listOf(refs.distances).forEach((rRaw, i) => {
+      records += 1;
+      pointPair(objOf(rRaw), `routedesk/references/distances/${i}`);
+    });
+    listOf(refs.routeTemplates).forEach((tRaw, ti) => {
+      records += 1;
+      const t = objOf(tRaw);
+      listOf(t.sections).forEach((sRaw, si) => {
+        pointPair(objOf(sRaw), `routedesk/references/routeTemplates/${ti}/sections/${si}`);
+      });
+    });
+    listOf(refs.customs).forEach((cRaw, i) => {
+      records += 1;
+      const c = objOf(cRaw);
+      values += 1;
+      const name = str(c.name);
+      if (name) nonEmpty += 1;
+      push({ branch: 'routedesk', path: `routedesk/references/customs/${i}`, field: 'name', value: name, klass: 'place', typeHint: 'таможня' });
+      values += 1;
+      const bc = str(c.borderCrossing);
+      if (bc) nonEmpty += 1;
+      push({ branch: 'routedesk', path: `routedesk/references/customs/${i}`, field: 'borderCrossing', value: bc, klass: 'checkpoint', typeHint: 'граница', noRef: true });
+    });
+    listOf(refs.counterparties).forEach((cRaw, i) => {
+      records += 1;
+      values += 1;
+      const v = str(objOf(cRaw).city);
+      if (v) nonEmpty += 1;
+      push({ branch: 'routedesk', path: `routedesk/references/counterparties/${i}`, field: 'city', value: v, klass: 'place' });
+    });
+    listOf(rd.tasks).forEach((tRaw, ti) => {
+      records += 1;
+      const t = objOf(tRaw);
+      listOf(t.sections).forEach((sRaw, si) => {
+        pointPair(objOf(sRaw), `routedesk/tasks/${ti}/sections/${si}`);
+      });
+    });
+    listOf(rd.trips).forEach((tRaw, ti) => {
+      records += 1;
+      const t = objOf(tRaw);
+      listOf(t.legs).forEach((lRaw, li) => {
+        pointPair(objOf(lRaw), `routedesk/trips/${ti}/legs/${li}`);
+      });
+    });
+    stat('routedesk', 'points/city/customs', values, nonEmpty, records);
+  }
+
+  void dashboardTrips; void legacyCount; void currentCount; void calcCount;
+
+  const statsList = Array.from(statMap.values()).sort(
+    (a, b) => a.branch.localeCompare(b.branch) || a.field.localeCompare(b.field),
+  );
+  return { occurrences, statsList, freeText, emptyOcc, rawDistinct };
+}
+
+function main(): Promise<number> {
+  return run();
+}
+
+async function run(): Promise<number> {
+  if (!adminDb) {
+    console.error('[migrate-cities] Firebase Admin недоступен: задайте FIREBASE_SERVICE_ACCOUNT (или FIREBASE_SERVICE_ACCOUNT_PATH) в .env/.env.local');
+    return 2;
+  }
+
+  const read: Reader = async (path: string): Promise<unknown> => (await adminDb!.ref(path).get()).val();
+
+  // -------------------------------------------------------------------------
+  // 0. Режим --verify: проверка после применения (только чтение)
+  // -------------------------------------------------------------------------
+  if (VERIFY) {
+    return runVerify(read);
+  }
+
+  const { occurrences, statsList, freeText, emptyOcc, rawDistinct } = await collectSources(read);
 
   // -------------------------------------------------------------------------
   // 5. Кандидаты: агрегация по нормализованному ключу
   // -------------------------------------------------------------------------
-  const statsList = Array.from(statMap.values()).sort(
-    (a, b) => a.branch.localeCompare(b.branch) || a.field.localeCompare(b.field),
-  );
   interface Agg {
     norm: string;
     variants: Map<string, { name: string; count: number; tripCount: number; klass: CitySourceClass }>;
@@ -469,6 +921,8 @@ async function main(): Promise<number> {
   });
 
   const candidates: CityCandidate[] = [];
+  /** Причины, почему значение не стало кандидатом (норм → причина). */
+  const rejectReasons = new Map<string, string>();
   const suspicious: Array<{ value: string; norm: string; count: number; reason: string; path: string }> = [];
   const GENERIC = ['база', 'граница', 'таможня', 'склад', 'терминал', 'офис', 'дом', 'порт', 'аэропорт', 'рынок', 'депо', 'стоянка', 'заправка', 'пост', 'переход', 'круг', 'точка'];
   aggs.forEach((agg) => {
@@ -478,16 +932,20 @@ async function main(): Promise<number> {
         : agg.klassCounts.checkpoint >= 1 ? 'checkpoint'
           : agg.klassCounts.location >= 1 ? 'location'
             : 'free-text';
+    const reject = (reason: string): void => {
+      rejectReasons.set(agg.norm, reason);
+      suspicious.push({ value: bestVariant.name, norm: agg.norm, count: agg.count, reason, path: agg.sources[0]?.path || '' });
+    };
     if (!looksLikePlaceName(agg.norm)) {
-      suspicious.push({ value: bestVariant.name, norm: agg.norm, count: agg.count, reason: 'не похоже на название места', path: agg.sources[0]?.path || '' });
+      reject('не похоже на название места');
       return;
     }
     if (GENERIC.includes(agg.norm)) {
-      suspicious.push({ value: bestVariant.name, norm: agg.norm, count: agg.count, reason: 'слишком общее слово (не место)', path: agg.sources[0]?.path || '' });
+      reject('слишком общее слово (не место)');
       return;
     }
     if (agg.count === 1 && klass === 'free-text') {
-      suspicious.push({ value: bestVariant.name, norm: agg.norm, count: agg.count, reason: 'одиночное значение из свободного текста', path: agg.sources[0]?.path || '' });
+      reject('одиночное значение из свободного текста');
       return;
     }
     candidates.push({
@@ -540,6 +998,33 @@ async function main(): Promise<number> {
   const noCountry = planned.filter((p) => !p.country);
   /** Нормализованные формы, попадающие в справочник (для ссылок cityId). */
   const candidateNorms = new Set<string>(candidates.map((c) => c.norm));
+  const groupNorms = new Set<string>(groups.map((g) => g.norm));
+  const normToVariant = new Map<string, string>(planned.map((p) => [p.norm, p.name]));
+
+  // -------------------------------------------------------------------------
+  // 5б. Привязано / не привязано (с ПРИЧИНОЙ)
+  // -------------------------------------------------------------------------
+  const normInGroup = (norm: string): boolean => candidateNorms.has(norm) || groupNorms.has(norm);
+  const notAttached = new Map<string, { reason: string; count: number; examples: string[]; branches: Set<string> }>();
+  let attachedCount = 0;
+  occurrences.forEach((o) => {
+    const norm = normalizeCityName(o.value);
+    if (!norm) return;
+    if (normInGroup(norm)) {
+      attachedCount += 1;
+      return;
+    }
+    const reason = rejectReasons.get(norm) || (o.value.length > 60 ? 'длинная фраза — свободный текст' : 'не прошло проверку места');
+    let entry = notAttached.get(reason);
+    if (!entry) {
+      entry = { reason, count: 0, examples: [], branches: new Set() };
+      notAttached.set(reason, entry);
+    }
+    entry.count += 1;
+    entry.branches.add(o.branch);
+    if (entry.examples.length < 10 && !entry.examples.includes(o.value)) entry.examples.push(o.value);
+  });
+  const unattachedTotal = occurrences.length - attachedCount;
 
   // -------------------------------------------------------------------------
   // 6. Отчёт
@@ -552,7 +1037,10 @@ async function main(): Promise<number> {
     totals: {
       occurrences: occurrences.length,
       empty: emptyOcc + normEmpty,
+      uniqueRaw: rawDistinct.size,
       uniqueNorms: aggs.size,
+      attached: attachedCount,
+      unattached: unattachedTotal,
       candidates: candidates.length,
       groups: groups.length,
       duplicates: duplicates.length,
@@ -562,6 +1050,9 @@ async function main(): Promise<number> {
       borderlinePairs: borderline.length,
       noCountry: noCountry.length,
     },
+    unattachedByReason: Array.from(notAttached.values())
+      .sort((a, b) => b.count - a.count)
+      .map((u) => ({ reason: u.reason, count: u.count, branches: Array.from(u.branches), examples: u.examples })),
     duplicates: duplicates.map((d) => ({
       id: d.id,
       canonical: d.name,
@@ -603,12 +1094,18 @@ async function main(): Promise<number> {
   const lines: string[] = [];
   const log = (s: string): void => { lines.push(s); console.log(s); };
   log(`[migrate-cities] Режим: ${APPLY ? 'ЗАПИСЬ (--apply)' : 'ОТЧЁТ (dry-run; запись только с --apply)'}${MATCH ? ` (match=${MATCH})` : ''}`);
-  log(`[migrate-cities] Источники (значений/непустых):`);
-  statsList.forEach((s) => log(`    ${s.branch} · ${s.field}: ${s.nonEmpty}/${s.values}`));
+  log(`[migrate-cities] Источники (непустых значений/всего, просмотрено записей):`);
+  statsList.forEach((s) => log(`    ${s.branch} · ${s.field}: ${s.nonEmpty}/${s.values}, записей ${s.records}`));
   const t = report.totals;
-  log(`[migrate-cities] Всего значений: ${t.occurrences} (пустых ${t.empty}); уникальных форм после нормализации: ${t.uniqueNorms}; кандидатов: ${t.candidates}`);
+  log(`[migrate-cities] Всего значений: ${t.occurrences} (пустых ${t.empty}); уникальных до нормализации: ${t.uniqueRaw}; после нормализации: ${t.uniqueNorms}; кандидатов: ${t.candidates}`);
+  log(`[migrate-cities] Привязано: ${t.attached}; НЕ привязано: ${t.unattached} (причины ниже)`);
   log(`[migrate-cities] Групп: ${t.groups}; дублей (2+ вариантов): ${t.duplicates}; одиночных: ${t.singles}; подозрительных: ${t.suspicious}; свободный текст (не место): ${t.freeTextSkipped}`);
   log(`[migrate-cities] Без страны: ${t.noCountry}; неоднозначных пар (Левенштейн на грани): ${t.borderlinePairs}`);
+  log('');
+  log(`НЕ привязано — по причинам (всего ${t.unattached}):`);
+  report.unattachedByReason.forEach((u) => {
+    log(`  ${u.reason}: ${u.count} (${u.branches.join(', ')}) — напр. ${u.examples.slice(0, 6).map((e) => `«${e}»`).join(', ')}`);
+  });
   log('');
   log(`Группы дублей (топ ${Math.min(TOP, duplicates.length)} из ${duplicates.length}):`);
   duplicates.slice(0, TOP).forEach((d) => {
@@ -707,19 +1204,11 @@ async function main(): Promise<number> {
     // --- ссылки cityId рядом со старыми текстовыми значениями (старые поля не трогаем) ---
     const normToId = new Map<string, string>();
     planned.forEach((p) => normToId.set(p.norm, existingByNorm.get(p.norm) || p.id));
-    const sideField = (branch: string, field: string): string => {
-      if (branch === 'knownDistancesList' || branch === 'directories/standardDistances' || branch === 'distanceDb') {
-        return field === 'to' || field === 'toName' ? 'toCityId' : 'fromCityId';
-      }
-      if (branch === 'trips_dashboard' || branch === 'trips' || branch === 'current_trips' || branch === 'calculationsHistory') {
-        return field === 'from' ? 'fromCityId' : 'toCityId';
-      }
-      return 'cityId';
-    };
     occurrences.forEach((o) => {
+      if (o.noRef) return; // значения из массивов строк — только в справочник
       const norm = normalizeCityName(o.value);
       if (!norm || !candidateNorms.has(norm)) return;
-      const field = sideField(o.branch, o.field);
+      const field = sideFieldOf(o.field);
       updates[`${o.path}/${field}`] = normToId.get(norm);
       refs += 1;
     });
@@ -741,6 +1230,119 @@ async function main(): Promise<number> {
   if (ONLY_JSON) {
     console.log(JSON.stringify(report.totals, null, 1));
   }
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Режим --verify: повторный обход и остаток непривязанных (после --apply)
+// ---------------------------------------------------------------------------
+async function runVerify(read: Reader): Promise<number> {
+  const { occurrences, statsList } = await collectSources(read);
+
+  const citiesRaw = objOf(await read('cities'));
+  /** норм. форма (имя+алиасы) → id записи справочника */
+  const citiesByNorm = new Map<string, string>();
+  Object.entries(citiesRaw).forEach(([id, recRaw]) => {
+    const rec = objOf(recRaw);
+    const forms: string[] = [str(rec.name), ...(Array.isArray(rec.aliases) ? rec.aliases.map((a) => str(a)) : [])];
+    forms.forEach((f) => {
+      const norm = normalizeCityName(f);
+      if (norm && !citiesByNorm.has(norm)) citiesByNorm.set(norm, id);
+    });
+  });
+
+  // свежие снимки затронутых веток — проверяем фактическое значение рядом
+  const roots = new Map<string, unknown>();
+  for (const branch of AFFECTED_BRANCHES) {
+    roots.set(branch, objOf(await read(branch)));
+  }
+  const rootPrefixes = Array.from(roots.keys()).sort((a, b) => b.length - a.length);
+  const valueAt = (path: string): unknown => {
+    const prefix = rootPrefixes.find((p) => path === p || path.startsWith(`${p}/`));
+    if (!prefix) return undefined;
+    const rest = path === prefix ? [] : path.slice(prefix.length + 1).split('/');
+    let cur: unknown = roots.get(prefix);
+    for (const seg of rest) {
+      if (cur && typeof cur === 'object') cur = (cur as Record<string, unknown>)[seg];
+      else return undefined;
+    }
+    return cur;
+  };
+  let refsExpected = 0;
+  let refsOk = 0;
+  let noRefValues = 0;
+  const refsMissing: Array<{ path: string; field: string; value: string; expectedId: string }> = [];
+  const refsWrong: Array<{ path: string; field: string; value: string; expectedId: string; actual: string }> = [];
+  const unattached: Array<{ branch: string; path: string; field: string; value: string; reason: string }> = [];
+  const unattachedByReason = new Map<string, number>();
+
+  occurrences.forEach((o) => {
+    if (o.noRef) {
+      // значения из массивов строк: ссылка не предусмотрена конструкцией
+      noRefValues += 1;
+      return;
+    }
+    const norm = normalizeCityName(o.value);
+    if (!norm) return;
+    const expectedId = citiesByNorm.get(norm);
+    if (!expectedId) {
+      // значения нет в справочнике — остаток непривязанных
+      const reason = 'нет записи в cities (не мигрировано)';
+      unattached.push({ branch: o.branch, path: o.path, field: o.field, value: o.value, reason });
+      unattachedByReason.set(reason, (unattachedByReason.get(reason) || 0) + 1);
+      return;
+    }
+    refsExpected += 1;
+    const field = sideFieldOf(o.field);
+    const actual = valueAt(`${o.path}/${field}`);
+    if (actual == null || actual === '') {
+      refsMissing.push({ path: o.path, field, value: o.value, expectedId });
+    } else if (String(actual) !== expectedId) {
+      refsWrong.push({ path: o.path, field, value: o.value, expectedId, actual: String(actual) });
+    } else {
+      refsOk += 1;
+    }
+  });
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  mkdirSync(OUT_DIR, { recursive: true });
+  const base = join(OUT_DIR, `cities-verify-${stamp}`);
+  const report = {
+    mode: 'verify',
+    takenAt: new Date().toISOString(),
+    cities: citiesByNorm.size,
+    occurrences: occurrences.length,
+    refsExpected,
+    refsOk,
+    noRefValues,
+    refsMissing: refsMissing.slice(0, 1000),
+    refsMissingTotal: refsMissing.length,
+    refsWrong: refsWrong.slice(0, 1000),
+    refsWrongTotal: refsWrong.length,
+    unattachedTotal: unattached.length,
+    unattachedByReason: Array.from(unattachedByReason.entries()).map(([reason, count]) => ({ reason, count })),
+    unattached: unattached.slice(0, 1000),
+    sources: statsList,
+  };
+  writeFileSync(`${base}.json`, JSON.stringify(report, null, 1), 'utf8');
+
+  const log = (s: string): void => console.log(s);
+  const lines: string[] = [];
+  const logBoth = (s: string): void => { lines.push(s); log(s); };
+  logBoth(`[migrate-cities --verify] Записей в справочнике: ${citiesByNorm.size}; значений-мест: ${occurrences.length}`);
+  logBoth(`[migrate-cities --verify] Ссылок ожидается: ${refsExpected}; на месте: ${refsOk}; НЕТ: ${refsMissing.length}; указывают на другой id: ${refsWrong.length}`);
+  logBoth(`[migrate-cities --verify] Значений из массивов строк (ссылка не предусмотрена): ${noRefValues}`);
+  logBoth(`[migrate-cities --verify] Остаток непривязанных: ${unattached.length}`);
+  report.unattachedByReason.forEach((u) => logBoth(`    ${u.reason}: ${u.count}`));
+  refsMissing.slice(0, TOP).forEach((r) => logBoth(`    НЕТ cityId: ${r.path}/${r.field} = «${r.value}» (ожидался ${r.expectedId})`));
+  refsWrong.slice(0, TOP).forEach((r) => logBoth(`    НЕВЕРНО: ${r.path}/${r.field} = «${r.value}» → ${r.actual}, ожидался ${r.expectedId}`));
+  const uniqUnatt = new Map<string, number>();
+  unattached.forEach((u) => uniqUnatt.set(u.value, (uniqUnatt.get(u.value) || 0) + 1));
+  Array.from(uniqUnatt.entries()).sort((a, b) => b[1] - a[1]).slice(0, TOP)
+    .forEach(([v, c]) => logBoth(`    без записи: «${v}» ×${c}`));
+  writeFileSync(`${base}.txt`, lines.join('\n'), 'utf8');
+  console.log(`[migrate-cities --verify] Отчёт: ${base}.json`);
+  if (ONLY_JSON) console.log(JSON.stringify({ refsExpected, refsOk, refsMissing: refsMissing.length, refsWrong: refsWrong.length, unattached: unattached.length }, null, 1));
   return 0;
 }
 
