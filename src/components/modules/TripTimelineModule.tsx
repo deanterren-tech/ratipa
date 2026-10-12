@@ -31,6 +31,7 @@ import TimelineGrid from './tripTimeline/TimelineGrid';
 import TripCard from './tripTimeline/TripCard';
 import NewTripForm, { type NewTripDraft, type NewTripResult } from './tripTimeline/NewTripForm';
 import StatsBlock from './tripTimeline/StatsBlock';
+import StageTemplatesSettingsBlock from './StageTemplatesSettingsBlock';
 import CarOverviewModal from './tripTimeline/CarOverviewModal';
 import { useTimelineData } from './tripTimeline/useTimelineData';
 import { type DirectionOption } from './tripTimeline/lib/directionCatalog';
@@ -49,11 +50,12 @@ import { buildTimelinePlanPayload } from './tripTimeline/lib/planFromDraft';
 import TripTimelineGuide, { guideStepAvailable } from './tripTimeline/guide/TripTimelineGuide';
 import { GUIDE_VERSION, GUIDE_WHATS_NEW, buildGuideSteps, type GuideContext, type GuideStep } from './tripTimeline/guide/guideContent';
 
-type TabId = 'timeline' | 'stats';
+type TabId = 'timeline' | 'stats' | 'templates';
 
 const TAB_SLUGS: Record<TabId, string> = {
   timeline: 'timeline',
   stats: 'stats',
+  templates: 'templates',
 };
 const SLUG_TO_TAB: Record<string, TabId> = Object.fromEntries(
   Object.entries(TAB_SLUGS).map(([tab, slug]) => [slug, tab as TabId]),
@@ -734,6 +736,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
   const tabs = [
     { key: 'timeline', label: 'Таймлайн' },
     { key: 'stats', label: 'Статистика' },
+    { key: 'templates', label: 'Шаблоны' },
   ];
 
   // ── Интерактивный гайд «Обучение» ──────────────────────────────────────
@@ -1117,6 +1120,13 @@ export default function TripTimelineModule({ user, settings }: Props) {
             onAddDirection={canWrite ? () => setShowAddDirection(true) : undefined}
           />
         </div>
+      </div>
+
+      {/* Шаблоны этапов — отдельная вкладка (владелец: «сделай вкладку, где
+          шаблоны делать»). Тот же блок, что был в «Системных настройках»;
+          редактирование внутри доступно администратору, остальным — просмотр. */}
+      <div className={activeTab === 'templates' ? '' : 'hidden'}>
+        <StageTemplatesSettingsBlock user={user} />
       </div>
 
       <div className={activeTab === 'stats' ? '' : 'hidden'}>

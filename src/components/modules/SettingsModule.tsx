@@ -9,7 +9,6 @@ import DirectoriesModule from './DirectoriesModule';
 import DriverDirectoryBlock from './directories/DriverDirectoryBlock';
 import DistanceDirectoryBlock from './directories/DistanceDirectoryBlock';
 import {effectiveStageTypes} from './tripTimeline/lib/catalog';
-import StageTemplatesSettingsBlock from './StageTemplatesSettingsBlock';
 import {Lock, Wallet, Layers, AlertTriangle, Timer} from 'lucide-react';
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
@@ -1068,10 +1067,8 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
             {/* Шаблоны запасов этапов «Таймлайна рейсов» — тот же справочник типов. */}
             <StageBufferTemplatesBlock user={user} isWritePermitted={isWritePermitted} />
 
-            {/* Шаблоны этапов (ветка stageTemplates): списки НАЗВАНИЙ этапов для
-                кнопки «Из шаблона» в окне рейса. Блок виден только администратору
-                (внутри проверка роли) — требование владельца. */}
-            <StageTemplatesSettingsBlock user={user} />
+            {/* Шаблоны этапов переехали на отдельную вкладку «Шаблоны» модуля
+                «Таймлайн рейсов» — там же, где кнопка «Из шаблона». */}
           </div>
         )}
 
