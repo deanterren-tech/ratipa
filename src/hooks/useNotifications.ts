@@ -138,6 +138,18 @@ export function useNotifications(user: UserProfile, settings: AppSettings | null
     }
   };
 
+  /**
+   * Владелец: «при открытии уведомлений должны читаться и пропадать метка
+   * непрочитанного». Открытие панели отмечает уведомления прочитанными, поэтому
+   * счётчик на колокольчике обнуляется сразу. Уведомления, пришедшие ПОКА панель
+   * открыта, остаются непрочитанными (эффект не перезапускается).
+   */
+  useEffect(() => {
+    if (!isNotifOpen) return;
+    markAllNotifsAsRead();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNotifOpen]);
+
   const deleteNotif = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (useFirebase && user) {
