@@ -14,7 +14,12 @@
       ".write": "auth != null"
     },
     "baza": {
-      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'root_admin'"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'root_admin'",
+      "$periodId": {
+        "events": {
+          ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'root_admin'"
+        }
+      }
     },
     "users": {
       "$uid": {

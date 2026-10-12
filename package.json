@@ -23,7 +23,8 @@
     "test:navby": "tsx scripts/test-navby.ts",
     "test:salary-calc": "tsx scripts/test-salary-calc.ts",
     "test:canseries": "tsx scripts/test-can-series.ts",
-    "test:repair-events": "tsx scripts/test-repair-events.ts"
+    "test:repair-events": "tsx scripts/test-repair-events.ts",
+    "test:stage-buffer": "tsx scripts/test-stage-buffer.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

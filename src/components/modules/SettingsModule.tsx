@@ -1,6 +1,6 @@
 import React from 'react';
 import {useState, useEffect} from 'react'
-import {UserProfile, AppSettings, FerryTemplate, DistancePreset, QuickLink, CarRateGroup, Driver} from '../../types'
+import {UserProfile, AppSettings, FerryTemplate, DistancePreset, QuickLink, CarRateGroup, Driver, TimelineStageType} from '../../types'
 import {dbService, directoryService, database, onValue} from '../../api';
 import {pdService} from '../../api'
 import {ref, set, push, remove} from 'firebase/database'
@@ -8,12 +8,113 @@ import CouplingDirectoryEditor from './CouplingDirectoryEditor';
 import DirectoriesModule from './DirectoriesModule';
 import DriverDirectoryBlock from './directories/DriverDirectoryBlock';
 import DistanceDirectoryBlock from './directories/DistanceDirectoryBlock';
-import {Lock, Wallet, Layers, AlertTriangle} from 'lucide-react';
+import {effectiveStageTypes} from './tripTimeline/lib/catalog';
+import {Lock, Wallet, Layers, AlertTriangle, Timer} from 'lucide-react';
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
 import {formatDriverShortName} from '../../utils/driverSync'
 import {UI} from '../../ui/kit'
 import {ModuleShell, SectionHeader} from '../../ui/components'
+
+/**
+ * «Шаблоны запасов этапов» (Настройки → Системные настройки).
+ *
+ * Запас этапа (дней) — часть плана «Таймлайна рейсов»: сдвигает эффективный
+ * срок этапа и всех последующих. Шаблон по типу этапа живёт в ТОМ ЖЕ
+ * справочнике, что сами типы — `tripTimeline/config/stageTypes/<key>.bufferDays`
+ * (отдельного места настроек нет), и подставляется при создании этапа и смене
+ * типа; уже введённый вручную запас не перезаписывается (логика — TripCard).
+ * Пока справочник в базе пуст, показываются встроенные типы (catalog.ts);
+ * первое сохранение становится его сидом в базе.
+ */
+function StageBufferTemplatesBlock({ user, isWritePermitted }: { user: UserProfile; isWritePermitted: boolean }) {
+  const { toast } = useToast();
+  const [dbTypes, setDbTypes] = useState<TimelineStageType[]>([]);
+  const [values, setValues] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const unsub = dbService.getTimelineStageTypes(setDbTypes);
+    return () => unsub();
+  }, []);
+
+  const eff = effectiveStageTypes(dbTypes);
+
+  // Значения полей: инициализируются из справочника один раз на ключ; после
+  // сохранения подписка обновит базу — уже правленные поля не затираются.
+  useEffect(() => {
+    setValues((prev) => {
+      const next = { ...prev };
+      eff.forEach((t) => {
+        if (next[t.key] === undefined) next[t.key] = String(t.bufferDays ?? 0);
+      });
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eff.map((t) => `${t.key}:${t.bufferDays ?? 0}`).join('|')]);
+
+  const clampInt = (v: string): number => {
+    const n = Math.floor(Number(String(v).replace(',', '.')));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+
+  const setValue = (key: string, v: string) => setValues((prev) => ({ ...prev, [key]: v }));
+
+  const save = () => {
+    if (!isWritePermitted) return;
+    const list: TimelineStageType[] = eff.map((t) => ({ ...t, bufferDays: clampInt(values[t.key] ?? '0') }));
+    dbService.saveTimelineStageTypes(
+      list,
+      user.name,
+      user.role,
+      list.map((t) => `${t.name}: ${t.bufferDays} дн`).join('; '),
+    );
+    toast('Шаблоны запасов этапов сохранены.', 'success');
+  };
+
+  return (
+    <div data-ui="stage-buffer-templates" className="flex flex-col gap-4">
+      <SectionHeader
+        icon={<Timer className="w-4 h-4" aria-hidden="true" />}
+        tone="graphite"
+        title="Шаблоны запасов этапов"
+        subtitle="Запас по типу этапа для «Таймлайна рейсов» — подставляется при создании этапа и смене типа (вручную введённый запас не перезаписывается)"
+      />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {eff.map((t) => (
+          <div key={t.key} className="flex items-center justify-between gap-3">
+            <label className={UI.fieldLabel} title={`Тип этапа «${t.name}» (${t.key})`}>{t.name}</label>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <input
+                type="number"
+                min={0}
+                step={1}
+                inputMode="numeric"
+                disabled={!isWritePermitted}
+                data-stage-buffer-template={t.key}
+                value={values[t.key] ?? '0'}
+                onChange={(e) => setValue(t.key, e.target.value)}
+                onBlur={(e) => setValue(t.key, String(clampInt(e.target.value)))}
+                className="w-[74px] bg-white border border-[#E5E7EB] rounded-xl px-2 py-1.5 text-xs text-[#121316] outline-none focus:border-[var(--accent)] disabled:opacity-60"
+                aria-label={`Запас этапа «${t.name}», дней`}
+              />
+              <span className="text-[10px] text-[#6B7280]">дн</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" data-ui="stage-buffer-templates-save" onClick={save} disabled={!isWritePermitted} className={UI.buttonPrimary}>
+          Сохранить шаблоны
+        </button>
+        <span className="text-[11px] text-[#6B7280]">
+          {dbTypes.length === 0
+            ? 'Справочник типов в базе ещё не задан — при сохранении будет создан из встроенных типов (tripTimeline/config/stageTypes).'
+            : 'Хранится в справочнике типов этапов (tripTimeline/config/stageTypes/bufferDays). 0 — запаса нет.'}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 interface SettingsModuleProps {
   user: UserProfile;
@@ -962,6 +1063,9 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
               <AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-px shrink-0" aria-hidden="true" />
               <span>Смена данных величин немедленно затронет новые расчеты в калькуляциях и диспетчерских планировщиках. Исторические записи останутся без изменений.</span>
             </div>
+
+            {/* Шаблоны запасов этапов «Таймлайна рейсов» — тот же справочник типов. */}
+            <StageBufferTemplatesBlock user={user} isWritePermitted={isWritePermitted} />
           </div>
         )}
 

@@ -35,7 +35,7 @@ import CarOverviewModal from './tripTimeline/CarOverviewModal';
 import { useTimelineData } from './tripTimeline/useTimelineData';
 import { sortMonthLabelsDesc, todayNum, zoomColW, zoomIndexOf } from './tripTimeline/lib/timeline';
 import { plateKeyOf } from './tripTimeline/lib/sources';
-import { setColumnHighlight } from './tripTimeline/lib/timelinePrefs';
+import { setColumnHighlight, setPaintByDirection } from './tripTimeline/lib/timelinePrefs';
 import {
   openDepartureAccountingPanel,
   parseDeparturePanelHash,
@@ -256,6 +256,24 @@ export default function TripTimelineModule({ user, settings }: Props) {
     (v: boolean) => {
       setColumnHighlight(v);
       if (user.uid) dbService.saveTimelinePrefs(user.uid, { columnHighlight: v });
+    },
+    [user.uid],
+  );
+
+  /**
+   * «Раскрасить по направлению» — тоже настройка ПОЛЬЗОВАТЕЛЯ
+   * (users_list/{uid}/tlPrefs.paintByDirection) и по требованию владельца
+   * ВКЛЮЧЕНА ПО УМОЛЧАНИЮ: отсутствие ключа = включено; выключает только
+   * явный false в профиле (снятая галочка пишется туда же). Старые профили
+   * без ключа продолжают работать — режим просто включается.
+   */
+  useEffect(() => {
+    setPaintByDirection(user.tlPrefs?.paintByDirection !== false);
+  }, [user.uid, user.tlPrefs?.paintByDirection]);
+  const changePaintByDirection = useCallback(
+    (v: boolean) => {
+      setPaintByDirection(v);
+      if (user.uid) dbService.saveTimelinePrefs(user.uid, { paintByDirection: v });
     },
     [user.uid],
   );
@@ -1077,6 +1095,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
             fullscreen={fullscreen}
             onToggleFullscreen={toggleFullscreen}
             onColumnHighlightChange={changeColumnHighlight}
+            onPaintByDirectionChange={changePaintByDirection}
           />
         </div>
       </div>

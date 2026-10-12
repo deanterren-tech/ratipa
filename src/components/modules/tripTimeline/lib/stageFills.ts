@@ -13,6 +13,7 @@
  */
 import type { TimelineStage, TimelineStageType } from '../../../../types';
 import { dayNum, fmtDM, stageDeviation, stageStateOf } from './timeline';
+import { stageBufferOf, type StageSchedule } from './stageSchedule';
 
 export interface StageColor {
   /** Мягкая заливка секции. */
@@ -94,6 +95,12 @@ export interface StageFillSection {
   sections: number;
   /** Порядок этапа среди этапов этого дня (стабильный тай-брейкер). */
   order: number;
+  /** Собственный запас этапа, дней (0 — запаса нет). */
+  bufferDays?: number;
+  /** Накопленный запас по цепочке, включая собственный. */
+  cumBufferDays?: number;
+  /** Плановая дата этапа с запасом (ISO) — «крит. срок» считается от неё. */
+  effectiveIso?: string | null;
 }
 
 /**
@@ -102,6 +109,8 @@ export interface StageFillSection {
  * следующее, с учётом якорей дня смены (база/ремонт ↔ рейс). Здесь этап только
  * получает свою долю дня через переданный `slotOf` — собственной арифметики
  * секций нет (старое правило «заявки слева, этапы справа» удалено).
+ * `scheduleOf` — плановый график с запасом по рейсу (lib/stageSchedule): из
+ * него секция получает запас этапа и дату с запасом (геометрия не меняется).
  */
 export const layoutStageFills = (
   inputs: StageFillInput[],
@@ -110,11 +119,15 @@ export const layoutStageFills = (
   ve: number,
   /** Доля дня для этапа (день × рейс × этап) — из единой раскладки дня. */
   slotOf?: (day: number, tripKey: string, stageId: string) => { section: number; sections: number } | null,
+  /** Плановый график рейса с запасом (по tripKey); отсутствие — запас не учитывается. */
+  scheduleOf?: (tripKey: string) => StageSchedule | null,
 ): StageFillSection[] => {
   const out: StageFillSection[] = [];
   inputs.forEach((it) => {
     const r = kind === 'plan' ? stagePlanRange(it.stage) : stageFactRange(it.stage);
     if (!r) return;
+    const sched = kind === 'plan' && scheduleOf ? scheduleOf(it.tripKey) : null;
+    const chainItem = sched ? sched.byId.get(it.stage.id) || null : null;
     for (let day = Math.max(r.a, vs); day <= Math.min(r.b, ve); day += 1) {
       const slot = slotOf ? slotOf(day, it.tripKey, it.stage.id) : null;
       out.push({
@@ -125,6 +138,9 @@ export const layoutStageFills = (
         section: slot ? slot.section : 0,
         sections: slot ? slot.sections : 1,
         order: Number(it.stage.order) || 0,
+        bufferDays: stageBufferOf(it.stage),
+        cumBufferDays: chainItem ? chainItem.cumBufferDays : stageBufferOf(it.stage),
+        effectiveIso: chainItem ? chainItem.effectiveIso : it.stage.plannedDate || null,
       });
     }
   });
@@ -153,10 +169,18 @@ export const stageNeighborLabel = (types: TimelineStageType[], s: TimelineStage)
 
 /**
  * Полная подсказка секции: тип, место, плановые/фактические даты, отклонение,
- * состояние и приглашение к переходу. Точность — календарные дни; время в
- * данных этапов не хранится и не выдумывается.
+ * состояние, запас (если задан — со сроком «с запасом») и приглашение к
+ * переходу. Точность — календарные дни; время в данных этапов не хранится и
+ * не выдумывается.
  */
-export const stageFillTitle = (types: TimelineStageType[], s: TimelineStage, day: number, today: number): string => {
+export const stageFillTitle = (
+  types: TimelineStageType[],
+  s: TimelineStage,
+  day: number,
+  today: number,
+  /** Сведения о запасе этапа (из планового графика lib/stageSchedule). */
+  buffer?: { bufferDays: number; cumBufferDays: number; effectiveIso: string | null; stateLabel?: string | null } | null,
+): string => {
   const t = types.find((x) => x.key === s.type);
   const typeName = t ? t.name : s.type || 'Этап';
   const dev = stageDeviation(s);
@@ -166,6 +190,14 @@ export const stageFillTitle = (types: TimelineStageType[], s: TimelineStage, day
   parts.push(`факт: ${s.actualDate ? fmtDM(dayNum(s.actualDate)) : 'не указан'}`);
   if (dev != null) parts.push(dev > 0 ? `позже плана на ${dev} дн` : dev < 0 ? `раньше плана на ${-dev} дн` : 'по плану');
   else parts.push(st.label);
+  if (buffer && buffer.bufferDays > 0) {
+    parts.push(
+      `запас этапа: ${buffer.bufferDays} дн (накопленный по маршруту: ${buffer.cumBufferDays} дн)${
+        buffer.effectiveIso ? ` · плановая дата с запасом: ${fmtDM(dayNum(buffer.effectiveIso))}` : ''
+      }`,
+    );
+    if (buffer.stateLabel) parts.push(`состояние: ${buffer.stateLabel}`);
+  }
   if (dayNum(s.plannedDate) == null && dayNum(s.actualDate) != null) parts.push('плановая дата не указана');
   if (dayNum(s.actualDate) == null && dayNum(s.plannedDate) != null) parts.push('выезд / факт не указан — последующие дни не закрашены');
   if (s.isCritical) parts.push('КРИТИЧЕСКИЙ СРОК');

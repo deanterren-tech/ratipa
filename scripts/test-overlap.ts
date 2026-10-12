@@ -172,7 +172,7 @@ const markerOf = (res: ReturnType<typeof resolveOverlaps>, kind: string) => res.
     id: 'p7', key: 'bz:p7', carKey: 'car:7', carId: '7', carNumber: 'T 0007', dispatcherId: '', dispatcherName: '',
     arrivalDay: 10, departureDay: 20, repairStartDay: 12, repairEndDay: 16, plannedReadyDay: 18,
     causeLabel: 'Ремонт', causeKind: 'repair', comment: '', archived: false, openBase: false, openRepair: false,
-    repairCappedByDeparture: false, warnings: [],
+    repairCappedByDeparture: false, driverName: '', events: [], warnings: [],
   };
   const bb = baseBarRange(period, 20);
   const rr = repairBarRange(period, 20);
@@ -245,7 +245,7 @@ const markerOf = (res: ReturnType<typeof resolveOverlaps>, kind: string) => res.
     id: 'p9', key: 'bz:p9', carKey: 'car:9', carId: '9', carNumber: 'T 0009', dispatcherId: '', dispatcherName: '',
     arrivalDay: 10, departureDay: 20, repairStartDay: null, repairEndDay: null, plannedReadyDay: 16,
     causeLabel: 'На базе', causeKind: 'base', comment: '', archived: false, openBase: false, openRepair: false,
-    repairCappedByDeparture: false, warnings: [],
+    repairCappedByDeparture: false, driverName: '', events: [], warnings: [],
   };
   const planTrips = [{ key: 'pd:z1', a: 12, b: 25, label: 'Рейс «Z»' }];
   const plan = resolveRowOverlaps([period], planTrips, 'plan', 20, fmt, 'T 0009');
@@ -271,6 +271,8 @@ const markerOf = (res: ReturnType<typeof resolveOverlaps>, kind: string) => res.
     causeLabel: 'На базе', causeKind: 'base', comment: '', archived: false, openBase: false, openRepair: false,
     repairCappedByDeparture: false, warnings: [],
     ...over,
+    driverName: '',
+    events: [],
   });
   // Ранний выезд (−1 день, как AT 4458-7 / AC 3392-7): рейс начался внутри
   // периода, идёт дальше его конца; учётный конец — фактический выезд.

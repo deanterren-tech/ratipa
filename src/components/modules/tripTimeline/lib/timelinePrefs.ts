@@ -31,3 +31,25 @@ export const subscribeTimelinePrefs = (fn: () => void): (() => void) => {
 /** Реактивное значение для компонентов («Подсветка столбца» включена). */
 export const useColumnHighlight = (): boolean =>
   useSyncExternalStore(subscribeTimelinePrefs, getColumnHighlight, () => true);
+
+/**
+ * «Раскрасить по направлению» — по умолчанию ВКЛЮЧЕНО (требование владельца):
+ * дефолт true, выключить может только явный false из профиля (или снятая
+ * галочка — она сохраняется в профиль тем же значением). Значение живёт в том
+ * же внешнем store, что и «Подсветка столбца», чтобы панель, полотно и
+ * вспомогательные экраны читали один источник.
+ */
+let paintByDirection = true;
+
+export const getPaintByDirection = (): boolean => paintByDirection;
+
+export const setPaintByDirection = (value: boolean): void => {
+  const next = value !== false;
+  if (next === paintByDirection) return;
+  paintByDirection = next;
+  listeners.forEach((fn) => fn());
+};
+
+/** Реактивное значение («Раскрасить по направлению» включено). */
+export const usePaintByDirection = (): boolean =>
+  useSyncExternalStore(subscribeTimelinePrefs, getPaintByDirection, () => true);

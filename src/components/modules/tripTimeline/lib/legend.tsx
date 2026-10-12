@@ -12,6 +12,7 @@ import { CarFront, CircleCheck, CircleDashed, Hourglass, LogIn, LogOut, OctagonX
 import { BAR_ICON_CLS, CLR, PLAN_ACCENT, TRIP_CIRCLE_BADGE_CLS, TRIP_CIRCLE_TICK_LINE, TRIP_CIRCLE_TICK_TEXT, conflictHatch, hatch45, tripCircleBadgeStyle, waitHatch } from './visuals';
 import { FACT_SEGMENT_COLORS, type FactSegColor } from './factSegments';
 import { bzKindColor } from './bzFills';
+import { stageColorOf } from './stageFills';
 import { VYEZD_STATUS } from './vyezd';
 import { directionChipColors, type DirectionDef } from './directions';
 
@@ -50,14 +51,22 @@ export const segSw = (c: FactSegColor, extra?: React.ReactNode): React.ReactNode
  * живого справочника (Турция, Китай и добавленные пользователем).
  */
 export const buildLegendItems = (directions: DirectionDef[]): LegendItem[] => [
-  { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: PLAN_ACCENT.bg, border: `1px solid ${PLAN_ACCENT.border}`, borderRadius: 4 }} />, label: 'рейс (ПЛАН): вся полоса — акцентный цвет приложения, без индикации сроков' },
+  { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: PLAN_ACCENT.bg, border: `1px solid ${PLAN_ACCENT.border}`, borderRadius: 4 }} />, label: 'рейс (ПЛАН): вся полоса — акцентный цвет приложения; при включённом режиме «Раскрасить по направлению» (по умолчанию) полоса окрашена приглушённым цветом направления рейса, сроки на ней по-прежнему не индицируются' },
   { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: hatch45, border: '1px solid rgba(217,119,6,0.25)', borderRadius: 4 }} />, label: 'запас на риски' },
+  // Запас ЭТАПА (lib/stageSchedule): светлая штриховка СПРАВА от этапа на
+  // плановой подстроке — дни буфера; тянет за собой эффективный срок.
+  { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: hatch45, border: '1px solid rgba(217,119,6,0.22)', borderLeft: 'none', borderRadius: '0 4px 4px 0' }} />, label: 'запас этапа, дней — светлая штриховка справа от этапа на полосе «План»: сдвигает эффективный срок этого этапа и всех последующих, «крит. срок» считается от даты с запасом (Σ запасов — строка «план без запаса / запас / итого» в карточке; шаблоны по типам — Настройки → «Шаблоны запасов этапов») ' },
   // ФАКТ рейса — сегменты по отставанию (пороги в lib/factSegments):
   { swatch: segSw('green'), label: 'факт: участок выполнен в срок или раньше плана' },
   { swatch: segSw('yellow'), label: 'факт: опоздание 1–2 дня' },
   { swatch: segSw('orange', <TriangleAlert className="w-2.5 h-2.5" style={{ color: FACT_SEGMENT_COLORS.orange.text }} aria-hidden="true" />), label: 'факт: опоздание больше 2 дней (штриховка и значок — вторичный признак)' },
   { swatch: segSw('red', <TriangleAlert className="w-2.5 h-2.5" style={{ color: FACT_SEGMENT_COLORS.red.text }} aria-hidden="true" />), label: 'факт: критический дедлайн нарушен или просрочка (срок прошёл, этап не выполнен)' },
   { swatch: segSw('neutral'), label: 'факт: план не указан — нейтральная полоса, зелёный не ставится' },
+  // Статус ФАКТА этапа с учётом запаса (lib/stageSchedule): янтарная полоска —
+  // отставание уложилось в запас; красная — запас исчерпан (или срок с запасом
+  // прошёл без факта). Тот же цвет — в колонке «Отклонение / состояние».
+  { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: stageColorOf('load').bg, border: `1px solid ${stageColorOf('load').border}`, borderBottom: '3px solid #D97706', borderRadius: 4 }} />, label: 'факт этапа «в пределах запаса»: позже плана, но запас не исчерпан — янтарная полоска внизу клетки этапа и янтарный текст состояния' },
+  { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: stageColorOf('load').bg, border: `1px solid ${stageColorOf('load').border}`, borderBottom: '3px solid #E11D48', borderRadius: 4 }} />, label: 'факт этапа «за пределами запаса»: запас исчерпан (или срок с запасом прошёл без факта) — красная полоска внизу клетки и красный текст состояния' },
   { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: FACT_SEGMENT_COLORS.green.bg, border: `1px solid ${FACT_SEGMENT_COLORS.green.border}`, borderRight: 'none', borderRadius: '4px 0 0 4px' }} />, label: 'факт идёт: продолжающийся край без скругления — отставание считается до сегодня' },
   { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: CLR.planNoneBg, border: `1px dashed ${CLR.planNoneBorder}`, borderRadius: 4 }} />, label: '«Факт не указан» (не выполнен)' },
   // Правило долей дня — единое с отрисовкой (lib/dayCellSections): половинки
@@ -92,7 +101,7 @@ export const buildLegendItems = (directions: DirectionDef[]): LegendItem[] => [
           </span>
         </i>
       ),
-      label: `направление «${d.name}» — код ${d.code}: мини-чип в колонке машины и код в правом углу полосы (при достаточной ширине)`,
+      label: `направление «${d.name}» — код ${d.code}: мини-чип в колонке машины, код в правом углу полосы (при достаточной ширине) и — при режиме «Раскрасить по направлению» (по умолчанию включён) — приглушённый цвет полосы «План»`,
     };
   }),
   { swatch: <i className="inline-block w-[9px] h-[9px] rotate-45" style={{ background: '#7C3AED', opacity: 0.95, borderRadius: 2 }} />, label: 'событие машины / журнала рейса (клик — к записи)' },

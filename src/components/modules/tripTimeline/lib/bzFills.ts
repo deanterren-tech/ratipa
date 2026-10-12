@@ -28,6 +28,7 @@ import {
   type BasePeriod,
 } from './sources';
 import { fmtDM } from './timeline';
+import { repairEventLabel } from './repairEvents';
 import { EARLY_DEPARTURE_TIMELINE_NOTE, vyezdStatusOf, vyezdSummaryOf, VYEZD_STATUS, type VyezdStatusKind, type VyezdTripRange } from './vyezd';
 
 export type BzFillKind = 'base-plan' | 'ready' | 'base-fact' | 'repair' | 'repair-end' | 'base-gap';
@@ -302,6 +303,12 @@ export const layoutBzFills = (
         );
       }
       if (p.warnings.length) titleLines.push(`Предупреждения: ${p.warnings.join('; ')}`);
+      if (p.events.length) {
+        const last = p.events[p.events.length - 1];
+        titleLines.push(
+          `События ремонта: ${p.events.length}${last ? ` · последнее ${last.day != null ? fmtDM(last.day) : 'без даты'} — ${repairEventLabel(last.type)}${last.text ? `: ${last.text}` : ''}` : ''}`,
+        );
+      }
       if (p.comment) titleLines.push(`Примечание: ${p.comment}`);
       titleLines.push('Клик — открыть окно учёта выезда этой машины и периода');
       stripes.push({
@@ -346,7 +353,7 @@ export const layoutBzFills = (
         stickyLabel: true,
         title: `Ремонт${arch}: ${fmtDM(rr.a)} – ${endTxt}${
           rr.capped ? ' · показан до фактического выезда (ремонт не закрыт)' : ''
-        } · клик — открыть период`,
+        }${p.events.length ? ` · события ремонта: ${p.events.length}` : ''} · клик — открыть период`,
       });
     }
     // Дата окончания ремонта: однодневная отметка на всю ячейку (когда окончание указано).

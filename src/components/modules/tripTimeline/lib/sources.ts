@@ -26,6 +26,7 @@ import {
 } from '../../../../utils/dispatcher';
 import { dayNum, normalizeStages, todayNum, type SpanOverride } from './timeline';
 import { normalizeCircles } from './circles';
+import { parseRepairEvents, type RepairEvent } from './repairEvents';
 import { dedupeBazaRecords } from '../../baza/lib/bazaDedupe';
 
 const normKey = (s: unknown): string => String(s ?? '').toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '');
@@ -334,6 +335,8 @@ export interface BasePeriod {
   carKey: string;
   carId: string;
   carNumber: string;
+  /** Водитель из записи учёта (driverNameRu → driverName → driverShortNameRu). */
+  driverName: string;
   dispatcherId: string;
   dispatcherName: string;
   arrivalDay: number | null;
@@ -350,6 +353,11 @@ export interface BasePeriod {
   openRepair: boolean;
   /** Выезд указан, а окончание ремонта нет: ремонт показываем до выезда с пометкой. */
   repairCappedByDeparture: boolean;
+  /**
+   * События ремонта — вложенная ветка записи `baza/<id>/events` (пустой
+   * массив, если ветки нет: старые периоды работают как раньше).
+   */
+  events: RepairEvent[];
   warnings: string[];
 }
 
@@ -421,6 +429,9 @@ export const bazaToBasePeriods = (
         carKey: carKeyOf(car?.carId || explicitCarId, car?.carNumber || carNumberText),
         carId: car?.carId || explicitCarId,
         carNumber: car?.carNumber || carNumberText,
+        // Водитель — из самой записи учёта (та же цепочка отката, что у
+        // колонки «Водитель» модуля: driverNameRu → driverName → driverShortNameRu).
+        driverName: String(rec.driverNameRu || rec.driverName || rec.driverShortNameRu || '').trim(),
         dispatcherId,
         dispatcherName,
         arrivalDay: arrival,
@@ -435,6 +446,7 @@ export const bazaToBasePeriods = (
         openBase: arrival != null && departure == null,
         openRepair: repairStart != null && repairEnd == null && departure == null,
         repairCappedByDeparture: repairStart != null && repairEnd == null && departure != null,
+        events: parseRepairEvents(rec.events),
         warnings,
       } satisfies BasePeriod;
     })

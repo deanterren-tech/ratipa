@@ -17,6 +17,7 @@
  */
 import type { TimelinePlanGuard, TimelinePlanHistoryEntry, TimelinePlanPermission, TimelineStage } from '../../../../types';
 import { dayNum } from './timeline';
+import { stageBufferOf, stageSeqOf } from './stageSchedule';
 
 export type PlanUiState = 'draft' | 'saved' | 'permitted';
 
@@ -100,7 +101,21 @@ export const resolvePlanLock = (params: {
 /** Изменения плана между сохранённым состоянием и черновиком окна. */
 export interface PlanStageChanges {
   adds: TimelineStage[];
-  plannedUpdates: Array<{ id: string; plannedDate: string; before: string }>;
+  /**
+   * Правки планового графика существующих этапов: плановая дата, запас этапа
+   * (bufferDays — часть плана: сдвигает эффективные сроки) и порядок маршрута
+   * (order/seq — «раньше внесён — левее»; тоже свойство плана).
+   */
+  plannedUpdates: Array<{
+    id: string;
+    plannedDate: string;
+    before: string;
+    bufferDays?: number;
+    bufferBefore?: number;
+    order?: number;
+    seq?: number;
+    orderBefore?: number;
+  }>;
   removes: TimelineStage[];
   /** Правки привязки этапов к кругам (null — привязка снята). */
   circleUpdates: Array<{ id: string; circle: number | null; before: number | null }>;
@@ -128,14 +143,29 @@ export const computePlanStageChanges = (
   const plannedUpdates: PlanStageChanges['plannedUpdates'] = [];
   const removes: TimelineStage[] = [];
   const circleUpdates: PlanStageChanges['circleUpdates'] = [];
-  (draft || []).forEach((s) => {
+  // Позиции в массивах — миграционный «order» для расчета seq (lib/stageSchedule).
+  const storedIdx = new Map((stored || []).map((s, i) => [s.id, i]));
+  (draft || []).forEach((s, i) => {
     const before = storedById.get(s.id);
     if (!before) {
       if (!isFallbackStage(s)) adds.push(s);
       return;
     }
-    if ((before.plannedDate || '') !== (s.plannedDate || '')) {
-      plannedUpdates.push({ id: s.id, plannedDate: s.plannedDate || '', before: before.plannedDate || '' });
+    const dateChanged = (before.plannedDate || '') !== (s.plannedDate || '');
+    // Запас этапа и порядок маршрута — часть плана (сдвигают эффективные сроки
+    // и порядок в дне), поэтому идут тем же гейтом, что плановые даты.
+    const bufferChanged = stageBufferOf(before) !== stageBufferOf(s);
+    const seqBefore = stageSeqOf(before, storedIdx.get(before.id) ?? 0);
+    const seqDraft = Number(s.seq) && Number(s.seq) > 0 ? Math.floor(Number(s.seq)) : i + 1;
+    const orderChanged = seqBefore !== seqDraft;
+    if (dateChanged || bufferChanged || orderChanged) {
+      plannedUpdates.push({
+        id: s.id,
+        plannedDate: s.plannedDate || '',
+        before: before.plannedDate || '',
+        ...(bufferChanged ? { bufferDays: stageBufferOf(s), bufferBefore: stageBufferOf(before) } : {}),
+        ...(orderChanged ? { order: seqDraft, seq: seqDraft, orderBefore: seqBefore } : {}),
+      });
     }
     const beforeCircle = circleValueOf(before.circle);
     const draftCircle = circleValueOf(s.circle);

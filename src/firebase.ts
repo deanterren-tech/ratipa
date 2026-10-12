@@ -2712,11 +2712,17 @@ export const dbService = {
         (snapshot) => {
           const data = snapshot.val();
           const list: TimelineStageType[] = data
-            ? Object.keys(data).map((key) => ({
-                key: data[key].key || key,
-                name: data[key].name || key,
-                order: Number(data[key].order) || 0,
-              }))
+            ? Object.keys(data).map((key) => {
+                // Шаблон запаса этапа этого типа (Настройки → «Шаблоны запасов
+                // этапов»): отсутствие/мусор = 0, отрицательные не принимаются.
+                const b = Number(data[key].bufferDays);
+                return {
+                  key: data[key].key || key,
+                  name: data[key].name || key,
+                  order: Number(data[key].order) || 0,
+                  bufferDays: Number.isFinite(b) && b > 0 ? Math.floor(b) : 0,
+                };
+              })
             : [];
           callback(list);
         },
@@ -2728,6 +2734,35 @@ export const dbService = {
     }
     callback([]);
     return () => {};
+  },
+
+  /**
+   * Шаблоны запасов этапов — пишутся в ТОТ ЖЕ справочник, где живут типы этапов
+   * (tripTimeline/config/stageTypes/<key>.bufferDays): отдельного места настроек
+   * не заводится, модуль читает запас оттуда при создании этапа и смене типа.
+   * `types` — полный ЭФФЕКТИВНЫЙ список (модуль отдаёт типы из базы, а при
+   * пустой базе — встроенные): первое сохранение становится сидом справочника.
+   */
+  saveTimelineStageTypes: (types: TimelineStageType[], user: string, role: string, details: string) => {
+    const list = (types || []).filter((t) => t && t.key);
+    if (!list.length) return;
+    const payload: Record<string, { key: string; name: string; order: number; bufferDays: number }> = {};
+    list.forEach((t) => {
+      const b = Number(t.bufferDays);
+      payload[t.key] = {
+        key: t.key,
+        name: t.name || t.key,
+        order: Number(t.order) || 0,
+        bufferDays: Number.isFinite(b) && b > 0 ? Math.floor(b) : 0,
+      };
+    });
+    if (useFirebase) {
+      set(ref(database, 'tripTimeline/config/stageTypes'), payload)
+        .then(() => dbService.logAction(user, role, 'Save Timeline Stage Buffers', 'Settings', 'tripTimeline/config/stageTypes', details))
+        .catch((err) =>
+          handleFailure('firebase', err, { path: 'tripTimeline/config/stageTypes', userMessage: 'Не удалось сохранить шаблоны запасов этапов' }),
+        );
+    }
   },
 
   // ---- Этапы целых рейсов из внешних источников (План дохода) --------------
@@ -4065,11 +4100,14 @@ export const dbService = {
    * (merge-апдейт users_list/{uid}/tlPrefs): «Подсветка столбца» и другие
    * переключатели переживают перезагрузку и действуют на всех устройствах.
    */
-  saveTimelinePrefs: (uid: string, data: { columnHighlight?: boolean }) => {
+  saveTimelinePrefs: (uid: string, data: { columnHighlight?: boolean; paintByDirection?: boolean }) => {
     if (useFirebase) {
       const patch: Record<string, any> = {};
       if (typeof data.columnHighlight === 'boolean') {
         patch['tlPrefs/columnHighlight'] = data.columnHighlight;
+      }
+      if (typeof data.paintByDirection === 'boolean') {
+        patch['tlPrefs/paintByDirection'] = data.paintByDirection;
       }
       update(ref(database, `users_list/${uid}`), patch).catch((err) =>
         console.warn("Failed to save timeline prefs:", err)

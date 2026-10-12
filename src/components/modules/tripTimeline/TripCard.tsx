@@ -31,6 +31,8 @@ import {
   Archive,
   CarFront,
   CalendarClock,
+  ChevronDown,
+  ChevronUp,
   ClipboardCopy,
   ExternalLink,
   EyeOff,
@@ -83,6 +85,7 @@ import {
   type StageFillSection,
 } from './lib/stageFills';
 import { computePlanStageChanges, resolvePlanLock, type PlanStageChanges } from './lib/planLock';
+import { buildStageSchedule, stageBufferOf, stageBufferStateOf, stageSeqOf, type StageSchedule } from './lib/stageSchedule';
 import { normalizeCircles, tripCircleMarksOf, visibleCircleTicks, type TripCircleMarks } from './lib/circles';
 import { hasPlanFinancials } from './lib/planFromDraft';
 import {
@@ -217,7 +220,7 @@ const toDraft = (t: WholeTrip): Draft => {
     dispatcherId: t.dispatcherId || '',
     dispatcherName: t.dispatcherName || '',
     bufferDays: String(t.bufferDays ?? 0),
-    stages: (t.stages || []).map((s) => ({
+    stages: (t.stages || []).map((s, i) => ({
       id: s.id,
       type: s.type,
       label: s.label || '',
@@ -227,6 +230,11 @@ const toDraft = (t: WholeTrip): Draft => {
       reason: s.reason || '',
       action: s.action || '',
       order: s.order ?? 0,
+      // Порядок маршрута: seq из базы либо миграционно из order/позиции
+      // (lib/stageSchedule) — значение НЕ дописывается в базу само по себе.
+      seq: stageSeqOf(s, i),
+      /** Запас этапа, дней (0 — запаса нет; подставляется из шаблона типа). */
+      bufferDays: stageBufferOf(s),
       circle: s.circle && s.circle >= 1 ? s.circle : undefined,
     })),
     planStart: isoOf(t.spanOverride?.pMin ?? span.pMin ?? null),
@@ -258,6 +266,8 @@ const draftDiff = (a: Draft, b: Draft): string[] => {
         s.plannedDate !== o.plannedDate ||
         s.actualDate !== o.actualDate ||
         s.type !== o.type ||
+        stageBufferOf(s) !== stageBufferOf(o) ||
+        stageSeqOf(s, i) !== stageSeqOf(o, i) ||
         (s.circle || 0) !== (o.circle || 0) ||
         !!s.isCritical !== !!o.isCritical
       );
@@ -2136,6 +2146,13 @@ export default function TripCard({
     });
     changes.plannedUpdates.forEach((u) => {
       updates[`${stagesBase}/${u.id}/plannedDate`] = u.plannedDate;
+      // Запас этапа и порядок маршрута — части плана: пишутся тем же (уже
+      // разрешённым) изменением, отдельными путями не дублируются.
+      if (u.bufferDays !== undefined) updates[`${stagesBase}/${u.id}/bufferDays`] = u.bufferDays;
+      if (u.seq !== undefined) {
+        updates[`${stagesBase}/${u.id}/seq`] = u.seq;
+        updates[`${stagesBase}/${u.id}/order`] = u.order ?? u.seq;
+      }
     });
     changes.circleUpdates.forEach((u) => {
       updates[`${stagesBase}/${u.id}/circle`] = u.circle ?? null;
@@ -2328,6 +2345,8 @@ export default function TripCard({
 
   const status = getDeadlineStatus(draftTrip, today, (s) => stageFullName(stageTypes, s));
   const tone = STATUS_TONE[status.level] || STATUS_TONE[0];
+  /** Плановый график с запасом черновика — итог над таблицей этапов (lib/stageSchedule). */
+  const draftSchedule = useMemo(() => buildStageSchedule(draft.stages), [draft.stages]);
   const dispatcherShown = dispatchers.find((d) => d.id === draft.dispatcherId)?.name || draft.dispatcherName || 'Не указано';
 
   const span = tripSpan(draftTrip);
@@ -2368,7 +2387,56 @@ export default function TripCard({
 
   const onStageField = (stageId: string, field: keyof TimelineStage, value: string | boolean) => {
     if (field === 'plannedDate' && !canEditPlanned) return;
-    setDraft((d) => ({ ...d, stages: d.stages.map((s) => (s.id === stageId ? { ...s, [field]: value } : s)) }));
+    setDraft((d) => ({
+      ...d,
+      stages: d.stages.map((s) => {
+        if (s.id !== stageId) return s;
+        const next = { ...s, [field]: value } as TimelineStage;
+        // Смена ТИПА: запас подставляется из шаблона типа (Настройки), но только
+        // если запас не правился вручную — т.е. равен шаблону прежнего типа.
+        if (field === 'type') {
+          const wasTemplate = stageBufferOf(s) === templateBufferOf(s.type);
+          if (wasTemplate) next.bufferDays = templateBufferOf(String(value));
+        }
+        return next;
+      }),
+    }));
+  };
+
+  /**
+   * Запас этапа, дней — вручную (целое ≥ 0). Часть плана: пишется кнопкой
+   * «Сохранить» (после сохранения плана — тем же разовым разрешением, что и
+   * плановые даты: запас сдвигает эффективные сроки следующих этапов).
+   */
+  const onStageBuffer = (stageId: string, value: string) => {
+    if (readOnly || !canEditPlanned) return;
+    const n = Math.max(0, Math.floor(Number(String(value).replace(',', '.')) || 0));
+    setDraft((d) => ({ ...d, stages: d.stages.map((s) => (s.id === stageId ? { ...s, bufferDays: n } : s)) }));
+  };
+
+  /**
+   * Перестановка этапа в маршруте: «раньше внесён — левее» (seq). Двигается
+   * ЧЕРНОВИК; после перестановки seq/order перенумеровываются по порядку
+   * массива (1..N) — порядок читается из данных даже у рейсов без seq.
+   */
+  const moveStage = (stageId: string, dir: -1 | 1) => {
+    if (readOnly || !canEditPlanned) return;
+    setDraft((d) => {
+      const idx = d.stages.findIndex((s) => s.id === stageId);
+      const to = idx + dir;
+      if (idx < 0 || to < 0 || to >= d.stages.length) return d;
+      const arr = [...d.stages];
+      const [moved] = arr.splice(idx, 1);
+      arr.splice(to, 0, moved);
+      return { ...d, stages: arr.map((s, i) => ({ ...s, seq: i + 1, order: i + 1 })) };
+    });
+  };
+
+  /** Шаблон запаса по типу этапа (Настройки → «Шаблоны запасов этапов»); 0 — нет. */
+  const templateBufferOf = (type: string): number => {
+    const t = stageTypes.find((x) => x.key === type);
+    const v = Number(t?.bufferDays);
+    return Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
   };
 
   /**
@@ -2412,6 +2480,10 @@ export default function TripCard({
       reason: '',
       action: '',
       order,
+      // Новый этап — в конец маршрута; запас по умолчанию — из шаблона типа
+      // (тип нового этапа 'other'; шаблоны правятся в Настройках).
+      seq: draft.stages.length + 1,
+      bufferDays: templateBufferOf('other'),
     };
     setDraft((d) => ({ ...d, stages: [...d.stages, stage] }));
   };
@@ -2967,6 +3039,31 @@ export default function TripCard({
         ) : null}
 
         {/* Этапы: план и факт рядом (главный блок) */}
+        {/*
+          Итог по плановому графику с запасом (lib/stageSchedule): «план без
+          запаса» — введённые даты, «запас этапов» — Σ запасов, «итого» — план
+          плюс запас (запас на риски записи сюда НЕ входит — он отдельное поле).
+        */}
+        <div data-ui="stage-buffer-summary" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#4B5563]">
+          {draftSchedule.planStartDay != null && draftSchedule.planEndDay != null ? (
+            <>
+              <span>
+                план без запаса: <b>{fmtDM(draftSchedule.planStartDay)} – {fmtDM(draftSchedule.planEndDay)}</b>
+              </span>
+              <span>
+                запас этапов: <b>{draftSchedule.totalBufferDays} дн</b>
+              </span>
+              <span>
+                итого (плановое возвращение): <b>{draftSchedule.effectiveEndDay != null ? fmtDM(draftSchedule.effectiveEndDay) : '—'}</b>
+              </span>
+              {trip.kind === 'manual' && trip.bufferDays > 0 ? (
+                <span>запас на риски записи: {trip.bufferDays} дн (сверх запасов этапов)</span>
+              ) : null}
+            </>
+          ) : (
+            <span>Этапов с плановыми датами нет — план с запасом не рассчитывается (даты не выдумываются).</span>
+          )}
+        </div>
         <div data-ui="stages-table" className="w-full overflow-x-auto">
           <table className="w-full text-left min-w-[880px]">
             <thead>
@@ -2974,6 +3071,7 @@ export default function TripCard({
                 <th className={UI.th}>Этап</th>
                 <th className={UI.th} title="Город, адрес, объект или другое место выполнения этапа — свободный ввод с подсказками городов портала">Место</th>
                 <th className={UI.th}>План</th>
+                <th className={UI.th} title="Запас этапа, дней: сдвигает эффективный срок этого этапа и всех последующих (сумма запасов — итоговая дата с запасом). Отсутствие запаса = 0">Запас, дн</th>
                 <th className={UI.th}>Факт</th>
                 <th className={UI.th}>Отклонение / состояние</th>
                 <th className={UI.th}>Крит. срок</th>
@@ -2987,12 +3085,13 @@ export default function TripCard({
               </tr>
             </thead>
             <tbody>
-              {draft.stages.map((s) => {
+              {draft.stages.map((s, sIdx) => {
                 const dev = stageDeviation(s);
                 const pDay = dayNum(s.plannedDate);
                 const fDay = dayNum(s.actualDate);
                 const hasText = !!(s.reason || s.action);
                 const stState = stageStateOf(s, today);
+                const bufState = stageBufferStateOf(s, draftSchedule, today);
                 const stageEvents = carEvents.filter((e) => e.tripKey === trip.key && e.stageId === s.id).length;
                 return (
                   <React.Fragment key={s.id}>
@@ -3020,21 +3119,59 @@ export default function TripCard({
                         />
                       </td>
                       <td className="px-2 py-1.5 align-middle">
-                        <div className="flex items-center gap-1">
-                          <span
-                            title={
-                              readOnly || canEditPlanned
-                                ? undefined
-                                : 'Плановые даты этапов заблокированы после сохранения плана — разблокировка только с разового разрешения администратора'
-                            }
-                          >
-                            <DateInput value={s.plannedDate || ''} disabled={readOnly || !canEditPlanned} ariaLabel="Плановая дата этапа" onChange={(v) => onStageField(s.id, 'plannedDate', v)} />
-                          </span>
+                        <div
+                          className="flex items-center gap-1"
+                          title={
+                            readOnly || canEditPlanned
+                              ? undefined
+                              : 'Плановые даты этапов заблокированы после сохранения плана — разблокировка только с разового разрешения администратора'
+                          }
+                        >
+                          <DateInput value={s.plannedDate || ''} disabled={readOnly || !canEditPlanned} ariaLabel="Плановая дата этапа" onChange={(v) => onStageField(s.id, 'plannedDate', v)} />
                           {pDay != null && isWeekendDay(pDay) ? (
                             <span title={WEEKEND_HINT} aria-label={WEEKEND_HINT} className="shrink-0">
                               <CalendarClock className="w-3.5 h-3.5 text-amber-600" aria-hidden="true" />
                             </span>
                           ) : null}
+                        </div>
+                      </td>
+                      {/*
+                        Запас этапа, дней (часть плана): сдвигает эффективный срок
+                        этапа и всех последующих; подставляется из шаблона типа,
+                        правится вручную. Итог с запасом — над таблицей.
+                      */}
+                      <td className="px-2 py-1.5 align-middle whitespace-nowrap">
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            inputMode="numeric"
+                            data-ui="stage-buffer"
+                            data-stage-buffer-input={s.id}
+                            value={stageBufferOf(s)}
+                            disabled={readOnly || !canEditPlanned}
+                            title={
+                              readOnly || canEditPlanned
+                                ? 'Запас этапа, дней (0 — запаса нет): сдвигает эффективный срок этапа и последующих'
+                                : 'Запас этапов — часть плана: после сохранения плана доступен только с разового разрешения администратора'
+                            }
+                            onChange={(e) => onStageBuffer(s.id, e.target.value)}
+                            className="w-[58px] bg-white border border-[#E5E7EB] rounded-lg px-1.5 py-1 text-[11px] text-[#121316] outline-none focus:border-[var(--accent)] disabled:opacity-60"
+                          />
+                          {(() => {
+                            const item = draftSchedule.byId.get(s.id);
+                            if (!item || !item.bufferDays) return null;
+                            return (
+                              <span
+                                className="text-[10px] text-amber-700 whitespace-nowrap"
+                                title={`Плановая дата с запасом: ${fmtDM(item.effectiveDay)} (введённая ${fmtDM(item.plannedDay)} + накопленный запас ${item.cumBufferDays} дн)`}
+                                data-stage-effective={s.id}
+                              >
+                                → {fmtDM(item.effectiveDay)}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </td>
                       <td className="px-2 py-1.5 align-middle">
@@ -3054,12 +3191,28 @@ export default function TripCard({
                               {fmtDev(dev)}
                             </span>
                           ) : null}
+                          {/*
+                            Состояние с учётом запаса (lib/stageSchedule): факт в
+                            пределах запаса — янтарный, за пределами — красный;
+                            прежний текст состояния остаётся в подсказке.
+                          */}
                           <span
+                            data-stage-state={s.id}
+                            data-stage-buffer-tone={bufState.code}
                             className={`text-[10px] ${
-                              stState.code === 'late' ? 'text-rose-600' : stState.code === 'early' ? 'text-emerald-600' : 'text-[#6B7280]'
+                              bufState.code === 'beyond' || bufState.code === 'planned-overdue'
+                                ? 'text-rose-600'
+                                : bufState.code === 'within'
+                                  ? 'text-amber-700'
+                                  : stState.code === 'late'
+                                    ? 'text-rose-600'
+                                    : stState.code === 'early'
+                                      ? 'text-emerald-600'
+                                      : 'text-[#6B7280]'
                             }`}
+                            title={`${stState.label}${bufState.code === 'within' || bufState.code === 'beyond' ? ` · с запасом: ${bufState.label}` : ''}`}
                           >
-                            {stState.label}
+                            {bufState.code === 'within' || bufState.code === 'beyond' ? bufState.label : stState.label}
                           </span>
                         </div>
                       </td>
@@ -3132,17 +3285,50 @@ export default function TripCard({
                         </div>
                       </td>
                       <td className="px-2 py-1.5 align-middle">
-                        {!readOnly && canEditPlanned ? (
-                          <button
-                            type="button"
-                            onClick={() => removeStage(s.id)}
-                            aria-label="Удалить этап"
-                            title="Удалить этап"
-                            className="inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                        ) : null}
+                        <div className="flex items-center justify-end gap-0.5">
+                          {!readOnly && canEditPlanned ? (
+                            <>
+                              {/*
+                                Перестановка этапа («раньше внесён — левее»):
+                                seq = позиция в маршруте; работает и для записи
+                                уже сохранённого плана (тот же гейт правок).
+                              */}
+                              <button
+                                type="button"
+                                data-ui="stage-move-up"
+                                data-stage-move={s.id}
+                                onClick={() => moveStage(s.id, -1)}
+                                disabled={sIdx === 0}
+                                aria-label="Этап выше по маршруту"
+                                title="Выше по маршруту: раньше внесён — левее в дне"
+                                className="inline-flex items-center justify-center p-1 rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default"
+                              >
+                                <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
+                              </button>
+                              <button
+                                type="button"
+                                data-ui="stage-move-down"
+                                data-stage-move={s.id}
+                                onClick={() => moveStage(s.id, 1)}
+                                disabled={sIdx === draft.stages.length - 1}
+                                aria-label="Этап ниже по маршруту"
+                                title="Ниже по маршруту: позже внесён — правее в дне"
+                                className="inline-flex items-center justify-center p-1 rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default"
+                              >
+                                <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeStage(s.id)}
+                                aria-label="Удалить этап"
+                                title="Удалить этап"
+                                className="inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   </React.Fragment>
@@ -3150,7 +3336,10 @@ export default function TripCard({
               })}
               {draft.stages.length === 0 ? (
                 <tr>
-                  <td colSpan={draft.circles >= 2 ? 9 : 8} className="px-2 py-4 text-center text-[11px] text-[#6B7280]">
+                  {/* Колонок в шапке: Этап, Место, План, Запас дн, Факт, Отклонение,
+                      Крит. срок, [Круг при 2+], События этапа, '' → 10/9.
+                      Держать в согласии с <th> той же таблицы. */}
+                  <td colSpan={draft.circles >= 2 ? 10 : 9} className="px-2 py-4 text-center text-[11px] text-[#6B7280]">
                     У рейса пока нет этапов — добавьте первый (граница, загрузка, выгрузка…).
                   </td>
                 </tr>

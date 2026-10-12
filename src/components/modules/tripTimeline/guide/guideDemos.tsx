@@ -74,6 +74,8 @@ const makePeriod = (id: string, spec: DemoBaseSpec): BasePeriod => ({
   openBase: (spec.departure ?? null) == null,
   openRepair: (spec.repairStart ?? null) != null && (spec.repairEnd ?? null) == null && (spec.departure ?? null) == null,
   repairCappedByDeparture: (spec.repairStart ?? null) != null && (spec.repairEnd ?? null) == null && (spec.departure ?? null) != null,
+  driverName: '',
+  events: [],
   warnings: [],
 });
 

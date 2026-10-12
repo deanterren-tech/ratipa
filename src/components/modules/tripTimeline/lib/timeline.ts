@@ -13,6 +13,7 @@ import type {
   TimelineTrip,
   TimelineVehicleEvent,
 } from '../../../../types';
+import { buildStageSchedule } from './stageSchedule';
 
 export const DAY_MS = 86400000;
 
@@ -450,9 +451,17 @@ export const getDeadlineStatus = (
   const nameOf = (s: TimelineStage): string => (stageName ? stageName(s) : s.label || s.type || 'этап');
   const dls = criticalStages(trip);
   if (!dls.length) return { level: 0, label: 'нет крит. срока', kind: 'none' };
+  // Критический срок считается от даты С ЗАПАСОМ (lib/stageSchedule): запас
+  // этапа сдвигает себя и последующие даты по цепочке; у рейсов без запасов
+  // (в т.ч. старых) поведение прежнее.
+  const schedule = buildStageSchedule(trip.stages || []);
+  const deadlineDayOf = (s: TimelineStage): number | null => {
+    const item = schedule.byId.get(s.id);
+    return item ? item.effectiveDay : dayNum(s.plannedDate);
+  };
   let out: DeadlineStatus = { level: 1, label: 'в норме', kind: 'ok' };
   dls.forEach((s) => {
-    const p = dayNum(s.plannedDate);
+    const p = deadlineDayOf(s);
     const f = dayNum(s.actualDate);
     if (f != null) {
       if (p != null && f > p) {

@@ -28,6 +28,7 @@
 import { stageFactRange, stagePlanRange, type StageFillInput } from './stageFills';
 import type { BzMark, BzStripe } from './bzFills';
 import type { RowOverlapResolution } from './overlapRow';
+import { stageSeqOf } from './stageSchedule';
 
 // ---------------------------------------------------------------------------
 // Приоритет типов событий дня (ОДНА константа — используется везде)
@@ -106,6 +107,12 @@ export interface DayCellEvent {
   label: string;
   /** Якорь дня смены: 'left'/'right' — событие обязано встать в эту половину. */
   side?: 'left' | 'right' | null;
+  /**
+   * Порядок этапа в маршруте (seq): тай-брейкер для событий ОДНОГО дня одного
+   * рейса с равной категорией/временем — «раньше внесён — левее». У полос/
+   * отметок записи отсутствует (у них прежний порядок по ключу слияния).
+   */
+  seq?: number;
 }
 
 export interface DaySlot {
@@ -162,6 +169,19 @@ export const layoutDaySlots = (day: number, events: DayCellEvent[]): DaySlot[] =
     if (d !== 0) return d;
     const t = a.time && b.time && a.time !== b.time ? (a.time < b.time ? -1 : 1) : 0;
     if (t !== 0) return t;
+    // правило 3 (этапы одного дня): порядок маршрута — seq по возрастанию
+    // («раньше внесён — левее»); события записи сохраняют прежний порядок по
+    // ключу слияния. Отсутствие seq у старых этапов трактуется как
+    // миграционный порядок (order → позиция, см. lib/stageSchedule).
+    const stageSeq = (g: (typeof groups)[number]): { tripKey: string; seq: number } | null => {
+      const st = g.evs.find((e) => e.ref.type === 'stage' && typeof e.seq === 'number');
+      if (!st) return null;
+      const ref = st.ref as { type: 'stage'; tripKey: string };
+      return { tripKey: ref.tripKey, seq: st.seq as number };
+    };
+    const sa = stageSeq(a);
+    const sb = stageSeq(b);
+    if (sa && sb && sa.tripKey === sb.tripKey && sa.seq !== sb.seq) return sa.seq - sb.seq;
     return a.mergeKey.localeCompare(b.mergeKey);
   };
 
@@ -303,7 +323,7 @@ export const buildRowDaySections = (input: RowDaySectionsInput): RowDaySections 
   };
 
   // Этапы: плановые даты — в «План», фактические — в «Факт» (не смешиваются).
-  input.stages.forEach((it) => {
+  input.stages.forEach((it, idx) => {
     const r = input.kind === 'plan' ? stagePlanRange(it.stage) : stageFactRange(it.stage);
     if (!r) return;
     const side = input.tripSides.get(it.tripKey) || null;
@@ -314,6 +334,7 @@ export const buildRowDaySections = (input: RowDaySectionsInput): RowDaySections 
         cat: stageCatOf(it.stage.type),
         ref: { type: 'stage', tripKey: it.tripKey, stageId: it.stage.id },
         label,
+        seq: stageSeqOf(it.stage, idx),
         side: side ? (side.startDay === d ? 'right' : side.endDay === d ? 'left' : null) : null,
       });
     }

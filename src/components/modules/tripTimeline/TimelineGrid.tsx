@@ -14,7 +14,7 @@
  * сохраняется между возвратами (sessionStorage + вкладки не размонтируются).
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { TimelineStageType, TimelineVehicleEvent } from '../../../types';
+import type { TimelineStage, TimelineStageType, TimelineVehicleEvent } from '../../../types';
 import { formatPlate } from '../../../utils/salaryAutofill';
 import {
   TIMELINE_COL_W,
@@ -57,6 +57,7 @@ import {
   stageColorOf,
   stageFillTitle,
   stageNeighborLabel,
+  stagePlanRange,
   stageShortName,
   type StageFillInput,
   type StageFillSection,
@@ -71,6 +72,8 @@ import {
   type BzStripe,
 } from './lib/bzFills';
 import { tripRangeOf, VYEZD_STATUS, vyezdStatusIcon } from './lib/vyezd';
+import { layoutEventDots, repairEventDotColor, repairEventLabel, type RepairEvent } from './lib/repairEvents';
+import { buildStageSchedule, stageBufferOf, stageBufferStateOf, stageRouteCmp, type StageBufferStateInfo, type StageSchedule } from './lib/stageSchedule';
 import { resolveRowOverlaps, type RowOverlapResolution, type RowTripAdjust, type RowTripInterval } from './lib/overlapRow';
 import type { ResolvedMarker, ResolvedWarning, WaitGap } from './lib/overlap';
 import {
@@ -135,7 +138,7 @@ import {
   waitHatch,
 } from './lib/visuals';
 import { useCrosshair } from './lib/useCrosshair';
-import { useColumnHighlight } from './lib/timelinePrefs';
+import { useColumnHighlight, usePaintByDirection } from './lib/timelinePrefs';
 
 /** Промежутки «Ожидание выезда»: совпадает ли полоса base-gap с зоной ожидания. */
 const waitCovers = (gaps: Array<{ a: number; b: number }>, s: { a: number; b: number }): boolean =>
@@ -272,6 +275,8 @@ interface Props {
   onToggleFullscreen: () => void;
   /** Переключатель «Подсветка столбца» — сохраняется в настройках пользователя. */
   onColumnHighlightChange: (v: boolean) => void;
+  /** «Раскрасить по направлению»: запись выбора в профиль (значение — в общем store). */
+  onPaintByDirectionChange: (v: boolean) => void;
 }
 
 /** Запас по краям окна: полосы, пересекающиеся с [vs−margin, ve+margin],
@@ -443,6 +448,13 @@ const buildRows = (
       const planEnd = pMax ?? pMin;
       const tripLabel = `Рейс «${t.route || 'без маршрута'}»`;
       const deadline = getDeadlineStatus(t, today, (s) => stageFullName(stageTypes, s));
+      // Плановый график с запасом этапов (lib/stageSchedule): «план без запаса»,
+      // суммарный запас и «итого» — в подсказке полосы (данные не меняются).
+      const stageSched = buildStageSchedule(t.stages || []);
+      const bufferLine =
+        stageSched.totalBufferDays > 0 && stageSched.effectiveEndDay != null
+          ? ` · запас этапов: ${stageSched.totalBufferDays} дн · итого с запасом: ${fmtDM(stageSched.effectiveEndDay)} (плановое возвращение с запасом)`
+          : '';
       const dir = directionOfTrip(t, directions);
       const parts = planBarLabelParts(t);
       // Круги рейса — поле записи («circles», lib/circles): счётчик у обоих
@@ -465,7 +477,7 @@ const buildRows = (
           warn: false,
           dir,
           circleMarks: circleMarksPlan,
-          title: `${formatPlate(car.carNumber)} · ${parts.titleText} · ${t.dispatcherName || 'без диспетчера'}${dir ? ` · направление: ${dir.name}` : ''}${circleMarksPlan ? ` · ${circleMarksPlan.title}` : ''}${t.kind === 'plan' ? ' · из плана дохода' : ''}${t.archived ? ' · архив' : ''}${openPlan ? ' · неполный план (нет даты возвращения)' : ` · плановое возвращение: ${fmtDM(planEnd)}`} · ${deadline.label}`,
+          title: `${formatPlate(car.carNumber)} · ${parts.titleText} · ${t.dispatcherName || 'без диспетчера'}${dir ? ` · направление: ${dir.name}` : ''}${circleMarksPlan ? ` · ${circleMarksPlan.title}` : ''}${t.kind === 'plan' ? ' · из плана дохода' : ''}${t.archived ? ' · архив' : ''}${openPlan ? ' · неполный план (нет даты возвращения)' : ` · плановое возвращение: ${fmtDM(planEnd)}`}${bufferLine} · ${deadline.label}`,
         });
       }
       planInts.push({ key: t.key, a: pMin, b: planEnd, open: openPlan, label: tripLabel });
@@ -670,7 +682,9 @@ const buildRows = (
     // раскладке). Дата в данные не пишется: только отображение.
     const stageInputs: StageFillInput[] = [];
     myTrips.forEach((t) => {
-      t.stages.forEach((s) => stageInputs.push({ tripKey: t.key, stage: s, archived: !!t.archived }));
+      // Порядок этапов для полосы: сначала дата, затем seq («раньше внесён —
+      // левее»; у старых рейсов seq читается из order/позиции — миграционно).
+      [...t.stages].sort(stageRouteCmp).forEach((s) => stageInputs.push({ tripKey: t.key, stage: s, archived: !!t.archived }));
     });
 
     // Стык смены диспетчера — в обе подстроки: «План» с подписью, «Факт» линией.
@@ -853,6 +867,51 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   const laneRowBg = rowHover ? 'var(--tl-hover)' : zebra ? 'var(--tl-zebra)' : 'transparent';
   const W = vn * colW;
   const ve = vs + vn - 1;
+  /**
+   * События ремонта по периодам строки — для точек НАД полосой (слой меток).
+   * Источник — те же периоды строки (без копий данных и без отдельных чтений).
+   */
+  const bzEventsById = useMemo(() => {
+    const m = new Map<string, RepairEvent[]>();
+    row.bzInputs.forEach(({ period }) => {
+      if (period.key && period.events.length) m.set(period.key, period.events);
+    });
+    return m;
+  }, [row.bzInputs]);
+  /**
+   * Плановый график с запасом по каждому рейсу строки (lib/stageSchedule):
+   * запас этапа сдвигает себя и последующие даты; из графика — штриховка
+   * запаса справа от этапа, «план с запасом» в подсказке и состояния
+   * «в пределах/за пределами запаса». Данные этапов не меняются.
+   */
+  const stageSchedules = useMemo(() => {
+    const byTrip = new Map<string, TimelineStage[]>();
+    row.stageInputs.forEach(({ tripKey, stage }) => {
+      const arr = byTrip.get(tripKey);
+      if (arr) arr.push(stage);
+      else byTrip.set(tripKey, [stage]);
+    });
+    const m = new Map<string, StageSchedule>();
+    byTrip.forEach((stages, tripKey) => m.set(tripKey, buildStageSchedule(stages)));
+    return m;
+  }, [row.stageInputs]);
+  const scheduleOf = useCallback((tripKey: string): StageSchedule | null => stageSchedules.get(tripKey) || null, [stageSchedules]);
+  const stageStateByKey = useMemo(() => {
+    const m = new Map<string, StageBufferStateInfo>();
+    if (!row.stageInputs.length) return m;
+    const byTrip = new Map<string, TimelineStage[]>();
+    row.stageInputs.forEach(({ tripKey, stage }) => {
+      const arr = byTrip.get(tripKey);
+      if (arr) arr.push(stage);
+      else byTrip.set(tripKey, [stage]);
+    });
+    byTrip.forEach((stages, tripKey) => {
+      const sched = stageSchedules.get(tripKey);
+      if (!sched) return;
+      stages.forEach((s) => m.set(`${tripKey}|${s.id}`, stageBufferStateOf(s, sched, today)));
+    });
+    return m;
+  }, [row.stageInputs, stageSchedules, today]);
   /** Та же единая функция «дата → координата», что у шапки и сетки. */
   const pos = (a: number, b: number): { left: number; width: number } | null => barRectInWindow(a, b, vs, ve, colW);
   /** Единая визуальная система: выбранный (открытый) рейс — тёмное кольцо,
@@ -1222,6 +1281,18 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     [row.bzInputs, row.bzGaps, vs, ve, today],
   );
   /**
+   * Точки событий ремонта вешает РОВНО ОДНА полоса периода: основная — «факт
+   * базы» (полоса учёта выезда); если у периода факт-полосы нет (не указан
+   * приезд) — полоса ремонта. Иначе события дублировались бы на обеих.
+   */
+  const bzEventDotKeys = useMemo(
+    () =>
+      new Set(
+        factBz.stripes.filter((s) => s.kind === 'base-fact' && s.periodKey).map((s) => s.periodKey as string),
+      ),
+    [factBz],
+  );
+  /**
    * ДОЛИ ЯЧЕЙКИ ДНЯ — единое правило lib/dayCellSections: слева предыдущее
    * событие дня, справа следующее (например, выгрузка слева, начало
    * ремонта/простоя справа), с учётом якорей дня смены (срезы полос рейса из
@@ -1293,7 +1364,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   );
   /** Заливки этапов: план — в подстроке «План», факт — в «Факт»; доли дня — из единой раскладки. */
   const planFills = useMemo(
-    () => layoutStageFills(row.stageInputs, 'plan', vs, ve, planSec.slotForStage),
+    () => layoutStageFills(row.stageInputs, 'plan', vs, ve, planSec.slotForStage, scheduleOf),
     [row.stageInputs, vs, ve, planSec],
   );
   const factFills = useMemo(
@@ -1384,10 +1455,49 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         backgroundImage: `repeating-linear-gradient(to right, #F1F2F4 0px, #F1F2F4 1px, transparent 1px, transparent ${colW}px)`,
       }
     : {};
+  /**
+   * Штриховка ЗАПАСА этапа — справа от последней секции этапа, ширина = запас
+   * в днях (в днях колонки), не перекрывает сроки: это визуальный «буфер»
+   * плана, тот же жёлтый hatch45, что у запаса на риски. Клики сквозь
+   * штриховку проходят к полосам (pointer-events: none).
+   */
+  const renderStageBuffer = (f: StageFillSection, keyPrefix: string) => {
+    const days = stageBufferOf(f.stage);
+    if (days <= 0) return null;
+    const range = stagePlanRange(f.stage);
+    // Штриховка — один раз, у последнего дня диапазона этапа (не у каждой доли).
+    if (!range || f.day !== Math.min(range.b, ve)) return null;
+    const anchor = dayToX(f.day, vs, colW) + Math.round(((f.section + 1) * colW) / f.sections);
+    const left = Math.max(anchor, 0);
+    const width = Math.min(days * colW, W - left);
+    if (width < 3) return null;
+    return (
+      <div
+        key={`${keyPrefix}-buf-${f.tripKey}-${f.stage.id}-${f.day}`}
+        aria-hidden="true"
+        data-stage-buffer={days}
+        data-trip={f.tripKey}
+        data-stage={f.stage.id}
+        className="absolute pointer-events-none"
+        style={{
+          zIndex: TL_Z.tripBar,
+          left,
+          width,
+          top: planTopOf(0),
+          height: PLAN_BAR_H,
+          background: hatch45,
+          border: '1px solid rgba(217, 119, 6, 0.22)',
+          borderLeft: 'none',
+          borderRadius: '0 var(--tl-bar-r) var(--tl-bar-r) 0',
+          ...(f.archived ? { opacity: 0.72 } : {}),
+        }}
+      />
+    );
+  };
   /** Секции заливок этапов — на всю высоту подстроки, кликабельны, в новом стиле
    *  (единое скругление, заливка, hover/focus). Этапы — ВСЕГДА поверх полос
    *  (слой TL_Z.stage); доля дня — из единого правила половин ячейки. */
-  const renderStageFill = (f: StageFillSection, keyPrefix: string, sec: RowDaySections) => {
+  const renderStageFill = (f: StageFillSection, keyPrefix: string, sec: RowDaySections, lane: 'plan' | 'fact' = 'fact') => {
     const color = stageColorOf(f.stage.type);
     const left = dayToX(f.day, vs, colW) + Math.round((f.section * colW) / f.sections);
     const right = dayToX(f.day, vs, colW) + Math.round(((f.section + 1) * colW) / f.sections);
@@ -1398,9 +1508,27 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     const radius = `${f.section === 0 ? `${r}px` : '0px'} ${f.section === f.sections - 1 ? `${r}px` : '0px'} ${
       f.section === f.sections - 1 ? `${r}px` : '0px'
     } ${f.section === 0 ? `${r}px` : '0px'}`;
+    // Запас этапа (lib/stageSchedule): в подсказке — размер и дата с запасом;
+    // сам запас нарисован светлой штриховкой СПРАВА от секции (renderStageBuffer).
+    const buf = stageBufferOf(f.stage);
+    const state = stageStateByKey.get(`${f.tripKey}|${f.stage.id}`) || null;
+    const bufferInfo =
+      buf > 0
+        ? {
+            bufferDays: buf,
+            cumBufferDays: f.cumBufferDays ?? buf,
+            effectiveIso: f.effectiveIso ?? null,
+            stateLabel: state ? state.label : null,
+          }
+        : null;
     // Подсказка доли: событие этапа + строка о соседнем событии этого дня.
     const neighbor = sec.neighborsOf(f.day, [stageMergeKeyOf(f.tripKey, f.stage.id)]);
-    const title = neighbor ? `${stageFillTitle(stageTypes, f.stage, f.day, today)}\n${neighbor}` : stageFillTitle(stageTypes, f.stage, f.day, today);
+    const titleBase = stageFillTitle(stageTypes, f.stage, f.day, today, bufferInfo);
+    const title = neighbor ? `${titleBase}\n${neighbor}` : titleBase;
+    // Статус факта с учётом запаса — вторичный признак на самой секции ФАКТА:
+    // «в пределах запаса» — жёлтая полоска снизу, «за пределами» — красная.
+    const stateCode = lane === 'fact' && state ? state.code : null;
+    const stateTone = stateCode === 'within' ? '#D97706' : stateCode === 'beyond' || stateCode === 'planned-overdue' ? '#E11D48' : null;
     // Иконка типа события — в своей доле; мелкий масштаб — только иконка.
     const StageIcon = stageIconOf(f.stage.type);
     return (
@@ -1413,6 +1541,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         data-trip={f.tripKey}
         data-stage-section={f.section}
         data-stage-sections={f.sections}
+        data-stage-buffer-state={stateCode || undefined}
         onClick={open}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -1442,6 +1571,14 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           </span>
         ) : width >= 12 ? (
           <StageIcon className={BAR_ICON_CLS} style={{ color: color.text }} aria-hidden="true" />
+        ) : null}
+        {stateTone ? (
+          <span
+            aria-hidden="true"
+            data-stage-buffer-flag="1"
+            className="absolute left-0 right-0 bottom-0 pointer-events-none"
+            style={{ height: 3, background: stateTone }}
+          />
         ) : null}
       </div>
     );
@@ -1642,7 +1779,15 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
    * у полос рейса. Если период продолжается за видимую область — на краю обрыв
    * без скругления с мягким градиентом. Клик и подсказка — на всей полосе.
    */
-  const renderBzStripe = (s: BzStripe, keyPrefix: string, ov: RowOverlapResolution, sec: RowDaySections, obstacles: BarObstacle[]) => {
+  const renderBzStripe = (
+    s: BzStripe,
+    keyPrefix: string,
+    ov: RowOverlapResolution,
+    sec: RowDaySections,
+    obstacles: BarObstacle[],
+    /** Точки событий ремонта над ЭТОЙ полосой (по одному периоду — одна полоса). */
+    withEventDots = false,
+  ) => {
     const color = bzStripeColor(s);
     // Полосы простоя, укороченные/разрезанные разрешением наложений (lib/overlap):
     // база обрывается в день выезда по рейсу, день смены делится по горизонтали.
@@ -1682,10 +1827,72 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         ? `linear-gradient(to right, #000 calc(100% - ${fadePx}px), transparent 100%)`
         : undefined;
     const open = s.periodKey ? () => onOpenBase(s.periodKey as string) : undefined;
+    /**
+     * Точки событий ремонта НАД полосой: слой меток TL_Z.mark (выше этапов и
+     * полос, как все метки), центр дня события. Надпись — по наведению
+     * (title): дата, тип, текст, сумма; клик открывает период.
+     */
+    const evDots =
+      withEventDots && s.periodKey
+        ? layoutEventDots(bzEventsById.get(s.periodKey) || [], clipA, clipB, (d) => dayToX(d, vs, colW) - left, colW)
+        : [];
+    const evDotsLayer = evDots.length ? (
+      <div className="absolute inset-0" style={{ zIndex: TL_Z.mark, pointerEvents: 'none' }} data-bz-events="1">
+        {evDots.map((d) => {
+          const first = d.items[0];
+          const lines = d.items.map(
+            (e) =>
+              `${e.day != null ? fmtDM(e.day) : 'без даты'} · ${repairEventLabel(e.type)}${e.text ? ` — ${e.text}` : ''}${
+                e.amount != null ? ` · сумма ${e.amount}` : ''
+              }`,
+          );
+          const title = [
+            ...lines,
+            ...(d.extra > 0 ? [`и ещё ${d.extra} — открыть окно периода`] : []),
+            'Клик — открыть период учёта выезда',
+          ].join('\n');
+          const dx = Math.max(1, Math.min(Math.round(d.x) - 3, Math.max(1, width - 8)));
+          return (
+            <button
+              type="button"
+              key={`ev-${d.key}`}
+              data-bz-event={first.type}
+              data-bz-event-period={s.periodKey}
+              data-bz-event-day={d.day}
+              data-bz-event-ids={d.items.map((e) => e.id).join(',')}
+              aria-label={`Событие ремонта: ${repairEventLabel(first.type)}`}
+              title={title}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (s.periodKey) onOpenBase(s.periodKey);
+              }}
+              className="absolute rounded-full"
+              style={{
+                zIndex: TL_Z.mark,
+                left: dx,
+                top: 1,
+                width: 7,
+                height: 7,
+                background: repairEventDotColor(first.type),
+                border: '1.5px solid rgba(255,255,255,0.95)',
+                boxShadow: '0 0 0 1px rgba(18,19,22,0.28)',
+                pointerEvents: 'auto',
+                cursor: 'pointer',
+                padding: 0,
+                opacity: s.archived ? 0.72 : 1,
+              }}
+            />
+          );
+        })}
+      </div>
+    ) : null;
     // «Учёт выезда»: подпись и иконка статуса (учёт ведётся / закрыт / не зафиксирован /
     // расхождение) — цвет полосы задан статусом; при узкой ширине остаётся иконка.
     const isVyezd = s.kind === 'base-fact';
     const StatusIcon = isVyezd && s.status ? vyezdStatusIcon(s.status) : null;
+    // Ремонт — вторичный признак (кроме цвета): значок гаечного ключа в подписи
+    // (тот же значок, что у отметки окончания ремонта). Цвет остаётся палитровым.
+    const KindIcon = s.kind === 'repair' ? Wrench : null;
     const showLabel = width >= (isVyezd ? 62 : 44) && (!isVyezd || !!StatusIcon);
     // Подпись — ЕДИНОЕ правило (lib/barLabels): полный текст (ремонт и учёт
     // выезда — с датами периода), короткая ступень — короткий вариант
@@ -1741,6 +1948,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       labelShort,
       labelIcon: StatusIcon ? (
         <StatusIcon className="w-2.5 h-2.5 shrink-0" style={{ color: color.text }} aria-hidden="true" />
+      ) : KindIcon ? (
+        <KindIcon className="w-2.5 h-2.5 shrink-0" style={{ color: color.text }} aria-hidden="true" />
       ) : undefined,
       labelOnlyIcon: isVyezd && !!StatusIcon && width >= 16 && !(showLabel && labelFull),
       obstacles,
@@ -1755,6 +1964,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         'data-bz-trunc': adj && adj.truncatedDays > 0 ? `${adj.truncatedDays}` : undefined,
         'data-period': s.periodKey || undefined,
       },
+      // Точки событий ремонта — поверх полосы (слой TL_Z.mark), как прочие метки.
+      marksOverlay: evDotsLayer,
     });
   };
   /**
@@ -1948,7 +2159,12 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         {bgPlane('bg', 0.75)}
         {planBz.stripes.map((s) => renderBzStripe(s, 'pb', row.planOv, planSec, planBzObstacles))}
         {planBz.marks.map((m) => renderBzMark(m, 'pbm', planSec))}
-        {planFills.map((f) => renderStageFill(f, 'pf', planSec))}
+        {planFills.map((f) => (
+          <React.Fragment key={`pf-${f.tripKey}-${f.stage.id}-${f.day}`}>
+            {renderStageFill(f, 'pf', planSec, 'plan')}
+            {renderStageBuffer(f, 'pf')}
+          </React.Fragment>
+        ))}
         {todayStrip('t', 0.1)}
         {row.planItems.map((it, idx) => {
           if (it.kind === 'handover') return renderHandover(it, `ph${idx}`);
@@ -2167,10 +2383,19 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       >
         {bgPlane('fbg', 0.6)}
         {factBz.stripes.map((s) =>
-          s.kind === 'base-gap' && waitCovers(row.factOv.waitGaps, s) ? null : renderBzStripe(s, 'fb', row.factOv, factSec, factBzObstacles),
+          s.kind === 'base-gap' && waitCovers(row.factOv.waitGaps, s)
+            ? null
+            : renderBzStripe(
+                s,
+                'fb',
+                row.factOv,
+                factSec,
+                factBzObstacles,
+                s.kind === 'base-fact' || (s.kind === 'repair' && !!s.periodKey && !bzEventDotKeys.has(s.periodKey)),
+              ),
         )}
         {factBz.marks.map((m) => renderBzMark(m, 'fbm', factSec))}
-        {factFills.map((f) => renderStageFill(f, 'ff', factSec))}
+        {factFills.map((f) => renderStageFill(f, 'ff', factSec, 'fact'))}
         {todayStrip('ft', 0.1)}
         {row.factItems.map((it, idx) => {
           if (it.kind === 'handover') return renderHandover(it, `fh${idx}`);
@@ -2440,14 +2665,19 @@ export default function TimelineGrid({
   fullscreen,
   onToggleFullscreen,
   onColumnHighlightChange,
+  onPaintByDirectionChange,
 }: Props) {
   const ve = vs + vn - 1;
   const colW = zoomColW(zoom);
   const W = vn * colW;
   /** Фильтр направлений: активные чипы (null — показаны все). Только видимость. */
   const [dirFilter, setDirFilter] = useState<string[] | null>(null);
-  /** Режим «Раскрасить по направлению»: цвет полосы рейса — приглушённый цвет направления. */
-  const [paintByDirection, setPaintByDirection] = useState(false);
+  /**
+   * Режим «Раскрасить по направлению»: цвет полосы рейса — приглушённый цвет
+   * направления. Дефолт ВКЛЮЧЁН; значение — общий store настроек пользователя
+   * (lib/timelinePrefs), запись в профиль — через onPaintByDirectionChange.
+   */
+  const paintByDirection = usePaintByDirection();
   /**
    * Ширина закреплённой колонки «Автомобили»: регулируется перетаскиванием
    * границы (resize-handle), значение — в localStorage; двойной клик по границе
@@ -3037,7 +3267,7 @@ export default function TimelineGrid({
                 type="checkbox"
                 data-ui="paint-by-direction"
                 checked={paintByDirection}
-                onChange={(e) => setPaintByDirection(e.target.checked)}
+                onChange={(e) => onPaintByDirectionChange(e.target.checked)}
                 className="w-3.5 h-3.5 rounded border-[#D1D5DB] accent-[var(--accent)] cursor-pointer"
               />
               Раскрасить по направлению
