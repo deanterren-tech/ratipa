@@ -1782,12 +1782,22 @@ export const dbService = {
             }));
             callback(list);
           } else {
-            INITIAL_TRIPS.forEach((t) => {
-              set(ref(database, `tripsdashboard/${t.id}`), t).catch((err) =>
-                console.warn(err),
-              );
-            });
-            callback(INITIAL_TRIPS);
+            // Пустая ветка в проде — это пустой список, а НЕ повод записать
+            // демонстрационные рейсы в рабочую базу (они возвращались сами при
+            // каждом открытии «Плана дохода», пока ветка пуста). Демо-засев
+            // оставлен только для разработки и staging.
+            const isStagingEnv =
+              import.meta.env.DEV || import.meta.env.VITE_STAGING === 'true';
+            if (isStagingEnv) {
+              INITIAL_TRIPS.forEach((t) => {
+                set(ref(database, `tripsdashboard/${t.id}`), t).catch((err) =>
+                  console.warn(err),
+                );
+              });
+              callback(INITIAL_TRIPS);
+            } else {
+              callback([]);
+            }
           }
         },
         (err) => {

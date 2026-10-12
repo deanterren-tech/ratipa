@@ -15,8 +15,11 @@
  * берутся ИЗ ТЕХ ЖЕ ИСТОЧНИКОВ, что показывают «Справочники» и сам раздел
  * «Авто и Водители»: единая база сцепок (getCouplingsFlat — как «База сцепок»
  * во вкладке «Автопарк и Водители») и справочник водителей (getDriversFlat —
- * как вкладка «База водителей»). Подписки живут только пока хаб открыт;
- * показываются у «План Дохода» и «Авто и Водители».
+ * как вкладка «База водителей»). Показатель «План дохода» — рабочая ветка
+ * trips_dashboard через pdService.subscribeTrips(…, false): тот же источник,
+ * что у самого модуля (легаси-ветка tripsdashboard больше не используется —
+ * в ней были только демонстрационные рейсы). Подписки живут только пока хаб
+ * открыт; показываются у «План Дохода» и «Авто и Водители».
  */
 import { useEffect, useState, type ComponentType, type CSSProperties } from 'react';
 import { motion } from 'motion/react';
@@ -31,7 +34,7 @@ import {
   HubKeyIcon, HubBookmarkIcon, HubWalletIcon, HubBookIcon, HubBookCheckIcon, HubDatabaseIcon, HubFolderIcon,
   HubGridIcon, HubFuelIcon,
 } from './common/HubIcons';
-import { dbService } from '../api';
+import { dbService, pdService } from '../api';
 import { getCouplingsFlat, getDriversFlat } from '../services/fleetService';
 import { UserProfile } from '../types';
 import { APP_VERSION_LABEL } from '../version';
@@ -121,7 +124,12 @@ export default function MobileMoreHub({ user, groups, onNavigate, onOpenAccount,
   const [drivers, setDrivers] = useState<number | null>(null);
 
   useEffect(() => {
-    const u1 = dbService.getTrips((list) => setTrips((list || []).filter((t) => !t.isArchived).length));
+    // «План дохода» — тот же источник и то же правило, что в самом модуле:
+    // рабочая ветка trips_dashboard через pdService.subscribeTrips(…, false)
+    // (не архивные). Прежний dbService.getTrips читал ЛЕГАСИ-ветку
+    // tripsdashboard, в которой лежали только демонстрационные рейсы,
+    // и показывал «2 активных» вместо реального числа рейсов плана.
+    const u1 = pdService.subscribeTrips((list) => setTrips((list || []).length), false);
     // Таймлайн рейсов: активные (не архивные) рейсы модуля tripTimeline
     const u1b = dbService.getTimelineTrips((list) => setTimelineTrips((list || []).filter((t) => !t.archived).length));
     // Автопарк — счёт из единой базы сцепок: тот же источник и та же цифра,
