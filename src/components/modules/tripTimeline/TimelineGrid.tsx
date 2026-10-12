@@ -104,7 +104,7 @@ import {
 } from './lib/sources';
 import DateInput from './DateInput';
 import CalendarHeader from './CalendarHeader';
-import { AlertTriangle, ArrowRightLeft, CalendarClock, CarFront, ChevronDown, ChevronLeft, ChevronRight, CircleDashed, LogIn, LogOut, Maximize2, Minimize2, Palette, TriangleAlert, Wrench } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, CalendarClock, CarFront, ChevronDown, ChevronLeft, ChevronRight, CircleDashed, LogIn, LogOut, Maximize2, Minimize2, Palette, Plus, TriangleAlert, Wrench } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Палитра полос / штриховок / маркеров / статусных значков — в lib/visuals:
@@ -277,6 +277,11 @@ interface Props {
   onColumnHighlightChange: (v: boolean) => void;
   /** «Раскрасить по направлению»: запись выбора в профиль (значение — в общем store). */
   onPaintByDirectionChange: (v: boolean) => void;
+  /**
+   * Кнопка «+ Направление» в панели фильтров: открывает окно аддитивного
+   * добавления записи справочника (нет обработчика — кнопки нет; режим чтения).
+   */
+  onAddDirection?: () => void;
 }
 
 /** Запас по краям окна: полосы, пересекающиеся с [vs−margin, ve+margin],
@@ -2666,6 +2671,7 @@ export default function TimelineGrid({
   onToggleFullscreen,
   onColumnHighlightChange,
   onPaintByDirectionChange,
+  onAddDirection,
 }: Props) {
   const ve = vs + vn - 1;
   const colW = zoomColW(zoom);
@@ -3259,6 +3265,18 @@ export default function TimelineGrid({
               );
             })}
             <span className="w-px h-4 bg-[var(--tl-hairline)] mx-0.5" aria-hidden="true" />
+            {onAddDirection ? (
+              <button
+                type="button"
+                data-ui="add-direction"
+                onClick={onAddDirection}
+                title="Добавить вариант направления (название + короткий код, например LT) — появится в переключателе рейсов"
+                className="inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-medium border border-[var(--tl-hairline)] bg-white text-[var(--tl-text)] hover:text-[var(--tl-text-strong)] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
+              >
+                <Plus className="w-3 h-3" aria-hidden="true" />
+                Направление
+              </button>
+            ) : null}
             <label
               className="flex items-center gap-1.5 text-[11px] text-[var(--tl-text)] cursor-pointer select-none"
               title="Подсветка: полосы рейсов окрашиваются в приглушённый цвет направления (данные не меняются)"

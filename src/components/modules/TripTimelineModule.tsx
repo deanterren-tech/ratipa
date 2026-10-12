@@ -33,6 +33,8 @@ import NewTripForm, { type NewTripDraft, type NewTripResult } from './tripTimeli
 import StatsBlock from './tripTimeline/StatsBlock';
 import CarOverviewModal from './tripTimeline/CarOverviewModal';
 import { useTimelineData } from './tripTimeline/useTimelineData';
+import { type DirectionOption } from './tripTimeline/lib/directionCatalog';
+import DirectionAddModal from './tripTimeline/DirectionAddModal';
 import { sortMonthLabelsDesc, todayNum, zoomColW, zoomIndexOf } from './tripTimeline/lib/timeline';
 import { plateKeyOf } from './tripTimeline/lib/sources';
 import { setColumnHighlight, setPaintByDirection } from './tripTimeline/lib/timelinePrefs';
@@ -401,6 +403,22 @@ export default function TripTimelineModule({ user, settings }: Props) {
   const [focusStageId, setFocusStageId] = useState<string | null>(null);
   const [overviewCarKey, setOverviewCarKey] = useState<string | null>(null);
   const [showNewTrip, setShowNewTrip] = useState(false);
+  /** Окно «+ Направление» (добавление записи в справочник directions). */
+  const [showAddDirection, setShowAddDirection] = useState(false);
+  /**
+   * Варианты направления, добавленные в этой сессии: справочник читается
+   * GET-подпиской с TTL-кэшем (5 минут), поэтому новая запись до перезагрузки
+   * дополняется локально — переключатели показывают её сразу.
+   */
+  const [directionExtras, setDirectionExtras] = useState<DirectionOption[]>([]);
+  const directionOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return [...data.directionOptions, ...directionExtras].filter((d) => {
+      if (seen.has(d.code)) return false;
+      seen.add(d.code);
+      return true;
+    });
+  }, [data.directionOptions, directionExtras]);
 
   // Текущее назначение машин (единый справочник сцепок) — основа группировки
   // вкладки «Все»: одна группа строк на автомобиль, без дублей из-за истории.
@@ -1096,6 +1114,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
             onToggleFullscreen={toggleFullscreen}
             onColumnHighlightChange={changeColumnHighlight}
             onPaintByDirectionChange={changePaintByDirection}
+            onAddDirection={canWrite ? () => setShowAddDirection(true) : undefined}
           />
         </div>
       </div>
@@ -1139,6 +1158,8 @@ export default function TripTimelineModule({ user, settings }: Props) {
           carBases={carBasesForModal}
           carEvents={carEventsForModal}
           cities={data.cities}
+          directionOptions={directionOptions}
+          stageTemplates={data.stageTemplates}
           onSelectTrip={(key) => setOpenTripKey(key)}
           onOpenPlan={openPlanRecord}
           onCopyPlanLink={copyPlanLink}
@@ -1186,8 +1207,23 @@ export default function TripTimelineModule({ user, settings }: Props) {
           dispatchers={data.dispatchers}
           defaultDispatcherId={defaultDispatcherId}
           canWrite={canCreateTrip}
+          directions={directionOptions}
+          stageTypes={data.stageTypes}
+          stageTemplates={data.stageTemplates}
           onCreate={createTrip}
           onCancel={() => setShowNewTrip(false)}
+        />
+      ) : null}
+
+      {/* Окно «+ Направление»: аддитивное дополнение справочника directions
+          (название + короткий код; подтверждение + защита от дублей по коду). */}
+      {showAddDirection && canWrite ? (
+        <DirectionAddModal
+          existing={directionOptions}
+          existingColorNames={data.directions.map((d) => d.name)}
+          user={{ name: user.name, role: user.role }}
+          onClose={() => setShowAddDirection(false)}
+          onSaved={(entry) => setDirectionExtras((prev) => [...prev, entry])}
         />
       ) : null}
 

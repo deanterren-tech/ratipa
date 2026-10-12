@@ -98,6 +98,34 @@ export const resolvePlanLock = (params: {
   };
 };
 
+/**
+ * «БЛОКИРУЕМЫЕ» изменения плана — то, что защищает существующий контроль:
+ * правка УЖЕ ВНЕСЁННЫХ плановых дат, удаление этапов, запас/порядок
+ * существующих этапов и количество кругов. ДОБАВЛЕНИЕ этапов и заполнение
+ * ПУСТЫХ плановых дат НЕ блокируются (право исполнителя canFillEmptyDates,
+ * lib/stageRights): такие правки сохраняются без разового разрешения.
+ *
+ * Реализация: из черновика исключаются добавленные этапы, а у существующих
+ * этапов незаполненная сохранённая плановая дата остаётся пустой «как в базе»
+ * (заполнение пустого поля не считается изменением плановой даты).
+ * Используется для гейта сохранения и индикатора изменений плана в карточке;
+ * счёт изменений для истории/версий (computePlanStageChanges) не меняется.
+ */
+export const computeBlockedPlanChanges = (
+  stored: TimelineStage[] | undefined,
+  draft: TimelineStage[] | undefined,
+  circles?: { stored?: number; draft?: number },
+): PlanStageChanges => {
+  const storedById = new Map((stored || []).map((s) => [s.id, s]));
+  const filteredDraft = (draft || [])
+    .filter((s) => storedById.has(s.id))
+    .map((s) => {
+      const before = storedById.get(s.id)!;
+      return dayNum(before.plannedDate) == null ? { ...s, plannedDate: before.plannedDate || '' } : s;
+    });
+  return computePlanStageChanges(stored, filteredDraft, circles);
+};
+
 /** Изменения плана между сохранённым состоянием и черновиком окна. */
 export interface PlanStageChanges {
   adds: TimelineStage[];

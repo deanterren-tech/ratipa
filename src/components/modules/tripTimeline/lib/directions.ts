@@ -103,11 +103,14 @@ export const resolveDirection = (text: unknown, dirs: DirectionDef[]): Direction
 };
 
 /**
- * Направление рейса: поле записи плана (`direction`), иначе — из текста
+ * Направление рейса: поле записи (`direction` — код «TR»/«CN» у новых, текст
+ * «Китай»/«Турция» у старых), далее поле записи плана, иначе — из текста
  * маршрута существующим способом. null — направление честно неизвестно.
  */
 export const directionOfTrip = (t: WholeTrip, dirs: DirectionDef[]): DirectionDef | null =>
-  resolveDirection(t.plan?.direction || '', dirs) || resolveDirection(t.route || '', dirs);
+  resolveDirection(t.direction || '', dirs) ||
+  resolveDirection(t.plan?.direction || '', dirs) ||
+  resolveDirection(t.route || '', dirs);
 
 /** Простое смешивание hex-цветов (для мягких заливок чипа/полосы). */
 export const mixHex = (hex: string, target: string, ratio: number): string => {

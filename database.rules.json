@@ -60,6 +60,50 @@
     },
     "telemetry_check_config": {
       ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'root_admin' || root.child('users').child(auth.uid).child('role').val() === 'admin')"
+    },
+    "tripTimeline": {
+      ".read": "auth != null",
+      "trips": {
+        ".write": "auth != null"
+      },
+      "vehicleEvents": {
+        ".write": "auth != null"
+      },
+      "planGuard": {
+        ".write": "auth != null"
+      },
+      "planPerms": {
+        ".write": "auth != null"
+      },
+      "planRequests": {
+        ".write": "auth != null"
+      },
+      "tripMeta": {
+        ".write": "auth != null"
+      },
+      "config": {
+        ".write": "auth != null"
+      },
+      "tripStages": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "$tripId": {
+          "$stageId": {
+            "plannedDate": {
+              ".validate": "(!data.exists() || data.val() === null || data.val() === '') || (newData.exists() && newData.val() === data.val()) || root.child('users_list').child(auth.uid).child('role').val() === 'root_admin' || root.child('users_list').child(auth.uid).child('role').val() === 'admin'"
+            },
+            "actualDate": {
+              ".validate": "(!data.exists() || data.val() === null || data.val() === '') || (newData.exists() && newData.val() === data.val()) || root.child('users_list').child(auth.uid).child('role').val() === 'root_admin' || root.child('users_list').child(auth.uid).child('role').val() === 'admin'"
+            }
+          }
+        }
+      }
+    },
+    "stageTemplates": {
+      ".read": "auth != null",
+      "$templateId": {
+        ".write": "auth != null && (root.child('users').child(auth.uid).child('role').val() === 'root_admin' || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users_list').child(auth.uid).child('role').val() === 'root_admin' || root.child('users_list').child(auth.uid).child('role').val() === 'admin')"
+      }
     }
   }
 }

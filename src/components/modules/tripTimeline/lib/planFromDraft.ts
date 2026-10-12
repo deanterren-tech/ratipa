@@ -14,6 +14,7 @@
  * диспетчер, плановые даты, маршрут (города — в плечи, текст — в заметку).
  */
 import type { TimelineLinkedPlanPayload } from '../../../../firebase/planDohodService';
+import type { TimelineStage } from '../../../../types';
 import { calculateTripFinances } from '../../../../utils/financeCalculators';
 import { dayNum } from './timeline';
 import { normalizeCircles } from './circles';
@@ -63,6 +64,14 @@ export interface TimelinePlanDraftInput {
   endDate: string;
   /** Количество кругов рейса (целое от 1; отсутствие = 1). */
   circles?: number;
+  /**
+   * Направление рейса — ОДНО поле-КОД («TR»/«CN»; пусто — не указано).
+   * Ставок/дней и пересчётов по направлению нет (упрощено по требованию
+   * владельца); старые текстовые значения читаются маппингом с фолбэком.
+   */
+  direction?: string;
+  /** Этапы нового рейса, когда выбрана подстановка шаблона по направлению. */
+  stages?: Array<Pick<TimelineStage, 'id' | 'type' | 'label' | 'plannedDate' | 'actualDate' | 'isCritical' | 'order' | 'seq' | 'bufferDays'>>;
 }
 
 export interface TimelinePlanPayloadContext {
@@ -98,6 +107,14 @@ export const buildTimelinePlanPayload = (
   // Круги рейса — ОДНО поле записи (та же «План дохода», тот же id): хранится
   // всегда числом от 1, читатели нормализуют отсутствие в 1 (lib/circles).
   payload.circles = normalizeCircles(draft.circles);
+  // Направление — ОДНО поле-КОД («TR»/«CN»; как выбрано в переключателе).
+  // Ставок/дней и любых пересчётов по направлению НЕТ (упрощено по требованию
+  // владельца); старые текстовые значения понимаются читателями с фолбэком.
+  const directionCodeStr = String(draft.direction || '').trim().toUpperCase();
+  if (directionCodeStr) payload.direction = directionCodeStr;
+  // Этапы из шаблона направления (опция формы, по умолчанию выключена) —
+  // той же атомарной записью в ветку tripStages (см. createLinkedTimelineTrip).
+  if (draft.stages && draft.stages.length) payload.stages = draft.stages;
   if (ctx.dispatcher && ctx.dispatcher.id) {
     payload.dispatcher = ctx.dispatcher.name || ctx.dispatcher.id;
     payload.dispatcherName = ctx.dispatcher.name || ctx.dispatcher.id;

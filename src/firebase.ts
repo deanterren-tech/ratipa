@@ -2765,6 +2765,65 @@ export const dbService = {
     }
   },
 
+  // ---- Шаблоны этапов рейса (Настройки → «Шаблоны этапов») ------------------
+  // Ветка stageTemplates/<id>: { id, name, stages: string[] — УПОРЯДОЧЕННЫЙ
+  // список НАЗВАНИЙ этапов, без мест и дат; updatedAt, updatedBy }.
+  // Создание/правку/удаление выполняет окно Настроек (только администратор);
+  // читают все экраны модуля (кнопка «Из шаблона» в окне рейса).
+
+  /** Подписка на шаблоны этапов (объект-ветка как есть; мусор не выдумываем). */
+  getStageTemplates: (callback: (store: Record<string, Record<string, unknown>>) => void) => {
+    if (useFirebase) {
+      return onValue(
+        ref(database, 'stageTemplates'),
+        (snapshot) => {
+          const data = snapshot.val();
+          callback(data && typeof data === 'object' ? data : {});
+        },
+        (err) => {
+          console.warn('Stage templates read lock:', err);
+          callback({});
+        },
+      );
+    }
+    callback({});
+    return () => {};
+  },
+
+  /** Сохранение (создание/правка) шаблона этапов — запись целиком по id. */
+  saveStageTemplate: (
+    template: { id: string; name: string; stages: string[] },
+    user: string,
+    role: string,
+    details: string,
+  ) => {
+    const id = String(template?.id || '').trim();
+    const name = String(template?.name || '').trim();
+    if (!id || !name) return;
+    const stages = (template.stages || []).map((s) => String(s || '').trim()).filter(Boolean);
+    const record = { id, name, stages, updatedAt: new Date().toISOString(), updatedBy: user };
+    if (useFirebase) {
+      set(ref(database, `stageTemplates/${id}`), record)
+        .then(() => dbService.logAction(user, role, 'Сохранение шаблона этапов', 'Settings', `stageTemplates/${id}`, details))
+        .catch((err) =>
+          handleFailure('firebase', err, { path: `stageTemplates/${id}`, userMessage: 'Не удалось сохранить шаблон этапов' }),
+        );
+    }
+  },
+
+  /** Удаление шаблона этапов. */
+  deleteStageTemplate: (id: string, user: string, role: string) => {
+    const key = String(id || '').trim();
+    if (!key) return;
+    if (useFirebase) {
+      remove(ref(database, `stageTemplates/${key}`))
+        .then(() => dbService.logAction(user, role, 'Удаление шаблона этапов', 'Settings', `stageTemplates/${key}`, `Шаблон этапов ${key} удалён`))
+        .catch((err) =>
+          handleFailure('firebase', err, { path: `stageTemplates/${key}`, userMessage: 'Не удалось удалить шаблон этапов' }),
+        );
+    }
+  },
+
   // ---- Этапы целых рейсов из внешних источников (План дохода) --------------
   // Рейсы, построенные из «Плана дохода», не хранят этапы внутри источника —
   // они живут в отдельной ветке tripTimeline/tripStages/<planId>/<stageId>

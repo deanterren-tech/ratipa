@@ -50,6 +50,14 @@ export interface TimelineLinkedPlanPayload {
   dispatcherId?: string;
   /** Количество кругов рейса — целое от 1 (единое поле записи «Плана дохода»). */
   circles?: number;
+  /**
+   * Направление рейса — ОДНО поле-КОД: «TR» (Турция) / «CN» (Китай). Читатели
+   * понимают и старый текст («Китай»/«Турция») через маппинг с фолбэком
+   * (lib/directionCatalog), миграции старых записей нет.
+   */
+  direction?: string;
+  /** Предложенные этапы нового рейса — черновик плана (той же операцией). */
+  stages?: Array<Record<string, unknown>>;
 }
 
 
@@ -129,6 +137,9 @@ export const pdService = {
     const nowIso = new Date().toISOString();
     const record: Record<string, unknown> = {};
     Object.entries(payload).forEach(([k, v]) => {
+      // Этапы в запись плана НЕ кладутся: они живут в отдельной ветке
+      // tripTimeline/tripStages/<id> (та же, что у карточки рейса) — ниже.
+      if (k === 'stages') return;
       if (v !== undefined) record[k] = v;
     });
     record.id = id;
@@ -136,10 +147,18 @@ export const pdService = {
     record.createdBy = user;
     record.updatedAt = now;
     record.updatedBy = user;
+    // Предложенные этапы нового рейса — тем же atomic-обновлением, что запись
+    // плана и маркер черновика: без этапов — ветка не создаётся вовсе.
+    const stageUpdates: Record<string, unknown> = {};
+    (payload.stages || []).forEach((s) => {
+      const sid = String((s as { id?: unknown })?.id || '');
+      if (sid) stageUpdates[`tripTimeline/tripStages/${id}/${sid}`] = s;
+    });
     try {
       await update(ref(database), {
         [`trips_dashboard/${id}`]: record,
         [`tripTimeline/planGuard/${planTripKey}`]: { version: 0, draftCreated: true, updatedAt: nowIso },
+        ...stageUpdates,
       });
     } catch (e) {
       console.error('Error creating timeline-linked trip in Firebase:', e);
@@ -173,6 +192,10 @@ export const pdService = {
     }
   },
 
+  /**
+   * Перевод записи плана в архив («дата закрытия»). Ставок и снимков нет:
+   * упрощено по требованию владельца (никаких пересчётов по направлению).
+   */
   archiveTrip: (id: string, currentMonth: string, user: string, role: string) => {
     if (!useFirebase) return;
     update(ref(database, `trips_dashboard/${id}`), { isArchived: true, currentMonth });

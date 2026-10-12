@@ -20,7 +20,7 @@
  * повторная отправка защищена (кнопка блокируется, ключ записи переиспользуется).
  * Бизнес-логика не менялась: все проверки, обработчики и формат данных прежние.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Info, Loader2, Plus, TriangleAlert } from 'lucide-react';
 import CouplingPicker from '../../common/CouplingPicker';
 import { ModalShell } from '../../../ui/components';
@@ -29,6 +29,10 @@ import { formatPlate } from '../../../utils/salaryAutofill';
 import { dayNum, todayStr } from './lib/timeline';
 import { planDaysForRange } from './lib/planFromDraft';
 import DateInput from './DateInput';
+import DirectionToggle from './DirectionToggle';
+import { type DirectionOption } from './lib/directionCatalog';
+import { applyStageTemplate, templateForDirection, type StageTemplate } from './lib/stageTemplates';
+import type { TimelineStage, TimelineStageType } from '../../../types';
 import type { DispatcherOption } from './useTimelineData';
 
 export interface NewTripDraft {
@@ -43,6 +47,13 @@ export interface NewTripDraft {
   endDate: string;
   /** Количество кругов рейса — целое от 1 (по умолчанию 1). */
   circles: number;
+  /**
+   * Направление рейса — ОДНО значение-КОД («TR»/«CN»; пусто — не указано).
+   * Ставок и пересчётов по направлению нет (упрощено по требованию владельца).
+   */
+  direction?: string;
+  /** Этапы из шаблона направления (опция, по умолчанию выключена). */
+  stages?: Array<Pick<TimelineStage, 'id' | 'type' | 'label' | 'plannedDate' | 'actualDate' | 'isCritical' | 'order' | 'seq' | 'bufferDays'>>;
 }
 
 /** Результат создания: ошибку форма показывает сама, данные не теряются. */
@@ -56,6 +67,12 @@ interface Props {
   /** Предвыбранный диспетчер: текущий пользователь, если он диспетчер. */
   defaultDispatcherId: string;
   canWrite: boolean;
+  /** Варианты направления (справочник Настроек) — ПЕРВОЕ поле формы. */
+  directions: DirectionOption[];
+  /** Типы этапов (Настройки) — для сопоставления названий шаблона. */
+  stageTypes: TimelineStageType[];
+  /** Шаблоны этапов (Настройки) — опция «этапы из шаблона направления». */
+  stageTemplates: StageTemplate[];
   onCreate: (draft: NewTripDraft) => Promise<NewTripResult>;
   onCancel?: () => void;
 }
@@ -71,7 +88,7 @@ const fieldCls =
 const footerBtnBase =
   'inline-flex items-center justify-center gap-2 px-5 min-h-[46px] rounded-xl text-[15px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]';
 
-export default function NewTripForm({ dispatchers, defaultDispatcherId, canWrite, onCreate, onCancel }: Props) {
+export default function NewTripForm({ dispatchers, defaultDispatcherId, canWrite, directions, stageTypes, stageTemplates, onCreate, onCancel }: Props) {
   const [carNumber, setCarNumber] = useState('');
   const [vehicleId, setVehicleId] = useState<string | undefined>(undefined);
   const [route, setRoute] = useState('');
@@ -80,8 +97,27 @@ export default function NewTripForm({ dispatchers, defaultDispatcherId, canWrite
   const [endDate, setEndDate] = useState('');
   /** Круги рейса: целое от 1; по умолчанию 1 (один внешний круг). */
   const [circles, setCircles] = useState(1);
+  /** Направление — ПЕРВОЕ поле формы: ОДИН переключатель (код «TR»/«CN»). */
+  const [direction, setDirection] = useState('');
+  /**
+   * Опция «подставлять шаблон по направлению» — по умолчанию ВЫКЛЮЧЕНА
+   * (требование владельца). Включается вручную и только при наличии шаблона.
+   */
+  const [useTemplate, setUseTemplate] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const selectedOption = useMemo(
+    () => directions.find((d) => d.code === direction) || null,
+    [directions, direction],
+  );
+  /** Шаблон выбранного направления (по названию варианта; нет — не выдумываем). */
+  const directionTemplate = useMemo(
+    () => templateForDirection(stageTemplates, selectedOption?.name, selectedOption?.code),
+    [stageTemplates, selectedOption],
+  );
+  /** Показываем опцию только когда для направления есть шаблон; без шаблона — off. */
+  const showTemplateOption = !!directionTemplate;
 
   // Ошибка порядка дат — «рядом с полями»: выводится из самих дат и видна
   // сразу, а не только после нажатия «Создать рейс».
@@ -99,6 +135,8 @@ export default function NewTripForm({ dispatchers, defaultDispatcherId, canWrite
     setEndDate('');
     setStartDate(todayStr());
     setCircles(1);
+    setDirection('');
+    setUseTemplate(false);
     setError('');
   };
 
@@ -113,6 +151,12 @@ export default function NewTripForm({ dispatchers, defaultDispatcherId, canWrite
       return;
     }
     const disp = dispatchers.find((d) => d.id === dispatcherId);
+    // Этапы из шаблона направления — только если опция включена вручную
+    // (по умолчанию выключена). Создаются с ПУСТЫМИ местом и датами, seq 1..N.
+    const templateStages =
+      useTemplate && directionTemplate
+        ? applyStageTemplate([], directionTemplate, 'append', { stageTypes }).stages
+        : [];
     setError('');
     setSubmitting(true);
     const res = await onCreate({
@@ -124,6 +168,8 @@ export default function NewTripForm({ dispatchers, defaultDispatcherId, canWrite
       startDate: startDate || todayStr(),
       endDate,
       circles: Math.max(1, Math.floor(circles) || 1),
+      direction: direction || undefined,
+      stages: templateStages.length ? templateStages : undefined,
     });
     setSubmitting(false);
     if (!res.ok) {
@@ -139,7 +185,7 @@ export default function NewTripForm({ dispatchers, defaultDispatcherId, canWrite
       isOpen
       onClose={onCancel ?? (() => undefined)}
       title="Новый рейс"
-      subtitle="Выберите машину, укажите маршрут и плановые даты"
+      subtitle="Выберите направление, машину, укажите маршрут и плановые даты"
       icon={<Plus className="w-4 h-4" aria-hidden="true" />}
       ariaLabel="Новый рейс"
       closeProminent
@@ -189,6 +235,35 @@ export default function NewTripForm({ dispatchers, defaultDispatcherId, canWrite
       {/* Содержимое формы — единственная прокручиваемая зона окна: шапка и
           нижняя панель рисуются ModalShell'ом отдельно и остаются видимыми. */}
       <div data-ui="new-trip-form" className="flex flex-col gap-6 py-1">
+        {/* Блок «Направление» — ПЕРВОЕ поле формы: ОДИН компактный
+            переключатель Турция/Китай (варианты — из справочника Настроек).
+            Никаких ставок и пересчётов: в рейс пишется одно значение-код
+            («TR»/«CN»). Опция шаблона этапов — по умолчанию ВЫКЛЮЧЕНА. */}
+        <section data-ui="new-trip-block-direction" className="flex flex-col gap-4">
+          <h3 className={blockTitleCls}>Направление</h3>
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <label className={labelCls}>Направление рейса</label>
+            <DirectionToggle options={directions} value={direction} onChange={setDirection} />
+            <span className="text-[12px] text-[#6B7280]" data-ui="new-trip-direction-hint">
+              {selectedOption
+                ? `В рейсе сохранится одно значение — ${selectedOption.code} (${selectedOption.name}). Повторный клик по активному варианту снимает выбор.`
+                : 'Необязательно: выберите Турцию или Китай — в рейсе сохранится одно значение (TR/CN).'}
+            </span>
+          </div>
+          {showTemplateOption ? (
+            <label className="inline-flex items-center gap-2 text-[12px] text-[#4B5563] cursor-pointer select-none" data-ui="new-trip-template-option">
+              <input
+                type="checkbox"
+                checked={useTemplate}
+                onChange={(e) => setUseTemplate(e.target.checked)}
+                className="w-4 h-4 rounded border-[#D1D5DB] accent-[var(--accent)] cursor-pointer"
+                data-ui="new-trip-template-checkbox"
+              />
+              Этапы из шаблона направления «{directionTemplate?.name}» ({directionTemplate?.stages.length} эт.) — с пустыми местом и датами
+            </label>
+          ) : null}
+        </section>
+
         {/* Блок «Машина и ответственный»: выбор машины (поиск по базе сцепок)
             и диспетчер — на компьютере в две колонки. */}
         <section data-ui="new-trip-block-vehicle" className="flex flex-col gap-4">

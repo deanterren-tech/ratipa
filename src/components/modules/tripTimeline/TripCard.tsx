@@ -37,6 +37,8 @@ import {
   ExternalLink,
   EyeOff,
   Flag,
+  Layers,
+  Lock,
   LogIn,
   LogOut,
   Plus,
@@ -55,6 +57,17 @@ import { useToast } from '../../ToastProvider';
 import type { DispatcherOption } from './useTimelineData';
 import { useWindowHotkeys } from './lib/useWindowHotkeys';
 import DateInput from './DateInput';
+import DirectionToggle from './DirectionToggle';
+import {
+  directionLabelOf,
+  normalizeTripDirection,
+  type DirectionOption,
+} from './lib/directionCatalog';
+import {
+  applyStageTemplate,
+  type ApplyTemplateMode,
+  type StageTemplate,
+} from './lib/stageTemplates';
 import CityAutocomplete from '../../common/CityAutocomplete';
 import TripEventsJournal from './TripEventsJournal';
 import { PlanBarLabel, planBarLabelParts } from './PlanBarLabel';
@@ -84,7 +97,8 @@ import {
   type StageFillInput,
   type StageFillSection,
 } from './lib/stageFills';
-import { computePlanStageChanges, resolvePlanLock, type PlanStageChanges } from './lib/planLock';
+import { computeBlockedPlanChanges, computePlanStageChanges, resolvePlanLock, type PlanStageChanges } from './lib/planLock';
+import { canEditPlannedDateField, resolveStageRights } from './lib/stageRights';
 import { buildStageSchedule, stageBufferOf, stageBufferStateOf, stageSeqOf, type StageSchedule } from './lib/stageSchedule';
 import { normalizeCircles, tripCircleMarksOf, visibleCircleTicks, type TripCircleMarks } from './lib/circles';
 import { hasPlanFinancials } from './lib/planFromDraft';
@@ -193,6 +207,16 @@ interface Props {
   carEvents: TimelineVehicleEvent[];
   /** Города из существующего справочника расстояний портала — подсказки в «Месте» (свободный ввод). */
   cities: string[];
+  /**
+   * Варианты направления (справочник Настроек, `directories/directions`) —
+   * тот же компактный переключатель, что в окне «Новый рейс» (без ставок).
+   */
+  directionOptions: DirectionOption[];
+  /**
+   * Шаблоны этапов (ветка `stageTemplates`) — кнопка «Из шаблона» в блоке
+   * этапов (управление — Настройки → «Шаблоны этапов»).
+   */
+  stageTemplates: StageTemplate[];
   onSelectTrip: (tripKey: string) => void;
   onOpenPlan: (planId: string) => void;
   onCopyPlanLink: (planId: string) => void;
@@ -211,9 +235,15 @@ interface Draft {
   planEnd: string;
   /** Количество кругов рейса — целое от 1 (по умолчанию 1). */
   circles: number;
+  /**
+   * Направление рейса — ОДНО значение-КОД («TR»/«CN», '' — не указано).
+   * Старые записи («Китай»/«Турция») приводятся к коду маппингом при открытии
+   * окна и НЕ переписываются, пока пользователь не изменит поле сам.
+   */
+  direction: string;
 }
 
-const toDraft = (t: WholeTrip): Draft => {
+const toDraft = (t: WholeTrip, options: DirectionOption[]): Draft => {
   const span = tripSpan(t);
   return {
     route: t.route || '',
@@ -240,6 +270,9 @@ const toDraft = (t: WholeTrip): Draft => {
     planStart: isoOf(t.spanOverride?.pMin ?? span.pMin ?? null),
     planEnd: isoOf(t.spanOverride?.pMax ?? span.pMax ?? null),
     circles: normalizeCircles(t.circles),
+    // Направление записи → значение-код переключателя (старый текст «Китай»/
+    // «Турция» маппится с фолбэком; ничего не мигрируется).
+    direction: normalizeTripDirection(t.direction || t.plan?.direction || '', options),
   };
 };
 
@@ -256,6 +289,7 @@ const draftDiff = (a: Draft, b: Draft): string[] => {
   if (a.planStart !== b.planStart) out.push('плановый старт');
   if (a.planEnd !== b.planEnd) out.push('плановое возвращение');
   if (a.circles !== b.circles) out.push('количество кругов');
+  if (a.direction !== b.direction) out.push('направление');
   if (a.stages.length !== b.stages.length || a.stages.some((s, i) => s.id !== b.stages[i].id)) {
     out.push('состав этапов');
   } else if (
@@ -1648,6 +1682,8 @@ export default function TripCard({
   carBases,
   carEvents,
   cities,
+  directionOptions,
+  stageTemplates,
   onSelectTrip,
   onOpenPlan,
   onCopyPlanLink,
@@ -1657,7 +1693,7 @@ export default function TripCard({
 }: Props) {
   const { showConfirm, showUnsaved } = useDialog();
   const { toast } = useToast();
-  const [draft, setDraft] = useState<Draft>(() => toDraft(trip));
+  const [draft, setDraft] = useState<Draft>(() => toDraft(trip, directionOptions));
   const [metaDraft, setMetaDraft] = useState<Meta>(meta);
   /**
    * Базовое (сохранённое) состояние окна. «Изменено» определяется СРАВНЕНИЕМ
@@ -1665,7 +1701,7 @@ export default function TripCard({
    * подтверждений не дают; состояние сбрасывается ТОЛЬКО после успешной записи
    * или синхронизации с базой при отсутствии правок.
    */
-  const [baseline, setBaseline] = useState<{ draft: Draft; meta: Meta }>(() => ({ draft: toDraft(trip), meta }));
+  const [baseline, setBaseline] = useState<{ draft: Draft; meta: Meta }>(() => ({ draft: toDraft(trip, directionOptions), meta }));
   /** Несохранённый текст журнала событий — общий запрос подтверждения при закрытии. */
   const journalDirtyRef = useRef(false);
   const [journalDirty, setJournalDirty] = useState(false);
@@ -1690,6 +1726,26 @@ export default function TripCard({
   const planSourceId = trip.plan?.id || '';
   const archived = !!trip.archived;
   const readOnly = archived || !canWrite;
+  /**
+   * Правка направления доступна так же, как правка плановых дат рейса:
+   * ручной рейс — при праве записи таймлайна; связанный с планом — ещё и при
+   * праве редактирования «Плана дохода» (запись одна и та же). Архив — просмотр.
+   */
+  const canEditPlanFields = !readOnly && (!isPlan || canEditPlan);
+
+  // ── Направление рейса (ОДНО поле-код; без ставок и пересчётов) ─────────
+  /** Подпись текущего значения: справочник → фолбэк CN/TR → исходный текст. */
+  const currentDirectionLabel = directionLabelOf(directionOptions, draft.direction);
+  /** Смена направления — одно поле; пишется кнопкой «Сохранить», без диалогов. */
+  const changeDirection = (code: string) => {
+    if (!canEditPlanFields) return;
+    setDraft((d) => ({ ...d, direction: code }));
+  };
+
+  // ── Этапы из шаблона (кнопка «Из шаблона»; управление — Настройки) ─────
+  /** Окно выбора шаблона: список шаблонов + способ применения. */
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [templatePick, setTemplatePick] = useState<StageTemplate | null>(null);
 
   // ── Контроль плана этапов (блокировка плановых дат после сохранения) ────
   const planEnabled = !!planControlEnabled;
@@ -1712,6 +1768,16 @@ export default function TripCard({
   const planState = planEnabled ? planLock.state : 'draft';
   /** Плановые даты и состав доступны правке в этом сеансе. */
   const canEditPlanned = !readOnly && (planState === 'draft' || planState === 'permitted' || isRootAdmin);
+  /**
+   * Права на этапы (lib/stageRights, единый резолвер): добавление этапа и
+   * заполнение ПУСТЫХ дат — всегда у авторизованного исполнителя (включая
+   * архивные и уже сохранённые рейсы), правка уже ВНЕСЁННЫХ плановых дат —
+   * только у администраторов (в сочетании с существующим замком плана).
+   */
+  const stageRights = useMemo(
+    () => resolveStageRights(user, { kind: trip.kind, archived, planState }, { canWrite }),
+    [user, trip.kind, archived, planState, canWrite],
+  );
   /** Запрос разового доступа ТЕКУЩЕГО пользователя по этому рейсу (одна запись на пару). */
   const myPlanRequest = useMemo<TimelinePlanRequest | null>(() => {
     const store = planRequests || {};
@@ -1787,7 +1853,7 @@ export default function TripCard({
    */
   useEffect(() => {
     if (stateRef.current.isDirty) return;
-    const nextDraft = toDraft(trip);
+    const nextDraft = toDraft(trip, directionOptions);
     setDraft(nextDraft);
     setMetaDraft(meta);
     setBaseline({ draft: nextDraft, meta });
@@ -1852,13 +1918,16 @@ export default function TripCard({
   );
 
   /** Единая точка входа «Сохранить» для кнопки и горячих клавиш (см. ниже). */
-  const saveAllRef = useRef<() => void>(() => {});
+  const saveAllRef = useRef<(opts?: { close?: boolean }) => void>(() => {});
 
   useWindowHotkeys({
     onEscape: () => {
       requestClose();
     },
+    // Enter — как кнопка «Сохранить»: записать и закрыть окно этого блока.
+    // Ctrl/Cmd+S — сохранить без закрытия (как написано в подсказке кнопки).
     onSave: () => saveAllRef.current(),
+    onSaveClose: () => saveAllRef.current({ close: true }),
   });
 
   // Отметка «Сохранено ✓» гаснет сама (уведомление об успехе — отдельный toast).
@@ -1995,13 +2064,16 @@ export default function TripCard({
       return { message: 'Нет права редактирования «Плана дохода» — изменения не сохранены.', focus: () => {} };
     }
     if (planEnabled && planState === 'saved' && !isRootAdmin) {
-      const blocked = computePlanStageChanges(trip.stages, draft.stages, {
+      // Блокируемые изменения = правка УЖЕ ВНЕСЁННЫХ дат/состава; добавление
+      // этапов и заполнение пустых дат исполнителю разрешены и сюда не входят.
+      const blocked = computeBlockedPlanChanges(trip.stages, draft.stages, {
         stored: normalizeCircles(trip.circles),
         draft: draft.circles,
       });
       if (blocked.count > 0) {
         return {
-          message: 'Плановые даты этапов заблокированы — изменение доступно только с разового разрешения администратора.',
+          message:
+            'Изменение уже внесённых плановых дат заблокировано — доступно только с разового разрешения администратора. Добавление этапов и заполнение пустых дат сохраняются без разрешения.',
           focus: () => {},
         };
       }
@@ -2021,8 +2093,9 @@ export default function TripCard({
    * история): первичное сохранение черновика либо расход разового разрешения —
    * в ТОЙ ЖЕ атомарной записи.
    */
-  const saveAll = async () => {
-    if (readOnly || savingRef.current) return;
+  const saveAll = async (opts?: { close?: boolean }) => {
+    if (savingRef.current) return;
+    const closeAfter = opts?.close === true;
     const cardBlocks = changedBlocksOf(draft, metaDraft, baseline);
     if (!cardBlocks.length) {
       toast(
@@ -2032,6 +2105,31 @@ export default function TripCard({
         'info',
       );
       return;
+    }
+    /**
+     * Режим просмотра/архива: сохранять можно ТОЛЬКО правки этапов по правам
+     * исполнителя (добавление этапа, заполнение ПУСТЫХ плановых дат) — жалоба
+     * владельца: «Добавить этап» должна работать и для завершённых рейсов.
+     * Все прочие блоки (они в этом режиме и недоступны) — как раньше: без записи.
+     */
+    const preChanges = computePlanStageChanges(trip.stages, draft.stages, {
+      stored: normalizeCircles(trip.circles),
+      draft: draft.circles,
+    });
+    if (readOnly) {
+      const fillsEmpty = preChanges.plannedUpdates.some(
+        (u) => !String(u.before || '').trim() && String(u.plannedDate || '').trim(),
+      );
+      const onlyStageBlocks = cardBlocks.every((b) => b === 'этапы' || b === 'состав этапов');
+      const allowed =
+        stageRights.canAddStage && onlyStageBlocks && (preChanges.adds.length > 0 || fillsEmpty);
+      if (!allowed) {
+        toast(
+          'Архив — просмотр: сохранить можно только добавление этапа или заполнение пустой плановой даты',
+          'info',
+        );
+        return;
+      }
     }
     const issue = findValidationIssue();
     if (issue) {
@@ -2045,6 +2143,16 @@ export default function TripCard({
     // Изменение количества кругов и состава этапов — тоже изменение плана
     // (участвует в счёте: разовое разрешение расходуется осознанно).
     const changes = computePlanStageChanges(trip.stages, draft.stages, {
+      stored: normalizeCircles(trip.circles),
+      draft: draft.circles,
+    });
+    /**
+     * Блокируемые изменения (уже внесённые даты, состав/запас внесённых этапов,
+     * круги): только они требуют разового разрешения при сохранённом плане.
+     * Добавление этапа и заполнение пустых дат (canAddStage/canFillEmptyDates,
+     * lib/stageRights) сохраняются исполнителем в любой момент.
+     */
+    const blockedChanges = computeBlockedPlanChanges(trip.stages, draft.stages, {
       stored: normalizeCircles(trip.circles),
       draft: draft.circles,
     });
@@ -2066,6 +2174,8 @@ export default function TripCard({
     const stagesTouched = changes.count > 0 || fieldPatches.length > 0;
     const datesChanged = draft.planStart !== baseline.draft.planStart || draft.planEnd !== baseline.draft.planEnd;
     const circlesChanged = draft.circles !== baseline.draft.circles;
+    /** Направление изменилось (одно поле-код — для updatedAt и сообщения). */
+    const dirChanged = draft.direction !== baseline.draft.direction;
     const metaChangedFields = (['comment', 'reason', 'measures'] as const).filter((k) => metaDraft[k] !== baseline.meta[k]);
     const detailsParts: string[] = [changes.count > 0 ? describePlanChanges(changes) : cardBlocks.join(', ')];
     if (metaChangedFields.length) detailsParts.push(`прежние тексты рейса: ${metaChangedFields.join(', ')}`);
@@ -2088,6 +2198,10 @@ export default function TripCard({
         updates[`${base}/bufferDays`] = Math.max(0, Number(String(draft.bufferDays).replace(',', '.')) || 0);
       }
       if (circlesChanged) updates[`${base}/circles`] = draft.circles;
+      // Направление — ОДНО поле: значение-код «TR»/«CN» (пусто — поле
+      // очищается, значение не выдумывается). Старые текстовые значения НЕ
+      // переписываются, пока пользователь сам не изменит переключатель.
+      if (dirChanged) updates[`${base}/direction`] = draft.direction || null;
       // Диапазон записи (startDate/endDate): явные плановые границы окна имеют
       // приоритет; без их правок диапазон пересчитывается по этапам (та же
       // функция «дата → диапазон», что и раньше).
@@ -2129,7 +2243,10 @@ export default function TripCard({
         }
       }
       if (circlesChanged) updates[`${base}/circles`] = draft.circles;
-      if (datesChanged || circlesChanged) {
+      // Направление — ОДНО поле-код в той же записи «Плана дохода» (пусто —
+      // поле очищается). Старые текстовые значения не переписываются молча.
+      if (dirChanged) updates[`${base}/direction`] = draft.direction || null;
+      if (datesChanged || circlesChanged || dirChanged) {
         updates[`${base}/updatedAt`] = new Date().toLocaleString('ru-RU');
         updates[`${base}/updatedBy`] = user.name;
       }
@@ -2209,6 +2326,11 @@ export default function TripCard({
               },
             ],
           };
+        } else if (blockedChanges.count === 0) {
+          // Разрешённые правки БЕЗ изменения плана: добавление этапов и/или
+          // заполнение пустых плановых дат (права canAddStage/canFillEmptyDates,
+          // lib/stageRights). Сохраняются исполнителем без разового доступа;
+          // состояние плана и его версия не меняются — guard не трогаем вовсе.
         } else if (perm || isRootAdmin) {
           const baseVersion = perm ? Number(perm.planVersion) : Number(planGuard?.version) || planLock.version || 1;
           const fresh = await dbService.getTimelinePlanGuardOnce(planTripKey);
@@ -2250,8 +2372,29 @@ export default function TripCard({
 
       await dbService.saveTimelineWindowCommit(updates, user.name, user.role, details);
 
+      // Журнал: добавление этапа(ов) — запись в СУЩЕСТВУЮЩИЙ журнал действий
+      // портала (auditLogs через dbService.logAction), без второго журнала.
+      // Для связанных рейсов история плана (planGuard.history) дополняется
+      // существующим механизмом при изменениях плана (см. details выше).
+      if (changes.adds.length > 0) {
+        const names = changes.adds
+          .map((s) => stageFullName(stageTypes, s))
+          .filter(Boolean)
+          .join(', ');
+        dbService.logAction(
+          user.name,
+          user.role,
+          'Добавление этапов',
+          'Timeline',
+          trip.key,
+          `Рейс ${trip.carNumber || trip.key}: добавлено этапов ${changes.adds.length}${names ? ` (${names})` : ''}`,
+        );
+      }
+
       // Успех: базовое состояние обновляем ТОЛЬКО здесь (по факту записи) —
-      // «есть несохранённые изменения» сбрасывается, окно остаётся открытым.
+      // «есть несохранённые изменения» сбрасывается. По кнопке/Enter окно
+      // ЗАКРЫВАЕТСЯ (требование блока «направления»); Ctrl/Cmd+S и «Повторить»
+      // сохраняют без закрытия.
       setBaseline({ draft: { ...draft, stages: draft.stages.map((s) => ({ ...s })) }, meta: { ...metaDraft } });
       if (permConsumed) {
         dbService.markTimelinePlanRequestUsed(planTripKey, planUserId, { byName: user.name, byId: planUserId });
@@ -2264,11 +2407,16 @@ export default function TripCard({
         if (datesChanged && stagesTouched) message = 'Рейс сохранён. Плановые даты и этапы обновлены в плане дохода';
         else if (datesChanged) message = 'Рейс сохранён. Плановые даты обновлены в плане дохода';
         else if (stagesTouched) message = 'Рейс сохранён. Этапы обновлены в плане дохода';
+        else if (dirChanged) message = 'Рейс сохранён. Направление обновлено';
         else message = 'Рейс сохранён';
       } else {
         message = stagesTouched ? 'Рейс сохранён. Этапы записаны' : 'Рейс сохранён';
       }
-      toast(message, 'success');
+      toast(closeAfter ? `${message} — окно закрыто` : message, 'success');
+      if (closeAfter) {
+        onClose();
+        return;
+      }
     } catch (err) {
       if (permConsumed && permConsumedSnapshot) {
         await dbService.restoreTimelinePlanPermission(planTripKey, planUserId, permConsumedSnapshot);
@@ -2282,7 +2430,7 @@ export default function TripCard({
       setSavingAll(false);
     }
   };
-  saveAllRef.current = () => void saveAll();
+  saveAllRef.current = (opts?: { close?: boolean }) => void saveAll(opts);
 
   /** Выдача разового разрешения (администратор): пользователь + текущая версия плана. */
   const grantPlanPermission = async () => {
@@ -2395,7 +2543,12 @@ export default function TripCard({
   };
 
   const onStageField = (stageId: string, field: keyof TimelineStage, value: string | boolean) => {
-    if (field === 'plannedDate' && !canEditPlanned) return;
+    // Плановая дата: пустое поле — по праву заполнения (в любой момент);
+    // уже внесённая — только администратор и существующий замок плана.
+    if (field === 'plannedDate') {
+      const current = draft.stages.find((s) => s.id === stageId)?.plannedDate || '';
+      if (!canEditPlannedDateField(stageRights, current, canEditPlanned)) return;
+    }
     setDraft((d) => ({
       ...d,
       stages: d.stages.map((s) => {
@@ -2474,9 +2627,10 @@ export default function TripCard({
     setDraft((d) => ({ ...d, circles: n }));
   };
 
-  /** Кнопка «Добавить этап»: этап копится в черновике и сохраняется кнопкой. */
+  /** Кнопка «Добавить этап»: копится в черновике и сохраняется кнопкой.
+   *  Право — ТОЛЬКО canAddStage (lib/stageRights): при любом статусе рейса. */
   const addStage = () => {
-    if (!canEditPlanned) return;
+    if (!stageRights.canAddStage) return;
     const sid = `s_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     const order = (draft.stages.length ? Math.max(...draft.stages.map((s) => s.order || 0)) : 0) + 1;
     const stage: TimelineStage = {
@@ -2501,6 +2655,25 @@ export default function TripCard({
   const removeStage = (stageId: string) => {
     if (!canEditPlanned) return;
     setDraft((d) => ({ ...d, stages: d.stages.filter((s) => s.id !== stageId) }));
+  };
+
+  /**
+   * Применение шаблона этапов (кнопка «Из шаблона»): этапы создаются с ПУСТЫМИ
+   * местом и датами, порядок — как в шаблоне.
+   *  · «Добавить в конец» — seq от max+1 (существующие этапы не меняются);
+   *  · «Заменить пустые» — удаляются только пустые этапы (без места и дат),
+   *    внесённые даты/места НЕ затираются; список перенумеровывается 1..N.
+   * В базу уходит кнопкой «Сохранить» (права этапов не меняются: canAddStage).
+   */
+  const applyTemplate = (mode: ApplyTemplateMode) => {
+    if (!templatePick) return;
+    const res = applyStageTemplate(draft.stages, templatePick, mode, { stageTypes });
+    setDraft((d) => ({ ...d, stages: res.stages }));
+    const parts = [`Этапы из шаблона «${templatePick.name}»: добавлено ${res.added}`];
+    if (res.removed) parts.push(`удалено пустых ${res.removed}`);
+    toast(parts.join(', '), 'success');
+    setTemplateOpen(false);
+    setTemplatePick(null);
   };
 
   /** Клик по маркеру этапа на встроенном таймлайне: прокрутка к этапу и
@@ -2531,10 +2704,15 @@ export default function TripCard({
     onDelete?.(trip);
   };
 
-  /** Есть несохранённые изменения ПЛАНА (плановая дата/состав/круги) — индикатор. */
+  /**
+   * Есть несохранённые БЛОКИРУЕМЫЕ изменения плана (правка внесённых дат,
+   * состав/запас внесённых этапов, круги) — индикатор у состояния плана.
+   * Добавление этапа и заполнение пустых дат не считаются блокируемыми: их
+   * сохранение разрешено без разового доступа и индикатор не пугает зря.
+   */
   const planDirtyNow = useMemo(
     () =>
-      computePlanStageChanges(trip.stages, draft.stages, {
+      computeBlockedPlanChanges(trip.stages, draft.stages, {
         stored: normalizeCircles(trip.circles),
         draft: draft.circles,
       }).count > 0,
@@ -2552,9 +2730,10 @@ export default function TripCard({
   });
 
   const plan = trip.plan;
-  const title = `${formatPlate(trip.carNumber)} · ${draft.route || plan?.direction || 'маршрут не указан'}`;
+  const title = `${formatPlate(trip.carNumber)} · ${draft.route || currentDirectionLabel || 'маршрут не указан'}`;
 
   return (
+    <>
     <ModalShell
       isOpen
       onClose={requestClose}
@@ -2609,13 +2788,17 @@ export default function TripCard({
                 </span>
               ) : null}
               <span className="text-emerald-600">{savedFlash ? 'Сохранено ✓' : ''}</span>
-              {!readOnly ? (
+              {!readOnly || stageRights.canAddStage ? (
                 <button
                   type="button"
                   data-ui="trip-save"
                   disabled={savingAll}
-                  title="Сохранить всё окно одной операцией · Enter (Ctrl/Cmd+S — сохранить без закрытия)"
-                  onClick={() => void saveAllRef.current()}
+                  title={
+                    readOnly
+                      ? 'Сохранить этапы (архив/просмотр: добавление этапа и заполнение пустых плановых дат) · Enter'
+                      : 'Сохранить окно и закрыть · Enter (Ctrl/Cmd+S — сохранить без закрытия)'
+                  }
+                  onClick={() => void saveAllRef.current({ close: true })}
                   className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-[#121316] text-white hover:bg-black transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default"
                 >
                   {savingAll ? (
@@ -2624,7 +2807,7 @@ export default function TripCard({
                       Сохраняется…
                     </>
                   ) : (
-                    'Сохранить'
+                    readOnly ? 'Сохранить этапы' : 'Сохранить'
                   )}
                 </button>
               ) : null}
@@ -2671,6 +2854,32 @@ export default function TripCard({
               <TriangleAlert className="w-3 h-3" aria-hidden="true" /> предупреждения: {trip.warnings.length}
             </span>
           ) : null}
+        </div>
+
+        {/* Направление — ТОТ ЖЕ компактный переключатель Турция/Китай, что в
+            окне «Новый рейс». В записи хранится ОДНО значение-код («TR»/«CN»);
+            никаких ставок/средних дней и пересчётов (упрощено по требованию
+            владельца). Старые записи («Китай»/«Турция») читаются маппингом. */}
+        <div data-ui="trip-direction" className="border border-[#E5E7EB] rounded-xl px-3 py-2.5 flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px]">
+            <span className="font-semibold text-[#121316]">Направление</span>
+            <DirectionToggle
+              options={directionOptions}
+              value={draft.direction}
+              onChange={changeDirection}
+              disabled={!canEditPlanFields}
+              compact
+              fallbackLabel={currentDirectionLabel}
+            />
+            <span className="text-[#6B7280]" data-ui="trip-direction-hint">
+              {draft.direction
+                ? `в записи сохранится одно значение — ${draft.direction}`
+                : 'не указано — в записи это одно поле direction (TR/CN)'}
+            </span>
+            {!canEditPlanFields ? (
+              <span className="text-[10px] text-[#9CA3AF]">{archived ? 'архив — просмотр' : 'нет права правки направления'}</span>
+            ) : null}
+          </div>
         </div>
 
         {/* Управление ручным рейсом */}
@@ -3098,6 +3307,9 @@ export default function TripCard({
                 const dev = stageDeviation(s);
                 const pDay = dayNum(s.plannedDate);
                 const fDay = dayNum(s.actualDate);
+                // Права на плановую дату этапа (lib/stageRights): пустое поле —
+                // заполняемо в любой момент; внесённое — только admin + замок.
+                const canEditPlanDate = canEditPlannedDateField(stageRights, s.plannedDate, canEditPlanned);
                 const hasText = !!(s.reason || s.action);
                 const stState = stageStateOf(s, today);
                 const bufState = stageBufferStateOf(s, draftSchedule, today);
@@ -3133,12 +3345,24 @@ export default function TripCard({
                         <div
                           className="flex items-center gap-1"
                           title={
-                            readOnly || canEditPlanned
-                              ? undefined
-                              : 'Плановые даты этапов заблокированы после сохранения плана — разблокировка только с разового разрешения администратора'
+                            canEditPlanDate
+                              ? pDay == null
+                                ? 'Пустая плановая дата заполняется в любой момент — сохранение без разового доступа'
+                                : undefined
+                              : 'Плановая дата уже внесена: изменение — только администратор (для не-root — с разового разрешения по замку плана)'
                           }
                         >
-                          <DateInput value={s.plannedDate || ''} disabled={readOnly || !canEditPlanned} ariaLabel="Плановая дата этапа" onChange={(v) => onStageField(s.id, 'plannedDate', v)} />
+                          <DateInput value={s.plannedDate || ''} disabled={!canEditPlanDate} ariaLabel="Плановая дата этапа" onChange={(v) => onStageField(s.id, 'plannedDate', v)} />
+                          {pDay != null && !canEditPlanDate ? (
+                            <span
+                              data-ui="stage-date-lock"
+                              className="shrink-0"
+                              title="Дата уже внесена — изменение только администратором (замок плана: разовое разрешение)"
+                              aria-label="Изменение внесённой даты — только администратор"
+                            >
+                              <Lock className="w-3.5 h-3.5 text-[#9CA3AF]" aria-hidden="true" />
+                            </span>
+                          ) : null}
                           {pDay != null && isWeekendDay(pDay) ? (
                             <span title={WEEKEND_HINT} aria-label={WEEKEND_HINT} className="shrink-0">
                               <CalendarClock className="w-3.5 h-3.5 text-amber-600" aria-hidden="true" />
@@ -3358,12 +3582,37 @@ export default function TripCard({
             </tbody>
           </table>
         </div>
-        {!readOnly && canEditPlanned ? (
-          <div>
+        {/* «Добавить этап» / «Из шаблона» — зависят ТОЛЬКО от права canAddStage
+            (lib/stageRights): видны и работают у авторизованного исполнителя —
+            до и после сохранения записи, у завершённых и архивных рейсов. Новые
+            этапы создаются с ПУСТЫМИ местом и датами (заполняются позже по
+            праву заполнения). */}
+        {stageRights.canAddStage ? (
+          <div className="flex flex-wrap items-center gap-2">
             <button type="button" data-ui="add-stage" onClick={addStage} className={UI.buttonGhost}>
               <Plus className="w-4 h-4" aria-hidden="true" />
               добавить этап
             </button>
+            <button
+              type="button"
+              data-ui="add-stage-from-template"
+              onClick={() => {
+                setTemplatePick(null);
+                setTemplateOpen(true);
+              }}
+              className={UI.buttonGhost}
+              title="Создать этапы из шаблона (Настройки → «Шаблоны этапов»): с пустыми местом и датами, порядок — как в шаблоне"
+            >
+              <Layers className="w-4 h-4" aria-hidden="true" />
+              из шаблона
+            </button>
+            {!canEditPlanned ? (
+              <span className="text-[10px] text-[#6B7280]">
+                {stageRights.canEditExistingDates
+                  ? 'новый этап — с пустыми датами; правка уже внесённых дат — по замку плана (разовое разрешение)'
+                  : 'новый этап — с пустыми датами; пустые даты можно заполнить сразу, уже внесённые даты правит администратор'}
+              </span>
+            ) : null}
           </div>
         ) : null}
 
@@ -3484,6 +3733,118 @@ export default function TripCard({
         </div>
       </div>
     </ModalShell>
+
+    {/* Окно «Из шаблона» (кнопка в блоке этапов): выбор шаблона и способа.
+        Созданные этапы — черновик; в базу уходят кнопкой «Сохранить» окна рейса.
+        Если этапы уже есть — два способа: «Добавить в конец» (seq от max+1) и
+        «Заменить пустые» (внесённые даты/места не затираются). */}
+    <ModalShell
+      isOpen={templateOpen}
+      onClose={() => {
+        setTemplateOpen(false);
+        setTemplatePick(null);
+      }}
+      title="Этапы из шаблона"
+      subtitle="Шаблоны — Настройки → «Шаблоны этапов». Этапы создаются с пустыми местом и датами; порядок — как в шаблоне."
+      icon={<Layers className="w-4 h-4" aria-hidden="true" />}
+      ariaLabel="Этапы из шаблона"
+      closeProminent
+      maxWidth="max-w-[560px]"
+      footer={
+        <>
+          <span className={`${UI.hint} mr-auto`}>
+            {templatePick
+              ? `Шаблон «${templatePick.name}»: ${templatePick.stages.join(' → ') || 'список пуст'}`
+              : 'Выберите шаблон в списке'}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setTemplateOpen(false);
+              setTemplatePick(null);
+            }}
+            data-ui="template-cancel"
+            className={`inline-flex items-center justify-center gap-2 px-4 min-h-[40px] rounded-xl text-[13px] bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] font-medium cursor-pointer`}
+          >
+            Отмена
+          </button>
+          {draft.stages.length === 0 ? (
+            <button
+              type="button"
+              onClick={() => applyTemplate('append')}
+              disabled={!templatePick}
+              data-ui="template-apply"
+              className={`inline-flex items-center justify-center gap-2 px-4 min-h-[40px] rounded-xl text-[13px] bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-on)] font-semibold shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              Создать этапы
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => applyTemplate('append')}
+                disabled={!templatePick}
+                data-ui="template-append"
+                title="Добавить этапы шаблона в конец (seq от max+1); существующие этапы не меняются"
+                className={`inline-flex items-center justify-center gap-2 px-4 min-h-[40px] rounded-xl text-[13px] bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#121316] font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                Добавить в конец
+              </button>
+              <button
+                type="button"
+                onClick={() => applyTemplate('replaceEmpty')}
+                disabled={!templatePick}
+                data-ui="template-replace-empty"
+                title="Удалить только пустые этапы (без места и дат) и создать этапы шаблона; внесённые данные не затираются"
+                className={`inline-flex items-center justify-center gap-2 px-4 min-h-[40px] rounded-xl text-[13px] bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-on)] font-semibold shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                Заменить пустые
+              </button>
+            </>
+          )}
+        </>
+      }
+    >
+      <div className="flex flex-col gap-2 py-1" data-ui="template-picker">
+        {stageTemplates.length === 0 ? (
+          <p className="text-[12px] text-[#6B7280]">
+            Шаблонов нет — создайте их в Настройках (администратор): «Шаблоны этапов».
+          </p>
+        ) : (
+          stageTemplates.map((t) => {
+            const active = templatePick?.id === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTemplatePick(t)}
+                aria-pressed={active}
+                data-ui="template-option"
+                data-template-id={t.id}
+                className={`w-full flex items-start gap-2.5 text-left px-3 py-2.5 rounded-xl border transition-colors cursor-pointer ${
+                  active ? 'border-[var(--accent)] bg-[var(--accent-5)]' : 'border-[#E5E7EB] bg-white hover:bg-[#F9FAFB]'
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-semibold text-[#121316]">{t.name}</div>
+                  <div className="text-[11px] text-[#6B7280]">
+                    {t.stages.length ? t.stages.join(' → ') : 'список этапов пуст'}
+                  </div>
+                </div>
+                {active ? <span className="text-[10px] font-semibold text-[var(--accent-ink)] mt-0.5">выбран</span> : null}
+              </button>
+            );
+          })
+        )}
+        {draft.stages.length > 0 ? (
+          <p className="text-[10px] text-[#6B7280]">
+            В рейсе уже {draft.stages.length} эт.: «Добавить в конец» сохранит их и добавит шаблон после; «Заменить пустые» удалит
+            только этапы без места и дат (внесённые данные не затираются).
+          </p>
+        ) : null}
+      </div>
+    </ModalShell>
+    </>
   );
 }
 

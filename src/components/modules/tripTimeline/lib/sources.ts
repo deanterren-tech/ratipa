@@ -136,6 +136,11 @@ export interface PlanLegInfo {
 export interface PlanTripInfo {
   /** id исходной записи плана дохода. */
   id: string;
+  /**
+   * Направление рейса — ОДНО поле записи: код «TR»/«CN» у новых/пересохранённых
+   * рейсов; у старых записей — текст («Китай»/«Турция»), читается маппингом
+   * с фолбэком (lib/directionCatalog). Ничего не мигрируется.
+   */
   direction?: string;
   month?: string;
   days?: number;
@@ -282,13 +287,18 @@ export const planTripsToWholeTrips = (
         key: `pd:${id}`,
         carKey: carKeyOf(car?.carId || '', car?.carNumber || carNumberText),
         carNumber: car?.carNumber || carNumberText,
-        route: String(rec.direction || rec.tripNote || ''),
+        // Маршрут — текст заметки рейса; старые записи без заметки показывают
+        // прежнее значение направления (ничего не досочиняется).
+        route: String(rec.tripNote || rec.direction || ''),
         dispatcherId,
         dispatcherName,
         bufferDays: 0,
         archived: rec.isArchived === true,
         createdAt: '',
         updatedAt: '',
+        // Направление записи (код TR/CN либо старый текст) — для метки/фильтра
+        // таймлайна и переключателя в окне рейса (маппинг с фолбэком).
+        ...(rec.direction ? { direction: String(rec.direction) } : {}),
         stages: normalizeStages(stagesStore[id] || {}),
         readOnlyDates: true,
         openPlan: pMin != null && pMax == null,

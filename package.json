@@ -30,7 +30,11 @@
     "migrate:stage-seq": "tsx scripts/migrate-stage-seq.ts",
     "audit:timeline-dups": "tsx scripts/audit-timeline-dups.ts",
     "migrate:directions": "tsx scripts/migrate-directions.ts",
-    "test:tl-guards": "tsx scripts/test-tl-guards.ts"
+    "test:tl-guards": "tsx scripts/test-tl-guards.ts",
+    "test:directions": "tsx scripts/test-directions.ts",
+    "test:stage-templates": "tsx scripts/test-stage-templates.ts",
+    "seed:stage-templates": "tsx scripts/seed-stage-templates.ts",
+    "test:stage-rights": "tsx scripts/test-stage-rights.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

@@ -23,6 +23,8 @@ import { dayNum, normalizeStages, withFallbackStages } from './lib/timeline';
 import { effectiveStageTypes } from './lib/catalog';
 import { normalizeCircles } from './lib/circles';
 import { mergeDirections, type DirectionDef } from './lib/directions';
+import { directionOptionsFromDb, effectiveDirectionOptions, type DirectionOption } from './lib/directionCatalog';
+import { effectiveStageTemplates, stageTemplatesFromDb, type StageTemplate } from './lib/stageTemplates';
 import {
   bazaToBasePeriods,
   buildCarIndex,
@@ -62,6 +64,18 @@ export interface TimelineData {
   cities: string[];
   /** Направления (Турция, Китай и добавленные пользователем): встроенные + справочник. */
   directions: DirectionDef[];
+  /**
+   * Варианты переключателя направления из справочника Настроек
+   * (`directories/directions`: Турция TR, Китай CN; при пустом справочнике —
+   * встроенная пара). Никаких ставок/дней — упрощено по требованию владельца.
+   */
+  directionOptions: DirectionOption[];
+  /**
+   * Шаблоны этапов (ветка `stageTemplates`): упорядоченные списки НАЗВАНИЙ
+   * этапов. Кнопка «Из шаблона» в окне рейса; при пустой ветке — стартовые
+   * «Турция»/«Китай» (по факту рейсов, lib/stageTemplates).
+   */
+  stageTemplates: StageTemplate[];
 }
 
 const normalizeManualTrip = (raw: TimelineTrip, carIndex: Map<string, CarRef>, dir: DispatcherDirectory): WholeTrip => {
@@ -116,6 +130,10 @@ export function useTimelineData(): TimelineData {
   const [dbStageTypes, setDbStageTypes] = useState<TimelineStageType[]>([]);
   const [cities, setCities] = useState<string[]>([]);
   const [dbDirections, setDbDirections] = useState<Array<Record<string, unknown>>>([]);
+  /** Записи справочника `directories/directions` — варианты переключателя. */
+  const [dbDirectionList, setDbDirectionList] = useState<Array<Record<string, unknown>>>([]);
+  /** Ветка `stageTemplates` — шаблоны этапов (как есть из базы). */
+  const [dbStageTemplates, setDbStageTemplates] = useState<Record<string, Record<string, unknown>>>({});
 
   useEffect(() => {
     const u1 = dbService.getTimelineTrips((list) => setManualTrips(list || []));
@@ -148,6 +166,11 @@ export function useTimelineData(): TimelineData {
     const u9 = dbService.getTimelineTripStages((store) => setStagesStore(store || {}));
     // Направления (Турция, Китай, добавленные пользователем) — справочник «Настройки»
     const u10 = directoryService.getTripDirections((list) => setDbDirections((list || []) as Array<Record<string, unknown>>));
+    // Справочник направлений (directories/directions) — варианты переключателя
+    // «Турция / Китай» в окнах рейса (ставок там больше нет).
+    const u11 = directoryService.getDirections((list) => setDbDirectionList((list || []) as Array<Record<string, unknown>>));
+    // Шаблоны этапов (кнопка «Из шаблона»; управление — Настройки).
+    const u12 = dbService.getStageTemplates((store) => setDbStageTemplates(store || {}));
     return () => {
       if (typeof u1 === 'function') u1();
       if (typeof u2 === 'function') u2();
@@ -159,6 +182,8 @@ export function useTimelineData(): TimelineData {
       if (typeof u8 === 'function') u8();
       if (typeof u9 === 'function') u9();
       if (typeof u10 === 'function') u10();
+      if (typeof u11 === 'function') u11();
+      if (typeof u12 === 'function') u12();
     };
   }, []);
 
@@ -183,6 +208,14 @@ export function useTimelineData(): TimelineData {
   const stageTypes = useMemo(() => effectiveStageTypes(dbStageTypes), [dbStageTypes]);
 
   const directions = useMemo(() => mergeDirections(dbDirections), [dbDirections]);
+  const directionOptions = useMemo(
+    () => effectiveDirectionOptions(directionOptionsFromDb(dbDirectionList)),
+    [dbDirectionList],
+  );
+  const stageTemplates = useMemo(
+    () => effectiveStageTemplates(stageTemplatesFromDb(dbStageTemplates)),
+    [dbStageTemplates],
+  );
 
-  return { trips, hiddenTrips, bases, events, fleetCars, dispatchers, stageTypes, cities, directions };
+  return { trips, hiddenTrips, bases, events, fleetCars, dispatchers, stageTypes, cities, directions, directionOptions, stageTemplates };
 }
