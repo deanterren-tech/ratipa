@@ -27,7 +27,12 @@ import {
   resolveStageTypeByName,
   stageHasContent,
   stageTemplatesFromDb,
+  suggestTemplateName,
+  templateCreatedLabel,
   templateForDirection,
+  templateNameTaken,
+  templateStagesFromTrip,
+  tripHasOwnStages,
 } from '../src/components/modules/tripTimeline/lib/stageTemplates';
 
 let passed = 0;
@@ -196,6 +201,56 @@ console.log('8. Правки шаблона: порядок, добавить, �
   const id2 = newTemplateId();
   check('id новых шаблонов различаются', id1 !== id2 && id1.startsWith('tpl_'));
   check('исходный список не мутирован', base.join('|') === 'Загрузка|Граница|Выгрузка');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+console.log('9. «Сохранить как шаблон»: состав из этапов рейса (порядок, метки типов)');
+{
+  // Этапы нарочно в «неудобном» порядке: без дат, с датами, с дублем типа.
+  const tripStages = [
+    stage({ id: 's_unl', type: 'unl', plannedDate: '2026-10-20', order: 4, seq: 4 }),
+    stage({ id: 's_load', type: 'load', plannedDate: '2026-10-01', order: 1, seq: 1 }),
+    stage({ id: 's_border2', type: 'border', plannedDate: '2026-10-10', order: 3, seq: 3 }), // повторный проход границы
+    stage({ id: 's_other', type: 'other', plannedDate: '2026-10-05', order: 2, seq: 2 }), // служебное «Другое»
+    stage({ id: 's_unk', type: 'nomatch', plannedDate: '2026-10-06', order: 5, seq: 5 }), // тип не из справочника
+    stage({ id: 's_border1', type: 'border', plannedDate: '2026-10-03', order: 6, seq: 6 }),
+    stage({ id: 't1-fallback-load', type: 'load', order: 7, seq: 7 }), // служебная строка плана
+  ];
+  const names = templateStagesFromTrip(tripStages, stageTypes);
+  check('порядок — как в таблице (дата, затем seq): Загрузка → Граница → Граница → Выгрузка', names.join('|') === 'Загрузка|Граница|Граница|Выгрузка', names);
+  check('имя = метка ТИПА (не место)', names[0] === 'Загрузка' && names[3] === 'Выгрузка');
+  check('«Другое» пропускается', !names.includes('Другое'));
+  check('тип не из справочника пропускается', !names.includes('nomatch'));
+  check('служебная строка плана (*-fallback-load) пропускается (одна «Загрузка»)', names.filter((n) => n === 'Загрузка').length === 1);
+  check('повтор типа НЕ схлопывается (рейс прошёл границу дважды)', names.filter((n) => n === 'Граница').length === 2);
+  check('без дат — порядок по seq', templateStagesFromTrip([stage({ id: 'b', type: 'border', seq: 2 }), stage({ id: 'a', type: 'load', seq: 1 })], stageTypes).join('|') === 'Загрузка|Граница');
+  check('всё «Другое»/чужие типы — пустой список (кнопка неактивна)', templateStagesFromTrip([stage({ id: 'x', type: 'other' }), stage({ id: 'y', type: 'zzz' })], stageTypes).length === 0);
+  check('только служебная строка — пустой список (в рейсе нет своих этапов)', templateStagesFromTrip([stage({ id: 't2-fallback-load', type: 'load' })], stageTypes).length === 0);
+  check('tripHasOwnStages: свои этапы есть / только фолбэк — нет', tripHasOwnStages([stage({ id: 'x' })]) === true && tripHasOwnStages([stage({ id: 't3-fallback-load' })]) === false && tripHasOwnStages([]) === false);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+console.log('10. Дубли имени: проверка и предложение свободного имени (без молчаливых дублей)');
+{
+  const tpls = [
+    { id: 'tpl_china', name: 'Китай', stages: ['Загрузка'] },
+    { id: 'tpl_china2', name: 'китай 2', stages: ['Загрузка'] },
+    { id: 'tpl_turkey', name: 'Турция', stages: ['Загрузка'] },
+  ];
+  check('точное имя занято', templateNameTaken(tpls, 'Китай') === true);
+  check('регистр/пробелы не важны', templateNameTaken(tpls, '  китай ') === true && templateNameTaken(tpls, 'ТУРЦИЯ') === true);
+  check('свободное имя', templateNameTaken(tpls, 'Литва') === false);
+  check('пустое имя — не «занято» (кнопка гасится отдельно)', templateNameTaken(tpls, '   ') === false);
+  check('своё имя при переименовании (exceptId) не считается дублем', templateNameTaken(tpls, 'Китай', 'tpl_china') === false);
+  check('предложение: «Китай» занят → «Китай 3» (2 тоже занят)', suggestTemplateName('Китай', tpls) === 'Китай 3');
+  check('предложение: свободное имя — как есть', suggestTemplateName('Литва', tpls) === 'Литва');
+  check('предложение без базы — «Шаблон»', suggestTemplateName('  ', tpls) === 'Шаблон');
+  const c1 = stage({ id: 'a', type: 'load', plannedDate: '2026-10-01' });
+  const c2 = stage({ id: 'b', type: 'border', plannedDate: '2026-10-02' });
+  const applyRes = applyStageTemplate([], { id: 't', name: 'X', stages: templateStagesFromTrip([c2, c1], stageTypes) }, 'append', { stageTypes, makeId });
+  check('цикл «сохранил → применил»: состав и порядок сохраняются', applyRes.stages.map((s) => s.type).join(',') === 'load,border');
+  check('аддитивные createdAt/createdBy читаются из ветки базы', stageTemplatesFromDb({ t: { id: 't', name: 'T', stages: ['A'], createdAt: '2026-10-12T10:00:00.000Z', createdBy: 'admin' } })[0].createdBy === 'admin');
+  check('подпись автора: «создан: admin, <дата>»', templateCreatedLabel({ id: 't', name: 'T', stages: [], createdAt: '2026-10-12T10:00:00.000Z', createdBy: 'admin' }).startsWith('создан: admin, ') && templateCreatedLabel({ id: 't', name: 'T', stages: [] }) === '');
 }
 
 // ────────────────────────────────────────────────────────────────────────────

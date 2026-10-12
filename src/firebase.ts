@@ -2790,25 +2790,47 @@ export const dbService = {
     return () => {};
   },
 
-  /** Сохранение (создание/правка) шаблона этапов — запись целиком по id. */
+  /**
+   * Сохранение (создание/правка) шаблона этапов — запись целиком по id.
+   * createdAt/createdBy — аддитивные поля автора создания (окно рейса,
+   * «Сохранить как шаблон»); повторное сохранение из «Шаблонов» передаёт их
+   * обратно, чтобы не потерять. Возвращает промис (true — записано): диалог
+   * создания шаблона показывает ошибку внутри окна, прежние вызовы результат
+   * игнорируют — поведение не меняется.
+   */
   saveStageTemplate: (
-    template: { id: string; name: string; stages: string[] },
+    template: { id: string; name: string; stages: string[]; createdAt?: string; createdBy?: string },
     user: string,
     role: string,
     details: string,
-  ) => {
+  ): Promise<boolean> => {
     const id = String(template?.id || '').trim();
     const name = String(template?.name || '').trim();
-    if (!id || !name) return;
+    if (!id || !name) return Promise.resolve(false);
     const stages = (template.stages || []).map((s) => String(s || '').trim()).filter(Boolean);
-    const record = { id, name, stages, updatedAt: new Date().toISOString(), updatedBy: user };
+    const createdAt = String(template?.createdAt || '').trim();
+    const createdBy = String(template?.createdBy || '').trim();
+    const record = {
+      id,
+      name,
+      stages,
+      updatedAt: new Date().toISOString(),
+      updatedBy: user,
+      ...(createdAt ? { createdAt } : {}),
+      ...(createdBy ? { createdBy } : {}),
+    };
     if (useFirebase) {
-      set(ref(database, `stageTemplates/${id}`), record)
-        .then(() => dbService.logAction(user, role, 'Сохранение шаблона этапов', 'Settings', `stageTemplates/${id}`, details))
-        .catch((err) =>
-          handleFailure('firebase', err, { path: `stageTemplates/${id}`, userMessage: 'Не удалось сохранить шаблон этапов' }),
-        );
+      return set(ref(database, `stageTemplates/${id}`), record)
+        .then(() => {
+          dbService.logAction(user, role, 'Сохранение шаблона этапов', 'Settings', `stageTemplates/${id}`, details);
+          return true;
+        })
+        .catch((err) => {
+          handleFailure('firebase', err, { path: `stageTemplates/${id}`, userMessage: 'Не удалось сохранить шаблон этапов' });
+          return false;
+        });
     }
+    return Promise.resolve(true);
   },
 
   /** Удаление шаблона этапов. */

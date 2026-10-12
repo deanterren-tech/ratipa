@@ -3,8 +3,12 @@
  * (scripts/test-stage-templates.ts).
  *
  * Модель данных (ветка RTDB `stageTemplates`):
- *   stageTemplates/<id>: { id, name, stages: string[], updatedAt, updatedBy? }
+ *   stageTemplates/<id>: { id, name, stages: string[], updatedAt, updatedBy,
+ *                          createdAt?, createdBy? }
  *   · stages — УПОРЯДОЧЕННЫЙ список НАЗВАНИЙ этапов (без мест и дат);
+ *   · createdAt/createdBy — аддитивные поля автора создания (пишутся при
+ *     создании шаблона из окна рейса — кнопка «Сохранить как шаблон»);
+ *     схема совместима со старыми записями без них;
  *   · название применяется к рейсу как ТИП этапа (сопоставление по названию
  *     справочника типов `tripTimeline/config/stageTypes`); если названию типа
  *     ничего не соответствует — этап создаётся типом «Другое», а название
@@ -27,6 +31,7 @@
  * типов этапов: первое сохранение становится сидом справочника).
  */
 import type { TimelineStage, TimelineStageType } from '../../../../types';
+import { stageRouteCmp } from './stageSchedule';
 
 export interface StageTemplate {
   id: string;
@@ -35,6 +40,9 @@ export interface StageTemplate {
   stages: string[];
   updatedAt?: string;
   updatedBy?: string;
+  /** Автор и время СОЗДАНИЯ шаблона (аддитивные поля; у старых записей нет). */
+  createdAt?: string;
+  createdBy?: string;
 }
 
 /** Стартовые шаблоны по факту рейсов (см. справку модуля). */
@@ -74,6 +82,8 @@ export const stageTemplatesFromDb = (
         stages: stages.filter(Boolean),
         ...(rec.updatedAt ? { updatedAt: str(rec.updatedAt) } : {}),
         ...(rec.updatedBy ? { updatedBy: str(rec.updatedBy) } : {}),
+        ...(rec.createdAt ? { createdAt: str(rec.createdAt) } : {}),
+        ...(rec.createdBy ? { createdBy: str(rec.createdBy) } : {}),
       } satisfies StageTemplate;
     })
     .filter((t) => t.name)
@@ -122,6 +132,81 @@ export const resolveStageTypeByName = (
 /** Заполненный этап (место/даты) — «внесённые данные»: replace-empty их не трогает. */
 export const stageHasContent = (s: TimelineStage | null | undefined): boolean =>
   !!s && (!!str(s.label) || !!str(s.plannedDate) || !!str(s.actualDate));
+
+// ---------------------------------------------------------------------------
+// «Сохранить как шаблон» (окно рейса → диалог создания шаблона): чистые функции
+// ---------------------------------------------------------------------------
+
+/** Служебная строка плана (фолбэк-этап) — в базе её нет, в шаблон не переносится. */
+const isFallbackStageId = (id: unknown): boolean => String(id ?? '').endsWith('-fallback-load');
+
+/**
+ * Названия этапов РЕЙСА для нового шаблона (кнопка «Сохранить как шаблон»):
+ *  · порядок — как в таблице этапов: «сначала дата, затем seq» (stageRouteCmp);
+ *  · имя = метка ТИПА этапа из справочника (как в существующих шаблонах:
+ *    «Загрузка», «Граница», «Растаможка (импорт)»…);
+ *  · пропускаются: служебная строка плана (`*-fallback-load` — отображение,
+ *    в базе не хранится), тип «Другое» (служебное — в шаблоны не попадает
+ *    никогда) и неизвестные справочнику типы — «пустые/без типа»;
+ *  · повторяющиеся типы НЕ схлопываются: рейс может реально пройти границу
+ *    дважды — шаблон повторяет маршрут как есть.
+ */
+export const templateStagesFromTrip = (
+  stages: TimelineStage[] | null | undefined,
+  stageTypes: TimelineStageType[] | null | undefined,
+): string[] => {
+  const types = stageTypes || [];
+  return [...(stages || [])]
+    .filter((s) => s && typeof s === 'object' && !isFallbackStageId(s.id))
+    .sort(stageRouteCmp)
+    .map((s) => types.find((t) => t && t.key === s.type))
+    .filter((t): t is TimelineStageType => !!t && t.key !== 'other' && !!str(t.name))
+    .map((t) => str(t.name));
+};
+
+/** Есть ли в рейсе собственные этапы (без служебной строки плана-фолбэка). */
+export const tripHasOwnStages = (stages: TimelineStage[] | null | undefined): boolean =>
+  (stages || []).some((s) => s && typeof s === 'object' && !isFallbackStageId(s.id));
+
+/** Занято ли имя шаблона (без учёта регистра и краевых пробелов). */
+export const templateNameTaken = (
+  templates: StageTemplate[] | null | undefined,
+  name: string,
+  exceptId?: string,
+): boolean => {
+  const n = str(name).toLowerCase();
+  return !!n && (templates || []).some((t) => t && t.id !== exceptId && str(t.name).toLowerCase() === n);
+};
+
+/**
+ * Свободное имя на основе желаемого: «Китай» занято → «Китай 2» → «Китай 3»…
+ * (предложение БЕЗ молчаливого создания дубля — показывается в диалоге).
+ */
+export const suggestTemplateName = (
+  desired: string,
+  templates: StageTemplate[] | null | undefined,
+): string => {
+  const base = str(desired) || 'Шаблон';
+  if (!templateNameTaken(templates, base)) return base;
+  for (let i = 2; i < 100; i += 1) {
+    const candidate = `${base} ${i}`;
+    if (!templateNameTaken(templates, candidate)) return candidate;
+  }
+  return `${base} ${Date.now().toString(36)}`;
+};
+
+/** Подпись автора/времени создания шаблона («создан: Иван, 12.10.2026»); '' — нет данных. */
+export const templateCreatedLabel = (t: StageTemplate | null | undefined): string => {
+  const by = str(t?.createdBy);
+  const at = str(t?.createdAt);
+  let when = '';
+  if (at) {
+    const d = new Date(at);
+    when = Number.isNaN(d.getTime()) ? at : d.toLocaleDateString('ru-RU');
+  }
+  if (!by && !when) return '';
+  return `создан${by ? `: ${by}` : ''}${when ? `, ${when}` : ''}`;
+};
 
 export interface ApplyTemplateContext {
   /** Справочник типов этапов (та же «Настройки», что у карточки рейса). */

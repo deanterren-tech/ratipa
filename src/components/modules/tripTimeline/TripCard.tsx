@@ -25,10 +25,18 @@
  *
  * Архивный статус связанного рейса меняется только в «Плане дохода»: здесь
  * пояснение и переход по прямой ссылке (в том числе для архивной записи).
+ *
+ * «СОХРАНИТЬ КАК ШАБЛОН» (кнопка рядом с «Из шаблона», только admin/root):
+ * брендированный диалог составляет шаблон этапов из ЭТОГО рейса — метки ТИПОВ
+ * в порядке таблицы (дата+seq), имя предзаполнено направлением, дубль имени
+ * блокируется с предложением свободного (lib/stageTemplates). Пишется ТОЛЬКО
+ * ветка stageTemplates (id/name/stages + createdAt/createdBy) — сам рейс не
+ * меняется; этапы — обратное действие кнопки «Из шаблона».
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
+  BookmarkPlus,
   CarFront,
   CalendarClock,
   ChevronDown,
@@ -65,6 +73,12 @@ import {
 } from './lib/directionCatalog';
 import {
   applyStageTemplate,
+  newTemplateId,
+  suggestTemplateName,
+  templateCreatedLabel,
+  templateNameTaken,
+  templateStagesFromTrip,
+  tripHasOwnStages,
   type ApplyTemplateMode,
   type StageTemplate,
 } from './lib/stageTemplates';
@@ -1747,6 +1761,19 @@ export default function TripCard({
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templatePick, setTemplatePick] = useState<StageTemplate | null>(null);
 
+  // ── «Сохранить как шаблон» (обратное действие к «Из шаблона»; только админ):
+  //    пишется ТОЛЬКО ветка stageTemplates, сам рейс не меняется.
+  const [saveTplOpen, setSaveTplOpen] = useState(false);
+  const [saveTplName, setSaveTplName] = useState('');
+  const [savingTpl, setSavingTpl] = useState(false);
+  const [saveTplError, setSaveTplError] = useState('');
+  /**
+   * Открыто ли окно «Сохранить как шаблон» — для горячих клавиш окна рейса:
+   * пока диалог сверху, Enter/Ctrl+S/Esc не сохраняют и не закрывают рейс.
+   */
+  const saveTplOpenRef = useRef(false);
+  saveTplOpenRef.current = saveTplOpen;
+
   // ── Контроль плана этапов (блокировка плановых дат после сохранения) ────
   const planEnabled = !!planControlEnabled;
   const planUserId = String(user.uid || '');
@@ -1778,6 +1805,21 @@ export default function TripCard({
     () => resolveStageRights(user, { kind: trip.kind, archived, planState }, { canWrite }),
     [user, trip.kind, archived, planState, canWrite],
   );
+
+  // ── «Сохранить как шаблон»: состав и проверка имени (чистые функции lib) ──
+  /** Состав будущего шаблона: метки ТИПОВ этапов в порядке таблицы (дата+seq). */
+  const tplSaveStages = useMemo(() => templateStagesFromTrip(draft.stages, stageTypes), [draft.stages, stageTypes]);
+  /** Есть ли в рейсе собственные этапы (служебная строка плана не считается). */
+  const tplSaveTripHasStages = useMemo(() => tripHasOwnStages(draft.stages), [draft.stages]);
+  /** Дубликат имени: предупреждение в диалоге, создание заблокировано — без молчаливых дублей. */
+  const tplSaveDup = useMemo(() => templateNameTaken(stageTemplates, saveTplName), [stageTemplates, saveTplName]);
+  /** Предложение свободного имени («Китай» занят → «Китай 2»). */
+  const tplSaveSuggested = useMemo(() => suggestTemplateName(saveTplName, stageTemplates), [stageTemplates, saveTplName]);
+  /** Подсказка, ПОЧЕМУ кнопка «сохранить как шаблон» неактивна. */
+  const tplSaveDisabledHint = tplSaveTripHasStages
+    ? 'кнопка «сохранить как шаблон» станет активной, когда у этапов будет тип (переносятся только названия типов)'
+    : 'кнопка «сохранить как шаблон» станет активной, когда в рейсе появится этап';
+
   /** Запрос разового доступа ТЕКУЩЕГО пользователя по этому рейсу (одна запись на пару). */
   const myPlanRequest = useMemo<TimelinePlanRequest | null>(() => {
     const store = planRequests || {};
@@ -1922,12 +1964,26 @@ export default function TripCard({
 
   useWindowHotkeys({
     onEscape: () => {
+      // Сверху открыт диалог «Сохранить как шаблон» — Esc закрывает его, а не окно рейса.
+      if (saveTplOpenRef.current) {
+        setSaveTplOpen(false);
+        setSaveTplError('');
+        return;
+      }
       requestClose();
     },
     // Enter — как кнопка «Сохранить»: записать и закрыть окно этого блока.
     // Ctrl/Cmd+S — сохранить без закрытия (как написано в подсказке кнопки).
-    onSave: () => saveAllRef.current(),
-    onSaveClose: () => saveAllRef.current({ close: true }),
+    // Пока открыт диалог «Сохранить как шаблон» — клавиши окна молчат (Enter
+    // диалога создаёт шаблон, рейс при этом не сохраняется и не закрывается).
+    onSave: () => {
+      if (saveTplOpenRef.current) return;
+      saveAllRef.current();
+    },
+    onSaveClose: () => {
+      if (saveTplOpenRef.current) return;
+      saveAllRef.current({ close: true });
+    },
   });
 
   // Отметка «Сохранено ✓» гаснет сама (уведомление об успехе — отдельный toast).
@@ -2674,6 +2730,63 @@ export default function TripCard({
     toast(parts.join(', '), 'success');
     setTemplateOpen(false);
     setTemplatePick(null);
+  };
+
+  // ── «Сохранить как шаблон»: только администратор (управление шаблонами —
+  //    админское); имя предзаполняется направлением рейса, рейс не меняется ──
+  /** Открытие диалога: имя = направление рейса («Китай»/«Турция» по direction). */
+  const openSaveTemplate = () => {
+    if (!stageRights.isAdmin) return;
+    setSaveTplName(directionLabelOf(directionOptions, draft.direction));
+    setSaveTplError('');
+    setSavingTpl(false);
+    setSaveTplOpen(true);
+  };
+
+  /** Закрытие диалога (кнопка «Отмена», фон, Esc): во время записи не закрываем. */
+  const closeSaveTemplate = () => {
+    if (savingTpl) return;
+    setSaveTplOpen(false);
+    setSaveTplError('');
+  };
+
+  /**
+   * Создание шаблона из этапов рейса («Создать шаблон»): единственная запись —
+   * ветка stageTemplates (id, name, stages — метки типов по порядку таблицы,
+   * плюс аддитивные createdAt/createdBy). Черновик рейса и его запись НЕ
+   * трогаются: сохранение шаблона — не изменение рейса. Ошибки — в диалоге.
+   */
+  const createTemplateFromTrip = async () => {
+    if (savingTpl || !stageRights.isAdmin) return;
+    const name = saveTplName.trim();
+    const stages = templateStagesFromTrip(draft.stages, stageTypes);
+    if (!name) {
+      setSaveTplError('Введите название шаблона (например, «Китай» или «Турция»).');
+      return;
+    }
+    if (!stages.length) {
+      setSaveTplError('В рейсе нет этапов с типами — шаблон не из чего составить.');
+      return;
+    }
+    if (templateNameTaken(stageTemplates, name)) {
+      setSaveTplError(`Шаблон «${name}» уже есть — выберите другое имя (например, «${suggestTemplateName(name, stageTemplates)}»).`);
+      return;
+    }
+    setSavingTpl(true);
+    setSaveTplError('');
+    const ok = await dbService.saveStageTemplate(
+      { id: newTemplateId(), name, stages, createdAt: new Date().toISOString(), createdBy: user.name },
+      user.name,
+      user.role,
+      `Создание шаблона из рейса ${trip.carNumber || trip.key}: «${name}» — ${stages.join(' → ')}`,
+    );
+    setSavingTpl(false);
+    if (!ok) {
+      setSaveTplError('Не удалось сохранить шаблон — проверьте соединение и повторите.');
+      return;
+    }
+    setSaveTplOpen(false);
+    toast(`Шаблон «${name}» создан (${stages.length} эт.) — доступен в «Из шаблона» и на вкладке «Шаблоны»`, 'success');
   };
 
   /** Клик по маркеру этапа на встроенном таймлайне: прокрутка к этапу и
@@ -3606,6 +3719,34 @@ export default function TripCard({
               <Layers className="w-4 h-4" aria-hidden="true" />
               из шаблона
             </button>
+            {/* «Сохранить как шаблон» — обратное действие к «Из шаблона», только
+                администратор (управление шаблонами — админское). Из этапов рейса
+                составляется именованный шаблон меток ТИПОВ (порядок таблицы);
+                сам рейс не меняется. Нет этапов/типов — кнопка неактивна с подсказкой. */}
+            {stageRights.isAdmin ? (
+              <button
+                type="button"
+                data-ui="save-as-template"
+                onClick={openSaveTemplate}
+                disabled={!tplSaveStages.length}
+                className={UI.buttonGhost}
+                title={
+                  tplSaveStages.length
+                    ? 'Создать именованный шаблон из этапов этого рейса: названия типов в порядке таблицы. Имя подставится из направления; рейс не изменится'
+                    : tplSaveTripHasStages
+                      ? 'Недоступно: у этапов не определён тип — в шаблон переносятся только названия типов («Другое» и неизвестные типы пропускаются)'
+                      : 'Недоступно: в рейсе нет этапов — сначала добавьте этапы'
+                }
+              >
+                <BookmarkPlus className="w-4 h-4" aria-hidden="true" />
+                сохранить как шаблон
+              </button>
+            ) : null}
+            {stageRights.isAdmin && !tplSaveStages.length ? (
+              <span className="text-[10px] text-[#6B7280]" data-ui="save-as-template-disabled-hint">
+                {tplSaveDisabledHint}
+              </span>
+            ) : null}
             {!canEditPlanned ? (
               <span className="text-[10px] text-[#6B7280]">
                 {stageRights.canEditExistingDates
@@ -3830,6 +3971,11 @@ export default function TripCard({
                   <div className="text-[11px] text-[#6B7280]">
                     {t.stages.length ? t.stages.join(' → ') : 'список этапов пуст'}
                   </div>
+                  {templateCreatedLabel(t) ? (
+                    <div className="text-[10px] text-[#9CA3AF]" data-ui="template-meta">
+                      {templateCreatedLabel(t)}
+                    </div>
+                  ) : null}
                 </div>
                 {active ? <span className="text-[10px] font-semibold text-[var(--accent-ink)] mt-0.5">выбран</span> : null}
               </button>
@@ -3841,6 +3987,127 @@ export default function TripCard({
             В рейсе уже {draft.stages.length} эт.: «Добавить в конец» сохранит их и добавит шаблон после; «Заменить пустые» удалит
             только этапы без места и дат (внесённые данные не затираются).
           </p>
+        ) : null}
+      </div>
+    </ModalShell>
+
+    {/* Окно «Сохранить как шаблон» (кнопка в блоке этапов, только админ):
+        имя — предзаполнено направлением рейса («Китай»/«Турция» по direction);
+        дубль имени — предупреждение и предложение свободного имени (без
+        молчаливых дублей, кнопка заблокирована); предпросмотр состава — метки
+        типов в порядке таблицы. Запись идёт ТОЛЬКО в ветку stageTemplates:
+        рейс (этапы/план) не меняется. */}
+    <ModalShell
+      isOpen={saveTplOpen}
+      onClose={closeSaveTemplate}
+      title="Сохранить как шаблон"
+      subtitle="Этапы рейса сохранятся названиями типов — в том же порядке, что в таблице. Места и даты в шаблон не переносятся, сам рейс не изменяется."
+      icon={<BookmarkPlus className="w-4 h-4" aria-hidden="true" />}
+      ariaLabel="Сохранить этапы рейса как шаблон"
+      closeProminent
+      maxWidth="max-w-[560px]"
+      footer={
+        <>
+          <span className={`${UI.hint} mr-auto`}>
+            {tplSaveStages.length
+              ? `Будет создан шаблон из ${tplSaveStages.length} эт. Рейс не изменится — пишется только шаблон.`
+              : 'Этапов с типами в рейсе нет — шаблон создать нельзя.'}
+          </span>
+          <button
+            type="button"
+            onClick={closeSaveTemplate}
+            data-ui="save-tpl-cancel"
+            className="inline-flex items-center justify-center gap-2 px-4 min-h-[40px] rounded-xl text-[13px] bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] font-medium cursor-pointer"
+          >
+            Отмена
+          </button>
+          <button
+            type="button"
+            onClick={() => void createTemplateFromTrip()}
+            disabled={!tplSaveStages.length || !saveTplName.trim() || tplSaveDup || savingTpl}
+            data-ui="save-tpl-create"
+            title={
+              tplSaveDup
+                ? 'Шаблон с таким именем уже есть — выберите другое имя'
+                : 'Создать шаблон из этапов рейса (рейс не изменится)'
+            }
+            className="inline-flex items-center justify-center gap-2 px-4 min-h-[40px] rounded-xl text-[13px] bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--accent-on)] font-semibold shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {savingTpl ? 'Создание…' : 'Создать шаблон'}
+          </button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3 py-1" data-ui="save-template-dialog">
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] font-semibold text-[#121316]">Название шаблона</span>
+          <input
+            value={saveTplName}
+            onChange={(e) => {
+              setSaveTplName(e.target.value);
+              setSaveTplError('');
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                void createTemplateFromTrip();
+              }
+            }}
+            autoFocus
+            maxLength={80}
+            placeholder="Например: Китай"
+            aria-label="Название шаблона"
+            data-ui="save-tpl-name"
+            className="h-10 w-full bg-white border border-[#E5E7EB] rounded-xl px-3 text-[13px] text-[#121316] outline-none transition-colors focus:border-[var(--accent)]"
+          />
+        </label>
+        {tplSaveDup ? (
+          <div
+            data-ui="save-tpl-dup"
+            role="alert"
+            className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-800"
+          >
+            <TriangleAlert className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+            <span className="flex-1 min-w-[180px]">
+              Шаблон «{saveTplName.trim()}» уже есть — создание заблокировано, чтобы не сделать молчаливый дубль. Выберите другое имя.
+            </span>
+            <button
+              type="button"
+              data-ui="save-tpl-suggest"
+              onClick={() => setSaveTplName(tplSaveSuggested)}
+              className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 transition-colors cursor-pointer"
+            >
+              Использовать «{tplSaveSuggested}»
+            </button>
+          </div>
+        ) : stageTemplates.length ? (
+          <span className="text-[10px] text-[#9CA3AF]" data-ui="save-tpl-existing">
+            Существующие шаблоны: {stageTemplates.map((t) => t.name).join(', ')} — имя не должно повторяться.
+          </span>
+        ) : null}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[11px] font-semibold text-[#121316]">Этапы в шаблон (в порядке таблицы)</span>
+          {tplSaveStages.length ? (
+            <ol data-ui="save-tpl-preview" className="flex flex-col gap-1 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2 max-h-[200px] overflow-y-auto">
+              {tplSaveStages.map((n, i) => (
+                <li key={`${n}_${i}`} data-ui="save-tpl-preview-item" className="flex items-center gap-2">
+                  <span className="w-5 text-right text-[10px] text-[#9CA3AF] tabular-nums">{i + 1}.</span>
+                  <span className="text-[12px] text-[#121316]">{n}</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <span className="text-[11px] text-[#6B7280]" data-ui="save-tpl-empty">
+              {tplSaveTripHasStages
+                ? 'У этапов не определён тип: в шаблон переносятся только типы («Другое» и неизвестные типы пропускаются) — задайте типы в таблице этапов.'
+                : 'В рейсе нет этапов — сначала добавьте их кнопкой «добавить этап».'}
+            </span>
+          )}
+        </div>
+        {saveTplError ? (
+          <div data-ui="save-tpl-error" role="alert" className={UI.errorBox}>
+            {saveTplError}
+          </div>
         ) : null}
       </div>
     </ModalShell>

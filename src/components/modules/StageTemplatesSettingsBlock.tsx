@@ -30,6 +30,7 @@ import {
   newTemplateId,
   removeTemplateStage,
   stageTemplatesFromDb,
+  templateCreatedLabel,
   type StageTemplate,
 } from './tripTimeline/lib/stageTemplates';
 
@@ -90,7 +91,20 @@ export default function StageTemplatesSettingsBlock({ user }: { user: UserProfil
       toast('У шаблона должно быть название (например, «Турция»)', 'error');
       return;
     }
-    dbService.saveStageTemplate({ id, name, stages }, user.name, user.role, `Шаблон «${name}»: ${stages.join(' → ') || 'без этапов'}`);
+    // Автор/время СОЗДАНИЯ (аддитивные поля) не теряются при правке из «Шаблонов».
+    const created = dbList.find((t) => t.id === id);
+    dbService.saveStageTemplate(
+      {
+        id,
+        name,
+        stages,
+        ...(created?.createdAt ? { createdAt: created.createdAt } : {}),
+        ...(created?.createdBy ? { createdBy: created.createdBy } : {}),
+      },
+      user.name,
+      user.role,
+      `Шаблон «${name}»: ${stages.join(' → ') || 'без этапов'}`,
+    );
     sessionIdsRef.current.delete(id);
     toast(`Шаблон «${name}» сохранён (${stages.length} эт.)`, 'success');
   };
@@ -131,6 +145,7 @@ export default function StageTemplatesSettingsBlock({ user }: { user: UserProfil
           ids.map((id) => {
             const item = work[id];
             const inDb = dbList.some((t) => t.id === id);
+            const createdLabel = templateCreatedLabel(dbList.find((t) => t.id === id));
             return (
               <div key={id} data-ui="stage-template-card" data-template-id={id} className="border border-[#E5E7EB] rounded-xl p-3 flex flex-col gap-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -145,6 +160,11 @@ export default function StageTemplatesSettingsBlock({ user }: { user: UserProfil
                   <span className={`text-[10px] ${inDb ? 'text-[#9CA3AF]' : 'text-amber-700 font-semibold'}`}>
                     {inDb ? `id: ${id}` : 'новый — не сохранён'}
                   </span>
+                  {createdLabel ? (
+                    <span className="text-[10px] text-[#9CA3AF]" data-ui="stage-template-created">
+                      {createdLabel}
+                    </span>
+                  ) : null}
                   <button type="button" onClick={() => saveTemplate(id)} data-ui="stage-template-save" className={UI.buttonPrimary}>
                     Сохранить
                   </button>
