@@ -1356,17 +1356,30 @@ export const dbService = {
     );
   },
 
+  // prev — исходные месяц/диспетчер записи (до правки). Нужен, чтобы при переносе
+  // даты на другой месяц или смене логиста не осталась копия в старом архиве
+  // (salaryHistory/months|byDispatcher): раньше обновлялась только новая ветка,
+  // и в старом месяце запись оставалась со старыми показателями.
   updateSalary: (
     id: string,
     updates: any,
     user: string,
     role: string,
+    prev?: { datetime?: string; logist?: string } | null,
   ) => {
-    const getYearMonth = (item: SalaryLog): string => {
+    const getYearMonth = (item: { datetime?: string; id?: string }): string => {
+      // Дата хранится в двух форматах: «ДД.ММ.ГГГГ» (старые записи и редактор даты)
+      // и «ДД/ММ/ГГГГ» (запись из формы расчёта). Раньше разбирался только формат
+      // с точками: для «ДД/ММ/ГГГГ» копия обновления уезжала в текущий месяц
+      // (у push-key записей id не числовой), а реальный месяц оставался старым.
       if (item.datetime) {
-        const parts = item.datetime.split('.');
+        const parts = item.datetime.split(/[./]/);
         if (parts.length === 3) {
-          return `${parts[2]}-${parts[1]}`;
+          const y = String(parts[2]).slice(0, 4);
+          const m = String(parts[1]).padStart(2, '0');
+          if (/^\d{4}$/.test(y) && /^\d{1,2}$/.test(String(parts[1]).trim())) {
+            return `${y}-${m}`;
+          }
         }
       }
       const timestamp = parseInt(item.id || "");
@@ -1384,17 +1397,31 @@ export const dbService = {
       return String(key || "").trim().replace(/[.#$[\]\/]/g, "_");
     };
 
+    let result: Promise<unknown> = Promise.resolve();
     if (useFirebase) {
       const ym = getYearMonth(updates);
       const dispatcher = sanitizeKey(updates.logist || 'System');
-      const payload = { ...updates, id };
+      // RTDB отвергает undefined-поля целиком (правка «молча не сохраняется») —
+      // легаси-записи могут не иметь bonus/comment и т.п.
+      const payload = sanitizeFirebaseObject({ ...updates, id });
       const dbUpdates: Record<string, any> = {
         [`salaryHistory/flat/${id}`]: payload,
         [`salaryHistory/months/${ym}/${id}`]: payload,
         [`salaryHistory/byDispatcher/${dispatcher}/${id}`]: payload,
         [`salaryHistory/${id}`]: payload
       };
-      update(ref(database), dbUpdates).catch((err) => console.warn("salary save (root_admin) failed", err));
+      // Правка перенесла запись в другой месяц/диспетчера — снимаем старые копии
+      // тем же multi-path update, иначе запись остаётся сразу в двух архивах.
+      if (prev) {
+        const prevYm = getYearMonth({ id, datetime: prev.datetime || '' });
+        const prevDispatcher = sanitizeKey(prev.logist || 'System');
+        if (prevYm !== ym) dbUpdates[`salaryHistory/months/${prevYm}/${id}`] = null;
+        if (prevDispatcher !== dispatcher) dbUpdates[`salaryHistory/byDispatcher/${prevDispatcher}/${id}`] = null;
+      }
+      result = update(ref(database), dbUpdates).catch((err) => {
+        console.warn("salary save (root_admin) failed", err);
+        throw err;
+      });
     } else {
       const local = getLocalStorageData<SalaryLog[]>("ratipa_salaries", []);
       const idx = local.findIndex((s) => s.id === id);
@@ -1411,6 +1438,7 @@ export const dbService = {
       id,
       `Запись о зарплате обновлена`,
     );
+    return result;
   },
 
   // VEHICLE FLEET (читает tractors — portal-схема)

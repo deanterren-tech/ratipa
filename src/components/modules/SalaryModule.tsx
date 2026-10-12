@@ -12,6 +12,7 @@ import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
 import {normalizePlate, findCarByPlate, getDriverById, getDriverIdForCar, formatCoupling} from '../../utils/salaryAutofill'
 import {formatDriverShortName} from '../../utils/driverSync'
+import {computeSalaryTotals, resolveCarRateFrom, deriveStoredRates, salaryNumber, type RateSource, type ResolvedCarRate} from '../../utils/salaryCalc'
 import {CarConflictModal} from '../common/CarConflictModal'
 import {CarConflict} from '../../utils/carConflictHandler'
 import CouplingPicker from '../common/CouplingPicker';
@@ -79,6 +80,13 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const [editingSalaryData, setEditingSalaryData] = useState<Partial<SalaryLog>>({});
   const [editDirection, setEditDirection] = useState<string>("");
   const [editCircles, setEditCircles] = useState<string>("");
+  // Ставки, которыми считает окно редактирования: суточные правятся прямо в окне
+  // («Суточные, €/день»), ставка простоя восстанавливается из записи/настроек.
+  const [editPerDiemRate, setEditPerDiemRate] = useState<number>(7);
+  const [editIdleRate, setEditIdleRate] = useState<number>(30);
+  // Исходный месяц/диспетчер записи — чтобы при переносе даты или смене логиста
+  // не оставалась копия в старом архиве (salaryHistory/months, byDispatcher).
+  const originalEditRef = useRef<{ datetime: string; logist: string } | null>(null);
   const [logsLimit, setLogsLimit] = useState(10);
 
   // handlers модалки редактирования выплаты (восстановлены: ранее были удалены,
@@ -86,6 +94,15 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const openEditModal = (rec: SalaryLog) => {
     setEditingSalaryId(rec.id || null);
     setEditingSalaryData(rec);
+    // Ставки окна: суточные/простой восстанавливаем из сохранённых начислений,
+    // иначе — текущие настройки портала (открытие окна не должно менять итог само).
+    const storedRates = deriveStoredRates(rec, {
+      perDiemRate: settings?.perDiemRate ?? 7,
+      idleRate: settings?.idleRate ?? 30,
+    });
+    setEditPerDiemRate(storedRates.perDiemRate);
+    setEditIdleRate(storedRates.idleRate);
+    originalEditRef.current = { datetime: rec.datetime || '', logist: rec.logist || '' };
     // Парсим mark "Направление, N круга" → отдельно направление и круги
     const mark = rec.mark || "";
     const circMatch = mark.match(/(\d+)\s*круг[а-я]*/i);
@@ -99,6 +116,7 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     setEditingSalaryData({});
     setEditDirection("");
     setEditCircles("");
+    originalEditRef.current = null;
   };
   const saveEditModal = () => {
     if (editingSalaryData && editingSalaryData.id) {
@@ -106,14 +124,43 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
       // storageKey — служебный ключ ветки, в саму запись его не пишем
       const editable: Partial<SalaryLog> = { ...editingSalaryData };
       delete editable.storageKey;
-      dbService.updateSalary(editingSalaryData.id, { ...editable, mark }, user.name, user.role);
+      // Тот же расчёт, что в основной форме: показатели записи пересчитываются
+      // из отредактированных полей и сохраняются (раньше оставались старыми).
+      const totals = computeSalaryTotals({
+        km: editable.km,
+        rate: editable.rate,
+        idleDays: editable.idleDays,
+        idleRate: editIdleRate,
+        totalDays: editable.totalDays,
+        perDiem: editPerDiemRate,
+        bonus: editable.bonus,
+      });
+      const prev = originalEditRef.current;
+      const result = dbService.updateSalary(
+        editingSalaryData.id,
+        {
+          ...editable,
+          mark,
+          kmMoney: totals.kmMoney,
+          idleMoney: totals.idleMoney,
+          daysMoney: totals.daysMoney,
+          totalSalary: totals.totalSalary,
+          salaryPerDay: totals.salaryPerDay,
+        },
+        user.name,
+        user.role,
+        prev ? { datetime: prev.datetime, logist: prev.logist } : undefined,
+      );
+      Promise.resolve(result)
+        .then(() => toast('Запись обновлена — показатели пересчитаны', 'success'))
+        .catch((err) => toast('Не удалось сохранить изменения: ' + (err?.message || err), 'error'));
     }
     closeEditModal();
   };
   const copyHistoryToForm = (rec: SalaryLog) => {
-    // дублируем запись в форму редактирования (переиспользуем тот же state)
-    setEditingSalaryId(rec.id || null);
-    setEditingSalaryData(rec);
+    // «Дублировать в форму» открывает ту же запись в окне редактирования; общая
+    // инициализация, чтобы не потерять направление/круги и ставки записи.
+    openEditModal(rec);
   };
 
   const getYearMonth = (item: SalaryLog): string => {
@@ -292,26 +339,10 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const lastRateCarRef = useRef('');
 
   /** Ставка авто: группа ставок (directories/rateGroups) по rateGroupId,
-   *  затем прямое числовое поле rate записи (сцепка / тягач / легаси-группа). */
-  const resolveCarRate = (source: { rateGroupId?: unknown; rate?: unknown; perDiemRate?: unknown } | null | undefined):
-    { rate: number; perDiemRate?: number } | null => {
-    if (!source) return null;
-    const groupId = String(source.rateGroupId || '').trim();
-    if (groupId) {
-      const group = rateGroups.find((x) => (x.id || x.key || '') === groupId);
-      const groupRate = Number(group?.rate);
-      if (Number.isFinite(groupRate) && groupRate > 0) {
-        const groupPerDiem = Number(group?.perDiemRate);
-        return { rate: groupRate, perDiemRate: Number.isFinite(groupPerDiem) && groupPerDiem > 0 ? groupPerDiem : undefined };
-      }
-    }
-    const directRate = Number(source.rate);
-    if (Number.isFinite(directRate) && directRate > 0) {
-      const directPerDiem = Number(source.perDiemRate);
-      return { rate: directRate, perDiemRate: Number.isFinite(directPerDiem) && directPerDiem > 0 ? directPerDiem : undefined };
-    }
-    return null;
-  };
+   *  затем прямое числовое поле rate записи (сцепка / тягач / легаси-группа).
+   *  Единая реализация — utils/salaryCalc.resolveCarRateFrom (без копий). */
+  const resolveCarRate = (source: RateSource | null | undefined): ResolvedCarRate | null =>
+    resolveCarRateFrom(source, rateGroups);
 
   /** Подставить ставку при выборе/смене авто. Если ставки в справочниках нет —
    *  поле не трогаем (ничего не подставляем и не стираем существующее значение). */
@@ -471,12 +502,12 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     );
     if (foundDriver) {
       setDriverId(foundDriver.id);
-      if (foundDriver.rateGroupId) {
-        const group = carsPool.find(g => g.id === foundDriver.rateGroupId);
-        if (group) {
-          setRatePerKm(group.rate);
-          setRatePerDiem(group.perDiemRate);
-        }
+      // Ставка водителя — тот же резолвер, что и при выборе авто: группа ставок
+      // (rateGroupId → directories/rateGroups), затем прямое значение записи.
+      const resolved = resolveCarRate(foundDriver);
+      if (resolved) {
+        setRatePerKm(resolved.rate);
+        setRatePerDiem(resolved.perDiemRate);
       }
     } else {
       setDriverId('');
@@ -486,11 +517,34 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const currentIdleRate = settings?.idleRate ?? 30;
   const currentPerDiem = ratePerDiem ?? settings?.perDiemRate ?? 7;
 
-  const kmMoney = (Number(totalKm) || 0) * ratePerKm;
-  const idleMoney = idleDays * currentIdleRate;
-  const daysMoney = totalDays * currentPerDiem;
-  const totalSalary = kmMoney + idleMoney + daysMoney + bonus;
-  const salaryPerDay = totalSalary / Math.max(totalDays, 1);
+  // Показатели основной формы — единая чистая функция (utils/salaryCalc),
+  // никаких копий формул в компоненте.
+  const {
+    kmMoney,
+    idleMoney,
+    daysMoney,
+    totalSalary,
+    salaryPerDay,
+  } = computeSalaryTotals({
+    km: totalKm,
+    rate: ratePerKm,
+    idleDays,
+    idleRate: currentIdleRate,
+    totalDays,
+    perDiem: currentPerDiem,
+    bonus,
+  });
+
+  // Живые показатели окна «Редактирование выплаты» — та же функция и формулы.
+  const editTotals = computeSalaryTotals({
+    km: editingSalaryData.km,
+    rate: editingSalaryData.rate,
+    idleDays: editingSalaryData.idleDays,
+    idleRate: editIdleRate,
+    totalDays: editingSalaryData.totalDays,
+    perDiem: editPerDiemRate,
+    bonus: editingSalaryData.bonus,
+  });
 
   const clearForm = () => {
     setCarNumber('');
@@ -1105,11 +1159,12 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
 
                      if (foundDriver) {
                          updatedData.driverId = foundDriver.id;
-                         if (foundDriver.rateGroupId) {
-                             const group = carsPool.find(g => g.id === foundDriver.rateGroupId);
-                             if (group) {
-                                 updatedData.rate = group.rate;
-                             }
+                         // Ставка водителя — группа ставок (rateGroupId), затем прямое
+                         // значение; без отдельного поиска через carsPool.
+                         const resolved = resolveCarRate(foundDriver);
+                         if (resolved) {
+                             updatedData.rate = resolved.rate;
+                             if (resolved.perDiemRate != null) setEditPerDiemRate(resolved.perDiemRate);
                          }
                      } else {
                          updatedData.driverId = '';
@@ -1135,13 +1190,13 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                               updatedData.driverId = matchedDriver.id;
                               updatedData.driver = matchedDriver.name;
 
-                              // Try updating rate
-                              const normalizedCarPlate = normalizePlate(matchedCar.carNumber || matchedCar.vehicleNumbers || '');
-                              const group = carsPool.find(g =>
-                                  (g.vehicles || []).some(v => normalizePlate(v) === normalizedCarPlate)
-                              );
-                              if (group) {
-                                  updatedData.rate = group.rate;
+                              // Ставка — как в основной форме: группа ставок сцепки
+                              // (rateGroupId → directories/rateGroups), затем прямое
+                              // значение записи. Отдельного поиска через carsPool нет.
+                              const resolved = resolveCarRate(matchedCar);
+                              if (resolved) {
+                                  updatedData.rate = resolved.rate;
+                                  if (resolved.perDiemRate != null) setEditPerDiemRate(resolved.perDiemRate);
                               }
                           } else {
                               updatedData.driverId = '';
@@ -1185,6 +1240,10 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
               <div className="flex flex-col gap-1.5">
                 <label className={UI.fieldLabel} htmlFor="salary-edit-days">Дней в рейсе</label>
                 <input id="salary-edit-days" type="number" value={editingSalaryData.totalDays || 1} onChange={e => setEditingSalaryData({...editingSalaryData, totalDays: Number(e.target.value)})} className={UI.input} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className={UI.fieldLabel} htmlFor="salary-edit-perdiem">Суточные (€/день)</label>
+                <input id="salary-edit-perdiem" type="number" step="0.1" value={editPerDiemRate} onChange={e => setEditPerDiemRate(salaryNumber(e.target.value))} className={UI.input} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className={UI.fieldLabel} htmlFor="salary-edit-bonus">Премия (€)</label>
@@ -1238,6 +1297,51 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
                   </button>
                 </div>
               </div>
+            </div>
+
+            {/* Живые показатели окна: пересчитываются на каждое изменение полей выше */}
+            <div data-testid="salary-edit-indicators" className="mt-5 flex flex-col gap-3 rounded-2xl bg-slate-50 border border-slate-200/60 p-4">
+              <span className={UI.caption}>Показатели (обновляются сразу)</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <StatusText color="accent">За километраж</StatusText>
+                  <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(editTotals.kmMoney).toLocaleString('ru-RU')} €</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <StatusText color="grey">Простой + Суточные</StatusText>
+                  <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(editTotals.idleMoney + editTotals.daysMoney).toLocaleString('ru-RU')} €</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <StatusText color="grey">Премия</StatusText>
+                  <span className="text-sm font-semibold font-mono tabular-nums text-[#121316] shrink-0">{Math.round(salaryNumber(editingSalaryData.bonus)).toLocaleString('ru-RU')} €</span>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-start gap-x-10 gap-y-4 pt-1">
+                <div className="flex flex-col gap-1">
+                  <span className={UI.caption}>Итого водителю</span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl sm:text-3xl font-mono font-semibold tabular-nums text-[#121316]">
+                      {Math.round(editTotals.totalSalary).toLocaleString('ru-RU')}
+                    </span>
+                    <span className="text-sm text-[#6B7280]">€</span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className={UI.caption}>З/П за сутки</span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl sm:text-3xl font-mono font-semibold tabular-nums text-[#121316]">
+                      {Math.round(editTotals.salaryPerDay).toLocaleString('ru-RU')}
+                    </span>
+                    <span className="text-sm text-[#6B7280]">€</span>
+                  </div>
+                </div>
+              </div>
+              <p className="text-[11px] text-[#6B7280]">
+                Пробег × ставка: {Math.round(salaryNumber(editingSalaryData.km)).toLocaleString('ru-RU')} км × {salaryNumber(editingSalaryData.rate)} €/км; простой {salaryNumber(editingSalaryData.idleDays)} дн. × {editIdleRate} €; суточные {salaryNumber(editingSalaryData.totalDays)} дн. × {editPerDiemRate} €; премия {Math.round(salaryNumber(editingSalaryData.bonus))} €.
+              </p>
+              {!editTotals.inputsValid && (
+                <p className="text-[11px] font-medium text-rose-600">Проверьте значения: отрицательные пробег/ставка/дни или дни в рейсе = 0 искажают показатели.</p>
+              )}
             </div>
           </ModalShell>
         )}
