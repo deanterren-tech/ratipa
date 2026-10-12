@@ -111,6 +111,12 @@ export interface RepairEventDraft {
   text: string;
   /** Сумма: число либо null (поле необязательное). */
   amount: number | null;
+  /**
+   * Порядковый номер внесения в рамках периода (целое ≥ 1) — присваивается
+   * вызывающим слоем (max(seq)+1 по периоду, см. lib/repairEvents.nextEventSeq).
+   * При правке события НЕ меняется (порядок внесения сохраняется).
+   */
+  seq?: number | null;
 }
 
 const eventSummaryText = (e: RepairEventDraft): string =>
@@ -118,7 +124,7 @@ const eventSummaryText = (e: RepairEventDraft): string =>
     e.amount != null ? ` · сумма ${e.amount}` : ''
   }`;
 
-/** Добавить событие ремонта (вложенная ветка events записи периода). */
+/** Добавить событие на базе (вложенная ветка events записи периода). */
 export const addRepairEvent = async (
   periodId: string,
   draft: RepairEventDraft,
@@ -136,12 +142,16 @@ export const addRepairEvent = async (
     createdAt: new Date().toISOString(),
   };
   if (draft.amount != null) doc.amount = draft.amount;
+  // Порядковый номер внесения: целое ≥ 1 (передаёт вызывающий слой; без номера
+  // запись тоже валидна — в чтении порядок возьмётся из createdAt).
+  const seq = Math.floor(Number(draft.seq));
+  if (Number.isFinite(seq) && seq >= 1) doc.seq = seq;
   const updates: Record<string, unknown> = { [`baza/${periodId}/events/${id}`]: doc };
   Object.assign(
     updates,
     historyPaths(
       periodId,
-      [{ field: 'Событие ремонта', was: '', became: eventSummaryText(draft), actionType: 'create' }],
+      [{ field: 'Событие на базе', was: '', became: eventSummaryText(draft), actionType: 'create' }],
       user,
       carNumber,
     ),
@@ -173,7 +183,7 @@ export const updateRepairEvent = async (
     updates,
     historyPaths(
       periodId,
-      [{ field: 'Событие ремонта (правка)', was: eventSummaryText(before), became: eventSummaryText(draft) }],
+      [{ field: 'Событие на базе (правка)', was: eventSummaryText(before), became: eventSummaryText(draft) }],
       user,
       carNumber,
     ),
@@ -195,7 +205,7 @@ export const deleteRepairEvent = async (
       periodId,
       [
         {
-          field: 'Событие ремонта (удаление)',
+          field: 'Событие на базе (удаление)',
           was: eventSummaryText({ date: event.dateIso, type: event.type, text: event.text, amount: event.amount }),
           became: '[Запись стерта]',
           actionType: 'delete',

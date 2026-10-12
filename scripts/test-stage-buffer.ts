@@ -182,6 +182,30 @@ console.log('7. Запас и порядок — ЧАСТЬ ПЛАНА (гейт
   const noChange = computePlanStageChanges(stored, stored.map((s) => ({ ...s })));
   check('без правок → изменений нет', noChange.count === 0, noChange);
   check('запас без изменений не считается правкой', computePlanStageChanges(draftBuffer, draftBuffer.map((s) => ({ ...s }))).plannedUpdates.length === 0);
+
+  // ── Ленивая миграция seq: старым этапам номер дописывается первым же
+  //    сохранением (значение — показываемый порядок seq→order→позиция), в счёт
+  //    изменений плана такие записи НЕ входят (разовое разрешение не горит).
+  //    Черновик окна строит toDraft: seq = stageSeqOf(s, i) — повторяем это.
+  const withDraftSeq = (arr: TimelineStage[]): TimelineStage[] => arr.map((s, i) => ({ ...s, seq: stageSeqOf(s, i) }));
+  const legacy = [
+    { id: 'l1', type: 'load', label: '', plannedDate: '2026-10-02', actualDate: '', isCritical: false },
+    { id: 'l2', type: 'load', label: '', plannedDate: '2026-10-04', actualDate: '', isCritical: false },
+  ] as TimelineStage[];
+  const cBack = computePlanStageChanges(legacy, withDraftSeq(legacy));
+  check('старые этапы без seq → кандидаты на дозапись (по позиции 1,2)', cBack.seqBackfill.map((b) => `${b.id}:${b.seq}`).join(',') === 'l1:1,l2:2', cBack.seqBackfill);
+  check('дозапись seq НЕ считается изменением плана (count 0)', cBack.count === 0, cBack.count);
+  const cBackNone = computePlanStageChanges(stored, stored.map((s) => ({ ...s })));
+  check('у этапов с seq кандидатов нет', cBackNone.seqBackfill.length === 0, cBackNone.seqBackfill);
+  const legacyOrdered = [
+    { id: 'o2', type: 'load', label: '', plannedDate: '2026-10-02', actualDate: '', isCritical: false, order: 5 },
+    { id: 'o1', type: 'load', label: '', plannedDate: '2026-10-04', actualDate: '', isCritical: false, order: 2 },
+  ] as TimelineStage[];
+  const cBackOrder = computePlanStageChanges(legacyOrdered, withDraftSeq(legacyOrdered));
+  check('легаси с order: seq дозаписывается из order (5 и 2)', cBackOrder.seqBackfill.map((b) => `${b.id}:${b.seq}`).join(',') === 'o2:5,o1:2', cBackOrder.seqBackfill);
+  const draftSwapped = renumberLocal(legacy, 'l2', 'l1');
+  const cSwap = computePlanStageChanges(legacy, draftSwapped);
+  check('перестановка легаси: seq идёт путём изменения плана, backfill не дублирует', cSwap.plannedUpdates.every((u) => u.seq != null) && cSwap.seqBackfill.length === 0, { plan: cSwap.plannedUpdates.map((u) => `${u.id}:${u.seq}`), back: cSwap.seqBackfill });
 }
 
 // Локальная перестановка пары (для теста гейта выше).

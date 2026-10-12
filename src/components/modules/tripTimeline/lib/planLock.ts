@@ -17,7 +17,7 @@
  */
 import type { TimelinePlanGuard, TimelinePlanHistoryEntry, TimelinePlanPermission, TimelineStage } from '../../../../types';
 import { dayNum } from './timeline';
-import { stageBufferOf, stageSeqOf } from './stageSchedule';
+import { stageBufferOf, stageSeqOf, hasStageSeq } from './stageSchedule';
 
 export type PlanUiState = 'draft' | 'saved' | 'permitted';
 
@@ -119,6 +119,14 @@ export interface PlanStageChanges {
   removes: TimelineStage[];
   /** Правки привязки этапов к кругам (null — привязка снята). */
   circleUpdates: Array<{ id: string; circle: number | null; before: number | null }>;
+  /**
+   * Ленивая миграция seq: сохранённые этапы БЕЗ собственного seq — при первой
+   * же правке этапов этого рейса номер записывается СУЩЕСТВУЮЩИМ сохранением
+   * (значение — тот же показываемый порядок seq→order→позиция, ничего не
+   * меняется по существу). В счёт изменений плана НЕ входит: разовое разрешение
+   * на такие записи не расходуется.
+   */
+  seqBackfill: Array<{ id: string; seq: number }>;
   /** Изменилось ли КОЛИЧЕСТВО кругов рейса (поле «Круги» — часть плана). */
   circlesChanged: boolean;
   /** Сколько записей реально изменится. */
@@ -143,6 +151,7 @@ export const computePlanStageChanges = (
   const plannedUpdates: PlanStageChanges['plannedUpdates'] = [];
   const removes: TimelineStage[] = [];
   const circleUpdates: PlanStageChanges['circleUpdates'] = [];
+  const seqBackfill: PlanStageChanges['seqBackfill'] = [];
   // Позиции в массивах — миграционный «order» для расчета seq (lib/stageSchedule).
   const storedIdx = new Map((stored || []).map((s, i) => [s.id, i]));
   (draft || []).forEach((s, i) => {
@@ -164,8 +173,16 @@ export const computePlanStageChanges = (
         plannedDate: s.plannedDate || '',
         before: before.plannedDate || '',
         ...(bufferChanged ? { bufferDays: stageBufferOf(s), bufferBefore: stageBufferOf(before) } : {}),
+        // Порядок менялся — этот же путь записи уже несёт seq (backfill ниже
+        // не дублируется); иначе номер мигрирует лениво без расхода гейта.
         ...(orderChanged ? { order: seqDraft, seq: seqDraft, orderBefore: seqBefore } : {}),
       });
+    }
+    // Ленивая миграция: у старой записи нет своего seq — при этой же правке
+    // этапов дописываем текущий эффективный номер (даже если плановых изменений
+    // у этапа нет: значение не меняется, счётчик плана не трогается).
+    if (!hasStageSeq(before) && !orderChanged) {
+      seqBackfill.push({ id: s.id, seq: seqBefore });
     }
     const beforeCircle = circleValueOf(before.circle);
     const draftCircle = circleValueOf(s.circle);
@@ -186,6 +203,7 @@ export const computePlanStageChanges = (
     plannedUpdates,
     removes,
     circleUpdates,
+    seqBackfill,
     circlesChanged,
     count:
       adds.length +

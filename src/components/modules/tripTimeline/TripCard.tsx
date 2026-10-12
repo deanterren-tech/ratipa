@@ -2144,6 +2144,15 @@ export default function TripCard({
         updates[`${stagesBase}/${id}/${k}`] = v;
       });
     });
+    // Ленивая миграция seq старых этапов: первая же правка этапов этого рейса
+    // дописывает порядковый номер тем же сохранением. Значения — уже
+    // показываемый порядок (seq→order→позиция), поэтому по существу ничего не
+    // меняется, а гейт «изменение плана» такими записями не расходуется.
+    if (stagesTouched) {
+      changes.seqBackfill.forEach((b) => {
+        updates[`${stagesBase}/${b.id}/seq`] = b.seq;
+      });
+    }
     changes.plannedUpdates.forEach((u) => {
       updates[`${stagesBase}/${u.id}/plannedDate`] = u.plannedDate;
       // Запас этапа и порядок маршрута — части плана: пишутся тем же (уже
@@ -3115,6 +3124,8 @@ export default function TripCard({
                           onChange={(v) => onStageField(s.id, 'label', v)}
                           placeholder="город, адрес или объект"
                           cities={cities}
+                          author={user.name}
+                          authorRole={user.role}
                           className={`${UI.inputSm} w-[160px]`}
                         />
                       </td>

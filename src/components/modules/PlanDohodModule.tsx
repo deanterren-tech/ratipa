@@ -42,6 +42,7 @@ import {
 import MapRouteModal from "../MapRouteModal";
 import { UI } from "../../ui/kit";
 import { ModuleShell, SectionHeader, SearchField, FoundCount, EmptyState, ModalShell, BackButton } from "../../ui/components";
+import CityAutocomplete from "../common/CityAutocomplete";
 
 interface PlanDohodModuleProps {
   user: UserProfile;
@@ -1170,6 +1171,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [addDistCpInput, setAddDistCpInput] = useState('');
   const [allCheckpoints, setAllCheckpoints] = useState<any[]>([]);
   const [cityDropdown, setCityDropdown] = useState<{idx: number; field: 'from'|'to'; isPl: boolean; rect?: DOMRect} | null>(null);
+  // Устарело: собственный список подсказок городов заменён общим CityAutocomplete
+  // (справочник cities + алиасы). Состояние и разметка оставлены, чтобы не
+  // трогать соседний код: городские поля больше не вызывают setCityDropdown.
+  void setCityDropdown;
   const cityDropdownRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
@@ -2051,22 +2056,24 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
                             <td className="py-1.5 text-xs font-semibold text-[#9CA3AF] font-mono">{idx + 1}</td>
                             <td className="py-1.5 pr-2">
-                              <input
-                                autoComplete="off"
+                              <CityAutocomplete
                                 value={leg.from}
-                                onChange={(e) => updateLeg(idx, { from: e.target.value })}
-                                onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx, field: 'from', isPl: false, rect}); }}
+                                onChange={(v) => updateLeg(idx, { from: v })}
                                 onBlur={() => { checkLegDistance(idx); }}
+                                cities={cityOptions}
+                                author={user.name}
+                                authorRole={user.role}
                                 className="w-full text-left px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                               />
                             </td>
                             <td className="py-1.5 pr-2">
-                              <input
-                                autoComplete="off"
+                              <CityAutocomplete
                                 value={leg.to}
-                                onChange={(e) => updateLeg(idx, { to: e.target.value })}
-                                onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx, field: 'to', isPl: false, rect}); }}
+                                onChange={(v) => updateLeg(idx, { to: v })}
                                 onBlur={() => { checkLegDistance(idx); }}
+                                cities={cityOptions}
+                                author={user.name}
+                                authorRole={user.role}
                                 className="w-full text-left px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                               />
                             </td>
@@ -2203,23 +2210,25 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1.5">
                             <span className="text-[11px] font-medium text-[#6B7280]">Откуда</span>
-                            <input
-                              autoComplete="off"
+                            <CityAutocomplete
                               value={leg.from}
-                              onChange={(e) => updateLeg(idx, { from: e.target.value })}
-                              onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx, field: 'from', isPl: false, rect}); }}
+                              onChange={(v) => updateLeg(idx, { from: v })}
                               onBlur={() => { checkLegDistance(idx); }}
+                              cities={cityOptions}
+                              author={user.name}
+                              authorRole={user.role}
                               className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold text-[#121316] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                             />
                           </div>
                           <div className="flex flex-col gap-1.5">
                             <span className="text-[11px] font-medium text-[#6B7280]">Куда</span>
-                            <input
-                              autoComplete="off"
+                            <CityAutocomplete
                               value={leg.to}
-                              onChange={(e) => updateLeg(idx, { to: e.target.value })}
-                              onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx, field: 'to', isPl: false, rect}); }}
+                              onChange={(v) => updateLeg(idx, { to: v })}
                               onBlur={() => { checkLegDistance(idx); }}
+                              cities={cityOptions}
+                              author={user.name}
+                              authorRole={user.role}
                               className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-semibold text-[#121316] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
                             />
                           </div>
@@ -2620,32 +2629,32 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         {plLegs.map((leg, i) => (
                           <tr key={i} className="border-b border-[#E5E7EB] last:border-b-0">
                             <td className="p-1">
-                              <input
-                                type="text"
-                                autoComplete="off"
+                              <CityAutocomplete
                                 value={leg.from}
-                                onChange={(e) => {
+                                onChange={(v) => {
                                   const nl = [...plLegs];
-                                  nl[i].from = e.target.value;
+                                  nl[i].from = v;
                                   setPlLegs(nl);
                                 }}
-                                onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'from', isPl: true, rect}); }}
                                 onBlur={() => { checkLegDistance(i, true); }}
+                                cities={cityOptions}
+                                author={user.name}
+                                authorRole={user.role}
                                 className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors font-sans"
                               />
                             </td>
                             <td className="p-1">
-                              <input
-                                type="text"
-                                autoComplete="off"
+                              <CityAutocomplete
                                 value={leg.to}
-                                onChange={(e) => {
+                                onChange={(v) => {
                                   const nl = [...plLegs];
-                                  nl[i].to = e.target.value;
+                                  nl[i].to = v;
                                   setPlLegs(nl);
                                 }}
-                                onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'to', isPl: true, rect}); }}
                                 onBlur={() => { checkLegDistance(i, true); }}
+                                cities={cityOptions}
+                                author={user.name}
+                                authorRole={user.role}
                                 className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors font-sans"
                               />
                             </td>
@@ -2817,11 +2826,11 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         <div className="grid grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1">
                             <span className="text-[11px] font-medium text-[#6B7280]">Откуда</span>
-                            <input type="text" autoComplete="off" value={leg.from} onChange={(e) => { const nl = [...plLegs]; nl[i].from = e.target.value; setPlLegs(nl); }} onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'from', isPl: true, rect}); }} onBlur={() => { checkLegDistance(i, true); }} className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors" />
+                            <CityAutocomplete value={leg.from} onChange={(v) => { const nl = [...plLegs]; nl[i].from = v; setPlLegs(nl); }} onBlur={() => { checkLegDistance(i, true); }} cities={cityOptions} author={user.name} authorRole={user.role} className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors" />
                           </div>
                           <div className="flex flex-col gap-1">
                             <span className="text-[11px] font-medium text-[#6B7280]">Куда</span>
-                            <input type="text" autoComplete="off" value={leg.to} onChange={(e) => { const nl = [...plLegs]; nl[i].to = e.target.value; setPlLegs(nl); }} onFocus={(e) => { const rect = e.currentTarget.getBoundingClientRect(); setCityDropdown({idx: i, field: 'to', isPl: true, rect}); }} onBlur={() => { checkLegDistance(i, true); }} className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors" />
+                            <CityAutocomplete value={leg.to} onChange={(v) => { const nl = [...plLegs]; nl[i].to = v; setPlLegs(nl); }} onBlur={() => { checkLegDistance(i, true); }} cities={cityOptions} author={user.name} authorRole={user.role} className="w-full px-3 py-2 min-h-[44px] bg-white border border-[#E5E7EB] rounded-xl text-xs font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors" />
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-3">

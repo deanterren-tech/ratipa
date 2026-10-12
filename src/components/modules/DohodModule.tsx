@@ -2648,6 +2648,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         onChange={(v) => updateLeg(idx, { from: v })}
                         onBlur={() => handleCityBlur(idx)}
                         cities={citiesList}
+                          author={user.name}
+                          authorRole={user.role}
                         placeholder="Откуда"
                         className={UI.inputSm}
                       />
@@ -2658,6 +2660,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
                         onChange={(v) => updateLeg(idx, { to: v })}
                         onBlur={() => handleCityBlur(idx)}
                         cities={citiesList}
+                          author={user.name}
+                          authorRole={user.role}
                         placeholder="Куда"
                         className={UI.inputSm}
                       />
@@ -2910,6 +2914,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       onChange={(v) => updateLeg(idx, { from: v })}
                       onBlur={() => handleCityBlur(idx)}
                       cities={citiesList}
+                          author={user.name}
+                          authorRole={user.role}
                       placeholder="Откуда"
                       className={UI.input}
                     />
@@ -2921,6 +2927,8 @@ export default function DohodModule({ user }: DohodModuleProps) {
                       onChange={(v) => updateLeg(idx, { to: v })}
                       onBlur={() => handleCityBlur(idx)}
                       cities={citiesList}
+                          author={user.name}
+                          authorRole={user.role}
                       placeholder="Куда"
                       className={UI.input}
                     />

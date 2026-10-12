@@ -48,6 +48,12 @@ export const stageSeqOf = (s: TimelineStage, index: number): number => {
   return index + 1;
 };
 
+/** Есть ли у этапа собственный seq в данных (целое > 0). */
+export const hasStageSeq = (s: TimelineStage | undefined): boolean => {
+  const seq = Number(s?.seq);
+  return Number.isFinite(seq) && seq > 0;
+};
+
 /** Запас этапа, дней: целое ≥ 0 (отсутствие/мусор = 0). */
 export const stageBufferOf = (s: TimelineStage): number => {
   const v = Number(s?.bufferDays);
