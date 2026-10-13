@@ -649,5 +649,10 @@ export function findSimilarCities<T extends CityCatalogEntry>(
   exact.sort(cmp);
   prefix.sort(cmp);
   substring.sort(cmp);
-  return [...exact, ...prefix, ...substring, ...similar].slice(0, limit);
+  // Слабые «похожие» не примешиваются, когда есть ТОЧНОЕ совпадение имени/алиаса:
+  // иначе к запросу «Горки» подмешивается Нижний Новгород — его собственный
+  // латинский алиас Gorki транслитерируется в ту же форму «горки», хотя это
+  // другой город. Пользователю нужен точный город без «созвучного» шума.
+  const weak = exact.length ? [] : similar;
+  return [...exact, ...prefix, ...substring, ...weak].slice(0, limit);
 }

@@ -189,6 +189,18 @@ console.log('\n10. Поиск похожих (CityAutocomplete)');
   check('префикс', r3.length > 0 && r3[0].entry.name === 'Минск' && r3[0].reason === 'prefix');
   const r4 = findSimilarCities('хоргос', catalog);
   check('несуществующее ≠ похоже на другие', r4.length === 0);
+  // «Горки»/«Горький»: точное совпадение глушит «созвучный» транслит-шум
+  // (латинский алиас Gorki у Нижнего Новгорода не должен подмешивать его к Горкам).
+  const catalogGK = [
+    { name: 'Горки', aliases: ['Gorki', 'Horkai', 'Horki'] },
+    { name: 'Нижний Новгород', aliases: ['Горький', 'Gorki', 'Gor\'kij', 'Gorky'] },
+  ];
+  const rg = findSimilarCities('Горки', catalogGK, 8, (e) => [e.name === 'Горки' ? 1 : 0]);
+  check('«Горки»: есть точные Горки', rg.some((s) => s.entry.name === 'Горки' && s.reason === 'exact'));
+  check('«Горки»: НЕТ подмешанного Нижнего Новгорода', !rg.some((s) => s.entry.name === 'Нижний Новгород'), `(${rg.map((s) => s.entry.name).join(', ')})`);
+  const rgy = findSimilarCities('Горький', catalogGK, 8, (e) => [e.name === 'Нижний Новгород' ? 1 : 0]);
+  check('«Горький»: находится Нижний Новгород по своему алиасу', rgy.some((s) => s.entry.name === 'Нижний Новгород' && s.reason === 'exact'));
+  check('«Горький»: НЕТ Горок', !rgy.some((s) => s.entry.name === 'Горки'), `(${rgy.map((s) => s.entry.name).join(', ')})`);
 }
 
 console.log(`\nИтог: ${passed} ok, ${failed} fail`);

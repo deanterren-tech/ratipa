@@ -40,7 +40,9 @@
     "test:directions": "tsx scripts/test-directions.ts",
     "test:stage-templates": "tsx scripts/test-stage-templates.ts",
     "seed:stage-templates": "tsx scripts/seed-stage-templates.ts",
-    "test:stage-rights": "tsx scripts/test-stage-rights.ts"
+    "test:stage-rights": "tsx scripts/test-stage-rights.ts",
+    "test:cities-cleanup": "tsx scripts/test-cities-cleanup.ts",
+    "fix:cities": "tsx scripts/fix-cities-cleanup.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

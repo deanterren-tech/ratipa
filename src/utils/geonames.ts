@@ -8,15 +8,21 @@
  *  - alternateNamesV2.zip — альтернативные названия (в т.ч. isoLanguage=ru).
  *
  * Идемпотентность (правила импорта):
- *  - сначала поиск по geonameId, затем по нормализованному названию/алиасам;
+ *  - сначала поиск по geonameId, затем по ОСНОВНОМУ названию записи
+ *    (ru/ascii, точное или кросс-раскладочное совпадение). Алиасы в поиске
+ *    НЕ участвуют: в GeoNames альтернативные имена одного города содержат
+ *    имена ДРУГИХ городов (историческое «Gorki» у Нижнего Новгорода совпадает
+ *    с белорусскими Горками; «Kaliningrad» — старое имя Королёва; «Podolsk»
+ *    числится альтернативным именем Полоцка и т.п.), и поиск по алиасам
+ *    склеивал разные города;
  *  - при совпадении — ДОПОЛНИТЬ aliases/geonameId/координаты/population
  *    (только ЗАПОЛНЯЕМ отсутствующее), НЕ переименовываем и НЕ затираем
- *    существующие значения;
+ *    существующие значения; записи с ДРУГИМ geonameId не сливаются вовсе;
  *  - записи с type ≠ «город» (граница/таможня/терминал) не трогаем вовсе —
  *    они ведутся вручную/миграцией;
  *  - дубли по нормализованному названию не создаются (в т.ч. внутри прогона).
  */
-import { normalizeCityName, hasCyrillic, citySlug } from './cityDirectory';
+import { normalizeCityName, hasCyrillic, translitVariants, citySlug } from './cityDirectory';
 
 // ---------------------------------------------------------------------------
 // Настройки (страны ISO и пороги населения)
@@ -288,6 +294,17 @@ export function decideCityImport(city: GeonamesCity, existing: ExistingCityEntry
       patch: {},
     };
   }
+  // Другой geonameId — это ДРУГОЙ город (или дубль строки в самом дампе):
+  // сливать нельзя ни имена, ни координаты. Не плодим и дубль по имени.
+  if (existing.geonameId && existing.geonameId !== city.geonameId) {
+    return {
+      action: 'skip',
+      id: existing.id,
+      reason: `одноимённая запись с другим geonameId (${existing.geonameId}) — не сливаем`,
+      addAliases: [],
+      patch: {},
+    };
+  }
   const have = new Set(formsOf(existing));
   const cityForms = [city.name, city.asciiName, ...city.aliases];
   const seen = new Set<string>();
@@ -319,13 +336,18 @@ export function decideCityImport(city: GeonamesCity, existing: ExistingCityEntry
 }
 
 /**
- * Индекс существующих записей: geonameId → id и норм. форма (имя/алиасы) → id.
+ * Индекс существующих записей: geonameId → id и ОСНОВНОЕ имя записи → id
+ * (точное и кросс-раскладочное совпадение). Алиасы в поиске НЕ участвуют:
+ * одно альтернативное имя могут разделять разные города (см. шапку модуля).
  * Дополняется по ходу импорта созданными/дополненными записями (защита от
  * дублей внутри прогона).
  */
 export class CityIndex {
   private byGeonameId = new Map<number, string>();
-  private byForm = new Map<string, string>();
+  /** Нормализованное основное имя записи → id. */
+  private byName = new Map<string, string>();
+  /** Кросс-раскладочные формы основного имени записи (латиница) → id. */
+  private byTranslit = new Map<string, string>();
   private entries = new Map<string, ExistingCityEntry>();
 
   constructor(list: Array<ExistingCityEntry & { id: string }>) {
@@ -335,8 +357,11 @@ export class CityIndex {
   add(c: ExistingCityEntry & { id: string }): void {
     this.entries.set(c.id, c);
     if (c.geonameId) this.byGeonameId.set(c.geonameId, c.id);
-    formsOf(c).forEach((f) => {
-      if (!this.byForm.has(f)) this.byForm.set(f, c.id);
+    const norm = normalizeCityName(c.name);
+    if (!norm) return;
+    if (!this.byName.has(norm)) this.byName.set(norm, c.id);
+    translitVariants(norm).forEach((v) => {
+      if (v && !this.byTranslit.has(v)) this.byTranslit.set(v, c.id);
     });
   }
 
@@ -344,15 +369,24 @@ export class CityIndex {
     return this.entries.get(id);
   }
 
-  /** Поиск: сначала по geonameId, затем по нормализованному имени/алиасам. */
+  /**
+   * Поиск: сначала по geonameId, затем по ОСНОВНОМУ названию (ru/ascii) —
+   * точное совпадение или кросс-раскладочное (Минск ↔ Minsk). Совпадение
+   * по произвольному алиасу намеренно НЕ считается тождеством города.
+   */
   find(city: GeonamesCity): ExistingCityEntry | null {
     const byGeo = this.byGeonameId.get(city.geonameId);
     if (byGeo) return this.entries.get(byGeo) || null;
-    for (const f of [city.name, city.asciiName, ...city.aliases]) {
-      const norm = normalizeCityName(f);
-      if (!norm) continue;
-      const id = this.byForm.get(norm);
-      if (id) return this.entries.get(id) || null;
+    const forms = Array.from(
+      new Set([normalizeCityName(city.name), normalizeCityName(city.asciiName)].filter(Boolean)),
+    );
+    for (const f of forms) {
+      const direct = this.byName.get(f) || this.byTranslit.get(f);
+      if (direct) return this.entries.get(direct) || null;
+      for (const v of translitVariants(f)) {
+        const id = this.byName.get(v) || this.byTranslit.get(v);
+        if (id) return this.entries.get(id) || null;
+      }
     }
     return null;
   }

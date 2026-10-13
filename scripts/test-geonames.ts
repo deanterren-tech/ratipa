@@ -127,10 +127,13 @@ const cityLine = (over: { id: number; name: string; ascii?: string; alts?: strin
   check('страна НЕ перезаписана (уже есть)', d2.patch.country === undefined);
   check('новые алиасы добавлены, старые не трогаются', d2.addAliases.includes('Mensk') && !d2.addAliases.includes('Миинск'));
 
-  // запись «user» — тоже только дополнение, имя не меняется
+  // запись «user» — поиск НЕ матчит по алиасу (альтернативное имя — не
+  // тождество города); решение не переименовывает и не затирает её
   const userRec = { id: 'mysk', name: 'Мыск', aliases: ['Минск'], type: 'город', source: 'user' };
+  const idxUser = new CityIndex([{ ...userRec }]);
+  check('user-запись НЕ находится по алиасу (Минск ≠ Мыск)', idxUser.find(city) === null);
   const d3 = decideCityImport(city, userRec);
-  check('совпадение по алиасу user-записи → extend', d3.action === 'extend' && d3.id === 'mysk');
+  check('дополнение user-записи без переименования → extend', d3.action === 'extend' && d3.id === 'mysk');
   check('user-запись не переименовывается (имя не в patch)', d3.patch.name === undefined && d3.patch.aliases === undefined);
 
   // запись-граница не трогается
@@ -149,7 +152,7 @@ const cityLine = (over: { id: number; name: string; ascii?: string; alts?: strin
   check('недостаёт только population → extend', d6.action === 'extend' && d6.patch.population === 1742124 && Object.keys(d6.patch).length === 1 && d6.addAliases.length === 0);
 }
 
-// --- CityIndex: поиск по geonameId и формам, дубли внутри прогона ---
+// --- CityIndex: поиск по geonameId и основному имени, дубли внутри прогона ---
 {
   const idx = new CityIndex([
     { id: 'minsk', name: 'Минск', aliases: ['Minsk'], type: 'город', source: 'migration', geonameId: 625144 },
@@ -157,15 +160,48 @@ const cityLine = (over: { id: number; name: string; ascii?: string; alts?: strin
   const city = buildGeonamesCity(parseCitiesRow(cityLine({ id: 625144, name: 'Minsk', ascii: 'Minsk', cc: 'BY', pop: 1742124 }))!, ['Минск']);
   check('поиск по geonameId', idx.find(city)?.id === 'minsk');
   const city2 = buildGeonamesCity(parseCitiesRow(cityLine({ id: 999999, name: 'Minsk', ascii: 'Minsk', cc: 'BY', pop: 100000 }))!, []);
-  check('поиск по алиасу (Minsk)', idx.find(city2)?.id === 'minsk');
+  check('кросс-раскладочное совпадение имён (Minsk ↔ Минск)', idx.find(city2)?.id === 'minsk');
+  const d2 = decideCityImport(city2, idx.find(city2));
+  check('то же имя, ДРУГОЙ geonameId → skip (не сливаем города)', d2.action === 'skip' && /другим geonameId/.test(d2.reason));
   const city3 = buildGeonamesCity(parseCitiesRow(cityLine({ id: 111111, name: 'Grodno', ascii: 'Grodno', cc: 'BY', pop: 300000 }))!, ['Гродно']);
   check('новый город не найден в индексе', idx.find(city3) === null);
   eq('uniqueId для нового (слаг из ru-имени)', idx.uniqueId(city3), 'grodno');
   idx.add({ id: 'grodno', name: 'Гродно', aliases: [], type: 'город', source: 'geonames', geonameId: 111111 });
   const citySame = buildGeonamesCity(parseCitiesRow(cityLine({ id: 222222, name: 'Grodno2', ascii: 'Grodno2', cc: 'BY', pop: 100000 }))!, ['Гродно']);
-  check('внутри прогона дубль не создаётся (по форме)', idx.find(citySame)?.id === 'grodno');
+  check('внутри прогона дубль не создаётся (по форме имени)', idx.find(citySame)?.id === 'grodno');
   const idCollision = idx.uniqueId(buildGeonamesCity(parseCitiesRow(cityLine({ id: 333333, name: 'Grodno', ascii: 'Grodno', cc: 'BY', pop: 1 }))!, ['Гродно', 'Городно']));
   check('коллизия id → суффикс', idCollision === 'grodno-2', idCollision);
+}
+
+// --- Корень бага: общий АЛЬТЕРНАТИВНОЕ имя у разных городов НЕ сливает их ---
+{
+  // Горки (BY, 627905) ↔ Нижний Новгород (520555): у НН «Gorki» — историческое
+  // имя, у Горок — собственное латинское написание. Старый поиск по алиасам
+  // склеивал записи и приписывал Горкам имена Нижнего Новгорода.
+  const idx = new CityIndex([
+    { id: 'gorki', name: 'Горки', aliases: ['Gorki', 'Horkai', 'Horki'], type: 'город', source: 'geonames', geonameId: 627905 },
+  ]);
+  const nn = buildGeonamesCity(parseCitiesRow(cityLine({ id: 520555, name: 'Nizhniy Novgorod', ascii: 'Nizhniy Novgorod', alts: "Gorki,Gorky,GOJ,Gor'kij", cc: 'RU', pop: 1259013 }))!, ['Нижний Новгород', 'Горький']);
+  check('НН (Gorki историч.) НЕ находится в индексе по Горкам', idx.find(nn) === null);
+  check('НН → create (новая запись, а не склейка в Горки)', decideCityImport(nn, idx.find(nn)).action === 'create');
+  const gorkiRow = buildGeonamesCity(parseCitiesRow(cityLine({ id: 627905, name: 'Horki', ascii: 'Horki', alts: 'Gorki,Horkai,Горки', cc: 'BY', pop: 28626 }))!, ['Горки']);
+  check('свой город находится и по латинскому имени (Horki)', idx.find(gorkiRow)?.id === 'gorki');
+
+  // Королёв (554233, алиас «Kaliningrad» — старое имя 1938–1996) ↔ Калининград
+  const idx2 = new CityIndex([
+    { id: 'korolev', name: 'Королёв', aliases: ['Kaliningrad', 'Kalininskiy', 'Korolev'], type: 'город', source: 'geonames', geonameId: 554233 },
+  ]);
+  const kaliningrad = buildGeonamesCity(parseCitiesRow(cityLine({ id: 554234, name: 'Kaliningrad', ascii: 'Kaliningrad', alts: 'KGD,Kaliningrad,Кёнигсберг', cc: 'RU', pop: 475056 }))!, ['Калининград']);
+  check('Калининград НЕ склеивается с Королёвым (по алиасу Kaliningrad)', idx2.find(kaliningrad) === null);
+  check('Калининград → create', decideCityImport(kaliningrad, idx2.find(kaliningrad)).action === 'create');
+
+  // Одноимённые города в дампе (разные geonameId) — второй не сливается
+  const idx3 = new CityIndex([
+    { id: 'talas', name: 'Талас', aliases: [], type: 'город', source: 'geonames', geonameId: 1527299 },
+  ]);
+  const talasTr = buildGeonamesCity(parseCitiesRow(cityLine({ id: 299900, name: 'Talas', ascii: 'Talas', cc: 'TR', pop: 36890 }))!, ['Талас']);
+  check('одноимённый Талас (TR) находит Талас (KG) по имени', idx3.find(talasTr)?.id === 'talas');
+  check('но решение — skip (другой geonameId, без склейки)', decideCityImport(talasTr, idx3.find(talasTr)).action === 'skip');
 }
 
 console.log(`\ntest-geonames: ${passed} passed, ${failed} failed`);
