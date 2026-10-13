@@ -32,6 +32,7 @@ import { resolveTripWindow, factDaysOfStages, type TripCandidate } from './engin
 import { canDayKey, canDayKeysInRange, dayBoundsFromKey, type CanPoint } from './engine/canSeries';
 import { fmtDMY, fmtHM } from './engine/format';
 import type { McCurrent } from './mcTypes';
+import LoadingSpinner from '../../common/LoadingSpinner';
 import CanOdomChart from './charts/CanOdomChart';
 
 interface Props {
@@ -349,7 +350,12 @@ export default function CanGraphDialog(props: Props) {
   if (!hasWindow) {
     body = <EmptyBlock title="Период не определён" text={periodInfo.reason || 'Выберите период.'} />;
   } else if (loading) {
-    body = <div className="text-[11px] text-[#6B7280] py-12 text-center">Загружаем измерения…</div>;
+    body = (
+      <div className="py-14 flex flex-col items-center gap-2 text-[#6B7280]" data-testid="mc-graph-loading">
+        <LoadingSpinner size={18} />
+        <div className="text-[11px]">Загружаем показания одометра…</div>
+      </div>
+    );
   } else if (loadError) {
     body = (
       <div className="py-12 text-center" data-testid="mc-graph-error">
@@ -363,7 +369,7 @@ export default function CanGraphDialog(props: Props) {
   } else if (points.length === 0) {
     body = (
       <EmptyBlock
-        title="За выбранный период измерений нет"
+        title="Нет CAN-данных за выбранный период"
         text="Источник не передал показаний одометра за это время. Текущее поступление данных по машине — в индикаторе выше; при необходимости выберите другой период."
       />
     );
@@ -380,9 +386,16 @@ export default function CanGraphDialog(props: Props) {
     );
   }
 
+  /*
+   * Подложка — как у остальных модалок портала (Dozvola/PlanDohod/AccountSettings):
+   * умеренное полупрозрачное затемнение bg-black/40 + лёгкий blur, НЕ сплошной
+   * тёмный слой (bg-slate-950 перекрывал весь экран и давал «чёрный фон»).
+   * На телефоне правила index.css для [data-mobile-fullscreen] делают слой
+   * прозрачным и растягивают диалог на весь экран.
+   */
   return createPortal(
     <div
-      className="fixed inset-0 z-[5000] bg-slate-950 flex items-start justify-center overflow-y-auto md:p-6"
+      className="fixed inset-0 z-[5000] bg-black/40 backdrop-blur-[2px] flex items-start justify-center overflow-y-auto overscroll-contain md:p-6"
       data-scroll-lock="modal"
       data-mobile-fullscreen
       role="dialog"
