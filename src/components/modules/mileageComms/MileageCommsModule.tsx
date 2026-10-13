@@ -1,11 +1,14 @@
 /**
- * Раздел «Пробег и связь» (этап 1).
+ * Раздел «Пробег и связь» (упрощённый, по ТЗ владельца).
  *
- * Три вкладки:
+ * Две вкладки:
  *  - «Нет обновлений» — состояние телеметрии по сопоставленному автопарку;
- *  - «Обращения и ремонт» — ручные черновики обращений в поддержку;
- *  - «Проверка пробега» — честный каркас: данные собираются, вердиктов нет
- *    (правила и карточки событий — следующий этап).
+ *  - «Проверка пробега» — простая таблица «автомобиль — рейс — CAN-данные —
+ *    график»: показания одометра смотрят в отдельном окне.
+ *
+ * Обращения и въезд в РФ из интерфейса раздела убраны (вкладка, колонки,
+ * кнопки, диалог). Данные этих сущностей и их сервисный слой не удалены —
+ * другие части портала их не используют, но и не должны пострадать.
  *
  * Данные приходят из RTDB (ветки telemetry_*), которые наполняет серверный
  * поллер (server/navby). Браузер к Nav.by не обращается.
@@ -18,38 +21,28 @@ import { dbService } from '../../../api';
 import { resolvePermission } from '../../../utils/permissions';
 import { ModuleShell, EmptyState } from '../../../ui/components';
 import { UI } from '../../../ui/kit';
-import { useToast } from '../../ToastProvider';
 import { mcService } from './mcService';
 import {
   MC_CONFIG_DEFAULTS,
-  ageLabel,
   fmtTs,
-  isOpenRequest,
   type McConfig, type McCurrent, type McIntegration, type McMapping,
-  type McMappingHistoryEntry, type McNavbyObject, type McRequest, type McRfEntry,
+  type McMappingHistoryEntry, type McNavbyObject,
 } from './mcTypes';
 import NoUpdatesTab from './NoUpdatesTab';
-import RequestsTab from './RequestsTab';
 import MileageCheckTab from './MileageCheckTab';
 import MappingSettings from './MappingSettings';
-import RfEntryDialog from './RfEntryDialog';
 
 interface Props {
   user: UserProfile;
   settings?: AppSettings | null;
 }
 
-type TabKey = 'noUpdates' | 'requests' | 'check';
+type TabKey = 'noUpdates' | 'check';
 
 export default function MileageCommsModule({ user, settings }: Props) {
-  const { toast } = useToast();
-
   const rolePerms = settings?.rolePermissions;
   const canView = resolvePermission(user, 'mileageComms', rolePerms) !== 'none';
-  const canRequests = resolvePermission(user, 'mileageCommsRequests', rolePerms) === 'write';
   const canIntegration = resolvePermission(user, 'mileageCommsIntegration', rolePerms) === 'write';
-  const canEvents = resolvePermission(user, 'mileageCommsEvents', rolePerms) === 'write';
-  const canRules = resolvePermission(user, 'mileageCommsRules', rolePerms) === 'write';
 
   const [tab, setTab] = useState<TabKey>('noUpdates');
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -61,12 +54,8 @@ export default function MileageCommsModule({ user, settings }: Props) {
   const [mapping, setMapping] = useState<Record<string, McMapping>>({});
   const [mappingHistory, setMappingHistory] = useState<Record<string, Record<string, McMappingHistoryEntry>>>({});
   const [navbyObjects, setNavbyObjects] = useState<Record<string, McNavbyObject>>({});
-  const [rfEntries, setRfEntries] = useState<Record<string, McRfEntry>>({});
-  const [requests, setRequests] = useState<McRequest[]>([]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [rfDialogCarKey, setRfDialogCarKey] = useState<string | null>(null);
-  const [focusRequestId, setFocusRequestId] = useState<string | null>(null);
 
   // Обновление «возраста» строк раз в минуту (время идёт, данные — нет).
   useEffect(() => {
@@ -82,8 +71,6 @@ export default function MileageCommsModule({ user, settings }: Props) {
       mcService.subscribeMapping(setMapping),
       mcService.subscribeMappingHistory(setMappingHistory),
       mcService.subscribeNavbyObjects(setNavbyObjects),
-      mcService.subscribeRfEntries(setRfEntries),
-      mcService.subscribeRequests(setRequests),
     ];
     return () => unsubs.forEach((u) => u());
   }, []);
@@ -111,14 +98,6 @@ export default function MileageCommsModule({ user, settings }: Props) {
     [cars, plateOf],
   );
 
-  const openRequestsByCar = useMemo(() => {
-    const map: Record<string, McRequest> = {};
-    for (const r of requests) {
-      if (isOpenRequest(r.status)) map[r.carKey] = r;
-    }
-    return map;
-  }, [requests]);
-
   const staleCount = useMemo(() => {
     let n = 0;
     for (const carKey of Object.keys(mapping)) {
@@ -128,45 +107,6 @@ export default function MileageCommsModule({ user, settings }: Props) {
     }
     return n;
   }, [mapping, current, config.staleHours, nowTick]);
-
-  const openRequestsCount = useMemo(() => requests.filter((r) => isOpenRequest(r.status)).length, [requests]);
-
-  const handleCreateRequest = useCallback(
-    async (carKey: string, problem?: string) => {
-      if (!canRequests) return;
-      try {
-        const { buildRequestDraft } = await import('./mcTypes');
-        const m = mapping[carKey];
-        const cur = current[carKey] || null;
-        const rf = rfEntries[carKey] || null;
-        const plate = plateOf(carKey);
-        const problemText = problem || 'Данные телеметрии не обновляются.';
-        const draftText = buildRequestDraft({
-          plate,
-          objectId: m?.navbyObjectId ?? null,
-          imei: m?.imei ?? null,
-          current: cur,
-          rfEntry: rf,
-          problem: problemText,
-          nowMs: Date.now(),
-        });
-        const id = await mcService.createRequest({
-          carKey, plate,
-          objectId: m?.navbyObjectId ?? null,
-          imei: m?.imei ?? null,
-          problem: problemText,
-          draftText,
-          user,
-        });
-        setFocusRequestId(id);
-        setTab('requests');
-        toast('Черновик обращения создан — текст можно скопировать и отправить вручную', 'success');
-      } catch (e) {
-        toast(`Не удалось создать обращение: ${String(e instanceof Error ? e.message : e).slice(0, 120)}`, 'error');
-      }
-    },
-    [canRequests, mapping, current, rfEntries, plateOf, user, toast],
-  );
 
   if (!canView) {
     return (
@@ -184,7 +124,6 @@ export default function MileageCommsModule({ user, settings }: Props) {
 
   const tabs = [
     { key: 'noUpdates' as const, label: 'Нет обновлений', count: staleCount },
-    { key: 'requests' as const, label: 'Обращения и ремонт', count: openRequestsCount },
     { key: 'check' as const, label: 'Проверка пробега' },
   ];
 
@@ -227,53 +166,22 @@ export default function MileageCommsModule({ user, settings }: Props) {
 
         {tab === 'noUpdates' && (
           <NoUpdatesTab
-            user={user}
-            cars={cars}
-            canRequests={canRequests}
-            canRfEntry={canRequests}
             config={config}
             integration={integration}
             current={current}
             mapping={mapping}
-            requestsByCar={openRequestsByCar}
-            rfEntries={rfEntries}
             nowMs={nowTick}
             carLabelOf={carLabelOf}
-            onOpenRfDialog={setRfDialogCarKey}
-            onCreateRequest={(carKey) => handleCreateRequest(carKey)}
-            onGoToRequest={(id) => { setFocusRequestId(id); setTab('requests'); }}
-          />
-        )}
-
-        {tab === 'requests' && (
-          <RequestsTab
-            user={user}
-            canRequests={canRequests}
-            requests={requests}
-            mapping={mapping}
-            current={current}
-            rfEntries={rfEntries}
-            cars={cars}
-            integration={integration}
-            nowMs={nowTick}
-            plateOf={plateOf}
-            focusRequestId={focusRequestId}
-            onFocusHandled={() => setFocusRequestId(null)}
           />
         )}
 
         {tab === 'check' && (
           <MileageCheckTab
-            user={user}
-            canEvents={canEvents}
-            canRules={canRules}
             mapping={mapping}
             current={current}
             config={config}
-            integration={integration}
             cars={cars}
             nowMs={nowTick}
-            onCreateRequest={(carKey, problem) => handleCreateRequest(carKey, problem)}
           />
         )}
       </ModuleShell>
@@ -291,15 +199,6 @@ export default function MileageCommsModule({ user, settings }: Props) {
           cars={cars}
         />
       )}
-
-      <RfEntryDialog
-        carKey={rfDialogCarKey}
-        carLabel={rfDialogCarKey ? carLabelOf(rfDialogCarKey) : ''}
-        existing={rfDialogCarKey ? rfEntries[rfDialogCarKey] || null : null}
-        user={user}
-        canEdit={canRequests}
-        onClose={() => setRfDialogCarKey(null)}
-      />
     </>
   );
 }

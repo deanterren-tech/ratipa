@@ -429,6 +429,42 @@ export const mcService = {
     return out;
   },
 
+  /**
+   * Строгое чтение истории измерений за диапазон (для окна графика): в отличие
+   * от readCanHistoryRange различает «измерений нет» и «не удалось прочитать»
+   * (пустой результат при сбое сети/прав не должен выглядеть как «данных нет»).
+   */
+  async readCanHistoryRangeStrict(
+    carKey: string,
+    fromMs: number,
+    toMs: number,
+  ): Promise<{ ok: true; points: CanPoint[] } | { ok: false; reason: string }> {
+    if (!useFirebase || !carKey) return { ok: false, reason: 'База данных недоступна' };
+    const days = canDayKeysInRange(fromMs - 12 * 3_600_000, toMs + 12 * 3_600_000, 100);
+    const out: CanPoint[] = [];
+    let okCount = 0;
+    let failCount = 0;
+    await Promise.all(
+      days.map(async (d) => {
+        try {
+          const snap = await get(ref(database, `${ROOT}_can_history/${carKey}/${d}`));
+          okCount += 1;
+          const chunk = snap.val() as Record<string, Record<string, unknown>> | null;
+          if (!chunk) return;
+          for (const node of Object.values(chunk)) {
+            const p = normalizeCanRecord(node);
+            if (p && p.xMs >= fromMs && p.xMs <= toMs) out.push(p);
+          }
+        } catch {
+          failCount += 1;
+        }
+      }),
+    );
+    if (failCount > 0 && okCount === 0) return { ok: false, reason: 'не удалось прочитать данные' };
+    out.sort((a, b) => a.xMs - b.xMs);
+    return { ok: true, points: out };
+  },
+
   /** Покрытие измерениями по дням (какие методы отработали/что дали). */
   async readCanCoverage(carKey: string): Promise<Record<string, Record<string, unknown>>> {
     if (!useFirebase || !carKey) return {};
