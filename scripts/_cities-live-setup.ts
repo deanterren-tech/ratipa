@@ -91,9 +91,12 @@ async function main(): Promise<number> {
       if (/^testograd|^probe/.test(id)) del[`cities/${id}`] = null;
     });
     ['users_list/probe-city-admin', 'users_list/probe-city-exec'].forEach((p) => { del[p] = null; });
-    // настройки GeoNames, созданные живым тестом (если есть)
-    const gn = (await adminDb.ref('appSettings/geonames').get()).val();
-    if (gn) del['appSettings/geonames'] = null;
+    // ВАЖНО: appSettings/geonames здесь НЕ удаляем — с 13.10.2026 это рабочие
+    // настройки администратора (страны и пороги GeoNames), а не артефакт теста.
+    // ЖИВОЙ тест настроек больше не должен писать их в боевой узел или обязан
+    // восстанавливать прежнее значение сам.
+    const gnProbe = (await adminDb.ref('appSettings/geonamesProbe').get()).val();
+    if (gnProbe) del['appSettings/geonamesProbe'] = null;
     // свежие auditLogs прогона (пишутся через logAction от probe-city-*)
     try {
       const snap = await adminDb.ref('auditLogs').limitToLast(800).get();

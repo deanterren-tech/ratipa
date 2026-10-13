@@ -392,40 +392,71 @@ async function main(): Promise<number> {
   // --- пакетная запись ≤500 с прогрессом и чекпойнтом ---
   const now = new Date().toISOString();
   type Op = { path: string; value: unknown; geonameId: number; kind: 'create' | 'extend' };
-  const ops: Op[] = [];
+  // ОДНА операция на город. Два ряда дампа могут дать один и тот же id
+  // (в бою — «ararat»), и прежний код писал в одном update сразу и cities/<id>
+  // (create), и cities/<id>/aliases (extend). Firebase отклоняет пакет, где
+  // один путь является ПРЕДКОМ другого, причём целиком — не записывалась вся
+  // пачка. Теперь create и extend одного id сливаются в одну операцию.
+  const createOps = new Map<string, Record<string, unknown>>();
+  const patchOps = new Map<string, Record<string, unknown>>();
+  const geoById = new Map<string, number>();
+  const mergeAliases = (a: unknown, b: unknown): string[] =>
+    Array.from(new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]));
   outcomes.forEach((o) => {
     if (o.action === 'create') {
-      ops.push({
-        path: `cities/${o.id}`,
-        value: {
-          id: o.id,
-          name: o.name,
-          country: o.country,
-          aliases: o.addAliases,
-          type: 'город',
-          usageCount: 0,
-          geonameId: o.city.geonameId,
-          lat: o.city.lat,
-          lng: o.city.lng,
-          population: o.city.population,
-          source: 'geonames',
-          createdAt: now,
-        },
+      createOps.set(o.id, {
+        id: o.id,
+        name: o.name,
+        country: o.country,
+        aliases: o.addAliases,
+        type: 'город',
+        usageCount: 0,
         geonameId: o.city.geonameId,
-        kind: 'create',
+        lat: o.city.lat,
+        lng: o.city.lng,
+        population: o.city.population,
+        source: 'geonames',
+        createdAt: now,
       });
+      geoById.set(o.id, o.city.geonameId);
     } else if (o.action === 'extend' && o.id) {
       const prev = index.getById(o.id);
       const patch = { ...o.patch } as Record<string, unknown>;
       if (o.addAliases.length) {
         patch.aliases = Array.from(new Set([...(prev?.aliases || []), ...o.addAliases]));
       }
-      if (Object.keys(patch).length) {
-        Object.entries(patch).forEach(([k, v]) => {
-          ops.push({ path: `cities/${o.id}/${k}`, value: v, geonameId: o.city.geonameId, kind: 'extend' });
-        });
-      }
+      const acc = patchOps.get(o.id) || {};
+      Object.entries(patch).forEach(([k, v]) => {
+        if (v === undefined || v === null || v === '') return;
+        if (k === 'aliases') {
+          acc.aliases = mergeAliases(acc.aliases, v);
+          return;
+        }
+        acc[k] = v;
+      });
+      patchOps.set(o.id, acc);
+      geoById.set(o.id, o.city.geonameId);
     }
+  });
+  const ops: Op[] = [];
+  // create + extend одного id → единственная операция create с дополненными полями
+  createOps.forEach((value, id) => {
+    const patch = patchOps.get(id);
+    if (patch) {
+      Object.entries(patch).forEach(([k, v]) => {
+        if (k === 'aliases') {
+          value.aliases = mergeAliases(value.aliases, v);
+          return;
+        }
+        if (value[k] === undefined || value[k] === null || value[k] === '') value[k] = v;
+      });
+      patchOps.delete(id);
+    }
+    ops.push({ path: `cities/${id}`, value, geonameId: geoById.get(id) || 0, kind: 'create' });
+  });
+  // только extend → один update объектом (без пар «узел + дочерний путь»)
+  patchOps.forEach((patch, id) => {
+    ops.push({ path: `cities/${id}`, value: patch, geonameId: geoById.get(id) || 0, kind: 'extend' });
   });
   let written = 0;
   let batches = checkpoint.batches;
@@ -438,7 +469,19 @@ async function main(): Promise<number> {
       batchIds.push(op.geonameId);
     });
     try {
-      await adminDb.ref().update(updates);
+      // Страховка: Firebase отклоняет update ЦЕЛИКОМ, если один путь — предок
+      // другого. Пишем сначала «родительские» пути, затем их потомков, чтобы
+      // такой набор никогда не ронял весь пакет.
+      const paths = Object.keys(updates);
+      const isAncestorPair = (p: string, q: string) => q !== p && q.startsWith(`${p}/`);
+      const parents = paths.filter((p) => paths.some((q) => isAncestorPair(p, q)));
+      const others = paths.filter((p) => !parents.includes(p));
+      const writePhase = async (list: string[]) => {
+        if (!list.length) return;
+        await adminDb.ref().update(Object.fromEntries(list.map((p) => [p, updates[p]])));
+      };
+      await writePhase(parents);
+      await writePhase(others);
     } catch (e) {
       // чекпойнт уже сохранён для прошлых пакетов — повторный запуск продолжит с места сбоя
       writeFileSync(checkpointPath, JSON.stringify({ done: Array.from(doneSet), batches, lastAt: new Date().toISOString() }, null, 0), 'utf8');
