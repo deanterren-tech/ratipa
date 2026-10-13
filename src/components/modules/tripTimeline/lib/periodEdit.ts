@@ -107,10 +107,13 @@ export const savePeriodFields = async (
 
 export interface RepairEventDraft {
   date: string;
+  /**
+   * Ключ типа события: для НОВЫХ записей форма пишет 'other' — «Другое»
+   * (форма без типа; подпись типа больше не выбирается и не требуется).
+   * У уже сохранённых записей тип НЕ переписывается и не удаляется.
+   */
   type: string;
   text: string;
-  /** Сумма: число либо null (поле необязательное). */
-  amount: number | null;
   /**
    * Порядковый номер внесения в рамках периода (целое ≥ 1) — присваивается
    * вызывающим слоем (max(seq)+1 по периоду, см. lib/repairEvents.nextEventSeq).
@@ -119,12 +122,28 @@ export interface RepairEventDraft {
   seq?: number | null;
 }
 
-const eventSummaryText = (e: RepairEventDraft): string =>
-  `${repairEventLabel(e.type)}${e.date ? ` ${ruDate(e.date)}` : ''}${e.text ? ` — ${e.text}` : ''}${
-    e.amount != null ? ` · сумма ${e.amount}` : ''
-  }`;
+/** Правка события: дата и текст. Тип и сумма — поля старых записей: правка их
+ *  НЕ трогает (не переписывает и не обнуляет), в интерфейсе они не показываются. */
+export interface RepairEventEditDraft {
+  date: string;
+  text: string;
+}
 
-/** Добавить событие на базе (вложенная ветка events записи периода). */
+/** Сводка события для журнала изменений: текст, а у старых записей без текста —
+ *  подпись бывшего типа; сумма в сводку больше не входит (в интерфейсе её нет,
+ *  данные в базе остаются). */
+const eventSummaryText = (e: { date?: string; type?: string; text?: string }): string => {
+  const text = String(e.text || '');
+  const label = text || repairEventLabel(String(e.type || 'other'));
+  const date = e.date ? ruDate(e.date) : '';
+  return `${label}${date ? ` ${date}` : ''}`;
+};
+
+/**
+ * Добавить событие на базе (вложенная ветка events записи периода).
+ * Сумма не пишется вовсе (поле у новых записей не создаётся); тип — 'other'
+ * («Другое») от вызывающего слоя; type/amount старых записей не изменяются.
+ */
 export const addRepairEvent = async (
   periodId: string,
   draft: RepairEventDraft,
@@ -136,12 +155,11 @@ export const addRepairEvent = async (
   const doc: Record<string, unknown> = {
     id,
     date: draft.date,
-    type: draft.type,
+    type: draft.type || 'other',
     text: draft.text,
     author: user.name,
     createdAt: new Date().toISOString(),
   };
-  if (draft.amount != null) doc.amount = draft.amount;
   // Порядковый номер внесения: целое ≥ 1 (передаёт вызывающий слой; без номера
   // запись тоже валидна — в чтении порядок возьмётся из createdAt).
   const seq = Math.floor(Number(draft.seq));
@@ -160,25 +178,24 @@ export const addRepairEvent = async (
   return id;
 };
 
-/** Изменить событие ремонта (поля + updatedAt/updatedBy + журнал). */
+/** Изменить событие на базе: ТОЛЬКО дата и текст (+ updatedAt/updatedBy и
+ *  журнал). Тип и сумма записи не переписываются (данные старых записей
+ *  сохраняются как есть). */
 export const updateRepairEvent = async (
   periodId: string,
   eventId: string,
-  draft: RepairEventDraft,
+  draft: RepairEventEditDraft,
   previous: RepairEvent,
   user: PeriodEditor,
   carNumber: string,
 ): Promise<void> => {
   const updates: Record<string, unknown> = {
     [`baza/${periodId}/events/${eventId}/date`]: draft.date,
-    [`baza/${periodId}/events/${eventId}/type`]: draft.type,
     [`baza/${periodId}/events/${eventId}/text`]: draft.text,
     [`baza/${periodId}/events/${eventId}/updatedAt`]: new Date().toISOString(),
     [`baza/${periodId}/events/${eventId}/updatedBy`]: user.name,
   };
-  if (draft.amount != null) updates[`baza/${periodId}/events/${eventId}/amount`] = draft.amount;
-  else updates[`baza/${periodId}/events/${eventId}/amount`] = null;
-  const before: RepairEventDraft = { date: previous.dateIso, type: previous.type, text: previous.text, amount: previous.amount };
+  const before = { date: previous.dateIso, type: previous.type, text: previous.text };
   Object.assign(
     updates,
     historyPaths(
@@ -206,7 +223,7 @@ export const deleteRepairEvent = async (
       [
         {
           field: 'Событие на базе (удаление)',
-          was: eventSummaryText({ date: event.dateIso, type: event.type, text: event.text, amount: event.amount }),
+          was: eventSummaryText({ date: event.dateIso, type: event.type, text: event.text }),
           became: '[Запись стерта]',
           actionType: 'delete',
         },

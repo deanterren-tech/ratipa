@@ -568,6 +568,27 @@ export default function TripTimelineModule({ user, settings }: Props) {
   );
   const openCar = useCallback((carKey: string) => setOverviewCarKey(carKey), []);
 
+  /**
+   * Клик по метке СОБЫТИЯ НА БАЗЕ: открыть окно «Учёт выезда» этой машины
+   * (тот же хелпер, что у полосы и у клика по базе) и подсветить ИМЕННО это
+   * событие — тем же механизмом focusEventId, что у событий рейса. Если период
+   * не найден (запись исчезла/архив отфильтрован) — обычное открытие базы.
+   */
+  const openPeriodAtEvent = useCallback(
+    (key: string, eventId: string) => {
+      const p = data.bases.find((b) => b.key === key);
+      if (!p) return;
+      try {
+        panelReturnHash.current = window.location.hash || '';
+      } catch {
+        panelReturnHash.current = '';
+      }
+      setFocusEventId(eventId);
+      openDepartureAccountingPanel({ periodId: p.id, carKey: p.carKey, carNumber: p.carNumber });
+    },
+    [data.bases],
+  );
+
   /** Закрыть окно «Учёт выезда» без смены страницы: возврат к прежнему hash. */
   const closeDeparturePanel = useCallback(() => {
     setPanelTarget(null);
@@ -1108,6 +1129,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
             onOpenTripEvent={openTripAtEvent}
             onOpenTripStage={openTripAtStage}
             onOpenBase={openPeriod}
+            onOpenBaseEvent={openPeriodAtEvent}
             onOpenCar={openCar}
             dispatcherOrder={dispatcherOrderIds}
             groupByDispatcher={dispatcherTab === ALL_TAB}
@@ -1202,6 +1224,8 @@ export default function TripTimelineModule({ user, settings }: Props) {
             window.location.hash = `#tripTimeline/trip/${encodeURIComponent(key)}`;
           }}
           onOpenFull={openBazaModuleFor}
+          focusEventId={focusEventId}
+          onFocusEventDone={() => setFocusEventId(null)}
           onClose={closeDeparturePanel}
           onSwitchPeriod={(periodId) => setPanelTarget((prev) => ({ carKey: prev?.carKey ?? null, periodId }))}
           onReplaceTarget={(t) => replaceDeparturePanelHash({ periodId: t.periodId, carKey: t.carKey })}

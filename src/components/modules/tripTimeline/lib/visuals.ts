@@ -78,6 +78,25 @@ export const RISK_COLORS = {
 
 /** Диагональная штриховка сегмента «Риски» (оба тона непрозрачны ≥ 40%). */
 export const riskHatch = `repeating-linear-gradient(45deg, ${RISK_COLORS.stripe} 0px, ${RISK_COLORS.stripe} 5px, ${RISK_COLORS.stripe2} 5px, ${RISK_COLORS.stripe2} 10px)`;
+
+/**
+ * ЦВЕТА МЕТОК СОБЫТИЙ НА БАЗЕ на полотне таймлайна — собственный розово-
+ * малиновый (пурпурно-малиновый) тон, отличный от палитры ТИПОВ событий:
+ * на полосе базы тип события больше не показывается (форма без типа), метка —
+ * единый узнаваемый маркер «событие на базе» с началом текста; полный текст —
+ * в подсказке. Значения — ОДИН источник для полотна и легенды/гайда.
+ */
+export const BASE_EVENT_COLORS = {
+  /** Фон метки (розово-малиновый, «ягодный»). */
+  chip: 'rgba(219, 39, 119, 0.95)',
+  /** Кольцо-обводка метки (не влияет на геометрию: box-shadow, а не border). */
+  chipRing: 'rgba(157, 23, 77, 0.35)',
+  /** Текст метки. */
+  chipText: '#FFFFFF',
+  /** Акцент (подсветка события в окне периода). */
+  highlight: '#DB2777',
+} as const;
+
 export const hatchOpen = `repeating-linear-gradient(45deg, ${CLR.factOpenA}, ${CLR.factOpenA} 5px, transparent 5px, transparent 10px)`;
 /** Тонкая штриховка зоны конфликта данных (рейс ↔ простой) — предупреждение, не маскировка. */
 export const conflictHatch = 'repeating-linear-gradient(45deg, rgba(190,18,60,0.30), rgba(190,18,60,0.30) 2px, transparent 2px, transparent 6px)';

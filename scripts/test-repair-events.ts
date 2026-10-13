@@ -8,15 +8,18 @@
  */
 import {
   canonicalEventType,
+  EVENT_CHIP_GAP,
+  EVENT_CHIP_MAX_W,
+  EVENT_CHIP_MIN_W,
   EVENT_DATE_OUT_OF_RANGE,
   eventDateLimits,
+  eventMarkWidth,
   eventSeqRanks,
   eventsOutOfRange,
   isEventDateAllowed,
   isValidEventSeq,
   layoutEventDots,
   LEGACY_EVENT_TYPE_KEYS,
-  MAX_DOTS_PER_DAY,
   nextEventSeq,
   orderEvents,
   parseRepairEvents,
@@ -224,20 +227,52 @@ console.log('6. Ожидающее событие «Ждём запчасть» 
   ok('без «ждём запчасть» предложений нет', pendingWaitEvent([ev('d1', '2026-10-11', { type: 'diag' })]) === null);
 }
 
-console.log('7. Раскладка точек над полосой (layoutEventDots)');
+console.log('7. Раскладка меток событий (layoutEventDots): день, seq, перенос на строку');
 {
   const xOf = (d: number) => (d - D('2026-10-01')) * 30; // 30px/день, полоса от 1 окт
   const dayW = 30;
-  const one = layoutEventDots([ev('e1', '2026-10-05')], D('2026-10-01'), D('2026-10-10'), xOf, dayW);
-  ok('одно событие — одна точка в центре дня', one.length === 1 && one[0].x === 4 * 30 + 15, one);
-  const multi = layoutEventDots([ev('a', '2026-10-05'), ev('b', '2026-10-05'), ev('c', '2026-10-05')], D('2026-10-01'), D('2026-10-10'), xOf, dayW);
-  ok('события одного дня — рядом (шаг 9px)', multi.length === 3 && multi[1].x - multi[0].x === 9 && multi[2].x - multi[1].x === 9, multi.map((d) => d.x));
-  // несколько событий в один день — слева направо по seq (раньше внесено — левее)
+  const overlapInLine = (chips: Array<{ x: number; width: number; line: number }>): boolean => {
+    for (let i = 0; i < chips.length; i += 1) {
+      for (let j = i + 1; j < chips.length; j += 1) {
+        if (chips[i].line !== chips[j].line) continue;
+        const a = chips[i];
+        const b = chips[j];
+        if (a.x < b.x + b.width && b.x < a.x + a.width) return true;
+      }
+    }
+    return false;
+  };
+  const one = layoutEventDots([ev('e1', '2026-10-05', { text: 'Мойка' })], D('2026-10-01'), D('2026-10-10'), xOf, dayW);
+  ok('одно событие — одна метка, первая строка, у левого края дня', one.length === 1 && one[0].line === 0 && one[0].x === 4 * 30 + 1, one);
+  ok('ширина метки по тексту: минимум и максимум', eventMarkWidth('М') === EVENT_CHIP_MIN_W && eventMarkWidth('Д'.repeat(400)) === EVENT_CHIP_MAX_W, [eventMarkWidth('М'), eventMarkWidth('Д'.repeat(400))]);
+  ok('метка старой записи без текста получает ширину по подписи типа', eventMarkWidth(repairEventLabel('diag')) > 0);
+  const multi = layoutEventDots(
+    [ev('a', '2026-10-05', { seq: 1, text: 'Мойка' }), ev('b', '2026-10-05', { seq: 2, text: 'ТО' }), ev('c', '2026-10-05', { seq: 3, text: 'Сварка' })],
+    D('2026-10-01'), D('2026-10-10'), xOf, dayW,
+  );
+  ok('события одного дня — слева направо по seq', multi.map((c) => c.items[0].id).join(',') === 'a,b,c', multi.map((c) => `${c.items[0].id}@${c.x}`));
+  ok('в одной строке метки не накладываются', !overlapInLine(multi), multi.map((c) => `${c.line}:${c.x}+${c.width}`));
+  ok('каждому событию — своя метка (ничего не сворачивается в «+N»)', multi.length === 3 && multi.every((c) => c.extra === 0));
+  // Перенос: широкая метка предыдущего дня занимает место в начале СЛЕДУЮЩЕГО
+  // дня — метка следующего дня не встаёт поверх, а уходит на строку НИЖЕ.
+  const wrap = layoutEventDots(
+    [ev('w1', '2026-10-05', { seq: 1, text: 'Диагностика подвески и ремонт рамы' }), ev('w2', '2026-10-06', { seq: 1, text: 'Мойка' })],
+    D('2026-10-01'), D('2026-10-10'), xOf, dayW,
+  );
+  ok('метка, которой мешает соседняя, переносится на строку НИЖЕ (line ≥ 1)', wrap.length === 2 && wrap[1].line === 1, wrap.map((c) => `${c.line}:${c.x}`));
+  ok('ни одна пара меток не накладывается ни в строке, ни между строками', !overlapInLine(wrap), wrap.map((c) => `${c.line}:${c.x}+${c.width}`));
+  ok('перенесённая метка начинается от левого края своего дня', (wrap.find((c) => c.line === 1)?.x ?? -1) >= 5 * 30, wrap.filter((c) => c.line === 1).map((c) => c.x));
+  const many = layoutEventDots(
+    ['Мойка', 'ТО', 'Сварка', 'Покраска', 'Замена масла', 'Ремонт рамы'].map((t, i) => ev(`m${i}`, '2026-10-05', { seq: i + 1, text: t })),
+    D('2026-10-01'), D('2026-10-10'), xOf, dayW,
+  );
+  ok('все события дня получают метки (ни одно не теряется)', many.length === 6, many.length);
+  ok('координаты и ширины меток корректны', many.every((c) => Number.isFinite(c.x) && c.x >= 0 && c.width > 0 && c.line >= 0));
   const bySeq = layoutEventDots(
     [ev('b', '2026-10-05', { seq: 2 }), ev('a', '2026-10-05', { seq: 1 }), ev('c', '2026-10-05', { seq: 3 })],
     D('2026-10-01'), D('2026-10-10'), xOf, dayW,
   );
-  ok('точки одного дня идут по seq слева направо', bySeq.map((d) => d.items[0].id).join(',') === 'a,b,c' && bySeq[0].x < bySeq[1].x && bySeq[1].x < bySeq[2].x, bySeq.map((d) => `${d.items[0].id}@${d.x}`));
+  ok('метки одного дня идут по seq слева направо', bySeq.map((c) => c.items[0].id).join(',') === 'a,b,c' && bySeq[0].x < bySeq[1].x && bySeq[1].x < bySeq[2].x, bySeq.map((c) => `${c.items[0].id}@${c.x}`));
   const legacyDay = layoutEventDots(
     [
       ev('new', '2026-10-05', { seq: 5, createdAt: '2026-10-05T12:00:00Z' }),
@@ -246,18 +281,17 @@ console.log('7. Раскладка точек над полосой (layoutEvent
     ],
     D('2026-10-01'), D('2026-10-10'), xOf, dayW,
   );
-  ok('старые записи без seq — слева, по createdAt', legacyDay.map((d) => d.items[0].id).join(',') === 'old1,old2,new', legacyDay.map((d) => d.items[0].id));
-  const many = layoutEventDots(
-    [ev('a', '2026-10-05', { seq: 1 }), ev('b', '2026-10-05', { seq: 2 }), ev('c', '2026-10-05', { seq: 3 }), ev('d', '2026-10-05', { seq: 4 })],
-    D('2026-10-01'), D('2026-10-10'), xOf, dayW,
-  );
-  ok(`не больше ${MAX_DOTS_PER_DAY} точек в день, лишние в extra`, many.length === MAX_DOTS_PER_DAY && many[MAX_DOTS_PER_DAY - 1].extra === 1, many);
+  ok('старые записи без seq — слева, по createdAt', legacyDay.map((c) => c.items[0].id).join(',') === 'old1,old2,new', legacyDay.map((c) => c.items[0].id));
   const clipped = layoutEventDots([ev('x', '2026-09-28'), ev('y', '2026-10-05'), ev('z', '2026-10-12')], D('2026-10-01'), D('2026-10-10'), xOf, dayW);
   ok('события вне видимого отрезка полосы пропускаются', clipped.length === 1 && clipped[0].items[0].id === 'y');
   const order = layoutEventDots([ev('l', '2026-10-07', { seq: 1 }), ev('m', '2026-10-03', { seq: 2 })], D('2026-10-01'), D('2026-10-10'), xOf, dayW);
-  ok('точки в порядке дней', order[0].day === D('2026-10-03') && order[1].day === D('2026-10-07'));
+  ok('метки в порядке дней', order[0].day === D('2026-10-03') && order[1].day === D('2026-10-07'));
   const empty = layoutEventDots([], D('2026-10-01'), D('2026-10-10'), xOf, dayW);
-  ok('нет событий — нет точек', empty.length === 0);
+  ok('нет событий — нет меток', empty.length === 0);
+  ok('на узком дне (6 px) метки тоже раскладываются без потерь', layoutEventDots(
+    [ev('n1', '2026-10-05', { seq: 1, text: 'ТО' }), ev('n2', '2026-10-05', { seq: 2, text: 'Мойка' })],
+    D('2026-10-01'), D('2026-10-10'), (d) => (d - D('2026-10-01')) * 6, 6,
+  ).length === 2);
   ok('isoOfDay обратен dayStr', dayStr(D('2026-10-05')) === '2026-10-05');
 }
 

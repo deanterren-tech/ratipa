@@ -2,7 +2,8 @@
  * События на базе периода «Учёта выезда» — ЧИСТАЯ логика (без React и базы):
  * разбор вложенной ветки `baza/<id>/events`, типы событий, порядок внесения
  * (seq), проверка дат по границам периода, правила предложения сдвига срока
- * готовности и раскладка точек над полосой на таймлайне.
+ * готовности и многострочная раскладка меток событий на полосе таймлайна
+ * (с переносом на следующую строку).
  *
  * Хранение (RTDB, НЕ Firestore): события — ВЛОЖЕННАЯ ветка записи периода
  * `baza/<periodId>/events/<eventId>` с полями
@@ -312,33 +313,119 @@ export const pendingWaitEvent = (events: RepairEvent[]): RepairEvent | null => {
 };
 
 // ---------------------------------------------------------------------------
-// Раскладка точек над полосой
+// Раскладка меток событий на полосе (многострочная, с переносом)
 // ---------------------------------------------------------------------------
 
-/** Точка события над полосой: одна на событие; события одного дня — рядом. */
-export interface EventDot {
-  /** Ключ для React (по первому событию точки). */
+/**
+ * Метка события на базе — компактная плашка ТОГО ЖЕ размера по высоте, что у
+ * одиночной метки события рейса на полотне (9 px, слой TL_Z.mark): у рейса это
+ * точка-ромб, у события базы — плашка с началом текста (полный текст — в
+ * подсказке). Цвет — BASE_EVENT_COLORS (lib/visuals). Начало текста — само
+ * событие; у старых записей без текста показывается бывший тип.
+ */
+export interface EventChip {
+  /** Ключ для React (id первого события метки). */
   key: string;
+  /** День события (номер календарного дня). */
   day: number;
-  /** Относительная X-координата центра точки внутри полосы (px). */
+  /** Левая X-координата метки внутри полосы (px). */
   x: number;
-  /** События точки (у «слитой» точки — несколько, лишние уходят в подсказку). */
+  /** Ширина метки (px): задаётся явно из текста — раскладка и отрисовка совпадают. */
+  width: number;
+  /**
+   * Строка раскладки: 0 — первая (на полосе, как раньше точки);
+   * 1.. — следующая строка НИЖЕ полосы (перенос; слой метки растёт).
+   */
+  line: number;
+  /** События метки; при свёртке хвоста дня — несколько (extra > 0). */
   items: RepairEvent[];
-  /** Сколько событий дня не поместилось в отдельные точки (0 — все видны). */
+  /** Сколько событий дня свёрнуто в счётчик «+N» (0 — метка без счётчика). */
   extra: number;
 }
 
-/** Максимум отдельных точек на один день (остальные — в подсказке «+N»). */
-export const MAX_DOTS_PER_DAY = 3;
-/** Горизонтальный шаг между точками одного дня, px. */
-export const DOT_STEP = 9;
+/** Высота метки события базы (px) — как у одиночной метки события рейса. */
+export const EVENT_CHIP_H = 9;
+/** Вертикальный шаг строк раскладки (px): высота метки + 1 px зазор. */
+export const EVENT_CHIP_ROW_STEP = 10;
+/** Горизонтальный зазор между метками (px). */
+export const EVENT_CHIP_GAP = 2;
+/** Отступ первой строки от верхнего края полосы (px). */
+export const EVENT_CHIP_TOP = 1;
+/** Число строк раскладки по умолчанию (дальше переносить некуда — хвост в «+N»). */
+export const EVENT_CHIP_LINES = 2;
+/** Минимальная и максимальная ширина метки (px). */
+export const EVENT_CHIP_MIN_W = 14;
+export const EVENT_CHIP_MAX_W = 120;
+/** Оценка средней ширины символа метки при шрифте 7 px (px). */
+export const EVENT_CHIP_CHAR_W = 4.2;
+/** Горизонтальные внутренние отступы метки (px). */
+export const EVENT_CHIP_PAD = 6;
+
+/** Подпись события для метки: сам текст, у старых записей без текста — бывший тип. */
+export const eventMarkText = (e: RepairEvent): string => (e.text ? e.text : repairEventLabel(e.type));
+
+/** Дата события в формате метки (дд/мм) — как в подписях полос таймлайна. */
+export const eventMarkDate = (e: RepairEvent): string =>
+  e.dateIso ? e.dateIso.split('-').reverse().slice(0, 2).join('/') : '';
 
 /**
- * Раскладка точек событий над полосой в пределах её видимого отрезка:
- * точки ставятся в центр дня события; события одного дня — рядом (шаг 9px) в
- * порядке внесения seq — слева направо («раньше внесено — левее»);
- * лишние (>3) объединяются в последнюю точку (extra). xOf(day) — позиция
- * левого края дня относительно полосы, dayW — ширина дня.
+ * Подпись метки события базы: начало текста (у старых записей без текста —
+ * подпись бывшего типа) и дата: «Мойка · 13/10». Иконку (гаечный ключ) рисует
+ * сама метка — её ширина учтена отдельно (EVENT_CHIP_ICON_W).
+ */
+export const eventMarkLabel = (e: RepairEvent): string => {
+  const t = eventMarkText(e);
+  const d = eventMarkDate(e);
+  return d ? `${t} · ${d}` : t;
+};
+
+/** Ширина иконки-гаечного ключа в метке (px): входит в расчёт ширины чипа. */
+export const EVENT_CHIP_ICON_W = 10;
+
+/** Ширина метки по её тексту (та же формула применяется в отрисовке). */
+export const eventMarkWidth = (text: string): number => {
+  const raw = String(text ?? '');
+  const w = EVENT_CHIP_PAD + Math.ceil(raw.length * EVENT_CHIP_CHAR_W);
+  return Math.max(EVENT_CHIP_MIN_W, Math.min(EVENT_CHIP_MAX_W, w));
+};
+
+/** Ширина метки для события (подпись с датой + иконка-ключ; без DOM). */
+export const eventChipWidthOf = (e: RepairEvent): number => eventMarkWidth(eventMarkLabel(e)) + EVENT_CHIP_ICON_W;
+
+/** Занятая зона строки раскладки (полуинтервал [a, b), px внутри полосы). */
+interface BusyZone {
+  a: number;
+  b: number;
+}
+
+/** Первая свободная позиция x ≥ from на строке: [x, x+w) не пересекает занятые
+ *  зоны (с горизонтальным зазором EVENT_CHIP_GAP по обе стороны). */
+const firstFreeX = (busy: BusyZone[], from: number, w: number): number => {
+  let x = from;
+  let moved = true;
+  while (moved) {
+    moved = false;
+    for (let i = 0; i < busy.length; i += 1) {
+      const z = busy[i];
+      if (x < z.b + EVENT_CHIP_GAP && x + w + EVENT_CHIP_GAP > z.a) {
+        x = z.b + EVENT_CHIP_GAP;
+        moved = true;
+      }
+    }
+  }
+  return x;
+};
+
+/**
+ * Раскладка меток событий полосы: каждая метка — на дне своего события;
+ * события одного дня идут СЛЕВА НАПРАВО по seq («раньше внесено — левее»).
+ * Когда метка не помещается в своей позиции строки (место занято другой
+ * меткой), она ПЕРЕНОСИТСЯ на следующую строку; на новой строке — снова от
+ * левого края дня, снова слева направо. Строк не больше maxLines; если и там
+ * «своя» позиция занята, метка встаёт в первую свободную позицию последней
+ * строки — событие не теряется и метки не накладываются друг на друга.
+ * xOf(day) — позиция левого края дня относительно полосы, dayW — ширина дня
+ * (раскладка не пересекает метки между собой: ни в строке, ни между строками).
  */
 export const layoutEventDots = (
   events: RepairEvent[],
@@ -346,7 +433,11 @@ export const layoutEventDots = (
   clipB: number,
   xOf: (day: number) => number,
   dayW: number,
-): EventDot[] => {
+  opts?: { maxLines?: number; widthOf?: (e: RepairEvent) => number },
+): EventChip[] => {
+  const widthOf = opts?.widthOf || eventChipWidthOf;
+  const maxLines = Math.max(1, Math.floor(opts?.maxLines ?? EVENT_CHIP_LINES));
+  void dayW; // ширина дня участвует через xOf; параметр сохранён для совместимости вызова
   const byDay = new Map<number, RepairEvent[]>();
   events.forEach((e) => {
     if (e.day == null || e.day < clipA || e.day > clipB) return;
@@ -354,25 +445,51 @@ export const layoutEventDots = (
     if (arr) arr.push(e);
     else byDay.set(e.day, [e]);
   });
-  const dots: EventDot[] = [];
+  const busy: BusyZone[][] = Array.from({ length: maxLines }, () => []);
+  const chips: EventChip[] = [];
   Array.from(byDay.keys())
     .sort((a, b) => a - b)
     .forEach((day) => {
-      // Порядок точек одного дня — по seq (старым записям — фолбэк createdAt).
+      // Порядок меток одного дня — по seq (старым записям — фолбэк createdAt).
       const items = orderEvents(byDay.get(day) as RepairEvent[]);
-      const shown = Math.min(items.length, MAX_DOTS_PER_DAY);
-      const grouped: RepairEvent[][] = [];
-      for (let i = 0; i < shown; i += 1) grouped.push([items[i]]);
-      if (items.length > shown) grouped[shown - 1] = grouped[shown - 1].concat(items.slice(shown));
-      grouped.forEach((grp, i) => {
-        dots.push({
-          key: `${grp[0].id}`,
-          day,
-          x: xOf(day) + dayW / 2 + (i - (shown - 1) / 2) * DOT_STEP,
-          items: grp,
-          extra: items.length > shown && i === shown - 1 ? items.length - shown : 0,
-        });
+      const dayStart = xOf(day) + 1;
+      const dayCursor: number[] = Array.from({ length: maxLines }, () => dayStart);
+      items.forEach((e) => {
+        const w = widthOf(e);
+        let line = -1;
+        for (let L = 0; L < maxLines; L += 1) {
+          if (firstFreeX(busy[L], dayCursor[L], w) === dayCursor[L]) {
+            line = L;
+            break;
+          }
+        }
+        let x: number;
+        if (line < 0) {
+          // Все строки заняты в «своей» позиции — ставим в первую свободную
+          // позицию последней строки: метка не пропадает и не накладывается.
+          line = maxLines - 1;
+          x = firstFreeX(busy[line], dayCursor[line], w);
+        } else {
+          x = dayCursor[line];
+        }
+        busy[line].push({ a: x, b: x + w });
+        busy[line].sort((p, q) => p.a - q.a);
+        dayCursor[line] = x + w + EVENT_CHIP_GAP;
+        chips.push({ key: e.id, day, x, width: w, line, items: [e], extra: 0 });
       });
     });
-  return dots;
+  return chips;
+};
+
+/**
+ * Дата события по умолчанию для формы: СЕГОДНЯ, но всегда в границах периода
+ * (сегодня вне границ — ближайшая граница): форма открывается с допустимой
+ * датой, а не с заведомо отклоняемой.
+ */
+export const defaultEventDate = (limits: EventDateLimits, todayIso: string): string => {
+  const t = dayNum(todayIso);
+  if (t == null) return todayIso;
+  if (limits.hi != null && t > limits.hi) return isoOfDay(limits.hi);
+  if (limits.lo != null && t < limits.lo) return isoOfDay(limits.lo);
+  return todayIso;
 };

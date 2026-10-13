@@ -74,7 +74,8 @@ import {
   type BzStripe,
 } from './lib/bzFills';
 import { tripRangeOf, VYEZD_STATUS, vyezdStatusIcon } from './lib/vyezd';
-import { layoutEventDots, repairEventDotColor, repairEventLabel, type RepairEvent } from './lib/repairEvents';
+import { EVENT_CHIP_ROW_STEP, EVENT_CHIP_TOP, layoutEventDots, type RepairEvent } from './lib/repairEvents';
+import BaseEventMark from './BaseEventMark';
 import { buildStageSchedule, stageBufferOf, stageBufferStateOf, stageRouteCmp, stageSeqOf, type StageBufferStateInfo, type StageSchedule } from './lib/stageSchedule';
 import { layoutRiskSegments, riskSegmentTextOf, riskTextBudgetWithChip, type RiskSegment, type RiskSegmentInput } from './lib/riskSegments';
 import { resolveRowOverlaps, type RowOverlapResolution, type RowTripAdjust, type RowTripInterval } from './lib/overlapRow';
@@ -266,6 +267,9 @@ interface Props {
   /** Клик по заливке этапа: открыть рейс и выделить этап в карточке. */
   onOpenTripStage: (tripKey: string, stageId: string) => void;
   onOpenBase: (periodKey: string) => void;
+  /** Клик по метке события на базе: открыть окно периода этой машины и
+   *  подсветить именно это событие (не задан — клик открывает только окно). */
+  onOpenBaseEvent?: (periodKey: string, eventId: string) => void;
   onOpenCar: (carKey: string) => void;
   /** Порядок диспетчеров — как во вкладках «Плана дохода» (id, по порядку справочника). */
   dispatcherOrder: string[];
@@ -844,6 +848,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   onOpenTripEvent,
   onOpenTripStage,
   onOpenBase,
+  /** Клик по метке события на базе: открыть окно периода и подсветить событие. */
+  onOpenBaseEvent,
   onOpenCar,
 }: {
   row: CarRowModel;
@@ -865,6 +871,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   /** Клик по заливке этапа: открыть рейс и выделить этап в карточке. */
   onOpenTripStage: (tripKey: string, stageId: string) => void;
   onOpenBase: (key: string) => void;
+  /** Клик по метке события на базе: открыть окно периода и подсветить событие. */
+  onOpenBaseEvent?: (key: string, eventId: string) => void;
   onOpenCar: (key: string) => void;
 }) {
   const [hoverTrip, setHoverTrip] = useState<string | null>(null);
@@ -1757,6 +1765,13 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     labelOnlyIcon?: boolean;
     /** Занятые зоны строки (клетки этапов/отметки/маркеры) в координатах строки. */
     obstacles?: BarObstacle[];
+    /**
+     * Нижний отступ полосы внутри подстроки (px). Нужен «Факту» машины с
+     * перенесёнными строками меток событий: полоса не растягивается, а под ней
+     * освобождается место для строки меток. По умолчанию 0 — поведение полос
+     * без изменений.
+     */
+    bottomInset?: number;
     mask?: string;
     opacity?: number;
     dashed?: 'tb' | 'all';
@@ -1868,7 +1883,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           width: o.width,
           top: lanes > 1 ? `calc(${(lane * 100) / lanes}% + 1px)` : 0,
           height: lanes > 1 ? `calc(${100 / lanes}% - 2px)` : undefined,
-          bottom: lanes > 1 ? undefined : 0,
+          bottom: lanes > 1 ? undefined : o.bottomInset || 0,
         }}
       >
         <div
@@ -1926,8 +1941,19 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     ov: RowOverlapResolution,
     sec: RowDaySections,
     obstacles: BarObstacle[],
-    /** Точки событий ремонта над ЭТОЙ полосой (по одному периоду — одна полоса). */
+    /** Метки событий на базе над ЭТОЙ полосой (по одному периоду — одна полоса). */
     withEventDots = false,
+    /**
+     * Нижний отступ полосы в подстроке «Факт» (px): освобождает место ПОД
+     * полосой для перенесённых строк меток событий. Сама полоса при этом
+     * сохраняет высоту FACT_H (метки не растягивают её).
+     */
+    bottomInset = 0,
+    /**
+     * Верх первой «подполосной» строки меток (px от верхнего края полосы):
+     * нижний край полосы + 1 px. Строки 1+ рисуются под полосой — не на подписи.
+     */
+    chipBelowTop = FACT_H + 1,
   ) => {
     const color = bzStripeColor(s);
     // Полосы простоя, укороченные/разрезанные разрешением наложений (lib/overlap):
@@ -1969,62 +1995,41 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         : undefined;
     const open = s.periodKey ? () => onOpenBase(s.periodKey as string) : undefined;
     /**
-     * Точки событий ремонта НАД полосой: слой меток TL_Z.mark (выше этапов и
-     * полос, как все метки), центр дня события. Надпись — по наведению
-     * (title): дата, тип, текст, сумма; клик открывает период.
+     * МЕТКИ СОБЫТИЙ НА БАЗЕ — тот же приём и размеры, что у метки события
+     * рейса (слой TL_Z.mark, высота 9 px как у одиночной метки события рейса):
+     * компактная плашка с началом текста (у старых записей без текста — подпись
+     * бывшего типа) на дне события; полный текст — в подсказке. Несколько
+     * событий дня идут слева направо по seq; тем, кому не хватило места,
+     * раскладка (layoutEventDots) даёт следующую строку — она рисуется ПОД
+     * полосой (вторая и далее строки; подстрока «Факт» этой машины становится
+     * выше на EVENT_CHIP_ROW_STEP, сама полоса не растёт). Метки — препятствия
+     * для подписи полосы: подпись их обтекает и не накладывается.
+     * Клик открывает окно периода этой машины и подсвечивает ИМЕННО это событие.
      */
-    const evDots =
+    const evChips =
       withEventDots && s.periodKey
         ? layoutEventDots(bzEventsById.get(s.periodKey) || [], clipA, clipB, (d) => dayToX(d, vs, colW) - left, colW)
         : [];
-    const evDotsLayer = evDots.length ? (
+    /** Строка раскладки → верхняя координата (px от верхнего края полосы). */
+    const chipTopOf = (line: number): number =>
+      line <= 0 ? EVENT_CHIP_TOP : chipBelowTop + (line - 1) * EVENT_CHIP_ROW_STEP;
+    const evDotsLayer = evChips.length ? (
       <div className="absolute inset-0" style={{ zIndex: TL_Z.mark, pointerEvents: 'none' }} data-bz-events="1">
-        {evDots.map((d) => {
-          const first = d.items[0];
-          const lines = d.items.map(
-            (e) =>
-              `${e.day != null ? fmtDM(e.day) : 'без даты'} · ${repairEventLabel(e.type)}${e.text ? ` — ${e.text}` : ''}${
-                e.amount != null ? ` · сумма ${e.amount}` : ''
-              }`,
-          );
-          const title = [
-            ...lines,
-            ...(d.extra > 0 ? [`и ещё ${d.extra} — открыть окно периода`] : []),
-            'Клик — открыть период учёта выезда',
-          ].join('\n');
-          const dx = Math.max(1, Math.min(Math.round(d.x) - 3, Math.max(1, width - 8)));
-          return (
-            <button
-              type="button"
-              key={`ev-${d.key}`}
-              data-bz-event={first.type}
-              data-bz-event-period={s.periodKey}
-              data-bz-event-day={d.day}
-              data-bz-event-ids={d.items.map((e) => e.id).join(',')}
-              aria-label={`Событие ремонта: ${repairEventLabel(first.type)}`}
-              title={title}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (s.periodKey) onOpenBase(s.periodKey);
-              }}
-              className="absolute rounded-full"
-              style={{
-                zIndex: TL_Z.mark,
-                left: dx,
-                top: 1,
-                width: 7,
-                height: 7,
-                background: repairEventDotColor(first.type),
-                border: '1.5px solid rgba(255,255,255,0.95)',
-                boxShadow: '0 0 0 1px rgba(18,19,22,0.28)',
-                pointerEvents: 'auto',
-                cursor: 'pointer',
-                padding: 0,
-                opacity: s.archived ? 0.72 : 1,
-              }}
-            />
-          );
-        })}
+        {evChips.map((c) => (
+          <BaseEventMark
+            key={`bzev-${c.key}`}
+            chip={c}
+            periodKey={s.periodKey as string}
+            archived={!!s.archived}
+            top={chipTopOf(c.line)}
+            onOpen={() => {
+              if (!s.periodKey) return;
+              const firstId = c.items[0]?.id;
+              if (onOpenBaseEvent && firstId) onOpenBaseEvent(s.periodKey, firstId);
+              else onOpenBase(s.periodKey);
+            }}
+          />
+        ))}
       </div>
     ) : null;
     // «Учёт выезда»: подпись и иконка статуса (учёт ведётся / закрыт / не зафиксирован /
@@ -2059,6 +2064,14 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     const neighborDay = slotA ? clipA : slotB ? clipB : clipA;
     const neighbor = sec.neighborsOf(neighborDay, [mk]);
     const titleFull = [s.title, adjLine, neighbor].filter(Boolean).join('\n');
+    /**
+     * Подпись полосы обтекает и метки событий: их зоны добавляются к общим
+     * препятствиям полосы (координаты строки) — подпись никогда не встаёт на
+     * метку события (требование «без наложения на подписи полос»).
+     */
+    const labelObstacles: BarObstacle[] = evChips.length
+      ? [...obstacles, ...evChips.map((c) => ({ left: left + c.x, right: left + c.x + c.width }))]
+      : obstacles;
     return renderPeriodBar({
       key: `${keyPrefix}-${s.kind}-${s.periodKey || 'gap'}-${s.a}-${s.b}`,
       attrKind: 'bz',
@@ -2093,7 +2106,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         <KindIcon className="w-2.5 h-2.5 shrink-0" style={{ color: color.text }} aria-hidden="true" />
       ) : undefined,
       labelOnlyIcon: isVyezd && !!StatusIcon && width >= 16 && !(showLabel && labelFull),
-      obstacles,
+      obstacles: labelObstacles,
+      bottomInset,
       attrs: {
         'data-bz-status': s.status || undefined,
         'data-bz-a': s.a,
@@ -2783,6 +2797,8 @@ export default function TimelineGrid({
   onOpenTripEvent,
   onOpenTripStage,
   onOpenBase,
+  /** Клик по метке события на базе: открыть окно периода и подсветить событие. */
+  onOpenBaseEvent,
   onOpenCar,
   dispatcherOrder,
   groupByDispatcher,
@@ -3582,6 +3598,7 @@ export default function TimelineGrid({
                         onOpenTripEvent={onOpenTripEvent}
                         onOpenTripStage={onOpenTripStage}
                         onOpenBase={onOpenBase}
+                        onOpenBaseEvent={onOpenBaseEvent}
                         onOpenCar={onOpenCar}
                       />
                     ))

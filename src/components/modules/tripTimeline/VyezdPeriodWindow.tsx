@@ -24,7 +24,7 @@
  * Расчёты (дни, сроки, статусы, сводка) — существующие функции lib/sources и
  * lib/vyezd; правка периода пишет те же поля и тот же журнал, что модуль.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CalendarClock,
   ChevronDown,
@@ -52,6 +52,7 @@ import { useToast } from '../../ToastProvider';
 import { useTimelineData } from './useTimelineData';
 import { CarMiniTimeline } from './TripCard';
 import { DateInput } from './DateInput';
+import GrowingTextarea from './GrowingTextarea';
 import { useWindowHotkeys } from './lib/useWindowHotkeys';
 import {
   bazaToBasePeriods,
@@ -73,6 +74,7 @@ import {
   type ParsedVyezdRoute,
 } from './lib/vyezd';
 import {
+  defaultEventDate,
   EVENT_DATE_OUT_OF_RANGE,
   eventDateLimits,
   eventsOutOfRange,
@@ -82,7 +84,6 @@ import {
   proposedReadyShift,
   repairEventDotColor,
   repairEventLabel,
-  REPAIR_EVENT_TYPES,
   type RepairEvent,
 } from './lib/repairEvents';
 import {
@@ -126,6 +127,11 @@ interface Props {
    *    записи не дублируется, правка идёт тем же сохранением и проверками прав).
    */
   editMode?: 'inline' | 'module';
+  /** id события на базе, к которому нужно перейти и подсветить его (клик по
+   *  метке события на таймлайне). */
+  focusEventId?: string | null;
+  /** Подсветка показана — хост может сбросить focusEventId. */
+  onFocusEventDone?: () => void;
 }
 
 /** Те же дни между датами, что в карточке автомобиля (календарные, включительно по дню). */
@@ -182,6 +188,8 @@ export default function VyezdPeriodWindow({
   onSwitchPeriod,
   onReplaceTarget,
   editMode = 'inline',
+  focusEventId,
+  onFocusEventDone,
 }: Props) {
   const { showUnsaved, showConfirm } = useDialog();
   const { toast } = useToast();
@@ -436,9 +444,17 @@ export default function VyezdPeriodWindow({
   }, [period, saving, draft.dateDeparture, draftDirty, pendingRepair, doSave, today, toast]);
 
   // ── События на базе ─────────────────────────────────────────────────────────
-  const [eventForm, setEventForm] = useState<null | { id: string | null; date: string; type: string; text: string; amount: string }>(null);
+  /**
+   * Форма события: только ДАТА и ТЕКСТ. Тип и сумма у новых записей больше не
+   * спрашиваются и не показываются: у старых записей поля в базе остаются как
+   * есть, правка их НЕ трогает; у новых событий тип — 'other' («Другое»),
+   * сумма не пишется вовсе.
+   */
+  const [eventForm, setEventForm] = useState<null | { id: string | null; date: string; text: string }>(null);
   const [eventSaving, setEventSaving] = useState(false);
   const [shiftBusy, setShiftBusy] = useState(false);
+  /** Событие, к которому нужно перейти (клик по метке на таймлайне) — подсветка. */
+  const [eventHighlightId, setEventHighlightId] = useState<string | null>(null);
 
   /**
    * Границы дат события — от приезда до выезда включительно (без выезда — до
@@ -459,15 +475,16 @@ export default function VyezdPeriodWindow({
   );
 
   const openAddEvent = useCallback(() => {
-    setEventForm({ id: null, date: isoOfDayNum(today), type: 'diag', text: '', amount: '' });
-  }, [today]);
+    // Дата по умолчанию — СЕГОДНЯ, но всегда в границах периода: если сегодня
+    // выпало из периода, форма открывается с ближайшей границей (а не с датой,
+    // которую сохранение заведомо отклонит).
+    setEventForm({ id: null, date: defaultEventDate(eventLimits, isoOfDayNum(today)), text: '' });
+  }, [today, eventLimits]);
   const openEditEvent = useCallback((e: RepairEvent) => {
     setEventForm({
       id: e.id,
       date: e.dateIso || isoOfDayNum(today),
-      type: e.type,
       text: e.text,
-      amount: e.amount != null ? String(e.amount) : '',
     });
   }, [today]);
 
@@ -483,13 +500,7 @@ export default function VyezdPeriodWindow({
       toast(EVENT_DATE_OUT_OF_RANGE, 'error');
       return;
     }
-    const amountText = eventForm.amount.trim().replace(/\s/g, '').replace(',', '.');
-    const amount = amountText === '' ? null : Number(amountText);
-    if (amount != null && (!Number.isFinite(amount) || amount < 0)) {
-      toast('Сумма должна быть неотрицательным числом', 'error');
-      return;
-    }
-    const draftEvent = { date: eventForm.date, type: eventForm.type, text: eventForm.text.trim(), amount };
+    const text = eventForm.text.trim();
     setEventSaving(true);
     try {
       if (eventForm.id) {
@@ -499,13 +510,16 @@ export default function VyezdPeriodWindow({
           setEventForm(null);
           return;
         }
-        await updateRepairEvent(period.id, eventForm.id, draftEvent, prev, { name: user.name, role: user.role }, period.carNumber);
+        // Правка трогает ТОЛЬКО дату и текст: тип и сумма старой записи
+        // сохраняются в базе как есть (в интерфейсе они не показываются).
+        await updateRepairEvent(period.id, eventForm.id, { date: eventForm.date, text }, prev, { name: user.name, role: user.role }, period.carNumber);
         toast('Событие изменено', 'success');
       } else {
         // seq = max(seq по периоду) + 1 — порядок внесения; у старых записей без
         // seq номер берётся по фолбэку createdAt (lib/repairEvents.nextEventSeq).
+        // Тип нового события — 'other' («Другое»), сумма не пишется.
         const seq = nextEventSeq(period.events);
-        await addRepairEvent(period.id, { ...draftEvent, seq }, { name: user.name, role: user.role }, period.carNumber);
+        await addRepairEvent(period.id, { date: eventForm.date, type: 'other', text, seq }, { name: user.name, role: user.role }, period.carNumber);
         toast('Событие добавлено', 'success');
       }
       setEventForm(null);
@@ -520,7 +534,7 @@ export default function VyezdPeriodWindow({
     async (e: RepairEvent) => {
       if (!period) return;
       const ok = await showConfirm(
-        `Удалить событие «${repairEventLabel(e.type)}»${e.dateIso ? ` от ${ruDate(e.dateIso)}` : ''}? Запись удалится из ленты; событие останется в журнале изменений.`,
+        `Удалить событие ${e.text ? `«${e.text}»` : `«${repairEventLabel(e.type)}»`}${e.dateIso ? ` от ${ruDate(e.dateIso)}` : ''}? Запись удалится из ленты; событие останется в журнале изменений.`,
         // Для периода в ремонте — прежняя формулировка (её проверяют существующие
         // приёмочные прогоны); для обычного периода — «на базе».
         repairNow ? 'Удалить событие ремонта?' : 'Удалить событие на базе?',
@@ -535,6 +549,29 @@ export default function VyezdPeriodWindow({
     },
     [period, repairNow, showConfirm, user.name, user.role, toast],
   );
+
+  /**
+   * Переход с метки события на таймлайне: прокрутить ленту к записи и коротко
+   * подсветить ИМЕННО это событие (клик по метке события базы). Хайлайт гаснет
+   * сам; повторный клик по той же метке подсвечивает снова.
+   */
+  const eventsFeedRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!focusEventId || !period) return;
+    if (!period.events.some((e) => e.id === focusEventId)) {
+      onFocusEventDone?.();
+      return;
+    }
+    setEventHighlightId(focusEventId);
+    window.requestAnimationFrame(() => {
+      const el = eventsFeedRef.current?.querySelector(`[data-vyezd-event-id="${focusEventId}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    const t = window.setTimeout(() => setEventHighlightId((cur) => (cur === focusEventId ? null : cur)), 2400);
+    onFocusEventDone?.();
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusEventId, period?.id]);
 
   /** Предложение сдвига срока готовности из события «Ждём запчасть» (без автосдвига). */
   const waitEvent = useMemo(() => (period ? pendingWaitEvent(period.events) : null), [period]);
@@ -978,55 +1015,31 @@ export default function VyezdPeriodWindow({
               </div>
             ) : null}
 
-            {/* Форма события (добавление/правка) */}
+            {/* Форма события (добавление/правка): ДАТА + ТЕКСТ. Тип и сумма
+                не спрашиваются: у новых записей тип — «Другое», у старых поля
+                сохраняются в базе, но в интерфейсе не показываются. */}
             {eventForm && canAddEvents ? (
               <div className="mx-3 mt-2 flex flex-col gap-2 rounded-lg border border-[#E5E7EB] bg-white p-2.5" data-ui="vyezd-event-form">
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="flex flex-col gap-1">
-                    <span className={UI.fieldLabel}>Дата</span>
-                    <DateInput
-                      value={eventForm.date}
-                      onChange={(iso) => setEventForm((f) => (f ? { ...f, date: iso } : f))}
-                      ariaLabel="Дата события ремонта"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className={UI.fieldLabel}>Тип</span>
-                    <select
-                      data-ui="vyezd-event-type"
-                      value={eventForm.type}
-                      onChange={(e) => setEventForm((f) => (f ? { ...f, type: e.target.value } : f))}
-                      className={`${UI.select} !min-h-[32px] !py-1.5`}
-                    >
-                      {REPAIR_EVENT_TYPES.map((t) => (
-                        <option key={t.key} value={t.key}>
-                          {t.label}
-                        </option>
-                      ))}
-                      {/* Незнакомый тип из старой записи не теряем */}
-                      {!REPAIR_EVENT_TYPES.some((t) => t.key === eventForm.type) ? (
-                        <option value={eventForm.type}>{repairEventLabel(eventForm.type)}</option>
-                      ) : null}
-                    </select>
-                  </label>
-                </div>
-                <input
-                  type="text"
-                  data-ui="vyezd-event-text"
-                  value={eventForm.text}
-                  onChange={(e) => setEventForm((f) => (f ? { ...f, text: e.target.value } : f))}
-                  placeholder="Что происходит: заказали деталь, ждём поставку…"
-                  className={UI.inputSm}
-                />
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  data-ui="vyezd-event-amount"
-                  value={eventForm.amount}
-                  onChange={(e) => setEventForm((f) => (f ? { ...f, amount: e.target.value } : f))}
-                  placeholder="Сумма, необязательно"
-                  className={UI.inputSm}
-                />
+                <label className="flex flex-col gap-1 sm:max-w-[220px]">
+                  <span className={UI.fieldLabel}>Дата</span>
+                  <DateInput
+                    value={eventForm.date}
+                    onChange={(iso) => setEventForm((f) => (f ? { ...f, date: iso } : f))}
+                    ariaLabel="Дата события на базе"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className={UI.fieldLabel}>Текст</span>
+                  {/* Поле растёт по содержимому (auto-grow, без max-height и
+                      внутренней прокрутки): многострочный текст виден целиком. */}
+                  <GrowingTextarea
+                    dataUi="vyezd-event-text"
+                    value={eventForm.text}
+                    onChange={(v) => setEventForm((f) => (f ? { ...f, text: v } : f))}
+                    placeholder="Что происходит: заделывается прицеп, ждём аккумуляторы с сервиса…"
+                    ariaLabel="Текст события на базе"
+                  />
+                </label>
                 <div className="flex items-center justify-end gap-2">
                   <button type="button" data-ui="vyezd-event-cancel" onClick={() => setEventForm(null)} className={`${UI.buttonGhost} !min-h-[32px] !py-1`}>
                     Отмена
@@ -1046,13 +1059,18 @@ export default function VyezdPeriodWindow({
 
             {/* Лента событий: своя ограниченная прокрутка, окно целиком не скроллится.
                 У пустой ленты на узких экранах подсказка скрыта (блок уже стянут
-                в одну строку и не должен двигать компактное окно). */}
-            <div className={`px-3 pb-2.5 pt-2 ${emptyEventsCard ? 'max-sm:hidden' : ''}`} data-ui="vyezd-repair-feed">
+                в одну строку и не должен двигать компактное окно).
+                Текст события показывается ЦЕЛИКОМ (white-space: pre-wrap, без
+                text-overflow/line-clamp): у старых записей без текста вместо него —
+                название бывшего типа. Сумма в ленте НЕ показывается (данные в базе
+                остаются как есть). */}
+            <div className={`px-3 pb-2.5 pt-2 ${emptyEventsCard ? 'max-sm:hidden' : ''}`} data-ui="vyezd-repair-feed" ref={eventsFeedRef}>
               {period.events.length ? (
                 <div className="flex flex-col gap-1 max-h-[148px] overflow-y-auto custom-scrollbar pr-1">
                   {period.events.map((e) => {
                     const outside = e.day != null && !isEventDateAllowed(e.dateIso, eventLimits);
                     const outsideTitle = outside ? ` Дата события вне дат периода (${EVENT_DATE_OUT_OF_RANGE}).` : '';
+                    const highlighted = eventHighlightId === e.id;
                     return (
                     <div
                       key={e.id}
@@ -1061,12 +1079,17 @@ export default function VyezdPeriodWindow({
                       data-vyezd-event-type={e.type}
                       data-vyezd-event-seq={e.seq != null ? e.seq : ''}
                       data-vyezd-event-outside={outside ? '1' : undefined}
-                      title={`${repairEventLabel(e.type)}${e.dateIso ? ` · ${ruDate(e.dateIso)}` : ''}${e.text ? ` · ${e.text}` : ''}${
-                        e.amount != null ? ` · сумма ${e.amount}` : ''
-                      }${e.seq != null ? ` · внесено №${e.seq}` : ''}${outsideTitle}`}
-                      className="flex items-center gap-2 rounded-lg border border-[#F5D9C2] bg-white/80 px-2 py-1.5"
+                      data-vyezd-event-highlight={highlighted ? '1' : undefined}
+                      title={`${e.dateIso ? ruDate(e.dateIso) : 'без даты'}${e.text ? ` · ${e.text}` : ` · ${repairEventLabel(e.type)}`}${
+                        e.seq != null ? ` · внесено №${e.seq}` : ''
+                      }${outsideTitle}`}
+                      className={`flex items-start gap-2 rounded-lg border px-2 py-1.5 transition-colors ${
+                        highlighted
+                          ? 'border-[#DB2777] bg-[#FDF2F8] ring-1 ring-inset ring-[#DB2777]/30'
+                          : 'border-[#F5D9C2] bg-white/80'
+                      }`}
                     >
-                      <span className="inline-flex items-center gap-1.5 shrink-0 text-[11px] font-mono tabular-nums text-[#4B5563]">
+                      <span className="inline-flex items-center gap-1.5 shrink-0 text-[11px] font-mono tabular-nums text-[#4B5563] pt-0.5">
                         <span
                           className="w-2 h-2 rounded-full shrink-0"
                           style={{ background: repairEventDotColor(e.type) }}
@@ -1074,25 +1097,23 @@ export default function VyezdPeriodWindow({
                         />
                         {e.dateIso ? ruDate(e.dateIso) : 'без даты'}
                       </span>
-                      <span className="text-[11px] font-medium text-[#121316] shrink-0">{repairEventLabel(e.type)}</span>
-                      {e.text ? (
-                        <span className="text-[11px] text-[#4B5563] truncate" title={e.text}>
-                          {e.text}
-                        </span>
-                      ) : null}
-                      {e.amount != null ? <span className="text-[11px] text-[#6B7280] shrink-0">сумма {e.amount}</span> : null}
+                      {/* Текст ЦЕЛИКОМ: pre-wrap сохраняет переносы строк; при
+                          отсутствии текста показывается подпись бывшего типа. */}
+                      <span className="min-w-0 flex-1 text-[11px] leading-[15px] text-[#374151] whitespace-pre-wrap break-words" data-ui="vyezd-event-text-full">
+                        {e.text || repairEventLabel(e.type)}
+                      </span>
                       {outside ? (
-                        <span className="text-[10px] text-[#8A5A0A] shrink-0" data-ui="vyezd-event-outside" title={EVENT_DATE_OUT_OF_RANGE}>
+                        <span className="text-[10px] text-[#8A5A0A] shrink-0 pt-0.5" data-ui="vyezd-event-outside" title={EVENT_DATE_OUT_OF_RANGE}>
                           вне дат периода
                         </span>
                       ) : null}
                       {e.shiftedReadyTo ? (
-                        <span className="text-[10px] text-emerald-700 shrink-0" title="Из этого события явно перенесён срок готовности">
+                        <span className="text-[10px] text-emerald-700 shrink-0 pt-0.5" title="Из этого события явно перенесён срок готовности">
                           срок → {ruDate(e.shiftedReadyTo)}
                         </span>
                       ) : null}
                       {canAddEvents ? (
-                        <span className="ml-auto inline-flex items-center gap-0.5 shrink-0">
+                        <span className="ml-auto inline-flex items-center gap-0.5 shrink-0 pt-0.5">
                           <button
                             type="button"
                             data-ui="vyezd-event-edit"
@@ -1121,7 +1142,7 @@ export default function VyezdPeriodWindow({
                 </div>
               ) : (
                 <span className="text-[11px] text-[#6B7280]">
-                  Лента пуста: событий пока нет — добавьте первое («+ Событие»: диагностика, ТО, мойка…) — точки появятся и на полосе таймлайна.
+                  Лента пуста: событий пока нет — добавьте первое («+ Событие»: дата и текст) — метки появятся на полосе таймлайна.
                 </span>
               )}
             </div>
