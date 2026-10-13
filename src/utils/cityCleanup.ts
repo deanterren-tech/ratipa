@@ -258,3 +258,27 @@ export function mergeIntoCanonPatch(
   if (merged.type) patch.type = merged.type;
   return patch;
 }
+
+/**
+ * Исторические формы, которые надо УБРАТЬ из алиасов записи.
+ *
+ * Правило: форма убирается только если она помечена исторической ИМЕННО ДЛЯ ЭТОГО
+ * geonameId (`historic` — нормы форм этого города из alternateNamesV2). Одноимённая
+ * форма может быть исторической для одного города и современной для другого:
+ * «Gorki» — историческое имя Нижнего Новгорода и современное имя белорусских
+ * Горок; глобальное вычитание по строке уничтожило бы настоящий город.
+ *
+ * `keep` — осознанные исключения: формы, которые портал реально использует
+ * (напр. «Капшагай» в рейсах), оставляем, чтобы поиск по ним продолжал работать.
+ */
+export const historicFormsToStrip = (
+  aliases: string[],
+  historic: Set<string> | undefined,
+  keep: Set<string> = new Set(),
+): string[] => {
+  if (!historic || !historic.size || !aliases.length) return [];
+  return aliases.filter((a) => {
+    const n = normalizeCityName(a);
+    return !!n && historic.has(n) && !keep.has(n);
+  });
+};

@@ -32,6 +32,7 @@
     "audit:db": "tsx scripts/audit-db-quality.ts",
     "migrate:cities": "tsx scripts/migrate-cities.ts",
     "import:geonames": "tsx scripts/import-geonames.ts",
+    "strip:historic": "tsx scripts/strip-historic-names.ts",
     "inventory:cities": "tsx scripts/inventory-cities.ts",
     "migrate:stage-seq": "tsx scripts/migrate-stage-seq.ts",
     "audit:timeline-dups": "tsx scripts/audit-timeline-dups.ts",

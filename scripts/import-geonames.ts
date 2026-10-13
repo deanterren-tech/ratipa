@@ -69,6 +69,13 @@ const CLI_COUNTRIES = ((ARGS.find((a) => a.startsWith('--countries=')) || '').sp
 const CLI_THRESHOLD = Number((ARGS.find((a) => a.startsWith('--threshold=')) || '').split('=')[1] || 0) || 0;
 const CLI_SMALL = Number((ARGS.find((a) => a.startsWith('--small-threshold=')) || '').split('=')[1] || 0) || 0;
 
+/**
+ * ОСОЗНАННЫЕ ИСКЛЮЧЕНИЯ: формы, помеченные в GeoNames историческими, но реально
+ * используемые порталом (диспетчеры так пишут в маршрутах) — оставляем в алиасах,
+ * чтобы поиск по ним продолжал работать. Список — минимальный и объяснённый.
+ */
+const KEEP_HISTORIC_FOR_USAGE = new Set(['капшагай']); // Қонаев (KZ): в рейсах пишут «Капшагай»
+
 const BATCH = 500; // ≤500 путей на один update (пакетная запись)
 const MAX_LATIN_DISPLAY = 40; // сколько примеров в отчёте
 
@@ -168,6 +175,8 @@ async function main(): Promise<number> {
   const ruCachePath = join(DATA_DIR, 'ru-names-cache.json');
   const idsWanted = new Set(selected.map((r) => r.geonameId));
   let ruMap = new Map<number, string[]>();
+  /** Исторические формы по geonameId (флаг isHistoric) — исключаются при сборке записи. */
+  const historic = new Map<number, Set<string>>();
   /** Полный кэш (все страны прошлых прогонов) — объединяем, а не затираем. */
   const cacheAll = new Map<number, string[]>();
   if (existsSync(ruCachePath)) {
@@ -199,11 +208,25 @@ async function main(): Promise<number> {
       altTxt,
       parseAlternateNameRow,
       (row) => {
-        if (row.language !== 'ru' || !idsWanted.has(row.geonameId)) return;
+        if (!idsWanted.has(row.geonameId)) return;
+        // Исторические формы ЭТОГО города (флаг isHistoric, любая раскладка) —
+        // владелец: «исторические названия нам не нужны в базе». Формы уходят в
+        // excludeForms при сборке записи, поэтому в справочник не попадают ни
+        // как имя, ни как алиас и не возвращаются при пересборках.
+        if (row.isHistoric) {
+          const hn = normalizeCityName(row.name);
+          if (hn) {
+            const hset = historic.get(row.geonameId) || new Set<string>();
+            hset.add(hn);
+            historic.set(row.geonameId, hset);
+          }
+          return;
+        }
+        if (row.language !== 'ru') return;
         const list = any.get(row.geonameId) || [];
         if (!list.includes(row.name)) list.push(row.name);
         any.set(row.geonameId, list);
-        if (row.isPreferred && !row.isHistoric) preferred.set(row.geonameId, row.name);
+        if (row.isPreferred) preferred.set(row.geonameId, row.name);
       },
       'alternateNamesV2',
     );
@@ -270,7 +293,10 @@ async function main(): Promise<number> {
   let skippedCheckpoint = 0;
   selected.forEach((row) => {
     if (doneSet.has(row.geonameId)) { skippedCheckpoint += 1; return; }
-    const city = buildGeonamesCity(row, ruMap.get(row.geonameId));
+    const city = buildGeonamesCity(row, ruMap.get(row.geonameId), {
+      excludeForms: historic.get(row.geonameId),
+      keepForms: KEEP_HISTORIC_FOR_USAGE,
+    });
     const existing = index.find(city);
     const decision = decideCityImport(city, existing);
     if (decision.action === 'create') {

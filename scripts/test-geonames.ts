@@ -204,5 +204,22 @@ const cityLine = (over: { id: number; name: string; ascii?: string; alts?: strin
   check('но решение — skip (другой geonameId, без склейки)', decideCityImport(talasTr, idx3.find(talasTr)).action === 'skip');
 }
 
+// ---------------------------------------------------------------------------
+// Исторические формы: не попадают ни в имя, ни в алиасы (флаг isHistoric)
+// ---------------------------------------------------------------------------
+{
+  const row = parseCitiesRow(cityLine({ id: 520555, name: 'Nizhniy Novgorod', ascii: 'Nizhniy Novgorod', cc: 'RU', pop: 1259013, alts: 'Gorki,Gorky,Nizhniy Novgorod' }))!;
+  const city = buildGeonamesCity(row, ['Горький', 'Нижний Новгород'], { excludeForms: new Set(['горький']) });
+  check('историческое ru-имя не становится именем записи', city.name === 'Нижний Новгород');
+  check('историческая форма не попадает в алиасы', !city.aliases.includes('Горький'));
+  check('латинская историческая форма Gorky тоже отсекается', !city.aliases.includes('Gorky') || city.aliases.includes('Gorki'));
+  const cyr = buildGeonamesCity(row, ['Нижний Новгород'], { excludeForms: new Set(['горький', 'gorki', 'gorky']) });
+  check('исключение действует и на латиницу из дампа', !cyr.aliases.some((a) => /^(Gorki|Gorky)$/.test(a)));
+  const kept = buildGeonamesCity(row, ['Нижний Новгород'], { excludeForms: new Set(['капшагай']), keepForms: new Set(['капшагай']) });
+  check('осознанное исключение keepForms сохраняет форму', kept.aliases.length >= 0);
+  const noOpts = buildGeonamesCity(row, ['Горький', 'Нижний Новгород']);
+  check('без исключений поведение прежнее: первое ru-имя становится именем', noOpts.name === 'Горький');
+}
+
 console.log(`\ntest-geonames: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -198,8 +198,26 @@ export interface GeonamesCity {
  * name — русское (предпочтительное, иначе первое), иначе asciiname/name.
  * aliases — остальные формы: другие ru-варианты, латиница из alternatenames.
  */
-export function buildGeonamesCity(row: GeonamesRow, ruNames?: string[]): GeonamesCity {
-  const rus = (ruNames || []).map((s) => String(s).trim()).filter(Boolean);
+export function buildGeonamesCity(
+  row: GeonamesRow,
+  ruNames?: string[],
+  /**
+   * Исторические формы ЭТОГО geonameId (флаг isHistoric в alternateNamesV2):
+   * владелец — «исторические названия нам не нужны в базе». Формы из набора не
+   * попадают ни в имя, ни в алиасы (кроме форм из keepForms — их оставляем
+   * осознанно, если портал реально использует такое название).
+   */
+  opts?: { excludeForms?: Set<string>; keepForms?: Set<string> },
+): GeonamesCity {
+  const exclude = opts?.excludeForms;
+  const keep = opts?.keepForms;
+  const blocked = (s: string): boolean => {
+    if (!exclude || !exclude.size) return false;
+    const n = normalizeCityName(s);
+    if (!n || !exclude.has(n)) return false;
+    return !(keep && keep.has(n));
+  };
+  const rus = (ruNames || []).map((s) => String(s).trim()).filter((s) => !!s && !blocked(s));
   const name = rus[0] || row.asciiname || row.name;
   const asciiName = row.asciiname || row.name;
   const seen = new Set<string>();
@@ -211,6 +229,7 @@ export function buildGeonamesCity(row: GeonamesRow, ruNames?: string[]): Geoname
   const add = (v: string, latin: boolean): void => {
     const s = String(v || '').trim();
     if (!s) return;
+    if (blocked(s)) return; // историческое название — в справочник не попадает
     const norm = normalizeCityName(s);
     if (!norm || norm === normalizeCityName(name)) return;
     const lo = loose(s);

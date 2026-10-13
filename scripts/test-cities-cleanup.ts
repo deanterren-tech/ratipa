@@ -13,6 +13,7 @@
 import { normalizeCityName } from '../src/utils/cityDirectory.ts';
 import {
   findTypoCandidate,
+  historicFormsToStrip,
   isGluedValue,
   isNumericValue,
   isProtectedValue,
@@ -162,6 +163,22 @@ const row = (over: { id: number; name: string; ascii?: string; alts?: string; cc
   check('merge: тип миграции перелит', patch.type === 'город');
   const patchDup = mergeIntoCanonPatch({ ...canon, aliases: ['СПб'] }, { id: 'spb', name: 'СПБ', aliases: [], usageCount: 3 }, '2026-01-01T00:00:00Z');
   check('merge: дубль по норме («СПБ» vs «СПб») не добавлен', (patchDup.aliases as string[]).filter((a) => normalizeCityName(a) === 'спб').length === 1);
+}
+
+// ---------------------------------------------------------------------------
+// Исторические названия (владелец: «исторические названия нам не нужны в базе»)
+// ---------------------------------------------------------------------------
+{
+  const hist = new Set(['горький', 'калинин', 'шевченко']);
+  check('историческая форма убирается из алиасов', historicFormsToStrip(['Горький', 'Nizhny'], hist).join(',') === 'Горький');
+  check('современная форма остаётся', historicFormsToStrip(['Нижний Новгород'], hist).length === 0);
+  check('регистр и «ё» не мешают', historicFormsToStrip(['горький', 'ГОРЬКИЙ'], hist).length === 2);
+  check('без набора исторических форм ничего не убирается', historicFormsToStrip(['Горький'], undefined).length === 0);
+  check('пустые алиасы — не ошибка', historicFormsToStrip([], hist).length === 0);
+  // «Gorki» — историческое имя НН и современное имя белорусских Горок: набор ведётся
+  // ПО geonameId, поэтому форма Горок (у них свой набор) не убирается.
+  check('форма-омоним чужого города не убирается (правило по geonameId)', historicFormsToStrip(['Gorki'], new Set(['gorki']) /* набор НН */).join(',') === 'Gorki');
+  check('осознанное исключение (используется в данных) не убирается', historicFormsToStrip(['Капшагай'], new Set(['капшагай']), new Set(['капшагай'])).length === 0);
 }
 
 console.log(`\ntest-cities-cleanup: ${passed} passed, ${failed} failed`);
