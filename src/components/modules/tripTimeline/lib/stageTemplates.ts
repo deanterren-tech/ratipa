@@ -31,7 +31,7 @@
  * типов этапов: первое сохранение становится сидом справочника).
  */
 import type { TimelineStage, TimelineStageType } from '../../../../types';
-import { stageRouteCmp } from './stageSchedule';
+import { sortStagesRoute, stageRouteCmp } from './stageSchedule';
 
 export interface StageTemplate {
   id: string;
@@ -110,6 +110,70 @@ export const templateForDirection = (
     (templates || []).find((t) => code && (str(t.id).toLowerCase() === code || str(t.name).toLowerCase() === code)) ||
     null
   );
+};
+
+// ---------------------------------------------------------------------------
+// Предупреждение порядка по шаблону направления (НЕ блокирует сохранение)
+// ---------------------------------------------------------------------------
+
+/** Пара одного дня, стоящая вразрез с порядком шаблона направления. */
+export interface TemplateOrderWarning {
+  /** Этап с меньшим seq (стоит РАНЬШЕ), но по шаблону должен идти ПОЗЖЕ. */
+  a: TimelineStage;
+  /** Этап с большим seq (стоит позже), но по шаблону должен идти раньше. */
+  b: TimelineStage;
+  /** Плановая дата пары (ISO, один и тот же день). */
+  dayIso: string;
+  /** Метки типов пары (для сообщения; пустой тип — метка места/тип). */
+  nameA: string;
+  nameB: string;
+}
+
+/**
+ * Мягкий контроль порядка по ТИПАМ: в пределах ОДНОГО дня этапы должны идти
+ * так же, как в шаблоне этапов направления (например, «Граница» раньше
+ * «Выгрузки»). Возвращает пары-нарушения (пусто — порядок шаблону соответствует
+ * либо шаблона/типов нет): используется карточкой для предупреждения с
+ * кнопками «Поменять местами» / «Оставить как есть». Сохранение НЕ блокирует.
+ * Этапы без типа/вне шаблона в проверку не входят (сравнивать не с чем).
+ */
+export const templateOrderWarnings = (
+  stages: TimelineStage[] | null | undefined,
+  template: StageTemplate | null | undefined,
+  stageTypes: TimelineStageType[] | null | undefined,
+): TemplateOrderWarning[] => {
+  const tplNames = (template?.stages || []).map((s) => str(s)).filter(Boolean);
+  if (!tplNames.length) return [];
+  const types = stageTypes || [];
+  // Позиция ТИПА этапа в шаблоне направления (первое вхождение названия типа).
+  const tplIndex = new Map<string, number>();
+  tplNames.forEach((name, i) => {
+    const type = resolveStageTypeByName(types, name);
+    if (type && !tplIndex.has(type.key)) tplIndex.set(type.key, i);
+  });
+  if (!tplIndex.size) return [];
+  const nameOf = (s: TimelineStage): string => {
+    const t = types.find((x) => x && x.key === s.type);
+    return str(t?.name) || str(s.label) || str(s.type);
+  };
+  // Порядок итерации — единый порядок отображения (дата, затем seq): в одном
+  // дне пары перебираются по seq, «раньше стоит — раньше в паре».
+  const ordered = sortStagesRoute((stages || []).filter((s) => s && typeof s === 'object'));
+  const out: TemplateOrderWarning[] = [];
+  for (let i = 0; i < ordered.length; i += 1) {
+    for (let j = i + 1; j < ordered.length; j += 1) {
+      const a = ordered[i];
+      const b = ordered[j];
+      const dayA = str(a.plannedDate);
+      const dayB = str(b.plannedDate);
+      if (!dayA || dayA !== dayB) continue; // только этапы ОДНОГО дня
+      const ia = tplIndex.get(str(a.type));
+      const ib = tplIndex.get(str(b.type));
+      if (ia == null || ib == null || ia <= ib) continue; // пара шаблону не противоречит
+      out.push({ a, b, dayIso: dayA, nameA: nameOf(a), nameB: nameOf(b) });
+    }
+  }
+  return out;
 };
 
 /** Сопоставление названия шаблона типу этапа справочника (точно, затем по вхождению). */

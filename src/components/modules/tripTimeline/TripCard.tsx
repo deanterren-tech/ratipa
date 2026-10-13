@@ -45,6 +45,7 @@ import {
   ExternalLink,
   EyeOff,
   Flag,
+  GripVertical,
   Layers,
   Lock,
   LogIn,
@@ -73,14 +74,18 @@ import {
 } from './lib/directionCatalog';
 import {
   applyStageTemplate,
+  effectiveStageTemplates,
   newTemplateId,
   suggestTemplateName,
   templateCreatedLabel,
+  templateForDirection,
   templateNameTaken,
+  templateOrderWarnings,
   templateStagesFromTrip,
   tripHasOwnStages,
   type ApplyTemplateMode,
   type StageTemplate,
+  type TemplateOrderWarning,
 } from './lib/stageTemplates';
 import CityAutocomplete from '../../common/CityAutocomplete';
 import TripEventsJournal from './TripEventsJournal';
@@ -113,8 +118,20 @@ import {
   type StageFillSection,
 } from './lib/stageFills';
 import { computeBlockedPlanChanges, computePlanStageChanges, resolvePlanLock, type PlanStageChanges } from './lib/planLock';
-import { canEditPlannedDateField, resolveStageRights } from './lib/stageRights';
-import { buildStageSchedule, stageBufferOf, stageBufferStateOf, stageSeqOf, type StageSchedule } from './lib/stageSchedule';
+import { canEditPlannedDateField, resolveStageMove, resolveStageRights } from './lib/stageRights';
+import {
+  buildStageSchedule,
+  moveStageInList,
+  renumberStageSeq,
+  sortStagesRoute,
+  stageBufferOf,
+  stageBufferStateOf,
+  stageOrderConflicts,
+  stageSeqOf,
+  swapStageOrderInList,
+  type StageOrderConflict,
+  type StageSchedule,
+} from './lib/stageSchedule';
 import { normalizeCircles, tripCircleMarksOf, visibleCircleTicks, type TripCircleMarks } from './lib/circles';
 import { hasPlanFinancials } from './lib/planFromDraft';
 import {
@@ -265,7 +282,11 @@ const toDraft = (t: WholeTrip, options: DirectionOption[]): Draft => {
     dispatcherId: t.dispatcherId || '',
     dispatcherName: t.dispatcherName || '',
     bufferDays: String(t.bufferDays ?? 0),
-    stages: (t.stages || []).map((s, i) => ({
+    // ЕДИНЫЙ порядок строк окна — тот же, что у полосы: «дата, затем seq»
+    // (lib/stageSchedule.sortStagesRoute). Сырой порядок массива из базы
+    // (порядок ключей) на отображение не влияет; позиция в списке даёт
+    // миграционный seq старым этапам (значение само в базу не пишется).
+    stages: sortStagesRoute(t.stages || []).map((s, i) => ({
       id: s.id,
       type: s.type,
       label: s.label || '',
@@ -334,6 +355,20 @@ const changedBlocksOf = (d: Draft, m: Meta, base: { draft: Draft; meta: Meta }):
   if (m.reason !== base.meta.reason) out.push('причина');
   if (m.measures !== base.meta.measures) out.push('меры');
   return out;
+};
+
+/**
+ * Сообщение ЖЁСТКОГО нарушения хронологии (единое для баннера над таблицей и
+ * для блокировки сохранения): называет ОБА этапа с их датами.
+ * Пара: a — раньше по seq (но с более поздней датой), b — позже по seq, дата раньше.
+ */
+const chronoConflictMessageOf = (conflicts: StageOrderConflict[], stageTypes: TimelineStageType[]): string => {
+  if (!conflicts.length) return '';
+  const c = conflicts[0];
+  const nameA = stageFullName(stageTypes, c.a);
+  const nameB = stageFullName(stageTypes, c.b);
+  const more = conflicts.length > 1 ? ` (и ещё ${conflicts.length - 1} пара)` : '';
+  return `Хронология нарушена: «${nameB}» (${fmtDM(c.dayB)}) идёт в маршруте позже «${nameA}» (${fmtDM(c.dayA)}), но его плановая дата раньше${more}. Даты и порядок строк должны идти согласованно — сохранение заблокировано: исправьте даты или порядок этапов.`;
 };
 
 // ---------------------------------------------------------------------------
@@ -753,7 +788,10 @@ export function CarMiniTimeline({
     [carBases, miniFactInts, today, miniCarLabel],
   );
   const miniFillInputs = useMemo<StageFillInput[]>(
-    () => carTrips.flatMap((t) => (t.stages || []).map((s) => ({ tripKey: t.key, stage: s, archived: !!t.archived }))),
+    () =>
+      carTrips.flatMap((t) =>
+        sortStagesRoute(t.stages || []).map((s) => ({ tripKey: t.key, stage: s, archived: !!t.archived })),
+      ),
     [carTrips],
   );
   /**
@@ -1761,6 +1799,21 @@ export default function TripCard({
   const [eventFormRequest, setEventFormRequest] = useState<{ stageId?: string; nonce: number } | null>(null);
   /** Краткая подсветка этапа после клика по маркеру на встроенном таймлайне. */
   const [highlightStage, setHighlightStage] = useState<string | null>(null);
+  /**
+   * Перетаскивание строк этапов (без внешних библиотек): id перетаскиваемой
+   * строки и строка-цель под курсором (подсветка). Порядок строк окна — ГЛАВНЫЙ:
+   * он же задаёт порядок слева-направо на полосе в пределах одного дня (seq).
+   */
+  const [dragStageId, setDragStageId] = useState<string | null>(null);
+  const [dropStageId, setDropStageId] = useState<string | null>(null);
+  /**
+   * Предупреждение порядка по ШАБЛОНУ направления (не блокирует сохранение):
+   * первая противоречащая пара + кнопки «Поменять местами» / «Оставить как
+   * есть»; sig — подпись набора предупреждений (повторное сохранение после
+   * «Оставить как есть» той же пары проходит без повторного вопроса).
+   */
+  const [warnInfo, setWarnInfo] = useState<{ w: TemplateOrderWarning; close: boolean; sig: string } | null>(null);
+  const warnedSigRef = useRef('');
   const isPlan = trip.kind === 'plan';
   const planSourceId = trip.plan?.id || '';
   const archived = !!trip.archived;
@@ -2132,6 +2185,20 @@ export default function TripCard({
    * плановых дат (страховка поверх UI-гейтов).
    */
   const findValidationIssue = (): { message: string; focus: () => void } | null => {
+    // ЖЁСТКИЙ контроль хронологии этапов (lib/stageSchedule.stageOrderConflicts):
+    // дата этапа с БОЛЬШИМ seq не может быть раньше даты этапа с меньшим seq —
+    // сохранение блокируется, конфликтные строки подсвечены, сообщение называет
+    // ОБА этапа (единое сообщение — и у баннера над таблицей).
+    if (chronoConflicts.length) {
+      const c = chronoConflicts[0];
+      return {
+        message: chronoConflictMessageOf(chronoConflicts, stageTypes),
+        focus: () => {
+          const row = rootRef.current?.querySelector(`[data-stage="${c.b.id}"]`);
+          row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        },
+      };
+    }
     const s = dayNum(draft.planStart);
     const e = dayNum(draft.planEnd);
     if (s != null && e != null && e < s) {
@@ -2217,6 +2284,17 @@ export default function TripCard({
       setSaveError(issue.message);
       toast(issue.message, 'error');
       issue.focus();
+      return;
+    }
+    // Мягкий контроль порядка по ШАБЛОНУ выбранного направления (lib/stageTemplates):
+    // НЕ блокирует сохранение — спрашивает «Поменять местами» (seq пары
+    // пересчитывается 1..N, затем сохранение продолжается) или «Оставить как
+    // есть». Подпись набора предупреждений: после «Оставить как есть» та же
+    // пара больше не переспрашивается; пока панель открыта, повторный Save
+    // не записывает окно мимо выбора.
+    if (warnInfo) return;
+    if (stageWarnings.length > 0 && warnedSigRef.current !== stageWarningsSig) {
+      setWarnInfo({ w: stageWarnings[0], close: closeAfter, sig: stageWarningsSig });
       return;
     }
     const perm = planLock.permission;
@@ -2471,6 +2549,26 @@ export default function TripCard({
           `Рейс ${trip.carNumber || trip.key}: добавлено этапов ${changes.adds.length}${names ? ` (${names})` : ''}`,
         );
       }
+      // Журнал: ПЕРЕСТАНОВКА порядка этапов — «было → стало» по каждому
+      // сдвинутому этапу (существующий logAction: автор, время, рейс).
+      const reordered = changes.plannedUpdates.filter((u) => u.seq !== undefined && (u.orderBefore ?? 0) !== u.seq);
+      if (reordered.length > 0) {
+        const list = reordered
+          .map((u) => {
+            const st = draft.stages.find((x) => x.id === u.id);
+            const nm = st ? stageFullName(stageTypes, st) : u.id;
+            return `${nm}: порядок ${u.orderBefore ?? '—'}→${u.seq}`;
+          })
+          .join('; ');
+        dbService.logAction(
+          user.name,
+          user.role,
+          'Перестановка этапов',
+          'Timeline',
+          trip.key,
+          `Рейс ${trip.carNumber || trip.key}: порядок этапов обновлён (1..N) — ${list}`,
+        );
+      }
 
       // Успех: базовое состояние обновляем ТОЛЬКО здесь (по факту записи) —
       // «есть несохранённые изменения» сбрасывается. По кнопке/Enter окно
@@ -2585,6 +2683,35 @@ export default function TripCard({
   const tone = STATUS_TONE[status.level] || STATUS_TONE[0];
   /** Плановый график с запасом черновика — итог над таблицей этапов (lib/stageSchedule). */
   const draftSchedule = useMemo(() => buildStageSchedule(draft.stages), [draft.stages]);
+
+  // ── ЕДИНЫЙ порядок этапов и контроль хронологии ─────────────────────────
+  /**
+   * Порядок строк окна рейса — тот же список, что у полосы: «дата, затем seq»
+   * (lib/stageSchedule.sortStagesRoute). Таблица рисует ИМЕННО его, кнопки
+   * вверх/вниз и перетаскивание работают по нему же; порядок в пределах дня
+   * (seq) слева-направо на полосе повторяет порядок строк сверху вниз.
+   */
+  const draftStagesSorted = useMemo(() => sortStagesRoute(draft.stages), [draft.stages]);
+  /** ЖЁСТКОЕ нарушение хронологии (блокирует сохранение, подсвечивает строки). */
+  const chronoConflicts = useMemo(() => stageOrderConflicts(draftStagesSorted), [draftStagesSorted]);
+  const conflictStageIds = useMemo(
+    () => new Set(chronoConflicts.flatMap((c) => [String(c.a.id), String(c.b.id)])),
+    [chronoConflicts],
+  );
+  /** Шаблон этапов выбранного направления: подсказка порядка и мягкий контроль. */
+  const orderTemplate = useMemo(
+    () => templateForDirection(effectiveStageTemplates(stageTemplates), currentDirectionLabel, draft.direction),
+    [stageTemplates, currentDirectionLabel, draft.direction],
+  );
+  /** Мягкие предупреждения порядка по шаблону направления (не блокируют). */
+  const stageWarnings = useMemo(
+    () => templateOrderWarnings(draftStagesSorted, orderTemplate, stageTypes),
+    [draftStagesSorted, orderTemplate, stageTypes],
+  );
+  const stageWarningsSig = useMemo(
+    () => stageWarnings.map((w) => `${w.a.id}:${stageSeqOf(w.a, 0)}|${w.b.id}:${stageSeqOf(w.b, 0)}|${w.dayIso}`).join(';'),
+    [stageWarnings],
+  );
   const dispatcherShown = dispatchers.find((d) => d.id === draft.dispatcherId)?.name || draft.dispatcherName || 'Не указано';
 
   const span = tripSpan(draftTrip);
@@ -2658,21 +2785,94 @@ export default function TripCard({
   };
 
   /**
-   * Перестановка этапа в маршруте: «раньше внесён — левее» (seq). Двигается
-   * ЧЕРНОВИК; после перестановки seq/order перенумеровываются по порядку
-   * массива (1..N) — порядок читается из данных даже у рейсов без seq.
+   * Перестановка строки этапа на позицию соседа (кнопки «вверх/вниз»).
+   * Порядок строк окна — ГЛАВНЫЙ: он задаёт и порядок слева-направо на полосе
+   * в пределах одного дня (seq пересчитывается 1..N и уходит в базу существующим
+   * атомарным сохранением окна — один multi-path update).
+   * Права (lib/stageRights.resolveStageMove):
+   *  · один день / оба этапа без даты — исполнитель, даты не меняются;
+   *  · разные дни — только администратор: этапы обмениваются датами местами
+   *    (строка «встаёт ровно туда, куда её поставил пользователь»);
+   *  · пара «с датой ↔ без даты» не переставляется никому (порядок задают даты).
+   * Замок плана (canEditPlanned) действует как и раньше — не ослаблен.
    */
-  const moveStage = (stageId: string, dir: -1 | 1) => {
-    if (readOnly || !canEditPlanned) return;
-    setDraft((d) => {
-      const idx = d.stages.findIndex((s) => s.id === stageId);
-      const to = idx + dir;
-      if (idx < 0 || to < 0 || to >= d.stages.length) return d;
-      const arr = [...d.stages];
-      const [moved] = arr.splice(idx, 1);
-      arr.splice(to, 0, moved);
-      return { ...d, stages: arr.map((s, i) => ({ ...s, seq: i + 1, order: i + 1 })) };
+  const moveStage = (stageId: string, dir: -1 | 1): boolean => {
+    if (readOnly || !canEditPlanned) return false;
+    const sorted = sortStagesRoute(draft.stages);
+    const idx = sorted.findIndex((s) => s.id === stageId);
+    const neighbor = idx >= 0 ? sorted[idx + dir] : undefined;
+    const decision = resolveStageMove(stageRights, idx >= 0 ? sorted[idx] : null, neighbor);
+    if (!decision.allowed) {
+      if (neighbor) toast(decision.reason, 'info');
+      return false;
+    }
+    const next = moveStageInList(sorted, stageId, dir);
+    if (!next) return false;
+    setDraft((d) => ({ ...d, stages: next }));
+    return true;
+  };
+
+  /**
+   * Перетаскивание строки на позицию другой строки (HTML5 DnD, без библиотек).
+   * Разрешено ВНУТРИ одной группы (один день или оба этапа без даты) — перенос
+   * на другой день выполняется кнопками (для администратора — с обменом дат).
+   * После перестановки seq/order перенумеровываются 1..N.
+   */
+  const moveStageToIndex = (stageId: string, targetIndex: number): boolean => {
+    if (readOnly || !canEditPlanned) return false;
+    const sorted = sortStagesRoute(draft.stages);
+    const from = sorted.findIndex((s) => s.id === stageId);
+    if (from < 0 || targetIndex < 0 || targetIndex >= sorted.length || targetIndex === from) return false;
+    const moved = sorted[from];
+    const lo = Math.min(from, targetIndex);
+    const hi = Math.max(from, targetIndex);
+    const crossed = sorted.slice(lo, hi + 1).filter((s) => s.id !== moved.id);
+    const okInside = crossed.every((n) => {
+      const d = resolveStageMove(stageRights, moved, n);
+      return d.allowed && d.kind !== 'cross-day';
     });
+    if (!okInside) {
+      toast(
+        'Перетаскивание — внутри одного дня или среди этапов без даты; перенос на другой день — кнопками «выше/ниже» (администратор — с обменом дат).',
+        'info',
+      );
+      return false;
+    }
+    const next = [...sorted];
+    next.splice(from, 1);
+    next.splice(targetIndex, 0, moved);
+    setDraft((d) => ({ ...d, stages: renumberStageSeq(next) }));
+    return true;
+  };
+
+  /** Завершение перетаскивания (сброс подсветки). */
+  const endStageDrag = () => {
+    setDragStageId(null);
+    setDropStageId(null);
+  };
+
+  /**
+   * «Поменять местами» в предупреждении по шаблону: пара одного дня меняется
+   * номерами seq (даты не меняются), seq перенумеровывается 1..N — и то же
+   * сохранение продолжается (требование: после перестановки — сохранение).
+   */
+  const acceptWarnSwap = () => {
+    if (!warnInfo) return;
+    const { w, close } = warnInfo;
+    const next = swapStageOrderInList(sortStagesRoute(draft.stages), w.a.id, w.b.id);
+    setDraft((d) => ({ ...d, stages: next }));
+    setWarnInfo(null);
+    warnedSigRef.current = '';
+    window.setTimeout(() => void saveAllRef.current({ close }), 0);
+  };
+
+  /** «Оставить как есть»: предупреждение принято, сохранение продолжается. */
+  const acceptWarnKeep = () => {
+    if (!warnInfo) return;
+    warnedSigRef.current = warnInfo.sig;
+    const close = warnInfo.close;
+    setWarnInfo(null);
+    window.setTimeout(() => void saveAllRef.current({ close }), 0);
   };
 
   /** Шаблон запаса по типу этапа (Настройки → «Шаблоны запасов этапов»); 0 — нет. */
@@ -2709,11 +2909,14 @@ export default function TripCard({
   };
 
   /** Кнопка «Добавить этап»: копится в черновике и сохраняется кнопкой.
-   *  Право — ТОЛЬКО canAddStage (lib/stageRights): при любом статусе рейса. */
+   *  Право — ТОЛЬКО canAddStage (lib/stageRights): при любом статусе рейса.
+   *  Новый этап встаёт В КОНЕЦ маршрута (seq = максимум по seq/order/длине + 1):
+   *  он без даты и в едином порядке (дата, seq) отображается последним. */
   const addStage = () => {
     if (!stageRights.canAddStage) return;
     const sid = `s_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-    const order = (draft.stages.length ? Math.max(...draft.stages.map((s) => s.order || 0)) : 0) + 1;
+    const maxSeq = draft.stages.reduce((m, s) => Math.max(m, Number(s.seq) || 0, Number(s.order) || 0), draft.stages.length);
+    const order = maxSeq + 1;
     const stage: TimelineStage = {
       id: sid,
       type: 'other',
@@ -2726,7 +2929,7 @@ export default function TripCard({
       order,
       // Новый этап — в конец маршрута; запас по умолчанию — из шаблона типа
       // (тип нового этапа 'other'; шаблоны правятся в Настройках).
-      seq: draft.stages.length + 1,
+      seq: maxSeq + 1,
       bufferDays: templateBufferOf('other'),
     };
     setDraft((d) => ({ ...d, stages: [...d.stages, stage] }));
@@ -2897,6 +3100,43 @@ export default function TripCard({
                 className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white border border-rose-200 text-rose-600 hover:bg-rose-100 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default"
               >
                 Повторить
+              </button>
+            </div>
+          ) : null}
+          {/*
+            ПРЕДУПРЕЖДЕНИЕ порядка по шаблону направления (не блокирует):
+            «Поменять местами» меняет этапы одного дня номерами seq
+            (перенумерация 1..N) и продолжает сохранение; «Оставить как есть» —
+            сохраняет без изменений. Даты при перестановке не меняются.
+          */}
+          {warnInfo ? (
+            <div
+              data-ui="stage-order-warn"
+              role="alert"
+              className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800"
+            >
+              <TriangleAlert className="w-4 h-4 shrink-0 text-amber-600" aria-hidden="true" />
+              <span className="flex-1 min-w-[260px]">
+                Порядок по шаблону «{orderTemplate?.name}»: в один день «{warnInfo.w.nameA}» стоит раньше
+                «{warnInfo.w.nameB}», а шаблон задаёт обратный порядок. Переставить этапы местами?
+              </span>
+              <button
+                type="button"
+                data-ui="stage-order-warn-swap"
+                disabled={savingAll}
+                onClick={acceptWarnSwap}
+                className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-amber-500 text-white hover:bg-amber-600 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default"
+              >
+                Поменять местами
+              </button>
+              <button
+                type="button"
+                data-ui="stage-order-warn-keep"
+                disabled={savingAll}
+                onClick={acceptWarnKeep}
+                className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white border border-[#E5E7EB] text-[#4B5563] hover:bg-[#F3F4F6] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default"
+              >
+                Оставить как есть
               </button>
             </div>
           ) : null}
@@ -3420,6 +3660,25 @@ export default function TripCard({
             <span>Этапов с плановыми датами нет — план с запасом не рассчитывается (даты не выдумываются).</span>
           )}
         </div>
+        {/* Подсказка порядка из ШАБЛОНА направления (ветка stageTemplates —
+            не хардкод): тот же шаблон мягко контролирует порядок при
+            сохранении; этапы одного дня расставляются по порядку строк. */}
+        {orderTemplate && orderTemplate.stages.length > 0 ? (
+          <div data-ui="stage-order-hint" className="text-[11px] text-[#6B7280]">
+            Порядок направления «{orderTemplate.name}» (шаблон):{' '}
+            <b className="text-[#4B5563]">{orderTemplate.stages.join(' → ')}</b> — этапы одного дня
+            расставляются по порядку строк таблицы (вверх/вниз или перетаскиванием).
+          </div>
+        ) : null}
+        {/* ЖЁСТКИЙ контроль хронологии (lib/stageSchedule.stageOrderConflicts):
+            сохранение заблокировано, конфликтные строки подсвечены, сообщение
+            называет оба этапа. */}
+        {chronoConflicts.length ? (
+          <div data-ui="stage-order-conflict" role="alert" className={`${UI.errorBox} flex items-start gap-2`}>
+            <TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+            <span>{chronoConflictMessageOf(chronoConflicts, stageTypes)}</span>
+          </div>
+        ) : null}
         <div data-ui="stages-table" className="w-full overflow-x-auto">
           <table className="w-full text-left min-w-[880px]">
             <thead>
@@ -3441,7 +3700,13 @@ export default function TripCard({
               </tr>
             </thead>
             <tbody>
-              {draft.stages.map((s, sIdx) => {
+              {/*
+                Таблица рисует ЕДИНЫЙ отсортированный список (дата, затем seq) —
+                тот же, что у полосы (lib/stageSchedule.sortStagesRoute): «как
+                строки сверху вниз в окне — так и слева направо на полосе в
+                пределах одного дня». Сырой порядок массива из базы не влияет.
+              */}
+              {draftStagesSorted.map((s, sIdx) => {
                 const dev = stageDeviation(s);
                 const pDay = dayNum(s.plannedDate);
                 const fDay = dayNum(s.actualDate);
@@ -3452,9 +3717,57 @@ export default function TripCard({
                 const stState = stageStateOf(s, today);
                 const bufState = stageBufferStateOf(s, draftSchedule, today);
                 const stageEvents = carEvents.filter((e) => e.tripKey === trip.key && e.stageId === s.id).length;
+                // Перестановка пары «этап ↔ сосед» (lib/stageRights.resolveStageMove):
+                // разрешение и причина блокировки — для кнопок и замка в UI.
+                const upNeighbor = sIdx > 0 ? draftStagesSorted[sIdx - 1] : undefined;
+                const downNeighbor = sIdx < draftStagesSorted.length - 1 ? draftStagesSorted[sIdx + 1] : undefined;
+                const upMove = resolveStageMove(stageRights, s, upNeighbor);
+                const downMove = resolveStageMove(stageRights, s, downNeighbor);
+                const moveLockReason = !upMove.allowed && upNeighbor
+                  ? upMove.reason
+                  : !downMove.allowed && downNeighbor
+                    ? downMove.reason
+                    : '';
+                const inConflict = conflictStageIds.has(String(s.id));
                 return (
                   <React.Fragment key={s.id}>
-                    <tr data-stage={s.id} data-stage-highlighted={highlightStage === s.id ? '1' : undefined} className={`border-b border-[#E5E7EB] transition-colors ${highlightStage === s.id ? 'bg-[var(--accent-10)] ring-1 ring-inset ring-[var(--accent-30)]' : ''}`}>
+                    <tr
+                      data-stage={s.id}
+                      data-stage-highlighted={highlightStage === s.id ? '1' : undefined}
+                      data-stage-conflict={inConflict ? '1' : undefined}
+                      data-stage-drop-target={dropStageId === s.id ? '1' : undefined}
+                      draggable={!readOnly && canEditPlanned}
+                      onDragStart={(e) => {
+                        setDragStageId(s.id);
+                        try {
+                          e.dataTransfer.setData('text/plain', s.id);
+                          e.dataTransfer.effectAllowed = 'move';
+                        } catch {
+                          /* dataTransfer может быть недоступен — id уже в состоянии */
+                        }
+                      }}
+                      onDragOver={(e) => {
+                        if (!dragStageId || dragStageId === s.id) return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        if (dropStageId !== s.id) setDropStageId(s.id);
+                      }}
+                      onDragLeave={() => {
+                        setDropStageId((cur) => (cur === s.id ? null : cur));
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const dragged = dragStageId || e.dataTransfer.getData('text/plain');
+                        if (dragged && dragged !== s.id) moveStageToIndex(dragged, sIdx);
+                        endStageDrag();
+                      }}
+                      onDragEnd={endStageDrag}
+                      className={`border-b border-[#E5E7EB] transition-colors ${
+                        inConflict ? 'bg-rose-50 ring-1 ring-inset ring-rose-300' : ''
+                      } ${dropStageId === s.id ? 'ring-2 ring-inset ring-[var(--accent)] bg-[var(--accent-10)]' : ''} ${
+                        highlightStage === s.id ? 'bg-[var(--accent-10)] ring-1 ring-inset ring-[var(--accent-30)]' : ''
+                      }`}
+                    >
                       <td className="px-2 py-1.5 align-middle">
                         <select
                           value={s.type}
@@ -3662,18 +3975,42 @@ export default function TripCard({
                           {!readOnly && canEditPlanned ? (
                             <>
                               {/*
-                                Перестановка этапа («раньше внесён — левее»):
-                                seq = позиция в маршруте; работает и для записи
-                                уже сохранённого плана (тот же гейт правок).
+                                Перестановка строк: порядок строк окна — ГЛАВНЫЙ
+                                (seq пересчитывается 1..N; он же — порядок
+                                слева-направо на полосе в пределах дня).
+                                · один день / оба без даты — исполнитель;
+                                · разные дни — только администратор (этапы
+                                  поменяются датами местами);
+                                · пара «с датой ↔ без даты» — замок с причиной
+                                  (иконка, как у полей дат).
+                                Строку можно тащить (перетаскивание без
+                                библиотек — за ручку ⠿ или строку).
                               */}
+                              <span
+                                data-ui="stage-drag-handle"
+                                data-stage-drag={s.id}
+                                title="Перетащите строку (или кнопки ↑/↓): порядок строк окна задаёт порядок этапов одного дня слева-направо на полосе"
+                                className="inline-flex items-center justify-center px-0.5 text-[#C3C8CF] cursor-grab select-none"
+                                aria-hidden="true"
+                              >
+                                <GripVertical className="w-3.5 h-3.5" />
+                              </span>
                               <button
                                 type="button"
                                 data-ui="stage-move-up"
                                 data-stage-move={s.id}
                                 onClick={() => moveStage(s.id, -1)}
-                                disabled={sIdx === 0}
+                                disabled={!upNeighbor || !upMove.allowed}
                                 aria-label="Этап выше по маршруту"
-                                title="Выше по маршруту: раньше внесён — левее в дне"
+                                title={
+                                  !upNeighbor
+                                    ? 'Этап уже первый в маршруте'
+                                    : upMove.allowed
+                                      ? upMove.kind === 'cross-day'
+                                        ? 'Выше по маршруту: этапы разных дней поменяются датами местами (администратор) — полоса повторит порядок строк'
+                                        : 'Выше по маршруту: раньше внесён — левее в дне'
+                                      : upMove.reason
+                                }
                                 className="inline-flex items-center justify-center p-1 rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default"
                               >
                                 <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
@@ -3683,13 +4020,33 @@ export default function TripCard({
                                 data-ui="stage-move-down"
                                 data-stage-move={s.id}
                                 onClick={() => moveStage(s.id, 1)}
-                                disabled={sIdx === draft.stages.length - 1}
+                                disabled={!downNeighbor || !downMove.allowed}
                                 aria-label="Этап ниже по маршруту"
-                                title="Ниже по маршруту: позже внесён — правее в дне"
+                                title={
+                                  !downNeighbor
+                                    ? 'Этап уже последний в маршруте'
+                                    : downMove.allowed
+                                      ? downMove.kind === 'cross-day'
+                                        ? 'Ниже по маршруту: этапы разных дней поменяются датами местами (администратор) — полоса повторит порядок строк'
+                                        : 'Ниже по маршруту: позже внесён — правее в дне'
+                                      : downMove.reason
+                                }
                                 className="inline-flex items-center justify-center p-1 rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-default"
                               >
                                 <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
                               </button>
+                              {/* Замок перестановки — тем же языком, что замок
+                                  полей дат (иконка + подсказка почему). */}
+                              {moveLockReason ? (
+                                <span
+                                  data-ui="stage-move-lock"
+                                  className="shrink-0"
+                                  title={moveLockReason}
+                                  aria-label={moveLockReason}
+                                >
+                                  <Lock className="w-3.5 h-3.5 text-[#9CA3AF]" aria-hidden="true" />
+                                </span>
+                              ) : null}
                               <button
                                 type="button"
                                 onClick={() => removeStage(s.id)}
@@ -3700,6 +4057,15 @@ export default function TripCard({
                                 <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                               </button>
                             </>
+                          ) : !readOnly && canWrite && draftStagesSorted.length > 1 ? (
+                            <span
+                              data-ui="stage-move-lock"
+                              className="shrink-0"
+                              title="План сохранён: перестановка этапов — как и правка внесённых дат — только с разового разрешения администратора"
+                              aria-label="План сохранён — перестановка только с разового разрешения администратора"
+                            >
+                              <Lock className="w-3.5 h-3.5 text-[#9CA3AF]" aria-hidden="true" />
+                            </span>
                           ) : null}
                         </div>
                       </td>

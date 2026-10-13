@@ -13,7 +13,7 @@ import type {
   TimelineTrip,
   TimelineVehicleEvent,
 } from '../../../../types';
-import { buildStageSchedule } from './stageSchedule';
+import { buildStageSchedule, sortStagesRoute } from './stageSchedule';
 
 export const DAY_MS = 86400000;
 
@@ -381,9 +381,10 @@ export const normalizeStages = (raw: unknown): TimelineStage[] => {
     : raw && typeof raw === 'object'
       ? Object.keys(raw as Record<string, TimelineStage>).map((k) => ({ ...(raw as Record<string, TimelineStage>)[k], id: (raw as Record<string, TimelineStage>)[k]?.id || k }))
       : [];
-  return arr
-    .filter((s) => s && typeof s === 'object')
-    .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0) || String(a.id).localeCompare(String(b.id)));
+  // ЕДИНЫЙ порядок «дата, затем seq» (lib/stageSchedule.sortStagesRoute):
+  // сырой порядок ключей базы на отображение не влияет — и таблица окна рейса,
+  // и полоса таймлайна читают один и тот же порядок.
+  return sortStagesRoute(arr.filter((s) => s && typeof s === 'object'));
 };
 
 /**
@@ -480,10 +481,11 @@ export const getDeadlineStatus = (
 export const getLateStages = (trip: TimelineTrip, today: number): TimelineStage[] =>
   trip.stages.filter((s) => isStageLate(s, today));
 
-/** Рейс завершён по факту: у ПОСЛЕДНЕГО этапа (по порядку) заполнена фактическая
- *  дата. Отсутствие данных не трактуется как завершение или задержка. */
+/** Рейс завершён по факту: у ПОСЛЕДНЕГО этапа (по единому порядку «дата, seq»)
+ *  заполнена фактическая дата. Отсутствие данных не трактуется как завершение
+ *  или задержка. */
 export const tripFactEnd = (trip: TimelineTrip): number | null => {
-  const stages = [...(trip.stages || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+  const stages = sortStagesRoute(trip.stages || []);
   if (!stages.length) return null;
   return dayNum(stages[stages.length - 1].actualDate);
 };

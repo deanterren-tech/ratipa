@@ -61,7 +61,14 @@ export const stageBufferOf = (s: TimelineStage): number => {
 };
 
 /** Ключ сортировки маршрута: сначала дата (без даты — в конец), затем seq. */
-export const stageRouteCmp = (a: TimelineStage, b: TimelineStage): number => {
+export const stageRouteCmp = (a: TimelineStage, b: TimelineStage): number =>
+  stageRouteCmpSeq(a, stageSeqOf(a, 0), b, stageSeqOf(b, 0));
+
+/**
+ * Тот же компаратор «дата, затем seq», но с ЗАРАНЕЕ вычисленным seq (для
+ * сортировки списка, где миграционный seq считается по позиции элемента).
+ */
+export const stageRouteCmpSeq = (a: TimelineStage, seqA: number, b: TimelineStage, seqB: number): number => {
   const pa = dayNum(a.plannedDate);
   const pb = dayNum(b.plannedDate);
   if (pa != null && pb != null && pa !== pb) return pa - pb;
@@ -70,7 +77,149 @@ export const stageRouteCmp = (a: TimelineStage, b: TimelineStage): number => {
   const fa = dayNum(a.actualDate);
   const fb = dayNum(b.actualDate);
   if (pa == null && pb == null && fa != null && fb != null && fa !== fb) return fa - fb;
-  return stageSeqOf(a, 0) - stageSeqOf(b, 0) || String(a.id).localeCompare(String(b.id));
+  return seqA - seqB || String(a.id).localeCompare(String(b.id));
+};
+
+/**
+ * ЕДИНЫЙ ПОРЯДОК СПИСКА ЭТАПОВ (одна и та же сортировка «дата, затем seq» для
+ * таблицы окна рейса, полосы, заливок, «в этот день также», мини-таймлайна,
+ * отчётов и выгрузок): «как строки сверху вниз в окне — так и слева направо
+ * на полосе в пределах одного дня». Сырой порядок массива (порядок ключей в
+ * базе) на отображение не влияет: seq у старых записей читается миграционно
+ * (seq → order → позиция), затем довесок — id (детерминированно).
+ * Возвращает НОВЫЙ массив; исходный не мутируется.
+ */
+export const sortStagesRoute = (stages: TimelineStage[] | null | undefined): TimelineStage[] => {
+  const list = (stages || []).filter((s) => s && typeof s === 'object');
+  return list
+    .map((s, i) => ({ s, seq: stageSeqOf(s, i) }))
+    .sort((a, b) => stageRouteCmpSeq(a.s, a.seq, b.s, b.seq))
+    .map((x) => x.s);
+};
+
+/** Служебная строка плана (фолбэк-этап «Загрузка» без данных) — не этап рейса. */
+export const isServiceStageId = (id: unknown): boolean => String(id ?? '').endsWith('-fallback-load');
+
+/**
+ * Перенумерация seq/order 1..N по ПОРЯДКУ СПИСКА — «порядок строк окна рейса».
+ * Возвращает НОВЫЙ массив (порядок входа сохраняется).
+ */
+export const renumberStageSeq = (stages: TimelineStage[] | null | undefined): TimelineStage[] =>
+  (stages || []).filter((s) => s && typeof s === 'object').map((s, i) => ({ ...s, seq: i + 1, order: i + 1 }));
+
+/** Вид пары соседних строк при перестановке: оба без даты / один день / разные дни. */
+export type StageMoveKind = 'empty-tail' | 'same-day' | 'cross-day';
+
+/**
+ * Вид перестановки пары «перемещаемый этап ↔ сосед по списку отображения»:
+ *  · 'empty-tail' — оба этапа без плановой даты (порядок в хвосте без дат);
+ *  · 'same-day'   — обе плановые даты внесены и СОВПАДАЮТ (порядок внутри дня);
+ *  · 'cross-day'  — обе даты внесены и РАЗНЫЕ (этапы разных дней);
+ *  · null — пара «с датой ↔ без даты»: местами не переставляется.
+ */
+export const stageMoveKindOf = (
+  moved: TimelineStage | null | undefined,
+  neighbor: TimelineStage | null | undefined,
+): StageMoveKind | null => {
+  const mDay = dayNum(moved?.plannedDate);
+  const nDay = dayNum(neighbor?.plannedDate);
+  if (mDay == null && nDay == null) return 'empty-tail';
+  if (mDay != null && nDay != null) return mDay === nDay ? 'same-day' : 'cross-day';
+  return null;
+};
+
+/**
+ * Перестановка строки на соседнюю позицию в СПИСКЕ ОТОБРАЖЕНИЯ (dir: −1 выше,
+ * +1 ниже). Возвращает НОВЫЙ список или null, когда перестановка невозможна
+ * (край списка / пара «с датой ↔ без даты»).
+ *  · 'same-day' и 'empty-tail' — строки меняются местами, даты не трогаются;
+ *  · 'cross-day' — у пары меняются местами ПЛАНОВЫЕ ДАТЫ (строка встаёт на день
+ *    соседа — так она «встаёт ровно туда, куда её поставил пользователь», и
+ *    полоса повторяет это слева направо); право на такую перестановку решает
+ *    resolveStageMove (только администратор).
+ * В обоих случаях seq/order перенумеровываются 1..N по новому порядку списка.
+ */
+export const moveStageInList = (
+  stages: TimelineStage[] | null | undefined,
+  movedId: string,
+  dir: -1 | 1,
+): TimelineStage[] | null => {
+  const list = (stages || []).filter((s) => s && typeof s === 'object');
+  const idx = list.findIndex((s) => String(s.id) === String(movedId));
+  const to = idx + dir;
+  if (idx < 0 || to < 0 || to >= list.length) return null;
+  const moved = list[idx];
+  const other = list[to];
+  const kind = stageMoveKindOf(moved, other);
+  if (!kind) return null;
+  const next = [...list];
+  if (kind === 'cross-day') {
+    // Пара разных дней: этапы обмениваются датами (позиции — как при свапе).
+    next[to] = { ...moved, plannedDate: other.plannedDate ?? '' };
+    next[idx] = { ...other, plannedDate: moved.plannedDate ?? '' };
+  } else {
+    next[idx] = other;
+    next[to] = moved;
+  }
+  return renumberStageSeq(next);
+};
+
+/**
+ * Обмен местами ДВУХ этапов одного дня (кнопка «Поменять местами» при нарушении
+ * шаблона): этапы обмениваются номерами seq, затем seq/order перенумеровываются
+ * 1..N по новому порядку отображения. Даты не меняются. Нет пары в списке —
+ * список возвращается как есть.
+ */
+export const swapStageOrderInList = (
+  stages: TimelineStage[] | null | undefined,
+  idA: string,
+  idB: string,
+): TimelineStage[] => {
+  const list = (stages || []).filter((s) => s && typeof s === 'object');
+  const ia = list.findIndex((s) => String(s.id) === String(idA));
+  const ib = list.findIndex((s) => String(s.id) === String(idB));
+  if (ia < 0 || ib < 0 || ia === ib) return list;
+  const next = [...list];
+  const sa = stageSeqOf(next[ia], ia);
+  const sb = stageSeqOf(next[ib], ib);
+  next[ia] = { ...next[ia], seq: sb, order: sb };
+  next[ib] = { ...next[ib], seq: sa, order: sa };
+  return renumberStageSeq(sortStagesRoute(next));
+};
+
+/** Нарушение хронологии: этап с БОЛЬШИМ seq имеет БОЛЕЕ РАННЮЮ дату. */
+export interface StageOrderConflict {
+  /** Этап с меньшим seq (идёт раньше в маршруте). */
+  a: TimelineStage;
+  /** Этап с большим seq (идёт позже), но с более ранней датой. */
+  b: TimelineStage;
+  /** Дни (номера) плановых дат пары: dayA > dayB. */
+  dayA: number;
+  dayB: number;
+}
+
+/**
+ * ЖЁСТКИЙ контроль хронологии (блокирует сохранение): «дата этапа с БОЛЬШИМ seq
+ * не может быть раньше даты этапа с меньшим seq». Возвращает ВСЕ пары-
+ * нарушения (a — раньше по seq, b — позже по seq, но с более ранней датой);
+ * пустой список — хронология чистая. Этапы без плановой даты и служебные
+ * строки плана в проверку не входят (сравнивать нечего).
+ */
+export const stageOrderConflicts = (stages: TimelineStage[] | null | undefined): StageOrderConflict[] => {
+  const ordered = (stages || [])
+    .filter((s) => s && typeof s === 'object' && !isServiceStageId(s.id))
+    .map((s, i) => ({ s, seq: stageSeqOf(s, i), day: dayNum(s.plannedDate) }))
+    .filter((x): x is { s: TimelineStage; seq: number; day: number } => x.day != null)
+    .sort((x, y) => x.seq - y.seq || String(x.s.id).localeCompare(String(y.s.id)));
+  const out: StageOrderConflict[] = [];
+  for (let i = 0; i < ordered.length; i += 1) {
+    for (let j = i + 1; j < ordered.length; j += 1) {
+      if (ordered[i].day > ordered[j].day) {
+        out.push({ a: ordered[i].s, b: ordered[j].s, dayA: ordered[i].day, dayB: ordered[j].day });
+      }
+    }
+  }
+  return out;
 };
 
 export interface StageChainItem {

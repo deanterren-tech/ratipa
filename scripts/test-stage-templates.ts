@@ -31,6 +31,7 @@ import {
   templateCreatedLabel,
   templateForDirection,
   templateNameTaken,
+  templateOrderWarnings,
   templateStagesFromTrip,
   tripHasOwnStages,
 } from '../src/components/modules/tripTimeline/lib/stageTemplates';
@@ -251,6 +252,44 @@ console.log('10. Дубли имени: проверка и предложени
   check('цикл «сохранил → применил»: состав и порядок сохраняются', applyRes.stages.map((s) => s.type).join(',') === 'load,border');
   check('аддитивные createdAt/createdBy читаются из ветки базы', stageTemplatesFromDb({ t: { id: 't', name: 'T', stages: ['A'], createdAt: '2026-10-12T10:00:00.000Z', createdBy: 'admin' } })[0].createdBy === 'admin');
   check('подпись автора: «создан: admin, <дата>»', templateCreatedLabel({ id: 't', name: 'T', stages: [], createdAt: '2026-10-12T10:00:00.000Z', createdBy: 'admin' }).startsWith('создан: admin, ') && templateCreatedLabel({ id: 't', name: 'T', stages: [] }) === '');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+console.log('11. Предупреждение порядка по шаблону направления (templateOrderWarnings)');
+{
+  const china = DEFAULT_STAGE_TEMPLATES.find((t) => t.name === 'Китай')!;
+  // Один день: Выгрузка (seq 5) раньше Границы (seq 6) — шаблон требует
+  // обратного (Граница раньше Выгрузки).
+  const v = stage({ id: 'v', type: 'unl', plannedDate: '2026-10-26', seq: 5, order: 5 });
+  const b = stage({ id: 'b', type: 'border', plannedDate: '2026-10-26', seq: 6, order: 6 });
+  const warn = templateOrderWarnings([v, b], china, stageTypes);
+  check('Выгрузка раньше Границы в один день — предупреждение найдено', warn.length === 1, warn);
+  check('пара называет оба этапа: Выгрузка → Граница', warn[0]?.nameA === 'Выгрузка' && warn[0]?.nameB === 'Граница', warn[0] && `${warn[0].nameA}/${warn[0].nameB}`);
+  check('день пары — ISO плановой даты', warn[0]?.dayIso === '2026-10-26', warn[0]?.dayIso);
+  check('пара адресна к обоим этапам (кнопка «Поменять местами»)', warn[0]?.a.id === 'v' && warn[0]?.b.id === 'b');
+
+  // Верный порядок (Граница → Выгрузка) — предупреждений нет.
+  const okPairs = templateOrderWarnings([stage({ id: 'b2', type: 'border', plannedDate: '2026-10-26', seq: 5 }), stage({ id: 'v2', type: 'unl', plannedDate: '2026-10-26', seq: 6 })], china, stageTypes);
+  check('порядок по шаблону — предупреждений нет', okPairs.length === 0, okPairs);
+
+  // Граница раньше Загрузки в один день — тоже нарушение шаблона (Загрузка первая).
+  const loadAfter = templateOrderWarnings([b, stage({ id: 'l', type: 'load', plannedDate: '2026-10-26', seq: 7 })], china, stageTypes);
+  check('Граница раньше Загрузки — нарушение шаблона, названы оба', loadAfter.length === 1 && loadAfter[0].nameA === 'Граница' && loadAfter[0].nameB === 'Загрузка', loadAfter);
+
+  // Разные дни — не предупреждение: порядок между днями задают даты.
+  const diffDays = templateOrderWarnings([v, stage({ id: 'b3', type: 'border', plannedDate: '2026-10-27', seq: 6 })], china, stageTypes);
+  check('разные дни — предупреждений нет (порядок дней задают даты)', diffDays.length === 0, diffDays);
+
+  // Этап вне шаблона (тип «Другое») в сравнении не участвует; без шаблона — пусто.
+  const outsider = templateOrderWarnings([v, stage({ id: 'o', type: 'other', plannedDate: '2026-10-26', seq: 6 })], china, stageTypes);
+  check('тип вне шаблона не создаёт предупреждений', outsider.length === 0, outsider);
+  check('без шаблона (нет направления) — предупреждений нет', templateOrderWarnings([v, b], null, stageTypes).length === 0);
+  check('пустой шаблон/пустые этапы не падают', templateOrderWarnings([], { id: 't', name: 'T', stages: [] }, stageTypes).length === 0);
+  check('шаблон «Турция»: Затаможка раньше Границы — обратный порядок даёт предупреждение',
+    templateOrderWarnings([
+      stage({ id: 'g1', type: 'border', plannedDate: '2026-10-25', seq: 1 }),
+      stage({ id: 'g2', type: 'cust_out', plannedDate: '2026-10-25', seq: 2 }),
+    ], DEFAULT_STAGE_TEMPLATES.find((t) => t.name === 'Турция')!, stageTypes).length === 1);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

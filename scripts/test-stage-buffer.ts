@@ -10,6 +10,7 @@
 import type { TimelineStage, TimelineTrip } from '../src/types';
 import {
   buildStageSchedule,
+  sortStagesRoute,
   stageBufferOf,
   stageBufferStateOf,
   stageBufferStateTone,
@@ -282,6 +283,37 @@ console.log('9. Состояния факта относительно план�
   check('тон: beyond → rose', stageBufferStateTone('beyond') === 'rose');
   check('тон: planned-overdue → rose', stageBufferStateTone('planned-overdue') === 'rose');
   check('тон: остальные → grey', stageBufferStateTone('planned') === 'grey' && stageBufferStateTone('no-plan') === 'grey' && stageBufferStateTone('nodata') === 'grey');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+console.log('12. ЕДИНЫЙ порядок списка (sortStagesRoute): «как строки в окне — так и на полосе»');
+{
+  // Сырой порядок массива (порядок ключей базы) значения не имеет: показ и
+  // цепочка плана с запасом читают один и тот же порядок «дата, затем seq».
+  const raw = [
+    st('2026-10-26', { id: 'e', seq: 3 }),
+    st('2026-10-24', { id: 'a', seq: 1 }),
+    st('2026-10-25', { id: 'b', seq: 2 }),
+  ];
+  const sorted = sortStagesRoute(raw);
+  check('список по датам, а не по порядку массива', sorted.map((s) => s.id).join(',') === 'a,b,e', sorted.map((s) => s.id).join(','));
+  check('исходный массив не мутирован', raw.map((s) => s.id).join(',') === 'e,a,b');
+
+  // Эталон владельца (9271): в один день граница раньше выгрузки (seq 5 < 6).
+  const g = st('2026-10-25', { id: 'g', seq: 4 });
+  const bav = st('2026-10-26', { id: 'bavra', seq: 5 });
+  const ere = st('2026-10-26', { id: 'erevan', seq: 6 });
+  const sameDay = sortStagesRoute([ere, g, bav]);
+  check('эталон 9271: Гугути → Бавра → Ереван независимо от массива', sameDay.map((s) => s.id).join(',') === 'g,bavra,erevan', sameDay.map((s) => s.id).join(','));
+
+  // План с запасом строится по тому же порядку (цепочка), не по массиву.
+  const chain = buildStageSchedule([bav, g, ere]).chain;
+  check('цепочка запас-графика: g → bavra → erevan', chain.map((c) => c.stageId).join(',') === 'g,bavra,erevan', chain.map((c) => c.stageId).join(','));
+
+  // Без даты — всегда в конец (как в таблице и на полосе); пустые входы безопасны.
+  const withEmpty = sortStagesRoute([st('', { id: 'n', seq: 1 }), g]);
+  check('этап без даты — в конец списка', withEmpty[withEmpty.length - 1].id === 'n');
+  check('пустые входы безопасны', sortStagesRoute(undefined).length === 0);
 }
 
 console.log('');

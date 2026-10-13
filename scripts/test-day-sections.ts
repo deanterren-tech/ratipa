@@ -118,6 +118,33 @@ eq('категория типа: unl → выгрузка', stageCatOf('unl'), '
   const slots = layoutDaySlots(12, evs);
   eq('время только у одного: порядок по циклу (загрузка раньше выгрузки)', slots.map((s) => s.labels[0]), ['Загрузка (15:00)', 'Выгрузка (без времени)']);
 }
+// ── 4б. ОДИН день ОДНОГО рейса: порядок СТРОК ОКНА (seq) — главный; категория
+//       жизненного цикла его не перебивает («как внесено сверху вниз в окне,
+//       так и слева направо на полосе») ─────────────────────────────────────
+{
+  const evs: DayCellEvent[] = [
+    { mergeKey: stageMergeKeyOf('pd:1', 's2'), cat: 'stage-border', ref: { type: 'stage', tripKey: 'pd:1', stageId: 's2' }, label: 'Граница', seq: 6 },
+    { mergeKey: stageMergeKeyOf('pd:1', 's1'), cat: 'stage-unload', ref: { type: 'stage', tripKey: 'pd:1', stageId: 's1' }, label: 'Выгрузка', seq: 5 },
+  ];
+  const slots = layoutDaySlots(13, evs);
+  eq('seq строк окна главнее категории: Выгрузка (seq 5) слева от Границы (seq 6)', slots.map((s) => s.labels[0]), ['Выгрузка', 'Граница']);
+
+  const evsBack: DayCellEvent[] = [
+    { mergeKey: stageMergeKeyOf('pd:1', 's1'), cat: 'stage-unload', ref: { type: 'stage', tripKey: 'pd:1', stageId: 's1' }, label: 'Выгрузка', seq: 4 },
+    { mergeKey: stageMergeKeyOf('pd:1', 's2'), cat: 'stage-border', ref: { type: 'stage', tripKey: 'pd:1', stageId: 's2' }, label: 'Граница', seq: 5 },
+    { mergeKey: stageMergeKeyOf('pd:1', 's3'), cat: 'stage-load', ref: { type: 'stage', tripKey: 'pd:1', stageId: 's3' }, label: 'Загрузка', seq: 6 },
+  ];
+  const slotsBack = layoutDaySlots(14, evsBack);
+  eq('порядок строк переносится на полосу день-в-день (4→5→6)', slotsBack.map((s) => s.labels[0]), ['Выгрузка', 'Граница', 'Загрузка']);
+
+  // События РАЗНЫХ рейсов по seq не сравниваются — прежние правила (цикл).
+  const evsDiff: DayCellEvent[] = [
+    { mergeKey: stageMergeKeyOf('pd:1', 's1'), cat: 'stage-unload', ref: { type: 'stage', tripKey: 'pd:1', stageId: 's1' }, label: 'Выгрузка (рейс 1)', seq: 9 },
+    { mergeKey: stageMergeKeyOf('pd:2', 's1'), cat: 'stage-load', ref: { type: 'stage', tripKey: 'pd:2', stageId: 's1' }, label: 'Загрузка (рейс 2)', seq: 1 },
+  ];
+  const slotsDiff = layoutDaySlots(15, evsDiff);
+  eq('разные рейсы: seq не сравнивается, порядок по циклу', slotsDiff.map((s) => s.labels[0]), ['Загрузка (рейс 2)', 'Выгрузка (рейс 1)']);
+}
 
 // ── 5. Якоря дня смены: выгрузка/окончание рейса слева, простой справа ─────
 {

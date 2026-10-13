@@ -42,6 +42,8 @@
     "test:stage-templates": "tsx scripts/test-stage-templates.ts",
     "seed:stage-templates": "tsx scripts/seed-stage-templates.ts",
     "test:stage-rights": "tsx scripts/test-stage-rights.ts",
+    "test:stage-order": "tsx scripts/test-stage-order.ts",
+    "audit:stage-order": "tsx scripts/audit-stage-order.ts",
     "test:cities-cleanup": "tsx scripts/test-cities-cleanup.ts",
     "fix:cities": "tsx scripts/fix-cities-cleanup.ts"
   },

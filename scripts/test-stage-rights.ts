@@ -15,6 +15,7 @@ import { resolvePermission } from '../src/utils/permissions';
 import {
   canEditPlannedDateField,
   isAdminRole,
+  resolveStageMove,
   resolveStageRights,
   type StageRights,
 } from '../src/components/modules/tripTimeline/lib/stageRights';
@@ -130,6 +131,54 @@ console.log('3. Блокируемые изменения плана (гейт �
   check('запас существующего этапа — блокируется', computeBlockedPlanChanges(stored, [{ ...A, bufferDays: 3 }, B]).count === 1);
   check('без изменений — 0', computeBlockedPlanChanges(stored, stored).count === 0);
   check('пустые входы не падают', computeBlockedPlanChanges(undefined, undefined).count === 0);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+console.log('4. Перестановка строк этапов (resolveStageMove): права пары «этап ↔ сосед»');
+{
+  const day = (id: string, d: string, seq: number): TimelineStage => ({ ...st(id, d), id, seq, order: seq });
+  const blank = (id: string, seq: number): TimelineStage => ({ ...st(id, ''), id, seq, order: seq });
+  const disp = rightsOf('dispatcher', { kind: 'plan', planState: 'draft' });
+  const adm = rightsOf('admin', { kind: 'plan', planState: 'draft' });
+  const viewer = rightsOf('viewer', {});
+
+  const same1 = resolveStageMove(disp, day('a', '2026-10-26', 1), day('b', '2026-10-26', 2));
+  check('исполнитель: один день — разрешено (только seq, даты не меняются)', same1.allowed === true && same1.kind === 'same-day', same1);
+  const same2 = resolveStageMove(disp, blank('a', 1), blank('b', 2));
+  check('исполнитель: строки с ПУСТЫМИ датами — разрешено', same2.allowed === true && same2.kind === 'empty-tail', same2);
+  const cross1 = resolveStageMove(disp, day('a', '2026-10-26', 2), day('b', '2026-10-25', 1));
+  check('исполнитель: разные дни — ЗАПРЕЩЕНО', cross1.allowed === false && cross1.adminOnly === true, cross1);
+  check('подсказка блокировки называет администратора', cross1.reason.includes('администратор'), cross1.reason);
+
+  const cross2 = resolveStageMove(adm, day('a', '2026-10-26', 2), day('b', '2026-10-25', 1));
+  check('администратор: разные дни — разрешено (этапы меняются датами)', cross2.allowed === true && cross2.adminOnly === true && cross2.kind === 'cross-day', cross2);
+  const mixed = resolveStageMove(adm, day('a', '2026-10-26', 1), blank('b', 2));
+  check('пара «с датой ↔ без даты» — запрещена и администратору', mixed.allowed === false && mixed.kind === null, mixed);
+  check('подсказка объясняет: сначала внесите дату', mixed.reason.includes('внесите дату'), mixed.reason);
+
+  const ro = resolveStageMove(viewer, blank('a', 1), blank('b', 2));
+  check('без права записи — запрещено даже внутри пустых', ro.allowed === false && ro.reason.includes('права записи'), ro);
+  check('нет соседа — запрещено', resolveStageMove(adm, day('a', '2026-10-26', 1), undefined).allowed === false);
+
+  // Матрица ролей: право перестановки внутри дня = право записи;
+  // между днями — только администратор с правом записи.
+  const roles: Array<[string, boolean, boolean]> = [
+    ['root_admin', true, true],
+    ['admin', true, true],
+    ['manager', true, false],
+    ['dispatcher', true, false],
+    ['accountant', false, false],
+    ['viewer', false, false],
+  ];
+  let matrixOk = true;
+  for (const [role, within, across] of roles) {
+    const r = rightsOf(role, {});
+    if (r.canReorderStages !== within || r.canReorderAcrossDays !== across) {
+      matrixOk = false;
+      console.error(`    роль ${role} → canReorderStages=${r.canReorderStages}, canReorderAcrossDays=${r.canReorderAcrossDays}`);
+    }
+  }
+  check('матрица ролей: canReorderStages = запись, canReorderAcrossDays = admin + запись', matrixOk);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

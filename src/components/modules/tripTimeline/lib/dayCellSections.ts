@@ -161,7 +161,25 @@ export const layoutDaySlots = (day: number, events: DayCellEvent[]): DaySlot[] =
     side: evs.find((e) => e.side)?.side ?? null,
   }));
 
+  /**
+   * Порядок этапа ОДНОГО дня одного рейса: seq (порядок строк окна рейса).
+   * «Как внесено сверху вниз в окне — так и слева направо на полосе».
+   */
+  const stageSeq = (g: (typeof groups)[number]): { tripKey: string; seq: number } | null => {
+    const st = g.evs.find((e) => e.ref.type === 'stage' && typeof e.seq === 'number');
+    if (!st) return null;
+    const ref = st.ref as { type: 'stage'; tripKey: string };
+    return { tripKey: ref.tripKey, seq: st.seq as number };
+  };
+
   const cmp = (a: (typeof groups)[number], b: (typeof groups)[number]): number => {
+    // Правило 0 (главное для этапов): два этапа ОДНОГО дня одного рейса идут
+    // строго по порядку строк окна рейса (seq) — «как внесено сверху вниз,
+    // так и слева направо». Ни категория, ни время, ни ключ слияния его не
+    // перебивают: единый порядок (дата, seq) задаёт таблица окна.
+    const sa = stageSeq(a);
+    const sb = stageSeq(b);
+    if (sa && sb && sa.tripKey === sb.tripKey && sa.seq !== sb.seq) return sa.seq - sb.seq;
     // правило 2: если у обоих событий есть время — по времени
     if (a.time && b.time && a.time !== b.time) return a.time < b.time ? -1 : 1;
     // правило 1: по жизненному циклу (константа приоритета)
@@ -169,19 +187,8 @@ export const layoutDaySlots = (day: number, events: DayCellEvent[]): DaySlot[] =
     if (d !== 0) return d;
     const t = a.time && b.time && a.time !== b.time ? (a.time < b.time ? -1 : 1) : 0;
     if (t !== 0) return t;
-    // правило 3 (этапы одного дня): порядок маршрута — seq по возрастанию
-    // («раньше внесён — левее»); события записи сохраняют прежний порядок по
-    // ключу слияния. Отсутствие seq у старых этапов трактуется как
-    // миграционный порядок (order → позиция, см. lib/stageSchedule).
-    const stageSeq = (g: (typeof groups)[number]): { tripKey: string; seq: number } | null => {
-      const st = g.evs.find((e) => e.ref.type === 'stage' && typeof e.seq === 'number');
-      if (!st) return null;
-      const ref = st.ref as { type: 'stage'; tripKey: string };
-      return { tripKey: ref.tripKey, seq: st.seq as number };
-    };
-    const sa = stageSeq(a);
-    const sb = stageSeq(b);
-    if (sa && sb && sa.tripKey === sb.tripKey && sa.seq !== sb.seq) return sa.seq - sb.seq;
+    // правило 3 (остаток): равные seq (патологические данные) и события
+    // записи — прежний детерминированный порядок по ключу слияния.
     return a.mergeKey.localeCompare(b.mergeKey);
   };
 

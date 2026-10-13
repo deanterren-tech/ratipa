@@ -27,6 +27,7 @@
  * проверяется тестом scripts/test-fact-segments.ts).
  */
 import { dayNum, tripFactEnd, tripSpan } from './timeline';
+import { stageRouteCmp } from './stageSchedule';
 import type { TimelineStage, TimelineTrip } from '../../../../types';
 
 /** Цвет сегмента факта. */
@@ -119,16 +120,15 @@ const fmt = (n: number): string => {
 
 const stageName = (s: TimelineStage): string => String(s.label || s.type || 'этап').trim() || 'этап';
 
-const byOrder = (a: TimelineStage, b: TimelineStage): number =>
-  (Number(a.order) || 0) - (Number(b.order) || 0) || String(a.plannedDate || '').localeCompare(String(b.plannedDate || ''));
-
 /**
  * ЧИСТАЯ функция: рейс (этапы + плановые/фактические границы) → сегменты факта.
  * Ничего не читает и не пишет, кроме входных данных; today — параметр.
+ * Порядок этапов — ЕДИНЫЙ «дата, затем seq» (lib/stageSchedule.stageRouteCmp):
+ * тот же, что в таблице окна рейса и на полосе.
  */
 export const factSegmentsOf = (input: FactSegmentsInput): FactSegmentsResult => {
   const { factFrom, factTo, ongoing, today } = input;
-  const stages = [...input.stages].sort(byOrder);
+  const stages = [...input.stages].sort(stageRouteCmp);
   const plannedStages = stages.filter((s) => dayNum(s.plannedDate) != null);
   const planKnown = plannedStages.length > 0 || input.planFrom != null || input.planTo != null;
 
