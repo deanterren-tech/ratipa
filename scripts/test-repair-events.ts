@@ -13,6 +13,7 @@ import {
   EVENT_CHIP_MIN_W,
   EVENT_DATE_OUT_OF_RANGE,
   eventDateLimits,
+  eventChipWidthOf,
   eventMarkWidth,
   eventSeqRanks,
   eventsOutOfRange,
@@ -244,7 +245,8 @@ console.log('7. Раскладка меток событий (layoutEventDots): 
   };
   const one = layoutEventDots([ev('e1', '2026-10-05', { text: 'Мойка' })], D('2026-10-01'), D('2026-10-10'), xOf, dayW);
   ok('одно событие — одна метка, первая строка, у левого края дня', one.length === 1 && one[0].line === 0 && one[0].x === 4 * 30 + 1, one);
-  ok('ширина метки по тексту: минимум и максимум', eventMarkWidth('М') === EVENT_CHIP_MIN_W && eventMarkWidth('Д'.repeat(400)) === EVENT_CHIP_MAX_W, [eventMarkWidth('М'), eventMarkWidth('Д'.repeat(400))]);
+  ok('подпись метки по-прежнему считается по тексту (для подсказки)', eventMarkWidth('М') === EVENT_CHIP_MIN_W && eventMarkWidth('Д'.repeat(400)) === EVENT_CHIP_MAX_W, [eventMarkWidth('М'), eventMarkWidth('Д'.repeat(400))]);
+  ok('метка события базы — ромб 9×9 (как событие рейса)', eventChipWidthOf(ev('x', '2026-10-05', { text: 'Очень длинный текст события' })) === 9, eventChipWidthOf(ev('x', '2026-10-05', { text: 'Очень длинный текст события' })));
   ok('метка старой записи без текста получает ширину по подписи типа', eventMarkWidth(repairEventLabel('diag')) > 0);
   const multi = layoutEventDots(
     [ev('a', '2026-10-05', { seq: 1, text: 'Мойка' }), ev('b', '2026-10-05', { seq: 2, text: 'ТО' }), ev('c', '2026-10-05', { seq: 3, text: 'Сварка' })],
@@ -253,15 +255,23 @@ console.log('7. Раскладка меток событий (layoutEventDots): 
   ok('события одного дня — слева направо по seq', multi.map((c) => c.items[0].id).join(',') === 'a,b,c', multi.map((c) => `${c.items[0].id}@${c.x}`));
   ok('в одной строке метки не накладываются', !overlapInLine(multi), multi.map((c) => `${c.line}:${c.x}+${c.width}`));
   ok('каждому событию — своя метка (ничего не сворачивается в «+N»)', multi.length === 3 && multi.every((c) => c.extra === 0));
-  // Перенос: широкая метка предыдущего дня занимает место в начале СЛЕДУЮЩЕГО
-  // дня — метка следующего дня не встаёт поверх, а уходит на строку НИЖЕ.
+  // Перенос: кластер из четырёх ромбов одного дня «доходит» до начала
+  // СЛЕДУЮЩЕГО дня — метка следующего дня не встаёт поверх, а уходит на строку НИЖЕ.
   const wrap = layoutEventDots(
-    [ev('w1', '2026-10-05', { seq: 1, text: 'Диагностика подвески и ремонт рамы' }), ev('w2', '2026-10-06', { seq: 1, text: 'Мойка' })],
+    [
+      ev('w1', '2026-10-05', { seq: 1, text: 'ТО' }),
+      ev('w2', '2026-10-05', { seq: 2, text: 'Мойка' }),
+      ev('w3', '2026-10-05', { seq: 3, text: 'Сварка' }),
+      ev('w4', '2026-10-05', { seq: 4, text: 'Покраска' }),
+      ev('w5', '2026-10-06', { seq: 1, text: 'Диагностика' }),
+    ],
     D('2026-10-01'), D('2026-10-10'), xOf, dayW,
   );
-  ok('метка, которой мешает соседняя, переносится на строку НИЖЕ (line ≥ 1)', wrap.length === 2 && wrap[1].line === 1, wrap.map((c) => `${c.line}:${c.x}`));
+  const wrapLine1 = wrap.filter((c) => c.line === 1);
+  ok('метка, которой мешает соседняя, переносится на строку НИЖЕ (line ≥ 1)', wrapLine1.length >= 1, wrap.map((c) => `${c.line}:${c.x}`));
   ok('ни одна пара меток не накладывается ни в строке, ни между строками', !overlapInLine(wrap), wrap.map((c) => `${c.line}:${c.x}+${c.width}`));
-  ok('перенесённая метка начинается от левого края своего дня', (wrap.find((c) => c.line === 1)?.x ?? -1) >= 5 * 30, wrap.filter((c) => c.line === 1).map((c) => c.x));
+  ok('перенесённая метка начинается от левого края своего дня', wrapLine1.every((c) => c.x >= 5 * 30), wrapLine1.map((c) => c.x));
+  ok('ромбы одного дня идут слева направо с шагом ромб+зазор', wrap.filter((c) => c.line === 0).slice(0, 4).every((c, i, arr) => i === 0 || c.x - arr[i - 1].x === 9 + 2), wrap.map((c) => `${c.line}:${c.x}`));
   const many = layoutEventDots(
     ['Мойка', 'ТО', 'Сварка', 'Покраска', 'Замена масла', 'Ремонт рамы'].map((t, i) => ev(`m${i}`, '2026-10-05', { seq: i + 1, text: t })),
     D('2026-10-01'), D('2026-10-10'), xOf, dayW,

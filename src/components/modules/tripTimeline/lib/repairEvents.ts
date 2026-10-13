@@ -379,8 +379,11 @@ export const eventMarkLabel = (e: RepairEvent): string => {
   return d ? `${t} · ${d}` : t;
 };
 
-/** Ширина иконки-гаечного ключа в метке (px): входит в расчёт ширины чипа. */
-export const EVENT_CHIP_ICON_W = 10;
+/**
+ * Размер метки события базы = ромб 9×9, как у события рейса (ширина в раскладке
+ * тоже 9: маркер не растягивается по тексту — текст живёт в подсказке).
+ */
+export const EVENT_CHIP_DOT = 9;
 
 /** Ширина метки по её тексту (та же формула применяется в отрисовке). */
 export const eventMarkWidth = (text: string): number => {
@@ -389,8 +392,12 @@ export const eventMarkWidth = (text: string): number => {
   return Math.max(EVENT_CHIP_MIN_W, Math.min(EVENT_CHIP_MAX_W, w));
 };
 
-/** Ширина метки для события (подпись с датой + иконка-ключ; без DOM). */
-export const eventChipWidthOf = (e: RepairEvent): number => eventMarkWidth(eventMarkLabel(e)) + EVENT_CHIP_ICON_W;
+/**
+ * Ширина метки события в раскладке: постоянный размер ромба (без DOM).
+ * Подпись с датой (eventMarkLabel) нужна только подсказке — по ней метка
+ * больше не растягивается.
+ */
+export const eventChipWidthOf = (_e: RepairEvent): number => EVENT_CHIP_DOT;
 
 /** Занятая зона строки раскладки (полуинтервал [a, b), px внутри полосы). */
 interface BusyZone {

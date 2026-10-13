@@ -1,18 +1,20 @@
 /**
  * Метка СОБЫТИЯ НА БАЗЕ на полотне таймлайна.
  *
- * Компонент повторяет приём и размеры метки события РЕЙСА (TimelineGrid,
- * case 'event': абсолютная метка на дне события, слой меток TL_Z.mark,
- * высота 9 px как у одиночной метки события рейса, role=button, Enter/Space,
- * полный текст в подсказке, клик открывает окно периода и подсвечивает
- * ИМЕННО это событие). Отличия события базы: свой розово-малиновый цвет
- * (BASE_EVENT_COLORS, lib/visuals), плашка с НАЧАЛОМ ТЕКСТА (у старых записей
- * без текста — подпись бывшего типа) и перенос на следующую строку, когда
- * несколько событий дня не помещаются в одну (раскладка — layoutEventDots).
- * Ширина метки задаётся раскладкой явно — отрисовка совпадает с расчётом.
+ * Владелец: «событие базы сделать на таймлайне как событие рейса, только другого
+ * цвета». Поэтому метка — ТОТ ЖЕ маркер, что у события рейса (TimelineGrid,
+ * case 'event': ромб 9×9 — `width: 9`, `height: 9`, `borderRadius: 2`,
+ * `transform: rotate(45deg)`, `opacity: 0.95`, слой TL_Z.mark). Отличаются
+ * только ЦВЕТ (розово-малиновый, BASE_EVENT_COLORS.dot — константа в стилях) и
+ * действие: клик открывает окно периода «Учёт выезда» этой машины и подсвечивает
+ * ИМЕННО это событие (focusEventId — тот же механизм, что у событий рейса).
+ * Полный текст события и дата — в подсказке (title).
+ *
+ * Несколько событий одного дня идут слева направо по порядку внесения (seq);
+ * не поместившиеся раскладка (layoutEventDots) переносит на строку НИЖЕ под
+ * полосой — метки не накладываются ни друг на друга, ни на подписи полос.
  */
-import { Wrench } from 'lucide-react';
-import { EVENT_CHIP_H, eventMarkLabel, eventMarkText, type EventChip } from './lib/repairEvents';
+import { EVENT_CHIP_DOT, eventMarkLabel, eventMarkText, type EventChip } from './lib/repairEvents';
 import { BASE_EVENT_COLORS, TL_Z } from './lib/visuals';
 
 interface Props {
@@ -25,18 +27,14 @@ interface Props {
   onOpen: () => void;
 }
 
-/** Подпись метки: начало текста (у старых записей без текста — бывший тип) и дата. */
-const chipLabel = (chip: EventChip): string => (chip.extra > 0 ? `+${chip.extra}` : eventMarkLabel(chip.items[0]));
-
 export default function BaseEventMark({ chip, periodKey, archived, top, onOpen }: Props) {
   const first = chip.items[0];
-  const lines = chip.items.map((e) => `${eventMarkText(e)}`);
+  /** Подсказка: полный текст и дата каждого события метки, затем действие. */
   const title = [
-    ...lines,
-    ...(chip.extra > 0 ? [`и ещё ${chip.extra} — открыть окно периода`] : []),
+    ...chip.items.map((e) => `${eventMarkLabel(e)}${e.text ? '' : ' — текст не заполнен'}`),
+    ...(chip.extra > 0 ? [`и ещё ${chip.extra}`] : []),
     'Клик — открыть период учёта выезда и подсветить это событие',
   ].join('\n');
-  const label = chipLabel(chip);
   return (
     <button
       type="button"
@@ -52,30 +50,23 @@ export default function BaseEventMark({ chip, periodKey, archived, top, onOpen }
         e.stopPropagation();
         onOpen();
       }}
-      className="absolute inline-flex items-center gap-[1px] overflow-hidden rounded-[2px] px-[2px] text-[7px] leading-[9px] font-medium text-white cursor-pointer select-none"
+      className="absolute cursor-pointer select-none"
       style={{
         zIndex: TL_Z.mark,
         left: chip.x,
         top,
-        width: chip.width,
-        height: EVENT_CHIP_H,
-        background: BASE_EVENT_COLORS.chip,
-        color: BASE_EVENT_COLORS.chipText,
-        boxShadow: `0 0 0 1px ${BASE_EVENT_COLORS.chipRing}`,
+        width: EVENT_CHIP_DOT,
+        height: EVENT_CHIP_DOT,
+        background: BASE_EVENT_COLORS.dot,
+        borderRadius: 2,
+        transform: 'rotate(45deg)',
+        opacity: archived ? 0.72 : 0.95,
         padding: 0,
-        opacity: archived ? 0.72 : 1,
+        border: 'none',
         // Слой меток объявлен pointer-events:none (чтобы не мешать полотну) —
         // сама метка обязана принимать мышь: клик открывает окно периода.
         pointerEvents: 'auto',
       }}
-    >
-      <Wrench
-        className="shrink-0"
-        style={{ width: 7, height: 7 }}
-        strokeWidth={2.4}
-        aria-hidden="true"
-      />
-      <span className="truncate">{label}</span>
-    </button>
+    />
   );
 }
