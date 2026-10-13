@@ -117,7 +117,7 @@ import {
   type StageFillInput,
   type StageFillSection,
 } from './lib/stageFills';
-import { computeBlockedPlanChanges, computePlanStageChanges, resolvePlanLock, type PlanStageChanges } from './lib/planLock';
+import { computeBlockedPlanChanges, computePlanStageChanges, planDatesEditable, PLAN_DATES_OPEN_TO_ALL, resolvePlanLock, type PlanStageChanges } from './lib/planLock';
 import { canEditPlannedDateField, resolveStageMove, resolveStageRights } from './lib/stageRights';
 import {
   buildStageSchedule,
@@ -1871,13 +1871,17 @@ export default function TripCard({
   const isRootAdmin = user.role === 'root_admin';
   /** Итоговое состояние: вне облака контроль выключен (локальный режим). */
   const planState = planEnabled ? planLock.state : 'draft';
-  /** Плановые даты и состав доступны правке в этом сеансе. */
-  const canEditPlanned = !readOnly && (planState === 'draft' || planState === 'permitted' || isRootAdmin);
+  /** Плановые даты и состав доступны правке в этом сеансе.
+   *  Владелец: «открой доступ для дат планирования всем» — при
+   *  PLAN_DATES_OPEN_TO_ALL правка плановых дат открыта любому исполнителю с
+   *  правом записи, без разового разрешения администратора (lib/planLock). */
+  const canEditPlanned = planDatesEditable(planEnabled ? planLock : null, { readOnly, isRootAdmin });
   /**
    * Права на этапы (lib/stageRights, единый резолвер): добавление этапа и
    * заполнение ПУСТЫХ дат — всегда у авторизованного исполнителя (включая
-   * архивные и уже сохранённые рейсы), правка уже ВНЕСЁННЫХ плановых дат —
-   * только у администраторов (в сочетании с существующим замком плана).
+   * архивные и уже сохранённые рейсы); правка уже ВНЕСЁННЫХ плановых дат — при
+   * открытых плановых датах тоже у исполнителя с правом записи, иначе только у
+   * администраторов.
    */
   const stageRights = useMemo(
     () => resolveStageRights(user, { kind: trip.kind, archived, planState }, { canWrite }),
@@ -1905,8 +1909,9 @@ export default function TripCard({
     const mine = key ? store[key] : undefined;
     return mine || null;
   }, [planRequests, planUserId]);
-  /** Кнопка «Запросить разовый доступ» — диспетчеру при заблокированном плане. */
-  const showRequestAccess = planEnabled && planState === 'saved' && !readOnly && !isRootAdmin;
+  /** Кнопка «Запросить разовый доступ» — диспетчеру при заблокированном плане.
+   *  При открытых плановых датах запрашивать нечего: кнопка не показывается. */
+  const showRequestAccess = planEnabled && planState === 'saved' && !readOnly && !isRootAdmin && !PLAN_DATES_OPEN_TO_ALL;
 
   /**
    * Отправка запроса разового доступа: свежая версия сохранённого плана, одна
@@ -2211,7 +2216,7 @@ export default function TripCard({
     if (isPlan && !canEditPlan && (draft.planStart !== baseline.draft.planStart || draft.planEnd !== baseline.draft.planEnd)) {
       return { message: 'Нет права редактирования «Плана дохода» — изменения не сохранены.', focus: () => {} };
     }
-    if (planEnabled && planState === 'saved' && !isRootAdmin) {
+    if (planEnabled && planState === 'saved' && !isRootAdmin && !PLAN_DATES_OPEN_TO_ALL) {
       // Блокируемые изменения = правка УЖЕ ВНЕСЁННЫХ дат/состава; добавление
       // этапов и заполнение пустых дат исполнителю разрешены и сюда не входят.
       const blocked = computeBlockedPlanChanges(trip.stages, draft.stages, {
@@ -2315,6 +2320,17 @@ export default function TripCard({
       stored: normalizeCircles(trip.circles),
       draft: draft.circles,
     });
+    /**
+     * Изменения плана ПО СУЩЕСТВУ (даты/состав/круги/привязка к кругам) — без
+     * них добавление этапов и заполнение пустых дат плана не меняет. При
+     * открытых плановых датах такие правки сохраняет любой исполнитель, но они
+     * фиксируются в истории плана (кто, когда, что именно).
+     */
+    const substantivePlanChange =
+      changes.plannedUpdates.length > 0 ||
+      changes.removes.length > 0 ||
+      changes.circleUpdates.length > 0 ||
+      changes.circlesChanged;
     /** Правки обычных полей этапов (факт, тип, место, крит. срок, порядок). */
     const fieldPatches: Array<{ id: string; patch: Record<string, unknown> }> = [];
     draft.stages.forEach((s) => {
@@ -2484,6 +2500,31 @@ export default function TripCard({
                 note: `Первичное сохранение плана этапов (этапов: ${draft.stages.filter((s) => !String(s.id).endsWith('-fallback-load')).length})`,
               },
             ],
+          };
+        } else if (PLAN_DATES_OPEN_TO_ALL && substantivePlanChange) {
+          // Плановые даты открыты всем исполнителям: правку плана сохраняет
+          // любой исполнитель с правом записи, но само изменение плана
+          // фиксируется в истории плана (кто, когда, что) — тот же guard,
+          // разовых разрешений не требуется.
+          const baseVersion = Number(planGuard?.version) || planLock.version || 1;
+          const fresh = await dbService.getTimelinePlanGuardOnce(planTripKey);
+          const freshVersion = Number(fresh?.version) || (fresh?.initialSavedAt ? 1 : baseVersion);
+          if (fresh && freshVersion !== baseVersion) {
+            throw new Error(
+              `план изменился с момента открытия (версия ${freshVersion} вместо ${baseVersion}) — ничего не записано, чтобы не перезаписать чужие изменения; обновите данные (F5)`,
+            );
+          }
+          updates[guardKey] = {
+            ...(planGuard || {}),
+            version: baseVersion + 1,
+            ...(planGuard?.initialSavedAt ? { initialSavedAt: planGuard.initialSavedAt } : {}),
+            ...(planGuard?.initialSavedBy ? { initialSavedBy: planGuard.initialSavedBy } : {}),
+            ...(planGuard?.initialSavedById ? { initialSavedById: planGuard.initialSavedById } : {}),
+            ...(planLock.legacy || planGuard?.legacy ? { legacy: true } : {}),
+            updatedAt: nowIso,
+            updatedBy: user.name,
+            ...(planUserId ? { updatedById: planUserId } : {}),
+            history: nextPlanHistory(isRootAdmin ? 'admin-update' : 'update', details),
           };
         } else if (blockedChanges.count === 0) {
           // Разрешённые правки БЕЗ изменения плана: добавление этапов и/или
@@ -3319,10 +3360,16 @@ export default function TripCard({
                   ? 'Черновик плана'
                   : planState === 'permitted'
                     ? 'Разрешено одно сохранение изменений'
-                    : 'План сохранён. Плановые даты этапов заблокированы'}
+                    : PLAN_DATES_OPEN_TO_ALL
+                      ? 'План сохранён. Плановые даты открыты всем исполнителям'
+                      : 'План сохранён. Плановые даты этапов заблокированы'}
               </span>
               {planState === 'draft' ? (
-                <span className="text-[#6B7280]">перед первым сохранением: после сохранения изменение плановых дат этапов будет доступно только с разового разрешения администратора</span>
+                <span className="text-[#6B7280]">
+                  {PLAN_DATES_OPEN_TO_ALL
+                    ? 'правка плановых дат доступна всем исполнителям с правом записи — разовое разрешение не требуется'
+                    : 'перед первым сохранением: после сохранения изменение плановых дат этапов будет доступно только с разового разрешения администратора'}
+                </span>
               ) : null}
               {planState === 'permitted' ? (
                 <span className="text-[#6B7280]">после успешного сохранения плановые даты снова будут заблокированы</span>
@@ -3336,8 +3383,11 @@ export default function TripCard({
                   {planLock.initialSavedAt ? `, ${fmtFull(planLock.initialSavedAt.slice(0, 10))}` : ''}
                 </span>
               ) : null}
-              {planState === 'saved' && !readOnly && !isRootAdmin ? (
+              {planState === 'saved' && !readOnly && !isRootAdmin && !PLAN_DATES_OPEN_TO_ALL ? (
                 <span className="text-[#6B7280]">изменение плановых дат — только с разового разрешения администратора</span>
+              ) : null}
+              {planState === 'saved' && !readOnly && !isRootAdmin && PLAN_DATES_OPEN_TO_ALL ? (
+                <span className="text-[#6B7280]">изменение плановых дат (в том числе уже внесённых) разрешено — разовое разрешение не требуется</span>
               ) : null}
               {/* Запрос разового доступа: диспетчер при заблокированном плане.
                   Одна запись на пару (рейс, пользователь); пока ожидает решения —

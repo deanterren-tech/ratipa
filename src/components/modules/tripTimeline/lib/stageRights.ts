@@ -15,15 +15,17 @@
  *    момент, в том числе ПОСЛЕ явного сохранения плана (главный кейс владельца):
  *    заполнение пустого — не переписывание уже внесённых дат.
  *
- *  · canEditExistingDates — изменить УЖЕ ВНЕСЁННУЮ плановую дату. Только
- *    администраторы (root_admin / admin). Существующий замок плана (planLock)
- *    при этом СОХРАНЯЕТСЯ: у рейса с сохранённым планом не-root-администратору
- *    дополнительно нужно разовое разрешение (существующее правило не ослаблено).
+ *  · canEditExistingDates — изменить УЖЕ ВНЕСЁННУЮ плановую дату. По решению
+ *    владельца («открой доступ для дат планирования всем») плановые даты открыты
+ *    всем исполнителям с правом записи: флаг PLAN_DATES_OPEN_TO_ALL (lib/planLock)
+ *    снимает и требование «администратор», и разовое разрешение. При выключенном
+ *    флаге возвращается прежнее правило «только администраторы + разовое
+ *    разрешение».
  *
  * Функция чистая: роли и статус рейса — параметры, никаких обращений к базе.
  */
 import type { TimelineStage } from '../../../../types';
-import type { PlanUiState } from './planLock';
+import { PLAN_DATES_OPEN_TO_ALL, type PlanUiState } from './planLock';
 import { stageMoveKindOf, type StageMoveKind } from './stageSchedule';
 
 export interface StageRightsUser {
@@ -43,6 +45,11 @@ export interface StageRightsTrip {
 export interface StageRightsOptions {
   /** Право записи в модуль (tripTimeline = write) — «авторизованный исполнитель». */
   canWrite: boolean;
+  /**
+   * Переопределение режима плановых дат (для тестов обоих режимов): по умолчанию
+   * берётся флаг продукта PLAN_DATES_OPEN_TO_ALL (lib/planLock).
+   */
+  planDatesOpen?: boolean;
 }
 
 export interface StageRights {
@@ -52,7 +59,8 @@ export interface StageRights {
   canAddStage: boolean;
   /** Заполнить ПУСТУЮ плановую дату — в любой момент, в том числе после сохранения. */
   canFillEmptyDates: boolean;
-  /** Изменить УЖЕ ВНЕСЁННУЮ плановую дату — только администраторы. */
+  /** Изменить УЖЕ ВНЕСЁННУЮ плановую дату — при открытых плановых датах все
+   *  исполнители с правом записи, иначе только администраторы. */
   canEditExistingDates: boolean;
   /**
    * Перестановка строк этапов БЕЗ смены дней: этапы одного дня и этапы без
@@ -61,11 +69,18 @@ export interface StageRights {
    */
   canReorderStages: boolean;
   /**
-   * Перестановка этапов с внесёнными датами РАЗНЫХ дней — только администраторы:
-   * такая перестановка меняет сами даты этапов местами (этапы дней меняются
-   * местами, строка «встаёт ровно туда, куда её поставил пользователь»).
+   * Перестановка этапов с внесёнными датами РАЗНЫХ дней. Такая перестановка
+   * меняет сами ПЛАНОВЫЕ даты этапов местами, поэтому при открытых плановых
+   * датах (PLAN_DATES_OPEN_TO_ALL) доступна исполнителю с правом записи, иначе —
+   * только администраторам.
    */
   canReorderAcrossDays: boolean;
+  /**
+   * Режим правки плановых дат: true — открыт всем исполнителям с правом записи
+   * (PLAN_DATES_OPEN_TO_ALL), false — прежний контроль (только администраторы).
+   * Используется resolveStageMove для признака adminOnly.
+   */
+  planDatesOpen: boolean;
 }
 
 /** Административные роли портала. */
@@ -78,14 +93,16 @@ export const resolveStageRights = (
 ): StageRights => {
   const canWrite = options?.canWrite === true;
   const isAdmin = isAdminRole(user?.role);
+  const planDatesOpen = options?.planDatesOpen ?? PLAN_DATES_OPEN_TO_ALL;
   return {
     isAdmin,
     // Статус рейса (в т.ч. archived) на это право НЕ влияет — требование блока.
     canAddStage: canWrite,
     canFillEmptyDates: canWrite,
-    canEditExistingDates: isAdmin && canWrite,
+    canEditExistingDates: canWrite && (isAdmin || planDatesOpen),
     canReorderStages: canWrite,
-    canReorderAcrossDays: canWrite && isAdmin,
+    canReorderAcrossDays: canWrite && (isAdmin || planDatesOpen),
+    planDatesOpen,
   };
 };
 
@@ -108,8 +125,8 @@ export interface StageMoveDecision {
  * Право перестановки пары соседних строк «перемещаемый этап ↔ сосед»:
  *  · оба без даты ('empty-tail') и один день ('same-day') — исполнитель с
  *    правом записи; даты не меняются, seq перенумеровывается 1..N;
- *  · разные дни ('cross-day') — только администратор: этапы обмениваются
- *    внесёнными датами («перестановка этапов с внесёнными датами»);
+ *  · разные дни ('cross-day') — обмен плановыми датами; при открытых плановых
+ *    датах доступно исполнителю, иначе только администратору;
  *  · этап с датой ↔ этап без даты — не переставляется никому (порядок хвоста
  *    без дат и датированных этапов задаётся датами).
  * Замок плана (planLock) поверх этого правила не ослабляется: UI применяет его
@@ -134,7 +151,7 @@ export const resolveStageMove = (
   }
   if (kind === 'cross-day') {
     return rights.canReorderAcrossDays
-      ? { kind, allowed: true, adminOnly: true, reason: '' }
+      ? { kind, allowed: true, adminOnly: !rights.planDatesOpen, reason: '' }
       : {
           kind,
           allowed: false,
@@ -149,11 +166,11 @@ export const resolveStageMove = (
 
 /**
  * Редактируемость КОНКРЕТНОГО поля плановой даты этапа: пустое — по праву
- * заполнения (canFillEmptyDates); уже внесённое — только администраторам
- * (canEditExistingDates) и, как и раньше, под внешним замком плана
- * (planEditableNow — «черновик / разовое разрешение / root-администратор»).
- * Замок плана не ослабляется: для не-root-администратора с сохранённым планом
- * правка внесённой даты по-прежнему требует разового разрешения.
+ * заполнения (canFillEmptyDates); уже внесённое — по canEditExistingDates.
+ * Внешний замок (planEditableNow — из lib/planLock.planDatesEditable) применяется
+ * только к внесённым датам: при открытых плановых датах он true для всех
+ * исполнителей с правом записи, при прежнем контроле — «черновик / разовое
+ * разрешение / root-администратор».
  */
 export const canEditPlannedDateField = (
   rights: StageRights,

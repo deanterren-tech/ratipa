@@ -21,6 +21,36 @@ import { stageBufferOf, stageSeqOf, hasStageSeq } from './stageSchedule';
 
 export type PlanUiState = 'draft' | 'saved' | 'permitted';
 
+/**
+ * Плановые даты открыты всем исполнителям (решение владельца: «открой доступ
+ * для дат планирования всем»).
+ *
+ * При true контроль плановых дат снят: правку уже внесённых плановых дат,
+ * запас/порядок этапов и количество кругов сохраняет ЛЮБОЙ исполнитель с правом
+ * записи в модуль — разовое разрешение администратора больше не требуется.
+ * Состояние плана («Черновик плана» / «План сохранён») и журнал (planGuard.history,
+ * planPerms) сохраняются как история, кнопка запроса доступа не показывается.
+ *
+ * false возвращает прежний контроль «план сохранён → плановые даты правит только
+ * администратор / по разовому разрешению». Точка одна — этот флаг читают и
+ * lib/stageRights, и карточка рейса.
+ */
+export const PLAN_DATES_OPEN_TO_ALL = true;
+
+/**
+ * Можно ли править плановые даты этапов здесь и сейчас.
+ * Открытый доступ (PLAN_DATES_OPEN_TO_ALL) — всем, у кого есть запись в модуль;
+ * иначе — черновик плана, действующее разовое разрешение или root-администратор.
+ */
+export const planDatesEditable = (
+  lock: Pick<PlanLockInfo, 'state'> | null | undefined,
+  opts: { readOnly?: boolean; isRootAdmin?: boolean } = {},
+): boolean => {
+  if (opts.readOnly) return false;
+  if (PLAN_DATES_OPEN_TO_ALL) return true;
+  return lock?.state === 'draft' || lock?.state === 'permitted' || !!opts.isRootAdmin;
+};
+
 export interface PlanLockInfo {
   state: PlanUiState;
   /** План сохранён, но автор/дата первоначального сохранения неизвестны. */
@@ -115,7 +145,15 @@ export const computeBlockedPlanChanges = (
   stored: TimelineStage[] | undefined,
   draft: TimelineStage[] | undefined,
   circles?: { stored?: number; draft?: number },
+  /** Переопределение режима (тесты обоих режимов): по умолчанию PLAN_DATES_OPEN_TO_ALL. */
+  opts?: { open?: boolean },
 ): PlanStageChanges => {
+  // Плановые даты открыты всем исполнителям: блокируемых изменений нет —
+  // сохранение не требует разового разрешения администратора (сравниваем
+  // черновик с самим сохранённым состоянием).
+  if (opts?.open ?? PLAN_DATES_OPEN_TO_ALL) {
+    return computePlanStageChanges(stored, stored, circles ? { stored: circles.stored, draft: circles.stored } : undefined);
+  }
   const storedById = new Map((stored || []).map((s) => [s.id, s]));
   const filteredDraft = (draft || [])
     .filter((s) => storedById.has(s.id))
