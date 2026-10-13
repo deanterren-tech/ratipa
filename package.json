@@ -45,7 +45,8 @@
     "test:stage-order": "tsx scripts/test-stage-order.ts",
     "audit:stage-order": "tsx scripts/audit-stage-order.ts",
     "test:cities-cleanup": "tsx scripts/test-cities-cleanup.ts",
-    "fix:cities": "tsx scripts/fix-cities-cleanup.ts"
+    "fix:cities": "tsx scripts/fix-cities-cleanup.ts",
+    "fix:city-chains": "tsx scripts/strip-city-chains.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
