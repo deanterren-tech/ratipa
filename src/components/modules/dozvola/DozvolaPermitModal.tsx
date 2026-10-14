@@ -368,16 +368,17 @@ export default function DozvolaPermitModal({
                 <div className="max-h-48 overflow-y-auto space-y-1.5">
                   {(() => {
                     const permitNum = permitNumber.trim().toUpperCase();
-                    // Хронология ВПЕРЁД (решение владельца): самые ранние сверху,
-                    // ниже — более поздние; сравниваем разобранное время, а не
-                    // строки «ДД.ММ.ГГГГ, чч:мм:сс» (строкой порядок ломается на
-                    // смене месяца и года). При равном времени — по ключу записи.
+                    // Порядок — НОВЕЙШИЕ СВЕРХУ (решение владельца): сверху самые
+                    // поздние записи, ниже — более ранние. Сравниваем разобранное
+                    // время, а не строки «ДД.ММ.ГГГГ, чч:мм:сс» (строкой порядок
+                    // ломается на смене месяца и года). При равном времени — по
+                    // ключу записи, тоже от новых к старым.
                     const entries = Object.entries(dozvolsHistory)
                       .filter(([, entry]: [string, any]) =>
                         entry.doc && entry.doc.toUpperCase().includes(permitNum)
                       )
                       .sort(([ka, a]: [string, any], [kb, b]: [string, any]) =>
-                        permitHistoryTime(a) - permitHistoryTime(b) || String(ka).localeCompare(String(kb))
+                        permitHistoryTime(b) - permitHistoryTime(a) || String(kb).localeCompare(String(ka))
                       )
                       .slice(0, 200);
                     if (entries.length === 0) {
