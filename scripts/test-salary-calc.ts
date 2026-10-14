@@ -17,6 +17,10 @@ import {
   resolveCarRateFrom,
   deriveStoredRates,
   salaryNumber,
+  pushKeyTime,
+  salaryDateOnly,
+  salaryEntryTime,
+  compareByEntryTimeDesc,
 } from '../src/utils/salaryCalc';
 
 let failed = 0;
@@ -221,6 +225,34 @@ console.log('\nСтавка за км (resolveCarRateFrom) — группы ст
 console.log('\nsalaryNumber:');
 {
   check('пусто/undefined/NaN → 0', salaryNumber('') === 0 && salaryNumber(undefined) === 0 && salaryNumber(NaN) === 0 && salaryNumber('12.5') === 12.5, '');
+}
+
+// ── Порядок журнала/статистики: «по времени внесения записи, последние сверху» ──
+// Ключи взяты из реальной базы: push-ключ несёт время создания записи в мс.
+console.log('\nВремя внесения записи (порядок журнала выплат)');
+{
+  const oct = '-P3uLjnwiaTCNblprfye'; // внесена 14.10.2026
+  const jul = '-OwRy6MIGXHuHJFGxTQ1'; // внесена 01.07.2026
+  check('push-ключ декодируется в правдоподобное время', pushKeyTime(oct) > 1_700_000_000_000, String(pushKeyTime(oct)));
+  check('ключ новой записи позже ключа старой', pushKeyTime(oct) > pushKeyTime(jul), `${pushKeyTime(oct)} > ${pushKeyTime(jul)}`);
+  check('не-push ключи времени не дают', pushKeyTime('manual_1') === 0 && pushKeyTime('') === 0 && pushKeyTime('-Ot') === 0);
+  check('дата разбирается в обоих форматах (ДД.ММ.ГГГГ и ДД/ММ/ГГГГ)', salaryDateOnly('14/10/2026') === salaryDateOnly('14.10.2026') && salaryDateOnly('14/10/2026') > 0);
+  check('мусор и пусто → 0, без NaN', salaryDateOnly('не дата') === 0 && salaryEntryTime({ datetime: '' }) === 0 && Number.isFinite(salaryEntryTime({ datetime: 'abc' })));
+  check('запись без ключа: время берётся из createdAt/savedAt', salaryEntryTime({ createdAt: '2026-10-14T05:00:00.000Z' }) > 0 && salaryEntryTime({ savedAt: '2026-10-14T05:00:00.000Z' }) > 0);
+  check('запись без ключа и без createdAt: берётся дата выплаты', salaryEntryTime({ datetime: '14/10/2026' }) === salaryDateOnly('14/10/2026'));
+  check('сортировка: внесённая позже — выше', compareByEntryTimeDesc({ storageKey: jul }, { storageKey: oct }) > 0 && compareByEntryTimeDesc({ storageKey: oct }, { storageKey: jul }) < 0);
+  check(
+    'свежая запись со «старой» датой выплаты стоит ВЫШЕ старой записи (корень жалобы)',
+    compareByEntryTimeDesc({ storageKey: oct, datetime: '01/05/2026' }, { storageKey: jul, datetime: '14/10/2026' }) < 0,
+  );
+  check('порядок не зависит от даты выплаты: только от времени внесения', (() => {
+    const list = [
+      { storageKey: jul, datetime: '14/10/2026' },
+      { storageKey: oct, datetime: '01/05/2026' },
+    ].sort(compareByEntryTimeDesc);
+    return list[0].storageKey === oct && list[1].storageKey === jul;
+  })());
+  check('обе записи без времени — порядок детерминирован (по ключу)', compareByEntryTimeDesc({ id: 'aaaa' }, { id: 'bbbb' }) > 0);
 }
 
 if (failed > 0) {

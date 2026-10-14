@@ -47,6 +47,19 @@ function useLockBodyScroll(open: boolean) {
   }, [open]);
 }
 
+/**
+ * Время записи истории дозвола: «ДД.ММ.ГГГГ, чч:мм:сс» → миллисекунды
+ * (0 — если времени в записи нет). Сравнивать сами строки нельзя: «05.11.2026»
+ * строкой меньше «14.10.2026», и порядок ломается на смене месяца и года.
+ */
+function permitHistoryTime(entry: Record<string, unknown> | null | undefined): number {
+  const raw = String(entry?.time ?? entry?.timestamp ?? entry?.date ?? '');
+  const m = /^(\d{2})\.(\d{2})\.(\d{4}),?\s*(\d{1,2}):(\d{2}):(\d{2})/.exec(raw);
+  if (m) return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6]).getTime();
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export default function DozvolaPermitModal({
   isOpen,
   onClose,
@@ -355,16 +368,18 @@ export default function DozvolaPermitModal({
                 <div className="max-h-48 overflow-y-auto space-y-1.5">
                   {(() => {
                     const permitNum = permitNumber.trim().toUpperCase();
+                    // Хронология ВПЕРЁД (решение владельца): самые ранние сверху,
+                    // ниже — более поздние; сравниваем разобранное время, а не
+                    // строки «ДД.ММ.ГГГГ, чч:мм:сс» (строкой порядок ломается на
+                    // смене месяца и года). При равном времени — по ключу записи.
                     const entries = Object.entries(dozvolsHistory)
                       .filter(([, entry]: [string, any]) =>
                         entry.doc && entry.doc.toUpperCase().includes(permitNum)
                       )
-                      .sort(([, a]: [string, any], [, b]: [string, any]) => {
-                        const aTime = a.time || a.timestamp || '';
-                        const bTime = b.time || b.timestamp || '';
-                        return aTime > bTime ? -1 : aTime < bTime ? 1 : 0;
-                      })
-                      .slice(0, 20);
+                      .sort(([ka, a]: [string, any], [kb, b]: [string, any]) =>
+                        permitHistoryTime(a) - permitHistoryTime(b) || String(ka).localeCompare(String(kb))
+                      )
+                      .slice(0, 200);
                     if (entries.length === 0) {
                       return <p className="text-[11px] text-[#9CA3AF] italic">Нет записей истории для этого бланка</p>;
                     }

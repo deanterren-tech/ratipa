@@ -12,7 +12,7 @@ import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
 import {normalizePlate, findCarByPlate, getDriverById, getDriverIdForCar, formatCoupling} from '../../utils/salaryAutofill'
 import {formatDriverShortName} from '../../utils/driverSync'
-import {computeSalaryTotals, resolveCarRateFrom, deriveStoredRates, salaryNumber, type RateSource, type ResolvedCarRate} from '../../utils/salaryCalc'
+import {computeSalaryTotals, resolveCarRateFrom, deriveStoredRates, salaryNumber, compareByEntryTimeDesc, type RateSource, type ResolvedCarRate} from '../../utils/salaryCalc'
 import {CarConflictModal} from '../common/CarConflictModal'
 import {CarConflict} from '../../utils/carConflictHandler'
 import CouplingPicker from '../common/CouplingPicker';
@@ -288,11 +288,8 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
           // чтобы удаление снимало копии именно под фактическим ключом.
           storageKey: key,
         }));
-        list.sort((a, b) => {
-          const aTime = parseInt(a.id.replace(/\D/g, "")) || 0;
-          const bTime = parseInt(b.id.replace(/\D/g, "")) || 0;
-          return bTime - aTime;
-        });
+        // Порядок журнала — по времени внесения записи (ключ базы), новые сверху.
+        list.sort(compareByEntryTimeDesc);
         setLogs(list);
       } else {
         setLogs([]);
@@ -622,34 +619,17 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   };
 
 
+  /**
+   * Журнал и статистика выплат — по ВРЕМЕНИ ВНЕСЕНИЯ записи, последние сверху
+   * (compareByEntryTimeDesc: ключ базы → createdAt/savedAt → дата выплаты).
+   * Раньше сортировка шла по полю «Дата» (дата самой выплаты): запись, внесённая
+   * сегодня со «старой» датой, уезжала вниз, хотя внесена последней.
+   */
   const filteredHistory = useMemo(() => {
     return logs.filter(rec => {
         const haystack = `${rec.datetime || ''} ${rec.logist || ''} ${rec.driver || ''} ${rec.car || ''} ${rec.mark || ''} ${rec.km || ''} ${rec.rate || ''} ${rec.bonus || ''} ${rec.totalSalary || ''}`.toLowerCase();
         return !searchQuery || haystack.includes(searchQuery.toLowerCase());
-    }).sort((a, b) => {
-    // Parse date strings formatted as "DD.MM.YYYY" or standard ISO strings
-    const parseDate = (dStr: string) => {
-      if (!dStr) return 0;
-      const parts = dStr.split('.');
-      if (parts.length === 3) {
-        const d = parseInt(parts[0], 10);
-        const m = parseInt(parts[1], 10) - 1;
-        const y = parseInt(parts[2], 10);
-        return new Date(y, m, d).getTime();
-      }
-      return new Date(dStr).getTime() || 0;
-    };
-    
-    const dateA = parseDate(a.datetime);
-    const dateB = parseDate(b.datetime);
-    
-    if (dateA !== dateB) {
-      return dateB - dateA; // Descending by date
-    }
-    
-    // Within the same day, compare IDs descending
-    return (b.id || "").localeCompare(a.id || "");
-  });
+    }).sort(compareByEntryTimeDesc);
   }, [logs, searchQuery]);
 
   const totalPaid = logs.reduce((s, r) => s + (r.totalSalary || 0), 0);

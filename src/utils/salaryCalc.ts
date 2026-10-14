@@ -147,3 +147,73 @@ export function deriveStoredRates(
     idleRate: rateFromMoneyAndDays(record.idleMoney, record.idleDays, defaults.idleRate),
   };
 }
+
+
+// ---------------------------------------------------------------------------
+// «Время внесения записи» — порядок журнала/статистики выплат
+// ---------------------------------------------------------------------------
+
+/** Символы push-ключа Firebase (порядок фиксирован форматом ключа). */
+const PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
+
+/**
+ * Время создания записи по ключу базы: первые 8 символов push-ключа кодируют
+ * метку времени в миллисекундах. Не-push ключи (ручные, перенесённые) → 0 —
+ * времени создания в них нет, вызывающий берёт следующий источник.
+ */
+export function pushKeyTime(key: unknown): number {
+  const s = String(key ?? '');
+  if (s.length < 8) return 0;
+  let t = 0;
+  for (let i = 0; i < 8; i += 1) {
+    const idx = PUSH_CHARS.indexOf(s[i]);
+    if (idx < 0) return 0;
+    t = t * 64 + idx;
+  }
+  // Правдоподобные границы (2015 г. … ~2100 г.): мусор не считаем временем.
+  return t > 1_420_000_000_000 && t < 4_100_000_000_000 ? t : 0;
+}
+
+/** «ДД.ММ.ГГГГ» или «ДД/ММ/ГГГГ» → начало дня в мс (0 — даты нет). */
+export function salaryDateOnly(value: unknown): number {
+  const parts = String(value ?? '').trim().split(/[./]/);
+  if (parts.length !== 3) return 0;
+  const d = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  const y = parseInt(parts[2], 10);
+  if (!d || !m || String(y).length !== 4) return 0;
+  return new Date(y, m - 1, d).getTime();
+}
+
+/** Минимум полей записи, нужный для порядка: ключ базы и дата выплаты. */
+export interface SalaryEntryOrderLike {
+  storageKey?: unknown;
+  id?: unknown;
+  createdAt?: unknown;
+  savedAt?: unknown;
+  datetime?: unknown;
+}
+
+/**
+ * Время ВНЕСЕНИЯ записи выплаты: ключ базы → createdAt/savedAt → дата выплаты.
+ * Именно по нему сортируются журнал и статистика выплат («последние сверху»):
+ * свежая запись со «старой» датой выплаты должна быть сверху, а не внизу.
+ */
+export function salaryEntryTime(rec: SalaryEntryOrderLike | null | undefined): number {
+  if (!rec) return 0;
+  const byKey = pushKeyTime(rec.storageKey) || pushKeyTime(rec.id);
+  if (byKey) return byKey;
+  const stamp = rec.createdAt || rec.savedAt;
+  const parsed = stamp ? Date.parse(String(stamp)) : NaN;
+  if (Number.isFinite(parsed)) return parsed;
+  return salaryDateOnly(rec.datetime);
+}
+
+/** Компаратор «сначала внесённые позже» (журнал и статистика выплат). */
+export function compareByEntryTimeDesc(a: SalaryEntryOrderLike | null | undefined, b: SalaryEntryOrderLike | null | undefined): number {
+  const ta = salaryEntryTime(a);
+  const tb = salaryEntryTime(b);
+  if (ta !== tb) return tb - ta;
+  // Одно мгновение (или обе записи без времени) — по ключу базы, детерминированно.
+  return String(b?.storageKey || b?.id || '').localeCompare(String(a?.storageKey || a?.id || ''));
+}
