@@ -214,6 +214,25 @@ export interface RouteCalculation {
   username?: string;
 }
 
+/**
+ * Связь зарплатной записи с записью «Плана дохода» (trips_dashboard): источник
+ * подставленных дат и «Факт км». Хранится вместе с записью, чтобы повторное
+ * открытие показывало источник, а изменение плана не меняло зарплату молча.
+ */
+export interface SalaryPlanLink {
+  planId: string;
+  carNumber: string;
+  source: 'planDohod';
+  /** Значения плана на момент подстановки (YYYY-MM-DD / км). */
+  dateStart: string;
+  dateEnd: string;
+  factKm: number | null;
+  /** Время подстановки (ISO). */
+  syncedAt?: string;
+  /** Подпись источника на момент подстановки (если запись плана потом удалят). */
+  label?: string;
+}
+
 export interface SalaryLog {
   id: string;
   car: string;
@@ -237,6 +256,15 @@ export interface SalaryLog {
   /** Фактический ключ ветки salaryHistory/months|byDispatcher, под которым лежит запись.
    *  Служебное поле только для чтения/удаления — в базу не записывается. */
   storageKey?: string;
+  /** Период рейса (YYYY-MM-DD) — вводится в форме или подставляется из плана. */
+  dateStart?: string;
+  dateEnd?: string;
+  /** Связь с «Планом дохода»: идентификатор записи, источник и время подстановки. */
+  planId?: string;
+  planSource?: string;
+  planSyncedAt?: string;
+  /** Снимок подставленных значений на момент подстановки. */
+  planSynced?: SalaryPlanLink;
 }
 
 export interface LegPlan {
@@ -279,6 +307,35 @@ export interface PotentialLoad {
   days?: number;
 }
 
+/**
+ * Статья дополнительного расхода «Плана дохода»: сумма в исходной валюте,
+ * валюта, пояснение и СОХРАНЁННЫЙ эквивалент в евро вместе с курсом и временем
+ * его применения. Сохранённый `eur` не пересчитывается при новом курсе — иначе
+ * старые планы меняли бы суммы при каждом обновлении курсов.
+ */
+export interface ExpenseRow {
+  /** Устойчивый идентификатор строки (не зависит от позиции в списке). */
+  id: string;
+  /** Сумма в исходной валюте; '' — строка ещё не заполнена. */
+  amount: number | '';
+  /** Код валюты (EUR, USD, BYN, …). */
+  currency: string;
+  /** Пояснение: что это за расход и для чего. */
+  note: string;
+  /** Эквивалент в евро на момент ввода (null — курс был недоступен). */
+  eur: number | null;
+  /** Курс, которым считали: сколько BYN за 1 единицу валюты (EUR — 1). */
+  rate: number | null;
+  /** Когда применён курс (ISO). */
+  rateAt?: string;
+  /** Источник курса: «НБРБ» или «сохранённый курс портала». */
+  rateSource?: string;
+  /** Явно введённый ручной курс (помечен в интерфейсе, доступен по правам). */
+  manualRate?: number | null;
+  /** Строка перенесена из старых полей «Доп расходы €» / «Коммент расходов». */
+  legacy?: boolean;
+}
+
 export interface TripPlan {
   id: string; // Firebase id
   carNumber: string;
@@ -292,6 +349,12 @@ export interface TripPlan {
   totalExpenses: number;
   extraExpense: number;
   extraExpenseNote: string;
+  /**
+   * Дополнительные расходы статьями (сумма/валюта/пояснение/€ и курс).
+   * Старые записи поля не имеют: их единственная статья восстанавливается из
+   * `extraExpense`/`extraExpenseNote` при открытии (см. utils/expenseRates).
+   */
+  expenses?: ExpenseRow[];
   emptyRunKm?: number;
   ferryCost?: number;
   referenceRate?: number;

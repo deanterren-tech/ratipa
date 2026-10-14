@@ -13,6 +13,16 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
+  buildPlanSubstitution,
+  describeMissing,
+  planFactKmOf,
+  planPreviewHasChanges,
+  planRouteText,
+  planSourceLabel,
+  planSubstitutionPreview,
+  PLAN_FACT_KM_MISSING_NOTICE,
+} from '../src/utils/salaryPlanLink';
+import {
   computeSalaryTotals,
   resolveCarRateFrom,
   deriveStoredRates,
@@ -253,6 +263,50 @@ console.log('\nВремя внесения записи (порядок журн
     return list[0].storageKey === oct && list[1].storageKey === jul;
   })());
   check('обе записи без времени — порядок детерминирован (по ключу)', compareByEntryTimeDesc({ id: 'aaaa' }, { id: 'bbbb' }) > 0);
+}
+
+// ── Подстановка из «Плана дохода» (чистые правила) ──────────────────────────
+console.log('\nПодстановка из «Плана дохода» (даты и «Факт км»)');
+{
+  const plan = (over: Record<string, unknown>) => ({
+    id: 'p1', carNumber: 'TR 001', dateStart: '2026-10-14', dateEnd: '2026-10-28',
+    factKm: 5500, legs: [{ from: 'Мозырь', to: 'Гомель', km: 100 }, { from: 'Гомель', to: 'Стамбул', km: 2000 }],
+    ...over,
+  }) as unknown as import('../src/types').TripPlan;
+
+  const full = buildPlanSubstitution(plan({}));
+  check('полный план: подставляются даты старта/финиша и «Факт км»',
+    full.values.dateStart === '2026-10-14' && full.values.dateEnd === '2026-10-28' && full.values.factKm === 5500 && full.missing.length === 0,
+    JSON.stringify(full));
+
+  const noFact = buildPlanSubstitution(plan({ factKm: undefined }));
+  check('нет «Факт км»: поле попадает в missing, значение НЕ выдумывается',
+    noFact.missing.includes('factKm') && noFact.values.factKm === undefined && noFact.values.dateStart === '2026-10-14',
+    JSON.stringify(noFact));
+  check('нет «Факт км»: уведомление — дословно по заданию',
+    PLAN_FACT_KM_MISSING_NOTICE.includes('не заполнен фактический пробег') && PLAN_FACT_KM_MISSING_NOTICE.includes('Внесите'),
+    PLAN_FACT_KM_MISSING_NOTICE);
+  check('пустая строка в «Факт км» = отсутствие (не ноль)', buildPlanSubstitution(plan({ factKm: '' })).missing.includes('factKm'));
+  check('ЯВНЫЙ НОЛЬ — это значение, а не отсутствие', buildPlanSubstitution(plan({ factKm: 0 })).values.factKm === 0 && !buildPlanSubstitution(plan({ factKm: 0 })).missing.includes('factKm'));
+  check('planFactKmOf: 0 → 0, пусто → null', planFactKmOf(plan({ factKm: 0 })) === 0 && planFactKmOf(plan({ factKm: '' })) === null && planFactKmOf(plan({ factKm: undefined })) === null);
+
+  const noStart = buildPlanSubstitution(plan({ dateStart: '' }));
+  check('нет даты старта: сообщаем именно это поле (частичная подстановка)',
+    noStart.missing.includes('dateStart') && noStart.values.dateEnd === '2026-10-28' && describeMissing(noStart.missing).includes('дата старта'),
+    describeMissing(noStart.missing));
+
+  const emptyForm = planSubstitutionPreview(plan({}), { dateStart: '', dateEnd: '', km: '' });
+  check('предпросмотр: пустая форма — замена без подтверждения', emptyForm.every((r) => !r.filled) && emptyForm.length === 3, JSON.stringify(emptyForm.map((r) => [r.key, r.filled, r.same])));
+  const filledDiff = planSubstitutionPreview(plan({}), { dateStart: '2026-10-01', dateEnd: '2026-10-28', km: 4000 });
+  check('предпросмотр: заполненные и отличающиеся требуют подтверждения', filledDiff.filter((r) => r.filled && !r.same).length === 2 && planPreviewHasChanges(filledDiff), JSON.stringify(filledDiff.map((r) => [r.key, r.filled, r.same])));
+  const filledSame = planSubstitutionPreview(plan({}), { dateStart: '2026-10-14', dateEnd: '2026-10-28', km: 5500 });
+  check('предпросмотр: всё совпадает — изменений нет', !planPreviewHasChanges(filledSame) && filledSame.every((r) => r.same), JSON.stringify(filledSame.map((r) => [r.key, r.same])));
+  check('предпросмотр: «Факт км» = 0 в форме считается заполненным', (() => { const rows = planSubstitutionPreview(plan({ factKm: 0 }), { dateStart: '', dateEnd: '', km: 0 }); const r = rows.find((x) => x.key === 'factKm'); return !!r && r.filled && r.same; })());
+  check('маршрут плана: «Мозырь → Гомель → Стамбул»', planRouteText(plan({})) === 'Мозырь → Гомель → Стамбул', planRouteText(plan({})));
+  const labelFull = planSourceLabel(plan({})).replace(/[\u00a0\u202f]/g, ' ');
+  check('подпись источника показывает и факт, и его отсутствие',
+    labelFull.includes('TR 001') && labelFull.includes('факт 5 500 км') && planSourceLabel(plan({ factKm: undefined })).includes('«Факт км» не заполнен'),
+    labelFull);
 }
 
 if (failed > 0) {

@@ -1,4 +1,4 @@
-import {useState} from 'react'
+import {useEffect, useState} from 'react'
 import {Calendar, X} from 'lucide-react'
 import {UI} from '../../ui/kit'
 import {openDatePicker} from '../../utils/openDatePicker'
@@ -17,9 +17,39 @@ function ruDate(iso: string): string {
   return iso ? iso.split('-').reverse().join('/') : '';
 }
 
-export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCalculated: (days: number) => void }) {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+export default function CalendarDaysCalculator({
+  onDaysCalculated,
+  valueStart,
+  valueEnd,
+  onRangeChange,
+}: {
+  onDaysCalculated: (days: number) => void;
+  /** Значения извне (подстановка из «Плана дохода»): заполняют поля калькулятора. */
+  valueStart?: string;
+  valueEnd?: string;
+  /** Сообщает текущий период наружу, чтобы форма могла его сохранить/показать. */
+  onRangeChange?: (start: string, end: string) => void;
+}) {
+  const [startDate, setStartDate] = useState(valueStart || '');
+  const [endDate, setEndDate] = useState(valueEnd || '');
+
+  // Подстановка из плана дохода: внешние значения попадают в поля (по одному —
+  // частичная подстановка допустима: даты могут прийти без «Факт км» и наоборот).
+  useEffect(() => {
+    if (valueStart !== undefined) setStartDate(valueStart || '');
+  }, [valueStart]);
+  useEffect(() => {
+    if (valueEnd !== undefined) setEndDate(valueEnd || '');
+  }, [valueEnd]);
+
+  // Подставленный период обязан пересчитать дни: итог зарплаты считается от
+  // «Дней в рейсе», поэтому один заполненный внешний край уже пересчитывает
+  // значение (пустой период ничего не меняет — начальное состояние формы).
+  useEffect(() => {
+    if (!valueStart && !valueEnd) return;
+    onDaysCalculated(calculateDays(valueStart || '', valueEnd || ''));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valueStart, valueEnd]);
 
   const calculateDays = (start: string, end: string) => {
     if (!start || !end) return 0;
@@ -33,6 +63,7 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
   const handleDateChange = (start: string, end: string) => {
     const days = calculateDays(start, end);
     onDaysCalculated(days);
+    onRangeChange?.(start, end);
   };
 
   const totalDays = calculateDays(startDate, endDate);
@@ -48,6 +79,7 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
     setStartDate('');
     setEndDate('');
     onDaysCalculated(0);
+    onRangeChange?.('', '');
   };
 
   const fields = [
@@ -85,6 +117,7 @@ export default function CalendarDaysCalculator({ onDaysCalculated }: { onDaysCal
                 }}
                 className={`${UI.input} cursor-pointer pr-10`}
                 aria-label={f.label}
+                data-ui={f.id === 'salary-days-start' ? 'salary-trip-start' : 'salary-trip-end'}
               />
               <input
                 type="date"

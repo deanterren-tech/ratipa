@@ -1,12 +1,26 @@
 import {useState, useEffect, useMemo, useRef} from 'react'
-import {UserProfile, SalaryLog, CarRateGroup, AppSettings, Driver, Vehicle} from '../../types'
+import {UserProfile, SalaryLog, SalaryPlanLink, TripPlan, CarRateGroup, AppSettings, Driver, Vehicle} from '../../types'
 import { dbService, database, onValue } from '../../api'
 import {pdService, directoryService} from '../../api'
 import { ref } from 'firebase/database'
-import {Wallet, Calculator, Trash2, Edit, Copy, Calendar, TrendingUp, History, ChevronDown, CheckCircle2} from 'lucide-react'
+import {Wallet, Calculator, Trash2, Edit, Copy, Calendar, TrendingUp, History, ChevronDown, CheckCircle2, Link2, RefreshCw, Plus, Search} from 'lucide-react'
 import {UI} from '../../ui/kit'
 import {openDatePicker} from '../../utils/openDatePicker'
 import {ModuleShell, SectionHeader, SearchField, FilterPills, StatusText, EmptyState, FoundCount, ModalShell} from '../../ui/components'
+import {
+  buildPlanSubstitution,
+  describeMissing,
+  describeSubstituted,
+  planDayRu,
+  planDriverLabel,
+  planPreviewHasChanges,
+  planRouteText,
+  planSourceLabel,
+  planSubstitutionPreview,
+  planFactKmOf,
+  PLAN_FACT_KM_MISSING_NOTICE,
+  type PlanSubstitutionPreviewRow,
+} from '../../utils/salaryPlanLink'
 import CalendarDaysCalculator from './CalendarDaysCalculator';
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
@@ -88,6 +102,104 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   // не оставалась копия в старом архиве (salaryHistory/months, byDispatcher).
   const originalEditRef = useRef<{ datetime: string; logist: string } | null>(null);
   const [logsLimit, setLogsLimit] = useState(10);
+
+  // ── Подстановка из «Плана дохода» (записи trips_dashboard) ────────────────
+  // Выбор плана — ТОЛЬКО явный из списка: по номеру машины план не подбирается,
+  // у одной машины может быть несколько разных планов и рейсов. Подставляются
+  // лишь даты старта/финиша и «Факт км» (никогда — плановый километраж).
+  const [plans, setPlans] = useState<TripPlan[]>([]);
+  const [planPickerOpen, setPlanPickerOpen] = useState(false);
+  const [planQuery, setPlanQuery] = useState('');
+  const [tripStart, setTripStart] = useState('');
+  const [tripEnd, setTripEnd] = useState('');
+  const [planLink, setPlanLink] = useState<SalaryPlanLink | null>(null);
+  const [planNotice, setPlanNotice] = useState<{ tone: 'success' | 'warning' | 'error'; text: string } | null>(null);
+  const [planPreview, setPlanPreview] = useState<{ plan: TripPlan; rows: PlanSubstitutionPreviewRow[] } | null>(null);
+
+  useEffect(() => {
+    const unsub = pdService.subscribeTrips((list) => setPlans(list || []));
+    return () => { if (typeof unsub === 'function') unsub(); };
+  }, []);
+
+  /** Планы для выбора: свежие сверху; поиск по машине, маршруту, водителю, датам. */
+  const planOptions = useMemo(() => {
+    const q = planQuery.trim().toLowerCase();
+    const list = (plans || []).filter((p) => p && p.id);
+    const filtered = q
+      ? list.filter((p) => `${p.carNumber || ''} ${planRouteText(p)} ${planDriverLabel(p)} ${p.dateStart || ''} ${p.dateEnd || ''} ${p.logist || ''}`.toLowerCase().includes(q))
+      : list;
+    return filtered
+      .slice()
+      .sort((a, b) => String(b.dateStart || '').localeCompare(String(a.dateStart || '')));
+  }, [plans, planQuery]);
+
+  const findPlanById = (id: string | null | undefined) =>
+    (plans || []).find((p) => String(p?.id) === String(id)) || null;
+
+  /**
+   * Подстановка выбранного плана в форму. Пустые поля заполняются молча,
+   * заполненные и отличающиеся — только после подтверждения с показом
+   * «было → станет»; совпадающие не трогаем. Частичная подстановка — норма:
+   * даты могут подставиться, даже если «Факт км» в плане не заполнен.
+   */
+  const applyPlanSubstitution = async (plan: TripPlan, opts?: { skipConfirm?: boolean }) => {
+    const rows = planSubstitutionPreview(plan, { dateStart: tripStart, dateEnd: tripEnd, km: totalKm });
+    const conflicts = rows.filter((r) => r.filled && !r.same);
+    if (conflicts.length && !opts?.skipConfirm) {
+      const ok = await showConfirm(
+        `Заменить заполненные значения данными плана дохода?
+
+${conflicts
+          .map((r) => `• ${r.label}: было «${r.currentLabel}» → станет «${r.nextLabel}»`)
+          .join('\n')}`,
+        'Подстановка из плана дохода',
+      );
+      if (!ok) return;
+    }
+    const { values, missing } = buildPlanSubstitution(plan);
+    if (values.dateStart !== undefined) setTripStart(String(values.dateStart));
+    if (values.dateEnd !== undefined) setTripEnd(String(values.dateEnd));
+    if (values.factKm !== undefined) setTotalKm(Number(values.factKm));
+    const factMissing = missing.includes('factKm');
+    setPlanLink({
+      planId: String(plan.id),
+      carNumber: String(plan.carNumber || ''),
+      source: 'planDohod',
+      dateStart: values.dateStart !== undefined ? String(values.dateStart) : '',
+      dateEnd: values.dateEnd !== undefined ? String(values.dateEnd) : '',
+      factKm: values.factKm !== undefined ? Number(values.factKm) : null,
+      syncedAt: new Date().toISOString(),
+      label: planSourceLabel(plan),
+    });
+    const substituted = describeSubstituted(values);
+    const parts = [
+      substituted ? `Подставлено: ${substituted}.` : 'В плане нет данных для подстановки.',
+      factMissing ? `${PLAN_FACT_KM_MISSING_NOTICE}.` : '',
+      missing.length ? `Осталось заполнить вручную: ${describeMissing(missing)}.` : 'Все данные плана подставлены.',
+    ].filter(Boolean);
+    setPlanNotice({ tone: factMissing ? 'warning' : 'success', text: parts.join(' ') });
+    if (substituted) toast(`Подставлено из плана дохода: ${substituted}`, 'success');
+    if (factMissing) toast(PLAN_FACT_KM_MISSING_NOTICE, 'info');
+  };
+
+  /**
+   * «Обновить из плана дохода» — предпросмотр изменений с последующим явным
+   * применением. Сохранённые записи журнала не меняются: правится только форма.
+   */
+  const refreshFromPlan = () => {
+    const plan = planLink ? findPlanById(planLink.planId) : null;
+    if (!plan) {
+      setPlanNotice({ tone: 'error', text: 'Запись «Плана дохода» не найдена — возможно, её удалили. Выберите план заново.' });
+      return;
+    }
+    setPlanPreview({ plan, rows: planSubstitutionPreview(plan, { dateStart: tripStart, dateEnd: tripEnd, km: totalKm }) });
+  };
+
+  /** Переход в «План дохода» — из уведомления о незаполненном «Факт км». */
+  const openPlanModule = () => {
+    setPlanPickerOpen(false);
+    window.location.hash = '#planDohod';
+  };
 
   // handlers модалки редактирования выплаты (восстановлены: ранее были удалены,
   // но вызовы остались в JSX → ReferenceError при клике "Править"/"Дублировать")
@@ -554,6 +666,10 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
     setTotalDays(1);
     setBonus(0);
     setComment('');
+    setTripStart('');
+    setTripEnd('');
+    setPlanLink(null);
+    setPlanNotice(null);
     clearCarDriverAutofill();
   };
 
@@ -611,7 +727,15 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
         totalSalary,
         salaryPerDay,
         carId: carId || undefined,
-        driverId: driverId || undefined
+        driverId: driverId || undefined,
+        // Период рейса и источник подстановки — сохраняются вместе с записью:
+        // открыв её позже, видно, откуда взяты даты и «Факт км».
+        dateStart: tripStart || undefined,
+        dateEnd: tripEnd || undefined,
+        planId: planLink?.planId,
+        planSource: planLink ? 'planDohod' : undefined,
+        planSyncedAt: planLink?.syncedAt,
+        planSynced: planLink ? { ...planLink } : undefined
     };
 
     dbService.saveSalary(newLog, user.name, user.role);
@@ -711,8 +835,62 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
               </div>
             </div>
             <div className="lg:col-span-1">
-              <CalendarDaysCalculator onDaysCalculated={(days) => setTotalDays(days)} />
+              <CalendarDaysCalculator
+                onDaysCalculated={(days) => setTotalDays(days)}
+                valueStart={tripStart}
+                valueEnd={tripEnd}
+                onRangeChange={(s, e) => { setTripStart(s); setTripEnd(e); }}
+              />
             </div>
+          </div>
+
+          {/* Подстановка из «Плана дохода»: явный выбор записи плана, показ
+              источника и честный отчёт — что подставлено, а что нужно вручную. */}
+          <div className="flex flex-col gap-2 pt-1" data-ui="salary-plan-link">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                data-ui="salary-plan-pick"
+                onClick={() => { setPlanQuery(''); setPlanPickerOpen(true); }}
+                className={UI.buttonGhost}
+              >
+                <Link2 className="w-3.5 h-3.5" aria-hidden="true" /> Подставить из плана дохода
+              </button>
+              {planLink && (
+                <>
+                  <button type="button" data-ui="salary-plan-refresh" onClick={refreshFromPlan} className={UI.buttonGhost}>
+                    <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" /> Обновить из плана дохода
+                  </button>
+                  <button type="button" data-ui="salary-plan-open" onClick={openPlanModule} className={UI.buttonLink}>
+                    Открыть план дохода
+                  </button>
+                </>
+              )}
+            </div>
+            {planLink && (
+              <div className="text-[11px] text-[#6B7280] leading-relaxed" data-ui="salary-plan-source">
+                Источник: «План дохода» —{' '}
+                {findPlanById(planLink.planId)
+                  ? planSourceLabel(findPlanById(planLink.planId))
+                  : planLink.label || planLink.carNumber || planLink.planId}
+                {planLink.syncedAt ? ` · подставлено ${new Date(planLink.syncedAt).toLocaleString('ru-RU')}` : ''}
+              </div>
+            )}
+            {planNotice && (
+              <div
+                data-ui="salary-plan-notice"
+                role="status"
+                className={`text-[11px] rounded-lg border px-2.5 py-2 leading-relaxed ${
+                  planNotice.tone === 'success'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                    : planNotice.tone === 'warning'
+                      ? 'border-amber-200 bg-amber-50 text-amber-900'
+                      : 'border-rose-200 bg-rose-50 text-rose-800'
+                }`}
+              >
+                {planNotice.text}
+              </div>
+            )}
           </div>
         </section>
 
@@ -1110,6 +1288,124 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
             </div>
           )}
         </section>
+
+        {planPickerOpen && (
+          <ModalShell
+            isOpen={planPickerOpen}
+            onClose={() => setPlanPickerOpen(false)}
+            title="Подстановка из «Плана дохода»"
+            subtitle="Выберите конкретную запись плана: по номеру машины планы не подбираются"
+            icon={<Link2 className="w-4 h-4" aria-hidden="true" />}
+            maxWidth="max-w-3xl"
+          >
+            <div className="flex flex-col gap-3">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-[#9CA3AF] absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
+                <input
+                  data-ui="salary-plan-search"
+                  className={`${UI.input} pl-9`}
+                  placeholder="Поиск: машина, маршрут, водитель, даты"
+                  value={planQuery}
+                  onChange={(e) => setPlanQuery(e.target.value)}
+                />
+              </div>
+              <div className="text-[11px] text-[#6B7280]">Найдено планов: {planOptions.length}</div>
+              <div className="max-h-[55vh] overflow-y-auto flex flex-col divide-y divide-[#E5E7EB] border border-[#E5E7EB] rounded-xl bg-white">
+                {planOptions.length === 0 && (
+                  <div className="px-3 py-6 text-center text-[11px] text-[#6B7280]">Планов не найдено</div>
+                )}
+                {planOptions.map((p) => {
+                  const fact = planFactKmOf(p);
+                  const route = planRouteText(p);
+                  const driver = planDriverLabel(p);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      data-ui="salary-plan-option"
+                      data-plan-id={p.id}
+                      onClick={() => { setPlanPickerOpen(false); void applyPlanSubstitution(p); }}
+                      className="w-full text-left px-3 py-2.5 hover:bg-[#F9FAFB] transition-colors cursor-pointer"
+                    >
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-xs font-semibold text-[#121316]">{p.carNumber || '—'}</span>
+                        <span className="text-[11px] text-[#6B7280]">
+                          {planDayRu(String(p.dateStart || '')) || '—'} – {planDayRu(String(p.dateEnd || '')) || '—'}
+                        </span>
+                        {p.isArchived ? <span className="text-[10px] text-[#9CA3AF]">архив</span> : null}
+                        {p.needsFill ? <span className="text-[10px] text-[#9CA3AF]">требует заполнения</span> : null}
+                      </div>
+                      {route ? <div className="text-[11px] text-[#4B5563] truncate">{route}</div> : null}
+                      <div className="text-[11px] text-[#6B7280] flex flex-wrap gap-x-3 gap-y-0.5">
+                        <span>{driver ? `Водитель: ${driver}` : 'Водитель: связь не задана'}</span>
+                        <span className={fact === null ? 'text-amber-700' : ''}>
+                          {fact === null ? '«Факт км» не заполнен' : `Факт: ${fact.toLocaleString('ru-RU')} км`}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </ModalShell>
+        )}
+
+        {planPreview && (
+          <ModalShell
+            isOpen={!!planPreview}
+            onClose={() => setPlanPreview(null)}
+            title="Обновление из «Плана дохода»"
+            subtitle={planSourceLabel(planPreview.plan)}
+            icon={<RefreshCw className="w-4 h-4" aria-hidden="true" />}
+            maxWidth="max-w-2xl"
+            footer={
+              <>
+                <button onClick={() => setPlanPreview(null)} className={UI.buttonGhost}>Отмена</button>
+                <button
+                  data-ui="salary-plan-apply"
+                  onClick={() => { const p = planPreview.plan; setPlanPreview(null); void applyPlanSubstitution(p, { skipConfirm: true }); }}
+                  disabled={!planPreviewHasChanges(planPreview.rows)}
+                  className={`${UI.buttonPrimary} disabled:opacity-60 disabled:cursor-default`}
+                >
+                  Применить изменения
+                </button>
+              </>
+            }
+          >
+            <div className="flex flex-col gap-2">
+              {planPreview.rows.length === 0 && (
+                <div className="text-[11px] text-[#6B7280]">В плане нет данных для подстановки.</div>
+              )}
+              {planPreview.rows.length > 0 && (
+                <table className="w-full text-left text-[11px]">
+                  <thead>
+                    <tr className={UI.theadRow}>
+                      <th className={UI.th}>Поле</th>
+                      <th className={UI.th}>Сейчас в форме</th>
+                      <th className={UI.th}>Из плана</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {planPreview.rows.map((r) => (
+                      <tr key={r.key} className={UI.tr}>
+                        <td className={UI.td}>{r.label}</td>
+                        <td className={UI.td}>{r.currentLabel}</td>
+                        <td className={UI.td}>
+                          <span className={r.same ? 'text-[#6B7280]' : 'font-semibold text-[#121316]'}>{r.nextLabel}</span>
+                          {r.same ? <span className="text-[#9CA3AF]"> — уже совпадает</span> : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {!planPreviewHasChanges(planPreview.rows) && planPreview.rows.length > 0 && (
+                <div className="text-[11px] text-[#6B7280]">Изменений нет: в форме уже значения плана.</div>
+              )}
+              <div className="text-[11px] text-[#9CA3AF]">Подстановка меняет только форму — сохранённые записи журнала не пересчитываются.</div>
+            </div>
+          </ModalShell>
+        )}
 
         {editingSalaryId && (
           <ModalShell
