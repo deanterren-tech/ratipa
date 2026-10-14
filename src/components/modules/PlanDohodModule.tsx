@@ -12,12 +12,28 @@ import {
   DISPATCHER_COLORS_PRESETS,
   PotentialLoad,
   CurrencyPreset,
+  ExpenseRow,
 } from "../../types";
 import {calculateTripFinances} from '../../utils/financeCalculators'
 import { buildDispatcherDirectory, dispatcherFieldsFor, resolvePersonName, DispatcherRef } from '../../utils/dispatcher'
 // Круги рейса — единое правило хранения/нормализации (одно поле записи,
 // общее с модулем «Таймлайн рейсов»; отсутствие поля = 1, без пересчёта).
 import { normalizeCircles } from './tripTimeline/lib/circles'
+// Дополнительные расходы: статьи с валютами и расчётом в евро (одна точка
+// конвертации — utils/expenseRates; направление курса проверено тестами).
+import {useConverter} from '../../hooks/useConverter'
+import {
+  convertToEur,
+  expensesMissingRate,
+  expensesTotalEur,
+  expenseAmountOf,
+  newExpenseId,
+  normalizeExpenseRows,
+  recalcExpenseRows,
+  serializeExpenseRows,
+  validateExpenseRows,
+  EXPENSE_CURRENCY_FALLBACK,
+} from '../../utils/expenseRates'
 import {dbService, directoryService} from '../../api';
 import {pdService} from '../../api';
 import CouplingPicker from "../common/CouplingPicker";
@@ -38,7 +54,7 @@ import {
   SlidersHorizontal,
   Truck,
   Lightbulb,
-  CircleDollarSign, MessageSquare, FileText, Pencil, PenLine} from "lucide-react";
+  CircleDollarSign, MessageSquare, FileText, Pencil, PenLine, RefreshCw} from "lucide-react";
 import MapRouteModal from "../MapRouteModal";
 import { UI } from "../../ui/kit";
 import { ModuleShell, SectionHeader, SearchField, FoundCount, EmptyState, ModalShell, BackButton } from "../../ui/components";
@@ -1126,6 +1142,74 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [circles, setCircles] = useState(1);
   const [extraExpense, setExtraExpense] = useState<number>(0);
   const [extraExpenseNote, setExtraExpenseNote] = useState("");
+  // ── Дополнительные расходы статьями ──────────────────────────────────────
+  // Курсы — те же, что в конвертере портала (НБРБ; rates = «сколько BYN за
+  // единицу валюты»). Старые поля extraExpense/extraExpenseNote остаются в
+  // записи как совместимое значение «Итого», но правятся только тут.
+  const conv = useConverter();
+  const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
+  const [pendingRateRefresh, setPendingRateRefresh] = useState(false);
+  const expensesSum = useMemo(() => expensesTotalEur(expenses), [expenses]);
+  const expensesMissing = useMemo(() => expensesMissingRate(expenses), [expenses]);
+  const expenseCodes = useMemo(() => {
+    const list = (currencies || []).map((c: { code?: string }) => String(c?.code || '').toUpperCase()).filter(Boolean);
+    const base = list.length ? list : EXPENSE_CURRENCY_FALLBACK.slice();
+    // Сохранённую валюту статьи показываем даже если её нет в справочнике:
+    // иначе открытая старая статья выглядела бы как «валюта не выбрана».
+    const used = (expenses || []).map((row) => String(row?.currency || '').toUpperCase()).filter(Boolean);
+    const merged = [...new Set([...(base.includes('EUR') ? base : ['EUR', ...base]), ...used])];
+    return merged;
+  }, [currencies, expenses]);
+  const expenseErrors = useMemo(() => {
+    const map: Record<string, string> = {};
+    validateExpenseRows(expenses).forEach((issue) => { map[issue.id] = issue.message; });
+    return map;
+  }, [expenses]);
+
+  const rateStampFor = (currency: string) =>
+    String(currency || '').toUpperCase() === 'EUR' ? 'EUR 1:1' : conv.ratesUpdatedAt ? `НБРБ, ${conv.ratesUpdatedAt}` : 'курс портала';
+
+  /** Правка статьи: сумма/валюта сразу пересчитываются в евро текущим курсом. */
+  const updateExpenseRow = (id: string, patch: Partial<ExpenseRow>) => {
+    setExpenses((prev) => prev.map((row) => {
+      if (row.id !== id) return row;
+      const next = { ...row, ...patch };
+      const amount = expenseAmountOf(next);
+      if (amount === null) return { ...next, eur: null, rate: null, rateAt: undefined, rateSource: undefined };
+      const manual = next.manualRate === undefined ? null : next.manualRate;
+      const res = convertToEur(amount, String(next.currency || ''), conv.rates, manual);
+      return {
+        ...next,
+        eur: res.ok ? res.eur : null,
+        rate: res.ok ? res.rate : null,
+        rateAt: new Date().toISOString(),
+        rateSource: rateStampFor(String(next.currency || '')),
+      };
+    }));
+  };
+  const addExpenseRow = () => setExpenses((prev) => [...prev, { id: newExpenseId(), amount: '', currency: 'EUR', note: '', eur: null, rate: null }]);
+  const removeExpenseRow = (id: string) => setExpenses((prev) => prev.filter((row) => row.id !== id));
+
+  /** «Обновить курс» — только явным действием; показывает изменение суммы. */
+  const refreshExpenseRates = async () => {
+    try { await conv.fetchNbrbRates?.(); } catch { /* курсы остаются прежними */ }
+    setPendingRateRefresh(true);
+  };
+  useEffect(() => {
+    if (!pendingRateRefresh) return;
+    setPendingRateRefresh(false);
+    const before = expensesTotalEur(expenses);
+    const res = recalcExpenseRows(expenses, conv.rates, 'НБРБ');
+    setExpenses(res.rows);
+    const after = expensesTotalEur(res.rows);
+    addToast(
+      Math.abs(before - after) > 0.004
+        ? `Курсы обновлены: было ${before.toFixed(2)} € → стало ${after.toFixed(2)} €`
+        : 'Курсы обновлены: суммы статей не изменились',
+      'success',
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRateRefresh, conv.rates]);
   
   const [ferryCost, setFerryCost] = useState(0);
   const [referenceRate, setReferenceRate] = useState<number | undefined>(
@@ -1414,7 +1498,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
 
   const calculateTotals = () => {
-    const fin = calculateTripFinances(legs, dateStart, dateEnd, Number(extraExpense), Number(ferryCost), Number(factKm));
+    const fin = calculateTripFinances(legs, dateStart, dateEnd, expensesSum, Number(ferryCost), Number(factKm));
     return {
       days: fin.days,
       daysPlan: fin.daysPlan,
@@ -1487,6 +1571,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     setCircles(1);
     setExtraExpense(0);
     setExtraExpenseNote("");
+    setExpenses([]);
     
     setFerryCost(0);
     setReferenceRate(undefined);
@@ -1535,6 +1620,9 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     setCircles(normalizeCircles(trip.circles));
     setExtraExpense(trip.extraExpense || 0);
     setExtraExpenseNote(trip.extraExpenseNote || "");
+    // Статьи: новые строки записи, либо перенос старых полей одной статьёй
+    // (перенос идемпотентен — повторное открытие дублей не даёт).
+    setExpenses(normalizeExpenseRows(trip));
     
     setFerryCost(trip.ferryCost || 0);
     setReferenceRate(trip.referenceRate);
@@ -1668,6 +1756,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
       setFerryCost(pl.ferryCost);
       setExtraExpense(pl.extraExpense);
       setExtraExpenseNote(pl.extraExpenseNote);
+      setExpenses(normalizeExpenseRows(pl));
       if (pl.referenceRate !== undefined) setReferenceRate(pl.referenceRate);
       if (pl.referenceCurrency)
         setReferenceCurrency(pl.referenceCurrency as any);
@@ -1678,6 +1767,16 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
   };
 
   const saveTrip = async () => {
+    // Проверки статей: сумма, валюта, пояснение, наличие курса.
+    const expenseIssues = validateExpenseRows(expenses);
+    if (expenseIssues.length) {
+      addToast(expenseIssues[0].message, 'error');
+      return;
+    }
+    if (expensesMissing.length) {
+      addToast('Нет курса для части статей — обновите курсы: итог пока неполный.', 'error');
+      return;
+    }
     if (isSubmitting) return;
     const trimmedCar = carNumber.trim().toUpperCase();
     if (!trimmedCar) {
@@ -1711,7 +1810,11 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
         totalKm: totals.totalKm,
         totalFreight: totals.totalFreight,
         totalExpenses: totals.totalExpenses,
-        extraExpense: Number(extraExpense || 0),
+        // Статьи расходов + совместимое «Итого» в старом поле: остальные
+        // потребители (таймлайн, KPI, отчёты) читают extraExpense и остаются
+        // корректными, а новые строки никогда не вычитаются дважды.
+        expenses: serializeExpenseRows(expenses),
+        extraExpense: expensesSum,
         extraExpenseNote,
         ferryCost: Number(ferryCost || 0),
         referenceRate,
@@ -2362,24 +2465,6 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                       <div>
-                        <label className="text-[11px] font-medium text-[#6B7280] mb-1.5 block">Доп расходы €</label>
-                        <input
-                          type="number"
-                          value={extraExpense || ""}
-                          onChange={(e) => setExtraExpense(Number(e.target.value))}
-                          className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 min-h-[44px] text-sm font-medium font-mono tabular-nums outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-medium text-[#6B7280] mb-1.5 block">Коммент расходов</label>
-                        <input
-                          type="text"
-                          value={extraExpenseNote}
-                          onChange={(e) => setExtraExpenseNote(e.target.value)}
-                          className="w-full bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3.5 py-2 min-h-[44px] text-sm font-medium outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
-                        />
-                      </div>
-                      <div>
                         <label className="text-[11px] font-medium text-[#6B7280] mb-1.5 block">Факт км</label>
                         <input
                           type="number"
@@ -2411,6 +2496,124 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                           ))}
                         </div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Дополнительные расходы — отдельными статьями: сумма, валюта,
+                      пояснение и рассчитанный эквивалент в евро. Сумма статей
+                      заменяет прежнее «Доп расходы €» в расчёте доходности. */}
+                  <div className="border-t border-[#E5E7EB] pt-6" data-ui="expenses-block">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                      <h3 className="text-sm font-semibold text-[#6B7280] flex items-center gap-2">
+                        <CircleDollarSign className="w-4 h-4 text-[#9CA3AF]"/>
+                        Расходы
+                      </h3>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold text-[#121316] font-mono tabular-nums" data-ui="expenses-total">
+                          Итого дополнительные расходы: {expensesSum.toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} €
+                        </span>
+                        {expenses.length > 0 && (
+                          <button
+                            type="button"
+                            data-ui="expenses-refresh-rates"
+                            onClick={refreshExpenseRates}
+                            className={UI.buttonGhost}
+                            title="Пересчитать суммы статей по текущим курсам портала"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" /> Обновить курс
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2" data-ui="expenses-list">
+                      {expenses.length === 0 && (
+                        <div className="text-[11px] text-[#9CA3AF]" data-ui="expenses-empty">
+                          Статей расхода нет. Добавьте, если рейс потребовал дополнительных затрат.
+                        </div>
+                      )}
+                      {expenses.map((row) => {
+                        const err = expenseErrors[row.id];
+                        const rateMissing = expensesMissing.some((m) => m.id === row.id);
+                        return (
+                          <div
+                            key={row.id}
+                            data-ui="expense-row"
+                            data-expense-id={row.id}
+                            className={`flex flex-col lg:flex-row lg:items-center gap-2 rounded-xl border px-2.5 py-2 ${err ? 'border-rose-200 bg-rose-50/40' : 'border-[#E5E7EB] bg-white'}`}
+                          >
+                            <div className="flex items-center gap-2 lg:shrink-0">
+                              <input
+                                data-ui="expense-amount"
+                                type="number"
+                                inputMode="decimal"
+                                placeholder="Сумма"
+                                value={row.amount === '' ? '' : row.amount}
+                                onChange={(e) => updateExpenseRow(row.id, { amount: e.target.value === '' ? '' : Number(e.target.value) })}
+                                className="w-24 lg:w-28 bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3 py-2 min-h-[44px] text-sm font-medium font-mono tabular-nums outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
+                              />
+                              <select
+                                data-ui="expense-currency"
+                                value={row.currency}
+                                onChange={(e) => updateExpenseRow(row.id, { currency: e.target.value })}
+                                aria-label="Валюта расхода"
+                                className="px-2 min-h-[44px] bg-[#F3F4F6] border border-[#E5E7EB] rounded-xl text-xs font-bold text-[#121316] outline-none focus:border-[var(--accent)] cursor-pointer"
+                              >
+                                {expenseCodes.map((code) => (
+                                  <option key={code} value={code}>{code}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <input
+                              data-ui="expense-note"
+                              type="text"
+                              placeholder="Пояснение: что это за расход и для чего"
+                              value={row.note}
+                              onChange={(e) => updateExpenseRow(row.id, { note: e.target.value })}
+                              className="flex-1 bg-white border border-[#E5E7EB] text-[#121316] rounded-xl px-3 py-2 min-h-[44px] text-sm outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] transition-colors"
+                            />
+                            <div className="flex items-center gap-2 lg:w-[210px] lg:shrink-0">
+                              <span
+                                data-ui="expense-eur"
+                                className={`text-xs font-semibold font-mono tabular-nums ${rateMissing ? 'text-rose-600' : 'text-[#121316]'}`}
+                              >
+                                {rateMissing ? 'курс недоступен' : `${(Number(row.eur) || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2})} €`}
+                              </span>
+                              {row.rate != null && !rateMissing && (
+                                <span className="text-[10px] text-[#9CA3AF] font-mono" title={row.rateSource || ''}>
+                                  {row.manualRate ? 'ручной ' : ''}×{row.rate}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                data-ui="expense-remove"
+                                onClick={() => removeExpenseRow(row.id)}
+                                className={`${UI.buttonIcon} ml-auto`}
+                                aria-label="Удалить статью расхода"
+                                title="Удалить статью"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                              </button>
+                            </div>
+                            {err && (
+                              <div data-ui="expense-error" className="text-[10px] text-rose-600 lg:max-w-[220px] leading-snug">{err}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <button type="button" data-ui="expense-add" onClick={addExpenseRow} className={`${UI.buttonGhost} mt-2`}>
+                      <Plus className="w-3.5 h-3.5" aria-hidden="true" /> Добавить расход
+                    </button>
+
+                    {expensesMissing.length > 0 && (
+                      <div data-ui="expenses-incomplete" className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-2 leading-relaxed">
+                        Итог неполный: для {expensesMissing.length} стат. нет курса. Обновите курсы — с неполным итогом план не сохраняется.
+                      </div>
+                    )}
+                    <div className="text-[10px] text-[#9CA3AF] mt-1.5 leading-relaxed">
+                      Курсы — те же, что в конвертере портала (НБРБ): сумма × курс валюты ÷ курс EUR. Сохранённые суммы не пересчитываются задним числом — только действием «Обновить курс».
                     </div>
                   </div>
 
