@@ -378,6 +378,51 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
     setShowDeliveryForm(true);
   };
 
+  /**
+   * Запись в журнал дозволов (`dozvolsHistoryV4`) — ТОТ ЖЕ формат и поля, что у
+   * реестра (`doc: «TYPE №NUMBER»`), поэтому запись видна и в модуле «История
+   * дозволов», и в блоке «История дозвола» окна самого бланка. Ключ генерируется
+   * заранее (`push().key`) и уходит в ОБЩИЙ multi-path update приёмки — запись и
+   * само изменение места попадают в базу одной операцией.
+   */
+  const logDozvolTo = (
+    updates: Record<string, unknown>,
+    docType: string,
+    docNum: string,
+    action: string,
+    meta: string,
+  ) => {
+    const key = push(ref(database, 'dozvolsHistoryV4')).key;
+    if (!key) return;
+    const logist = localStorage.getItem('ratipa_auth_user') || user?.name || 'Система';
+    updates[`dozvolsHistoryV4/${key}`] = {
+      time: new Date().toLocaleString('ru-RU'),
+      logist,
+      doc: `${docType} №${docNum}`,
+      action,
+      meta,
+    };
+  };
+
+  /**
+   * Приёмка доставки: бланки переезжают в место получения — и это изменение
+   * автомобиля/места пишется в историю КАЖДОГО бланка (раньше место менялось
+   * молча, и в истории дозвола ничего не появлялось).
+   */
+  const logDeliveryMoves = (updates: Record<string, unknown>, d: DeliveryItem, toLocName: string) => {
+    (d.dozvolIds || []).forEach((dId) => {
+      const rec = dozvolsData[dId];
+      if (!rec) return; // запись неизвестна — не пишем безымянную строку
+      logDozvolTo(
+        updates,
+        rec.type || '',
+        rec.number || rec.permitNumber || '',
+        'Изменено местонахождение',
+        `${rec.car || '—'} → ${toLocName} (приёмка доставки)`,
+      );
+    });
+  };
+
   const handleReceiveDelivery = (d: DeliveryItem) => {
     if (!useFirebase) return;
     const toLocName = locations[d.toLocId]?.name;
@@ -402,6 +447,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
           updates[`dozvolsRegistryV4/${dId}/car`] = toLocName;
         });
       }
+      logDeliveryMoves(updates, d, toLocName);
     } else {
       updates[`locationsDeliveries/${d.id}/status`] = 'received';
       updates[`locationsDeliveries/${d.id}/receivedAt`] = now;
@@ -414,6 +460,7 @@ export default function DozvolaLocations({ user }: DozvolaLocationsProps) {
           updates[`dozvolsRegistryV4/${dId}/car`] = toLocName;
         });
       }
+      logDeliveryMoves(updates, d, toLocName);
     }
 
     update(ref(database), updates);
