@@ -119,6 +119,13 @@ console.log('3. Шаблон по направлению');
   check('по названию «китай» (регистр не важен)', templateForDirection(tpls, 'китай', 'CN')?.id === 'tpl_china');
   check('по коду, когда назван так шаблон', templateForDirection([{ id: 'cn', name: 'CN', stages: ['A'] }], undefined, 'CN')?.id === 'cn');
   check('нет шаблона — null (не выдумываем)', templateForDirection(tpls, 'Литва', 'LT') === null);
+  // Шаблон направления с уточнением в названии («Турция 1») — реальный случай:
+  // владелец переименовал шаблон, и подсказка порядка не должна пропадать.
+  check('«Турция 1» — шаблон направления «Турция»', templateForDirection([{ id: 't1', name: 'Турция 1', stages: ['A'] }], 'Турция', 'TR')?.id === 't1');
+  check('«Китай 2 (основной)» — шаблон направления «Китай»', templateForDirection([{ id: 'c2', name: 'Китай 2 (основной)', stages: ['A'] }], 'Китай', 'CN')?.id === 'c2');
+  check('точное совпадение имеет приоритет над уточнённым', templateForDirection([{ id: 'ex', name: 'Турция', stages: ['A'] }, { id: 'num', name: 'Турция 1', stages: ['A'] }], 'Турция', 'TR')?.id === 'ex');
+  check('другое направление не подхватывается («Турция 1» ≠ «Китай»)', templateForDirection([{ id: 't1', name: 'Турция 1', stages: ['A'] }], 'Китай', 'CN') === null);
+  check('короткий код «TR» не даёт случайных совпадений', templateForDirection([{ id: 'x', name: 'Транзит', stages: ['A'] }], undefined, 'TR') === null);
 }
 
 // ────────────────────────────────────────────────────────────────────────────

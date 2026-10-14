@@ -358,8 +358,9 @@ const changedBlocksOf = (d: Draft, m: Meta, base: { draft: Draft; meta: Meta }):
 };
 
 /**
- * Сообщение ЖЁСТКОГО нарушения хронологии (единое для баннера над таблицей и
- * для блокировки сохранения): называет ОБА этапа с их датами.
+ * Сообщение нарушения хронологии (единое для баннера над таблицей и для подсказки
+ * при сохранении): называет ОБА этапа с их датами. Сохранение НЕ блокирует —
+ * баннер и подсветка строк показывают состояние плана, записать можно.
  * Пара: a — раньше по seq (но с более поздней датой), b — позже по seq, дата раньше.
  */
 const chronoConflictMessageOf = (conflicts: StageOrderConflict[], stageTypes: TimelineStageType[]): string => {
@@ -368,7 +369,7 @@ const chronoConflictMessageOf = (conflicts: StageOrderConflict[], stageTypes: Ti
   const nameA = stageFullName(stageTypes, c.a);
   const nameB = stageFullName(stageTypes, c.b);
   const more = conflicts.length > 1 ? ` (и ещё ${conflicts.length - 1} пара)` : '';
-  return `Хронология нарушена: «${nameB}» (${fmtDM(c.dayB)}) идёт в маршруте позже «${nameA}» (${fmtDM(c.dayA)}), но его плановая дата раньше${more}. Даты и порядок строк должны идти согласованно — сохранение заблокировано: исправьте даты или порядок этапов.`;
+  return `Хронология нарушена: «${nameB}» (${fmtDM(c.dayB)}) идёт в маршруте позже «${nameA}» (${fmtDM(c.dayA)}), но его плановая дата раньше${more}. Даты и порядок строк должны идти согласованно — проверьте даты или порядок этапов. Сохранить можно.`;
 };
 
 // ---------------------------------------------------------------------------
@@ -2190,20 +2191,10 @@ export default function TripCard({
    * плановых дат (страховка поверх UI-гейтов).
    */
   const findValidationIssue = (): { message: string; focus: () => void } | null => {
-    // ЖЁСТКИЙ контроль хронологии этапов (lib/stageSchedule.stageOrderConflicts):
-    // дата этапа с БОЛЬШИМ seq не может быть раньше даты этапа с меньшим seq —
-    // сохранение блокируется, конфликтные строки подсвечены, сообщение называет
-    // ОБА этапа (единое сообщение — и у баннера над таблицей).
-    if (chronoConflicts.length) {
-      const c = chronoConflicts[0];
-      return {
-        message: chronoConflictMessageOf(chronoConflicts, stageTypes),
-        focus: () => {
-          const row = rootRef.current?.querySelector(`[data-stage="${c.b.id}"]`);
-          row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        },
-      };
-    }
+    // Нарушение хронологии этапов (lib/stageSchedule.stageOrderConflicts) сохранение
+    // НЕ блокирует: это индикатор состояния плана — баннер над таблицей и подсветка
+    // строк показывают конфликт, но записать окно можно (решение владельца:
+    // «показывать, если ошибка реально есть, но не блокировать сохранение»).
     const s = dayNum(draft.planStart);
     const e = dayNum(draft.planEnd);
     if (s != null && e != null && e < s) {
@@ -2798,9 +2789,8 @@ export default function TripCard({
       const current = draft.stages.find((s) => s.id === stageId)?.plannedDate || '';
       if (!canEditPlannedDateField(stageRights, current, canEditPlanned)) return;
     }
-    setDraft((d) => ({
-      ...d,
-      stages: d.stages.map((s) => {
+    setDraft((d) => {
+      const stages = d.stages.map((s) => {
         if (s.id !== stageId) return s;
         const next = { ...s, [field]: value } as TimelineStage;
         // Смена ТИПА: запас подставляется из шаблона типа (Настройки), но только
@@ -2810,8 +2800,16 @@ export default function TripCard({
           if (wasTemplate) next.bufferDays = templateBufferOf(String(value));
         }
         return next;
-      }),
-    }));
+      });
+      // Дата определяет место этапа в маршруте: после её ввода/правки перенумеровываем
+      // seq/order по порядку отображения (дата, затем прежний seq) — «как строки
+      // сверху вниз». Иначе у только что добавленного этапа остаётся seq «в конец
+      // маршрута», хотя дата поставлена в середину рейса, и контроль хронологии
+      // подсвечивает красным весь рейс, хотя строки стоят верно.
+      const normalized =
+        field === 'plannedDate' || field === 'actualDate' ? renumberStageSeq(sortStagesRoute(stages)) : stages;
+      return { ...d, stages: normalized };
+    });
   };
 
   /**
@@ -2976,10 +2974,11 @@ export default function TripCard({
     setDraft((d) => ({ ...d, stages: [...d.stages, stage] }));
   };
 
-  /** Удаление этапа из черновика (в базу — той же кнопкой «Сохранить»). */
+  /** Удаление этапа из черновика (в базу — той же кнопкой «Сохранить»).
+   *  Список перенумеровывается 1..N (порядок отображения не меняется). */
   const removeStage = (stageId: string) => {
     if (!canEditPlanned) return;
-    setDraft((d) => ({ ...d, stages: d.stages.filter((s) => s.id !== stageId) }));
+    setDraft((d) => ({ ...d, stages: renumberStageSeq(d.stages.filter((s) => s.id !== stageId)) }));
   };
 
   /**
@@ -3720,9 +3719,9 @@ export default function TripCard({
             расставляются по порядку строк таблицы (вверх/вниз или перетаскиванием).
           </div>
         ) : null}
-        {/* ЖЁСТКИЙ контроль хронологии (lib/stageSchedule.stageOrderConflicts):
-            сохранение заблокировано, конфликтные строки подсвечены, сообщение
-            называет оба этапа. */}
+        {/* Контроль хронологии (lib/stageSchedule.stageOrderConflicts): сообщение
+            называет оба этапа, конфликтные строки подсвечены. Сохранение не
+            блокируется — баннер честно показывает состояние плана. */}
         {chronoConflicts.length ? (
           <div data-ui="stage-order-conflict" role="alert" className={`${UI.errorBox} flex items-start gap-2`}>
             <TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />

@@ -105,11 +105,26 @@ export const templateForDirection = (
 ): StageTemplate | null => {
   const name = str(directionName).toLowerCase();
   const code = str(directionCode).toLowerCase();
-  return (
-    (templates || []).find((t) => name && str(t.name).toLowerCase() === name) ||
-    (templates || []).find((t) => code && (str(t.id).toLowerCase() === code || str(t.name).toLowerCase() === code)) ||
-    null
-  );
+  const list = templates || [];
+  // 1) Точное совпадение: имя шаблона = имя направления (или id/имя = код направления).
+  const exact =
+    list.find((t) => name && str(t.name).toLowerCase() === name) ||
+    list.find((t) => code && (str(t.id).toLowerCase() === code || str(t.name).toLowerCase() === code));
+  if (exact) return exact;
+  // 2) Шаблон направления с уточнением в названии: «Турция 1», «Турция (основной)»,
+  //    «Китай 2» — имя направления является началом имени шаблона (или наоборот).
+  //    Без этого переименованный шаблон перестаёт давать подсказку порядка,
+  //    мягкое предупреждение по шаблону и сопоставление в аудите, хотя шаблон
+  //    направления реально существует. Короткие строки (<3) не сравниваем, чтобы
+  //    код «TR» не совпадал случайно.
+  const tolerant = (n: string): StageTemplate | null =>
+    n.length >= 3
+      ? list.find((t) => {
+          const tn = str(t.name).toLowerCase();
+          return tn.length >= 3 && (tn === n || tn.startsWith(n) || n.startsWith(tn));
+        }) || null
+      : null;
+  return tolerant(name) || tolerant(code) || null;
 };
 
 // ---------------------------------------------------------------------------
