@@ -53,8 +53,8 @@ import {
   Plus,
   Trash2,
   TriangleAlert,
-  Wrench,
-} from 'lucide-react';
+  Wrench, CheckCircle2} from 'lucide-react';
+import {openTripClose} from '../tripClose/openTripClose';
 import type { LegPlan, TimelinePlanGuard, TimelinePlanHistoryEntry, TimelinePlanPermission, TimelinePlanRequest, TimelineStage, TimelineStageType, TimelineVehicleEvent, UserProfile } from '../../../types';
 import { UI } from '../../../ui/kit';
 import { ModalShell } from '../../../ui/components';
@@ -4281,6 +4281,17 @@ export default function TripCard({
               >
                 <ExternalLink className="w-4 h-4" aria-hidden="true" />
                 Открыть план дохода
+              </button>
+              <button
+                type="button"
+                data-ui="close-trip-start"
+                disabled={!planSourceId}
+                onClick={() => openTripClose(planSourceId)}
+                className={`${UI.buttonGhost} disabled:opacity-50`}
+                title="Единый сценарий закрытия рейса для этой записи плана дохода"
+              >
+                <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
+                Закрыть рейс
               </button>
               <button type="button" data-ui="copy-plan-link" onClick={() => onCopyPlanLink(planSourceId)} className={UI.buttonGhost}>
                 <ClipboardCopy className="w-4 h-4" aria-hidden="true" />

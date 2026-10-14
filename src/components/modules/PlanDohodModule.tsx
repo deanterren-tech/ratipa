@@ -54,7 +54,8 @@ import {
   SlidersHorizontal,
   Truck,
   Lightbulb,
-  CircleDollarSign, MessageSquare, FileText, Pencil, PenLine, RefreshCw} from "lucide-react";
+  CircleDollarSign, MessageSquare, FileText, Pencil, PenLine, RefreshCw, CheckCircle2} from "lucide-react";
+import {openTripClose} from './tripClose/openTripClose';
 import MapRouteModal from "../MapRouteModal";
 import { UI } from "../../ui/kit";
 import { ModuleShell, SectionHeader, SearchField, FoundCount, EmptyState, ModalShell, BackButton } from "../../ui/components";
@@ -3149,6 +3150,15 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     </button>
                   )
                 )}
+                <button
+                  type="button"
+                  data-ui="close-trip-start"
+                  onClick={() => openTripClose(String((currentEditingTrip as TripPlan | null)?.id || ''))}
+                  className="bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] hover:text-[#121316] px-4 py-2.5 min-h-[44px] rounded-xl font-bold text-sm tracking-tight transition-colors flex items-center justify-center gap-2 flex-1 md:flex-none cursor-pointer"
+                  title="Единый сценарий закрытия рейса: план, зарплата, выезд, план загрузок, документы, МДП"
+                >
+                  <CheckCircle2 className="w-4 h-4 hidden md:block" /> Закрыть рейс
+                </button>
                 <button
                   onClick={saveTrip}
                   disabled={isSubmitting}

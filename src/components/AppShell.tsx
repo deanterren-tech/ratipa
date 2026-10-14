@@ -23,6 +23,8 @@ import UpdateTour from './UpdateTour'
 import PortalInstructionsModal from './PortalInstructionsModal'
 import {usePresence} from '../hooks/usePresence'
 import {useChat} from '../hooks/useChat'
+import TripCloseWizard from './modules/tripClose/TripCloseWizard';
+import {OPEN_TRIP_CLOSE_EVENT} from './modules/tripClose/openTripClose';
 import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Truck, FileText, Files, Clock, Map, Settings, Settings2, ShieldAlert, LogOut, Menu, X, Radio, MessageSquare, Send, Trash2, Sparkles, ChevronDown, ArrowUp, Pencil, Calendar, CalendarRange, Bell, BellRing, Check, CheckCheck, AlertTriangle, Info, LineChart, ExternalLink, Wifi, WifiOff, RefreshCw, LoaderCircle, Home, Sliders, BookOpen, ClipboardList, CircleDollarSign, Coins, BookCheck, BookMarked, Grid3x3, MoreHorizontal } from 'lucide-react';
 
 // Import newly created business modules
@@ -125,6 +127,17 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const [activeModule, setActiveModule] = useState<string>(getDefaultModule());
   const [loadedModules, setLoadedModules] = useState<string[]>([getDefaultModule()]);
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false);
+  // Сценарий «Закрыть рейс»: один мастер на весь портал, состояние — на сервере
+  const [closeTripId, setCloseTripId] = useState<string>('');
+  useEffect(() => {
+    const onOpenCloseTrip = (e: Event) => {
+      const detail = (e as CustomEvent<{ tripId?: string }>).detail || {};
+      const id = String(detail.tripId || '').trim();
+      if (id) setCloseTripId(id);
+    };
+    window.addEventListener(OPEN_TRIP_CLOSE_EVENT, onOpenCloseTrip as EventListener);
+    return () => window.removeEventListener(OPEN_TRIP_CLOSE_EVENT, onOpenCloseTrip as EventListener);
+  }, []);
   const [offlineMode, setOfflineMode] = useState(() => localStorage.getItem('offline_mode') === 'true');
 
   const toggleOfflineMode = () => {
@@ -2062,6 +2075,15 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         onClose={() => setIsCommandCenterOpen(false)} 
         onNavigate={handleNavigate} 
       />
+
+      {closeTripId && (
+        <TripCloseWizard
+          user={user}
+          settings={settings}
+          tripId={closeTripId}
+          onClose={() => setCloseTripId('')}
+        />
+      )}
     </div>
   );
 }
