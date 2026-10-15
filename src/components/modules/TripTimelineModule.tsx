@@ -19,7 +19,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HelpCircle, Plus } from 'lucide-react';
-import type { AppSettings, TimelinePlanGuard, TimelinePlanPermission, TimelinePlanRequest, UserProfile } from '../../types';
+import type { AppSettings, UserProfile } from '../../types';
 import { dbService, pdService } from '../../api';
 import { resolvePermission } from '../../utils/permissions';
 import { buildDispatcherDirectory } from '../../utils/dispatcher';
@@ -37,7 +37,7 @@ import { useTimelineData } from './tripTimeline/useTimelineData';
 import { type DirectionOption, directionStoreValue } from './tripTimeline/lib/directionCatalog';
 import DirectionAddModal from './tripTimeline/DirectionAddModal';
 import { sortMonthLabelsDesc, todayNum, zoomColW, zoomIndexOf } from './tripTimeline/lib/timeline';
-import { plateKeyOf } from './tripTimeline/lib/sources';
+import { plateKeyOf, withPlanMetaOverride } from './tripTimeline/lib/sources';
 import { setColumnHighlight, setPaintByDirection } from './tripTimeline/lib/timelinePrefs';
 import {
   openDepartureAccountingPanel,
@@ -332,10 +332,6 @@ export default function TripTimelineModule({ user, settings }: Props) {
     [archiveMonth],
   );
 
-  const filteredTrips = useMemo(
-    () => data.trips.filter((t) => matchesTab(t.dispatcherId) && monthMatches(t)),
-    [data.trips, matchesTab, monthMatches],
-  );
   const filteredBases = useMemo(() => data.bases.filter((p) => matchesTab(p.dispatcherId)), [data.bases, matchesTab]);
   const filteredEvents = useMemo(
     () => data.events.filter((e) => matchesTab(carDispatcherByNumber.get(plateKeyOf(e.carNumber)) || '')),
@@ -345,8 +341,18 @@ export default function TripTimelineModule({ user, settings }: Props) {
 
   // ── Общие тексты рейса (причина / меры при просрочке) ─────────────────
   const [metaStore, setMetaStore] = useState<Record<string, Record<string, unknown>>>({});
+  /**
+   * Ветка `tripTimeline/tripMeta` загружена (пришёл первый снапшот). В ней
+   * живут и правки плановых дат из таймлайна (planStart/planEnd), поэтому до
+   * загрузки оверрайда НЕ показываем ложное предупреждение о полноте плана
+   * (см. withPlanMetaOverride, lib/sources).
+   */
+  const [metaLoaded, setMetaLoaded] = useState(false);
   useEffect(() => {
-    const unsub = dbService.getTimelineTripMeta((store) => setMetaStore(store || {}));
+    const unsub = dbService.getTimelineTripMeta((store) => {
+      setMetaStore(store || {});
+      setMetaLoaded(true);
+    });
     return () => {
       if (typeof unsub === 'function') unsub();
     };
@@ -362,29 +368,25 @@ export default function TripTimelineModule({ user, settings }: Props) {
     metaTimers.current.set(key, t);
   }, []);
 
-  // ── Контроль плана этапов: состояние планов и разовые разрешения ────────
-  const [planGuardStore, setPlanGuardStore] = useState<Record<string, TimelinePlanGuard>>({});
-  const [planPermsStore, setPlanPermsStore] = useState<Record<string, Record<string, TimelinePlanPermission>>>({});
-  /** Запросы разового доступа (по рейсам) — статусы кнопки запроса в карточке. */
-  const [planRequestsStore, setPlanRequestsStore] = useState<Record<string, Record<string, TimelinePlanRequest>>>({});
-  useEffect(() => {
-    const unsub = dbService.getTimelinePlanGuards((store) => setPlanGuardStore(store || {}));
-    return () => {
-      if (typeof unsub === 'function') unsub();
-    };
-  }, []);
-  useEffect(() => {
-    const unsub = dbService.getTimelinePlanPerms((store) => setPlanPermsStore(store || {}));
-    return () => {
-      if (typeof unsub === 'function') unsub();
-    };
-  }, []);
-  useEffect(() => {
-    const unsub = dbService.getTimelinePlanRequests((store) => setPlanRequestsStore(store || {}));
-    return () => {
-      if (typeof unsub === 'function') unsub();
-    };
-  }, []);
+  /**
+   * ЕДИНЫЙ согласованный вид рейсов для отображения: плановые границы =
+   * план записи + правки дат из таймлайна (оверрайд `tripTimeline/tripMeta`,
+   * поля planStart/planEnd) + признак загрузки ветки (metaLoaded). Полоса,
+   * окно рейса, предупреждения и счёты получают ОДИН и тот же объект — тогда
+   * «поле рейса», «дата в окне» и правый край полосы совпадают по построению.
+   */
+  const tripsWithPlanMeta = useMemo(
+    () => data.trips.map((t) => withPlanMetaOverride(t, metaStore[t.key], { metaLoaded })),
+    [data.trips, metaStore, metaLoaded],
+  );
+  const hiddenTripsWithPlanMeta = useMemo(
+    () => data.hiddenTrips.map((t) => withPlanMetaOverride(t, metaStore[t.key], { metaLoaded })),
+    [data.hiddenTrips, metaStore, metaLoaded],
+  );
+  const filteredTrips = useMemo(
+    () => tripsWithPlanMeta.filter((t) => matchesTab(t.dispatcherId) && monthMatches(t)),
+    [tripsWithPlanMeta, matchesTab, monthMatches],
+  );
 
   // ── Карточки и модалки ─────────────────────────────────────────────────
   const [openTripKey, setOpenTripKey] = useState<string | null>(null);
@@ -960,14 +962,14 @@ export default function TripTimelineModule({ user, settings }: Props) {
       data.bases.find((p) => p.carKey === overviewCarKey)?.carNumber ||
       ''
     : '';
-  const overviewTrips = overviewCarKey ? data.trips.filter((t) => t.carKey === overviewCarKey) : [];
+  const overviewTrips = overviewCarKey ? tripsWithPlanMeta.filter((t) => t.carKey === overviewCarKey) : [];
   const overviewBases = overviewCarKey ? data.bases.filter((p) => p.carKey === overviewCarKey) : [];
   const defaultDispatcherId = isDispatcherUser && dispatcherTabs.some((t) => t.id === user.uid) ? user.uid : '';
 
   // Прямое открытие карточки (deep link): скрытый дубль ищем и среди hiddenTrips —
   // карточка открывается с понятной плашкой (см. TripCard), из таймлайна он скрыт.
   const openTripObj = openTripKey
-    ? data.trips.find((t) => t.key === openTripKey) || data.hiddenTrips.find((t) => t.key === openTripKey) || null
+    ? tripsWithPlanMeta.find((t) => t.key === openTripKey) || hiddenTripsWithPlanMeta.find((t) => t.key === openTripKey) || null
     : null;
   const openTripMetaRaw = openTripKey ? metaStore[openTripKey] || {} : {};
   const openTripMeta = {
@@ -975,7 +977,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
     measures: String(openTripMetaRaw.measures || ''),
     comment: String(openTripMetaRaw.comment || ''),
   };
-  const carTripsForModal = openTripObj ? data.trips.filter((t) => t.carKey === openTripObj.carKey) : [];
+  const carTripsForModal = openTripObj ? tripsWithPlanMeta.filter((t) => t.carKey === openTripObj.carKey) : [];
   const carBasesForModal = openTripObj ? data.bases.filter((p) => p.carKey === openTripObj.carKey) : [];
   const carEventsForModal = openTripObj
     ? data.events.filter((e) => plateKeyOf(e.carNumber) === plateKeyOf(openTripObj.carNumber))
@@ -1172,7 +1174,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
       <div className={activeTab === 'stats' ? '' : 'hidden'}>
         <StatsBlock
           trips={filteredTrips}
-          allTrips={data.trips}
+          allTrips={tripsWithPlanMeta}
           allEvents={data.events}
           bases={filteredBases}
           stageTypes={data.stageTypes}
@@ -1200,10 +1202,6 @@ export default function TripTimelineModule({ user, settings }: Props) {
           onFocusStageDone={() => setFocusStageId(null)}
           onOpenEventTrip={openTripAtEvent}
           onOpenBasePeriod={openPeriod}
-          planGuard={openTripKey ? planGuardStore[openTripKey] || null : null}
-          planPerms={openTripKey ? planPermsStore[openTripKey] || {} : {}}
-          planRequests={openTripKey ? planRequestsStore[openTripKey] || {} : {}}
-          planControlEnabled={dbService.isOnline()}
           carTrips={carTripsForModal}
           carBases={carBasesForModal}
           carEvents={carEventsForModal}

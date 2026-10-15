@@ -546,6 +546,80 @@ export const tripEnd = (trip: TimelineTrip): number | null => {
   return list.length ? Math.max(...list) : null;
 };
 
+/**
+ * ЕДИНЫЙ источник ПЛАНОВЫХ ГРАНИЦ рейса (план записи + оверрайд + этапы).
+ *
+ * Приоритет: правки дат из таймлайна (оверрайд `tripTimeline/tripMeta/<key>`,
+ * поля planStart/planEnd — передаётся metaOverride) → плановые границы записи
+ * (spanOverride: «План дохода» / ручной рейс) → плановые даты этапов.
+ * Эту же пару используют: предупреждение о неполном плане, полоса таймлайна
+ * (`ov.pMax ?? span.pMax`), подписи и расчёты окна рейса — расхождений между
+ * «полем рейса» и тем, что видно в окне/на полосе, быть не должно.
+ */
+export interface PlanBounds {
+  pMin: number | null;
+  pMax: number | null;
+}
+
+export const tripPlanBounds = (
+  trip: TimelineTrip & { spanOverride?: SpanOverride | null },
+  metaOverride?: SpanOverride | null,
+): PlanBounds => {
+  const span = tripSpan(trip);
+  return {
+    pMin: metaOverride?.pMin ?? span.pMin ?? null,
+    pMax: metaOverride?.pMax ?? span.pMax ?? null,
+  };
+};
+
+/**
+ * Интервалы между СОСЕДНИМИ этапами (в ТЕКУЩЕМ порядке списка) для окна рейса:
+ *  · плановый — разница плановых дат соседей, фактический — фактических;
+ *  · БЕЗ включительного подсчёта: 15.10→17.10 = 2 дня, один день = 0;
+ *  · нет одной из двух дат — null («—»): сегодня и план вместо факта
+ *    НЕ подставляются, через этап без даты не перескакиваем (соседи — ровно
+ *    соседние строки);
+ *  · дата следующего этапа раньше предыдущей — флаг ошибки порядка дат
+ *    (ошибку показываем явно, а не прячем нулём).
+ * Старт и возвращение рейса — границы цепочки (отдельные поля/оверрайд) и
+ * этапами здесь НЕ дублируются: интервалы считаются только между строками.
+ */
+export interface StageInterval {
+  /** Дней между соседними этапами по плану (без включительного подсчёта). */
+  planDays: number | null;
+  /** Дней между соседними этапами по факту (без включительного подсчёта). */
+  factDays: number | null;
+  /** Плановая дата следующего этапа раньше предыдущей — ошибка порядка. */
+  planReversed: boolean;
+  /** Фактическая дата следующего этапа раньше предыдущей — ошибка порядка. */
+  factReversed: boolean;
+}
+
+export const stageIntervalsOf = (stages: TimelineStage[]): StageInterval[] => {
+  const list = (stages || []).filter((s) => s && typeof s === 'object');
+  const out: StageInterval[] = [];
+  for (let i = 0; i + 1 < list.length; i += 1) {
+    const pa = dayNum(list[i].plannedDate);
+    const pb = dayNum(list[i + 1].plannedDate);
+    const fa = dayNum(list[i].actualDate);
+    const fb = dayNum(list[i + 1].actualDate);
+    out.push({
+      planDays: pa != null && pb != null && pb >= pa ? pb - pa : null,
+      factDays: fa != null && fb != null && fb >= fa ? fb - fa : null,
+      planReversed: pa != null && pb != null && pb < pa,
+      factReversed: fa != null && fb != null && fb < fa,
+    });
+  }
+  return out;
+};
+
+/** Компактная подпись интервала для таблицы окна: «План: N дн. · Факт: M дн.». */
+export const stageIntervalText = (iv: StageInterval): string => {
+  const part = (label: 'План' | 'Факт', days: number | null, reversed: boolean): string =>
+    reversed ? `${label}: ошибка порядка дат` : `${label}: ${days == null ? '—' : `${days} дн.`}`;
+  return `${part('План', iv.planDays, iv.planReversed)} · ${part('Факт', iv.factDays, iv.factReversed)}`;
+};
+
 /** Вычисляемый диапазон для хранения в рейсе (startDate/endDate) — обновляется
  *  при любом изменении этапов, чтобы окно грузилось по датам. */
 export const computeStoredRange = (trip: TimelineTrip): { startDate?: string; endDate?: string } => {

@@ -1,5 +1,6 @@
-import { ref, set, remove, push, update, onDisconnect, query, orderByChild, equalTo } from 'firebase/database';
+import { ref, set, remove, push, update, onDisconnect, query, orderByChild, equalTo, get } from 'firebase/database';
 import { database, useFirebase, dbService, onValue } from '../firebase';
+import { appendPlanRecordHistory } from './tripHistoryService';
 import { TripPlan } from '../types';
 
 const safeUserKey = (name: string) =>
@@ -112,13 +113,14 @@ export const pdService = {
 
   /**
    * Создание записи «Плана дохода» из формы «Новый рейс» таймлайна — одной
-   * атомарной парой с маркером черновика плана этапов.
+   * атомарной парой (запись + предложенные этапы).
    *
    * Ключ записи задаёт вызывающая сторона (таймлайн): повторная отправка с тем
    * же id перезаписывает ту же запись — повторные нажатия и ретраи после ошибки
-   * дубликатов не создают. Запись плана и черновик плана этапов
-   * (tripTimeline/planGuard) пишутся ОДНИМ multi-path обновлением: либо обе
-   * ветки, либо ни одной — бесхозного рейса и несвязанной записи не остаётся.
+   * дубликатов не создают. Маркер черновика плана этапов (tripTimeline/planGuard)
+   * больше НЕ пишется: механизм разрешений на изменение плана удалён, запись
+   * плана редактируется без ограничений, изменения фиксирует история изменений
+   * рейса (tripTimeline/tripHistory).
    * Финансовые поля сюда не кладутся: запись создаётся с состоянием
    * «Требует заполнения» (needsFill), числа не выдумываются.
    *
@@ -127,15 +129,15 @@ export const pdService = {
    */
   createLinkedTimelineTrip: async (
     id: string,
+    /** Ключ рейса таймлайна (`pd:<id>`) — параметр вызова сохранён ради совместимости. */
     planTripKey: string,
     payload: TimelineLinkedPlanPayload,
     user: string,
     role: string,
   ): Promise<string> => {
     if (!useFirebase) throw new Error('нет подключения к базе');
-    if (!id || !planTripKey) throw new Error('не задан идентификатор записи');
+    if (!id) throw new Error('не задан идентификатор записи');
     const now = new Date().toLocaleString('ru-RU');
-    const nowIso = new Date().toISOString();
     const record: Record<string, unknown> = {};
     Object.entries(payload).forEach(([k, v]) => {
       // Этапы в запись плана НЕ кладутся: они живут в отдельной ветке
@@ -149,7 +151,7 @@ export const pdService = {
     record.updatedAt = now;
     record.updatedBy = user;
     // Предложенные этапы нового рейса — тем же atomic-обновлением, что запись
-    // плана и маркер черновика: без этапов — ветка не создаётся вовсе.
+    // плана: без этапов — ветка не создаётся вовсе.
     const stageUpdates: Record<string, unknown> = {};
     (payload.stages || []).forEach((s) => {
       const sid = String((s as { id?: unknown })?.id || '');
@@ -158,7 +160,6 @@ export const pdService = {
     try {
       await update(ref(database), {
         [`trips_dashboard/${id}`]: record,
-        [`tripTimeline/planGuard/${planTripKey}`]: { version: 0, draftCreated: true, updatedAt: nowIso },
         ...stageUpdates,
       });
     } catch (e) {
@@ -176,6 +177,13 @@ export const pdService = {
     return id;
   },
 
+  /**
+   * Обновление записи «Плана дохода». Плановые поля (даты, круги, направление)
+   * попадают в ЕДИНУЮ историю изменений рейса (`tripTimeline/tripHistory/<pd:id>`)
+   * с source='plan' и тем же opKey: одно изменение, пришедшее и отсюда, и из
+   * окна таймлайна, не даёт двух записей, а инициатор записи не подменяется.
+   * Финансовые поля и статусы историю НЕ пишут.
+   */
   updateTrip: async (id: string, tripInfo: any, user: string, role: string) => {
     if (!useFirebase) return;
     try {
@@ -185,7 +193,19 @@ export const pdService = {
         updatedAt: now,
         updatedBy: user,
       }, (k, v) => v === undefined ? null : v));
-      update(ref(database, `trips_dashboard/${id}`), cleanInfo);
+      // Снимок «до» — только для расчёта изменений плана (даты/круги/направление).
+      let before: Record<string, unknown> | null = null;
+      try {
+        const snap = await get(ref(database, `trips_dashboard/${id}`));
+        before = (snap.val() || null) as Record<string, unknown> | null;
+      } catch (err) {
+        console.warn('Plan record pre-read for trip history failed:', err);
+      }
+      await update(ref(database, `trips_dashboard/${id}`), cleanInfo);
+      if (before) {
+        const after: Record<string, unknown> = { ...before, ...cleanInfo };
+        await appendPlanRecordHistory({ planId: id, before, after, by: user });
+      }
       dbService.logAction(user, role, 'Обновление плана рейса', 'PlanDohod', id, `Обновлен план рейса для ТС ${tripInfo.carNumber || id}`);
     } catch (e) {
       console.error("Error updating trip in Firebase:", e);

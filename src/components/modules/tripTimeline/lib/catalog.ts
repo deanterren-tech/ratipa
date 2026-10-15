@@ -9,13 +9,14 @@
 import type { TimelineStage, TimelineStageType } from '../../../../types';
 
 /** Типы этапов по умолчанию (спецификация: Загрузка, Затаможка, Граница,
- *  Растаможка, Бронь, Выгрузка, Другое). */
+ *  Растаможка, Бронь, Выгрузка, Другое) — используются короткие подписи
+ *  без уточнений («(экспорт)»/«(импорт)»/«/ согласование перехода»). */
 export const DEFAULT_STAGE_TYPES: TimelineStageType[] = [
   { key: 'load', name: 'Загрузка', order: 1 },
-  { key: 'cust_out', name: 'Затаможка (экспорт)', order: 2 },
+  { key: 'cust_out', name: 'Затаможка', order: 2 },
   { key: 'border', name: 'Граница', order: 3 },
-  { key: 'cust_in', name: 'Растаможка (импорт)', order: 4 },
-  { key: 'reserve', name: 'Бронь / согласование перехода', order: 5 },
+  { key: 'cust_in', name: 'Растаможка', order: 4 },
+  { key: 'reserve', name: 'Бронь', order: 5 },
   { key: 'unl', name: 'Выгрузка', order: 6 },
   { key: 'other', name: 'Другое', order: 7 },
 ];

@@ -21,7 +21,7 @@ import React from 'react';
 import type { LegPlan } from '../../../types';
 import { calculateTripFinances } from '../../../utils/financeCalculators';
 import { plural } from '../../../ui/kit';
-import { dayStr } from './lib/timeline';
+import { dayStr, tripPlanBounds } from './lib/timeline';
 import type { WholeTrip } from './lib/sources';
 
 export interface PlanBarParts {
@@ -63,18 +63,19 @@ const asLegList = (raw: unknown): LegPlan[] => {
 /**
  * Плановая продолжительность в днях — тем же расчётом, что в «Плане дохода».
  * Дат нет (или битые) — null: вымышленное число не показываем.
+ * Диапазон — из ЕДИНОГО источника плановых границ рейса (lib/timeline
+ * tripPlanBounds: границы записи плана → оверрайд tripMeta → плановые даты
+ * этапов): подпись полосы не противоречит полосе и окну — при заполненных
+ * этапах «нет дат» больше не показывается.
  */
 export const planDurationDays = (t: WholeTrip): number | null => {
   const raw = t.planRaw;
   let startIso = raw ? String(raw.dateStart || '') : '';
   let endIso = raw ? String(raw.dateEnd || '') : '';
   if (!startIso || !endIso) {
-    // Ручной рейс (или план без дат): пробуем собственные плановые границы рейса.
-    const ov = t.spanOverride || {};
-    if (ov.pMin != null && ov.pMax != null) {
-      startIso = dayStr(ov.pMin);
-      endIso = dayStr(ov.pMax);
-    }
+    const bounds = tripPlanBounds(t);
+    if (!startIso && bounds.pMin != null) startIso = dayStr(bounds.pMin);
+    if (!endIso && bounds.pMax != null) endIso = dayStr(bounds.pMax);
   }
   if (!startIso || !endIso) return null;
   const fin = calculateTripFinances(

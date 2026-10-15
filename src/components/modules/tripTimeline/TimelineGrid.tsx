@@ -31,6 +31,7 @@ import {
   layoutLaneTracks,
   stageDeviation,
   tripFactEnd,
+  tripPlanBounds,
   tripSpan,
   visibleRangeText,
   zoomColW,
@@ -461,13 +462,17 @@ const buildRows = (
 
     // ── Целые рейсы: план-полоса, запас, факт/«факт не указан», маркеры ──
     myTrips.forEach((t) => {
-      const ov = t.spanOverride || {};
       const span = tripSpan(t);
-      const pMin = ov.pMin ?? span.pMin ?? null;
-      const pMax = ov.pMax ?? span.pMax ?? null;
+      // Плановые границы — ЕДИНЫЙ источник (lib/timeline.tripPlanBounds):
+      // план записи + оверрайд tripMeta (уже подмешан в spanOverride на слое
+      // данных) + плановые даты этапов. Те же границы используют полнота
+      // плана (предупреждения), подписи окна и счёты — расхождений нет.
+      const bounds = tripPlanBounds(t);
+      const pMin = bounds.pMin;
+      const pMax = bounds.pMax;
       t.warnings.forEach((w) => warnings.add(w));
       if (pMin == null) return; // без старта полосу не рисуем — дату не выдумываем
-      const openPlan = t.openPlan === true || pMax == null;
+      const openPlan = pMax == null; // «неполный план» — только когда даты возвращения нет нигде
       const planEnd = pMax ?? pMin;
       const tripLabel = `Рейс «${t.route || 'без маршрута'}»`;
       const deadline = getDeadlineStatus(t, today, (s) => stageFullName(stageTypes, s));

@@ -620,11 +620,11 @@ const PlanFullDemo = () => {
   const days = 16;
   const stages: TimelineStage[] = [
     st('d-load', 'load', 'Загрузка', D0, null),
-    st('d-cust-out', 'cust_out', 'Затаможка (экспорт)', D0 + 2, null),
+    st('d-cust-out', 'cust_out', 'Затаможка', D0 + 2, null),
     st('d-border', 'border', 'Граница', D0 + 4, null),
-    st('d-cust-in', 'cust_in', 'Растаможка (импорт)', D0 + 7, null),
+    st('d-cust-in', 'cust_in', 'Растаможка', D0 + 7, null),
     st('d-unl', 'unl', 'Выгрузка', D0 + 9, null),
-    st('d-reserve', 'reserve', 'Бронь / согласование перехода', D0 + 11, null),
+    st('d-reserve', 'reserve', 'Бронь', D0 + 11, null),
   ];
   return (
     <DemoFrame

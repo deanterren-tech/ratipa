@@ -14,9 +14,9 @@
  * диспетчер, плановые даты, маршрут (города — в плечи, текст — в заметку).
  */
 import type { TimelineLinkedPlanPayload } from '../../../../firebase/planDohodService';
-import type { TimelineStage } from '../../../../types';
+import type { TimelineStage, TimelineTrip } from '../../../../types';
 import { calculateTripFinances } from '../../../../utils/financeCalculators';
-import { dayNum } from './timeline';
+import { dayNum, dayStr, tripFactEnd, tripSpan } from './timeline';
 import { normalizeCircles } from './circles';
 
 /**
@@ -55,6 +55,52 @@ export const planDaysForRange = (startIso: string, endIso: string): number | und
   const fin = calculateTripFinances([], startIso, endIso, 0, 0, 0);
   const days = Number(fin.days);
   return Number.isFinite(days) && days > 0 ? days : undefined;
+};
+
+// ---------------------------------------------------------------------------
+// Счётчики длительности окна рейса (задание владельца)
+// ---------------------------------------------------------------------------
+
+/**
+ * Длительности рейса для верхней части окна — календарные дни ВКЛЮЧИТЕЛЬНО
+ * (старт = день 1: 15.10→17.10 = 3 дня). Границы — день-номера из tripSpan,
+ * то есть тот же счёт через Date.UTC (dayNum/tripDayNum), что во всём модуле:
+ * без деления миллисекунд на 24 часа и без сдвигов часовых поясов.
+ *  · план — от планового старта до планового возвращения (planDaysForRange —
+ *    тот же расчёт, что у «Плана дохода»);
+ *  · выполняемый рейс — от фактического старта до СЕГОДНЯ (включительно);
+ *  · завершённый — от фактического старта до фактического возвращения
+ *    (последний этап маршрута с фактом, как в блоке «План и факт»);
+ *  · фактические даты плановыми НЕ подменяются: нет факта — счёта нет.
+ */
+export interface TripDurations {
+  /** Плановая длительность, дней; undefined — нет обеих плановых дат. */
+  planDays?: number;
+  /** Дней в рейсе (факт-старт → сегодня) — начавшийся незавершённый рейс. */
+  ongoingDays?: number;
+  /** Фактическая длительность завершённого рейса (факт-старт → факт-возвращение). */
+  doneDays?: number;
+  /** Фактический старт заполнен (без него фактических счётов нет). */
+  hasFact: boolean;
+  /** Плановые границы (день-номера; null — нет). */
+  planFrom: number | null;
+  planTo: number | null;
+}
+
+export const tripDurationsOf = (trip: TimelineTrip, today: number): TripDurations => {
+  const span = tripSpan(trip);
+  const planFrom = span.pMin;
+  const planTo = span.pMax;
+  const planDays =
+    planFrom != null && planTo != null ? planDaysForRange(dayStr(planFrom), dayStr(planTo)) : undefined;
+  const factStart = span.fMin;
+  const base: TripDurations = { planDays, hasFact: factStart != null, planFrom, planTo };
+  if (factStart == null) return base;
+  const factEnd = tripFactEnd(trip);
+  if (factEnd != null) {
+    return { ...base, doneDays: Math.max(1, factEnd - factStart + 1) };
+  }
+  return { ...base, ongoingDays: Math.max(1, today - factStart + 1) };
 };
 
 export interface TimelinePlanDraftInput {

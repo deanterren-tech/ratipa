@@ -3,7 +3,7 @@
  * и связанных правил: цепочка плановых дат, накопление запаса, порядок
  * «раньше внесён — левее» (seq → order → позиция), «план без запаса / запас /
  * итого», критический срок от даты С ЗАПАСОМ (lib/timeline) и гейт плана
- * (lib/planLock).
+ * (lib/planChanges).
  *
  * Запуск: npx tsx scripts/test-stage-buffer.ts  (или npm run test:stage-buffer)
  */
@@ -18,7 +18,7 @@ import {
   stageSeqOf,
 } from '../src/components/modules/tripTimeline/lib/stageSchedule';
 import { getDeadlineStatus } from '../src/components/modules/tripTimeline/lib/timeline';
-import { computePlanStageChanges } from '../src/components/modules/tripTimeline/lib/planLock';
+import { computePlanStageChanges } from '../src/components/modules/tripTimeline/lib/planChanges';
 
 let passed = 0;
 let failed = 0;
@@ -164,7 +164,7 @@ console.log('6. Перестановка ▲▼: seq перенумеровыв�
   check('▲▼ один день: лидерство в дне перевернулось', buildStageSchedule(swapped).chain[0].stageId === 'y' && buildStageSchedule(sameDay).chain[0].stageId === 'x');
 }
 
-console.log('7. Запас и порядок — ЧАСТЬ ПЛАНА (гейт planLock)');
+console.log('7. Запас и порядок — ЧАСТЬ ПЛАНА (расчёт изменений lib/planChanges)');
 {
   const stored = [
     st('2026-10-02', { id: 'a', seq: 1, order: 1 }),

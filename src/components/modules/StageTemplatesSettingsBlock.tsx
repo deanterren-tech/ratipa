@@ -235,7 +235,7 @@ export default function StageTemplatesSettingsBlock({ user }: { user: UserProfil
         </button>
         <span className="inline-flex items-start gap-1.5 text-[10px] text-[#6B7280]">
           <TriangleAlert className="w-3 h-3 text-amber-500 mt-px shrink-0" aria-hidden="true" />
-          Названия этапов сопоставляются с типами (Настройки → типы этапов): «Загрузка», «Граница», «Растаможка (импорт)»… Незнакомое
+          Названия этапов сопоставляются с типами (Настройки → типы этапов): «Загрузка», «Граница», «Растаможка»… Незнакомое
           название создаст этап типа «Другое», название попадёт в «Место». Места и даты в шаблоне НЕ хранятся.
         </span>
       </div>

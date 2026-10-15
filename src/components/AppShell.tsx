@@ -17,7 +17,6 @@ import ErrorPage from './common/ErrorPage'
 import ModuleDataContainer from './common/ModuleLoadState'
 import {useNotifications} from '../hooks/useNotifications'
 import type { NotificationItem } from '../hooks/useNotifications'
-import PlanAccessDecisionModal from './modules/tripTimeline/PlanAccessDecisionModal'
 import {useConverter} from '../hooks/useConverter'
 import UpdateTour from './UpdateTour'
 import PortalInstructionsModal from './PortalInstructionsModal'
@@ -338,23 +337,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const presence = usePresence(user, activeModule);
   useChat(user);
 
-  /**
-   * Окно решения по запросу разового доступа к плану этапов рейса.
-   * Открывается кликом по уведомлению администратора или по событию
-   * `ratipa-plan-request-open` (карточка рейса/уведомление).
-   */
-  const [planRequestModal, setPlanRequestModal] = useState<{ tripKey: string; requestId: string } | null>(null);
-  useEffect(() => {
-    const onOpen = (e: Event) => {
-      const detail = (e as CustomEvent<{ tripKey?: string; requestId?: string }>).detail || {};
-      if (detail.tripKey && detail.requestId) {
-        setPlanRequestModal({ tripKey: detail.tripKey, requestId: detail.requestId });
-      }
-    };
-    window.addEventListener('ratipa-plan-request-open', onOpen);
-    return () => window.removeEventListener('ratipa-plan-request-open', onOpen);
-  }, []);
-
   const {
     filteredNotifications,
     unreadNotifsCount,
@@ -372,17 +354,12 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   } = notif;
 
   /**
-   * Клик по уведомлению: администратору запрос доступа открывает окно решения по
-   * конкретному запросу; адресное уведомление диспетчера — ведёт к карточке рейса.
+   * Клик по уведомлению: уведомление по рейсу ведёт к его карточке на таймлайне
+   * (окна решения по разовому доступу к плану больше нет — механизм удалён).
    */
   const handleNotificationClick = (n: NotificationItem) => {
     markNotifAsRead(n.id);
     setIsNotifOpen(false);
-    const canDecide = user.role === 'root_admin' || user.role === 'admin';
-    if (n.requestKey && n.tripKey && canDecide && n.kind !== 'plan-access-decision') {
-      setPlanRequestModal({ tripKey: n.tripKey, requestId: n.requestKey });
-      return;
-    }
     if (n.requestKey && n.tripKey) {
       window.location.hash = `#tripTimeline/trip/${encodeURIComponent(n.tripKey)}`;
     }
@@ -1593,16 +1570,6 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         settings={settings}
         onClose={() => setPortalHelpOpen(false)}
       />
-
-      {/* Окно решения по запросу разового доступа к плану этапов (из уведомления) */}
-      {planRequestModal ? (
-        <PlanAccessDecisionModal
-          tripKey={planRequestModal.tripKey}
-          requestId={planRequestModal.requestId}
-          user={user}
-          onClose={() => setPlanRequestModal(null)}
-        />
-      ) : null}
 
       <UpdateTour
         isOpen={tourOpen}

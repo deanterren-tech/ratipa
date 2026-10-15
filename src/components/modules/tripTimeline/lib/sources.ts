@@ -24,7 +24,7 @@ import {
   resolveDispatcherId,
   type DispatcherDirectory,
 } from '../../../../utils/dispatcher';
-import { dayNum, normalizeStages, todayNum, type SpanOverride } from './timeline';
+import { dayNum, normalizeStages, todayNum, tripPlanBounds, type SpanOverride } from './timeline';
 import { normalizeCircles } from './circles';
 import { parseRepairEvents, type RepairEvent } from './repairEvents';
 import { dedupeBazaRecords } from '../../baza/lib/bazaDedupe';
@@ -264,8 +264,6 @@ export const planTripsToWholeTrips = (
       const pMax = dayNum(endIso);
       const warnings: string[] = [];
       if (!car) warnings.push('Автомобиль плана не найден в справочнике — строка показана по тексту плана');
-      if (pMin == null) warnings.push('В плане не указана дата старта — полоса рейса не строится');
-      if (pMin != null && pMax == null) warnings.push('В плане не указана дата возвращения — показан неполный план');
       if (pMin != null && pMax != null && pMax < pMin) warnings.push('Дата возвращения в плане раньше старта — проверьте план дохода');
       // Дубль, скрытый на таймлайне: флаг и основная запись — из источника, без выдумывания.
       const hiddenFromTimeline = rec.hiddenFromTimeline === true;
@@ -307,7 +305,7 @@ export const planTripsToWholeTrips = (
         ...(rec.direction ? { direction: String(rec.direction) } : {}),
         stages: normalizeStages(stagesStore[id] || {}),
         readOnlyDates: true,
-        openPlan: pMin != null && pMax == null,
+        openPlan: false,
         spanOverride: { pMin, pMax },
         planRaw: rec,
         // Круги рейса — поле записи «Плана дохода» (отсутствие = 1, миграция
@@ -335,10 +333,82 @@ export const planTripsToWholeTrips = (
           needsFill: rec.needsFill === true,
         },
       };
+      // Полнота плана — по ЕДИНОМУ источнику плановых границ (tripPlanBounds:
+      // запись плана → плановые даты этапов; правки дат из таймлайна —
+      // оверрайд tripTimeline/tripMeta — подмешивает withPlanMetaOverride).
+      // Раньше полнота считалась ТОЛЬКО по полю записи dateEnd и давала ложное
+      // «В плане не указана дата возвращения», хотя окно и полоса уже
+      // показывали дату возвращения (запись «Требует заполнения» с этапами).
+      const bounds = tripPlanBounds(trip);
+      if (bounds.pMin == null) warnings.push('В плане не указана дата старта — полоса рейса не строится');
+      if (bounds.pMin != null && bounds.pMax == null) {
+        warnings.push('В плане не указана дата возвращения — показан неполный план');
+      }
+      trip.openPlan = bounds.pMin != null && bounds.pMax == null;
       return trip;
     })
     // Рейс без старта не может дать полосу, но остаётся в обзоре машины
     .filter((t) => !(t.warnings.some((w) => w.includes('не указана дата старта')) && t.stages.length === 0));
+};
+
+// ---------------------------------------------------------------------------
+// Единый источник плановых границ: план + оверрайд (правки дат из таймлайна)
+// ---------------------------------------------------------------------------
+
+/** Префиксы предупреждений о плановых датах — пересобираются из границ. */
+const PLAN_DATE_WARNING_PREFIXES = [
+  'В плане не указана дата старта',
+  'В плане не указана дата возвращения',
+] as const;
+
+/**
+ * Правки плановых дат из таймлайна: ветка `tripTimeline/tripMeta/<ключ рейса>`,
+ * поля planStart/planEnd (тот же путь сохранения, что у правок дат из окна —
+ * см. dbService.saveTimelineTripMeta). Возвращает переопределение границ;
+ * пустые/битые значения не выдумываются (null).
+ */
+export const planMetaOverrideOf = (
+  metaRaw: Record<string, unknown> | null | undefined,
+): SpanOverride | null => {
+  if (!metaRaw || typeof metaRaw !== 'object') return null;
+  const pMin = dayNum(String(metaRaw.planStart ?? ''));
+  const pMax = dayNum(String(metaRaw.planEnd ?? ''));
+  if (pMin == null && pMax == null) return null;
+  return { pMin, pMax };
+};
+
+/**
+ * Рейс с ЕДИНЫМ согласованным источником плановых границ (план записи +
+ * оверрайд tripMeta + признак загрузки). Этот слой обязаны проходить все
+ * экраны (полоса, окно рейса, предупреждения, счёты) — тогда «поле рейса»,
+ * «дата в окне» и правый край плановой полосы совпадают по построению.
+ *  · metaLoaded === false — ветка оверрайда ещё загружается: предупреждение о
+ *    дате возвращения НЕ показываем (ложная ошибка до загрузки исключена);
+ *  · openPlan и предупреждения полноты пересчитываются по эффективным
+ *    границам (запись → этапы), а не по одному полю dateEnd;
+ *  · пока для рейса нет оверрайда, поведение прежнее — данные не меняются.
+ */
+export const withPlanMetaOverride = (
+  trip: WholeTrip,
+  metaRaw: Record<string, unknown> | null | undefined,
+  opts?: { metaLoaded?: boolean },
+): WholeTrip => {
+  const metaOverride = planMetaOverrideOf(metaRaw);
+  const base = trip.spanOverride || {};
+  const spanOverride: SpanOverride = {
+    pMin: metaOverride?.pMin ?? base.pMin ?? null,
+    pMax: metaOverride?.pMax ?? base.pMax ?? null,
+  };
+  const merged: WholeTrip = { ...trip, spanOverride };
+  const bounds = tripPlanBounds(merged);
+  const warnings = trip.warnings.filter((w) => !PLAN_DATE_WARNING_PREFIXES.some((p) => w.startsWith(p)));
+  if (trip.kind === 'plan') {
+    if (bounds.pMin == null) warnings.push('В плане не указана дата старта — полоса рейса не строится');
+    if (bounds.pMin != null && bounds.pMax == null && opts?.metaLoaded !== false) {
+      warnings.push('В плане не указана дата возвращения — показан неполный план');
+    }
+  }
+  return { ...merged, warnings, openPlan: bounds.pMin != null && bounds.pMax == null };
 };
 
 // ---------------------------------------------------------------------------

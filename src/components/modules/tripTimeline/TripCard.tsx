@@ -55,7 +55,7 @@ import {
   TriangleAlert,
   Wrench, CheckCircle2} from 'lucide-react';
 import {openTripClose} from '../tripClose/openTripClose';
-import type { LegPlan, TimelinePlanGuard, TimelinePlanHistoryEntry, TimelinePlanPermission, TimelinePlanRequest, TimelineStage, TimelineStageType, TimelineVehicleEvent, UserProfile } from '../../../types';
+import type { LegPlan, TimelineStage, TimelineStageType, TimelineVehicleEvent, UserProfile } from '../../../types';
 import { UI } from '../../../ui/kit';
 import { ModalShell } from '../../../ui/components';
 import { formatPlate } from '../../../utils/salaryAutofill';
@@ -119,8 +119,15 @@ import {
   type StageFillInput,
   type StageFillSection,
 } from './lib/stageFills';
-import { computeBlockedPlanChanges, computePlanStageChanges, planDatesEditable, PLAN_DATES_OPEN_TO_ALL, resolvePlanLock, type PlanStageChanges } from './lib/planLock';
+import { computePlanStageChanges, describePlanChanges, type PlanStageChanges } from './lib/planChanges';
 import { canEditPlannedDateField, resolveStageMove, resolveStageRights } from './lib/stageRights';
+import {
+  TRIP_HISTORY_SCOPE_LABELS,
+  historyPageSlice,
+  type TripHistorySnapshot,
+  type TripHistoryView,
+} from './lib/tripHistory';
+import { appendTripHistory, subscribeTripHistory, tripHistoryDraftOf } from '../../../firebase/tripHistoryService';
 import {
   buildStageSchedule,
   moveStageInList,
@@ -135,7 +142,7 @@ import {
   type StageSchedule,
 } from './lib/stageSchedule';
 import { normalizeCircles, tripCircleMarksOf, visibleCircleTicks, type TripCircleMarks } from './lib/circles';
-import { hasPlanFinancials } from './lib/planFromDraft';
+import { hasPlanFinancials, tripDurationsOf } from './lib/planFromDraft';
 import {
   WEEKEND_HINT,
   ZOOM_LEVELS,
@@ -154,6 +161,8 @@ import {
   isWeekendDay,
   layoutLaneTracks,
   stageDeviation,
+  stageIntervalText,
+  stageIntervalsOf,
   stageStateOf,
   TIMELINE_MINI_COL_W,
   tripFactEnd,
@@ -189,14 +198,8 @@ const STATUS_TONE: Record<number, { dot: string; text: string }> = {
 const isoOf = (day: number | null): string => (day == null ? '' : dayStr(day));
 const money = (v?: number, cur = '€') => (v == null ? '—' : `${v.toLocaleString('ru-RU')} ${cur}`);
 
-/** Подписи записей истории плана этапов. */
-const PLAN_HISTORY_LABELS: Record<string, string> = {
-  initial: 'первичное сохранение',
-  update: 'изменение плана',
-  'admin-update': 'изменение плана (администратор)',
-  grant: 'разрешение выдано',
-  revoke: 'разрешение отозвано',
-};
+/** Сколько строк истории показывать за раз (кнопка «Показать ещё»). */
+const HISTORY_PAGE_STEP = 6;
 
 interface Meta {
   reason: string;
@@ -227,14 +230,6 @@ interface Props {
   onOpenEventTrip?: (tripKey: string, eventId: string) => void;
   /** Клик по заливке базы/ремонта во встроенном таймлайне: открыть карточку периода. */
   onOpenBasePeriod?: (periodKey: string) => void;
-  /** Состояние плана этапов рейса (tripTimeline/planGuard) — блокировка плановых дат. */
-  planGuard?: TimelinePlanGuard | null;
-  /** Действующие разовые разрешения рейса (tripTimeline/planPerms). */
-  planPerms?: Record<string, TimelinePlanPermission>;
-  /** Запросы разового доступа рейса (tripTimeline/planRequests/tripKey): статусы для кнопки запроса. */
-  planRequests?: Record<string, TimelinePlanRequest>;
-  /** Контроль плана этапов доступен только в облачном режиме. */
-  planControlEnabled?: boolean;
   /** Рейсы, периоды и события этой же машины — контекст встроенного таймлайна. */
   carTrips: WholeTrip[];
   carBases: BasePeriod[];
@@ -1754,10 +1749,6 @@ export default function TripCard({
   onFocusStageDone,
   onOpenEventTrip,
   onOpenBasePeriod,
-  planGuard,
-  planPerms,
-  planRequests,
-  planControlEnabled,
   carTrips,
   carBases,
   carEvents,
@@ -1791,13 +1782,9 @@ export default function TripCard({
   const [saveError, setSaveError] = useState('');
   const [savedFlash, setSavedFlash] = useState(false);
   const savedFlashTimer = useRef<number | null>(null);
-  const [grantOpen, setGrantOpen] = useState(false);
-  const [grantUserId, setGrantUserId] = useState('');
-  /** Форма запроса разового доступа (диспетчер): причина и отправка. */
-  const [requestFormOpen, setRequestFormOpen] = useState(false);
-  const [requestReason, setRequestReason] = useState('');
-  const [requestSending, setRequestSending] = useState(false);
-  const [requestError, setRequestError] = useState('');
+  /** История изменений рейса: строки для показа и порция кнопки «Показать ещё». */
+  const [historyViews, setHistoryViews] = useState<TripHistoryView[]>([]);
+  const [historyShown, setHistoryShown] = useState(HISTORY_PAGE_STEP);
   /** Запрос из таблицы этапов: открыть форму события с предвыбранным этапом. */
   const [eventFormRequest, setEventFormRequest] = useState<{ stageId?: string; nonce: number } | null>(null);
   /** Краткая подсветка этапа после клика по маркеру на встроенном таймлайне. */
@@ -1855,40 +1842,23 @@ export default function TripCard({
   const saveTplOpenRef = useRef(false);
   saveTplOpenRef.current = saveTplOpen;
 
-  // ── Контроль плана этапов (блокировка плановых дат после сохранения) ────
-  const planEnabled = !!planControlEnabled;
+  // ── Права исполнителя и пользователь для записей истории ────────────────
+  /** Автор изменений (uid + имя авторизованного пользователя). */
   const planUserId = String(user.uid || '');
-  const planLock = useMemo(
-    () =>
-      resolvePlanLock({
-        storedStages: trip.stages,
-        guard: planGuard || null,
-        perms: planPerms || {},
-        userId: planUserId,
-        // Маркер черновика учитывается только у записей, созданных формой
-        // таймлайна: у заполненных реальных рейсов он не даёт бесплатную правку.
-        timelineDraft: trip.planDraftFromTimeline === true,
-      }),
-    [trip.stages, trip.planDraftFromTimeline, planGuard, planPerms, planUserId],
-  );
-  const isRootAdmin = user.role === 'root_admin';
-  /** Итоговое состояние: вне облака контроль выключен (локальный режим). */
-  const planState = planEnabled ? planLock.state : 'draft';
-  /** Плановые даты и состав доступны правке в этом сеансе.
-   *  Владелец: «открой доступ для дат планирования всем» — при
-   *  PLAN_DATES_OPEN_TO_ALL правка плановых дат открыта любому исполнителю с
-   *  правом записи, без разового разрешения администратора (lib/planLock). */
-  const canEditPlanned = planDatesEditable(planEnabled ? planLock : null, { readOnly, isRootAdmin });
   /**
-   * Права на этапы (lib/stageRights, единый резолвер): добавление этапа и
-   * заполнение ПУСТЫХ дат — всегда у авторизованного исполнителя (включая
-   * архивные и уже сохранённые рейсы); правка уже ВНЕСЁННЫХ плановых дат — при
-   * открытых плановых датах тоже у исполнителя с правом записи, иначе только у
-   * администраторов.
+   * Плановые даты и состав этапов доступны правке при праве записи: контроля
+   * плана и разовых разрешений администратора в модуле больше НЕТ (механизм
+   * удалён целиком). Архив/просмотр — только чтение.
+   */
+  const canEditPlanned = !readOnly;
+  /**
+   * Права на этапы (lib/stageRights, единый резолвер): добавление этапа,
+   * заполнение ПУСТЫХ дат и правка уже внесённых плановых дат — у исполнителя
+   * с правом записи при ЛЮБОМ статусе рейса (включая архив — как и раньше).
    */
   const stageRights = useMemo(
-    () => resolveStageRights(user, { kind: trip.kind, archived, planState }, { canWrite }),
-    [user, trip.kind, archived, planState, canWrite],
+    () => resolveStageRights(user, { kind: trip.kind, archived }, { canWrite }),
+    [user, trip.kind, archived, canWrite],
   );
 
   // ── «Сохранить как шаблон»: состав и проверка имени (чистые функции lib) ──
@@ -1905,56 +1875,23 @@ export default function TripCard({
     ? 'кнопка «сохранить как шаблон» станет активной, когда у этапов будет тип (переносятся только названия типов)'
     : 'кнопка «сохранить как шаблон» станет активной, когда в рейсе появится этап';
 
-  /** Запрос разового доступа ТЕКУЩЕГО пользователя по этому рейсу (одна запись на пару). */
-  const myPlanRequest = useMemo<TimelinePlanRequest | null>(() => {
-    const store = planRequests || {};
-    const key = planUserId ? dbService.planRequestIdOf(planUserId) : '';
-    const mine = key ? store[key] : undefined;
-    return mine || null;
-  }, [planRequests, planUserId]);
-  /** Кнопка «Запросить разовый доступ» — диспетчеру при заблокированном плане.
-   *  При открытых плановых датах запрашивать нечего: кнопка не показывается. */
-  const showRequestAccess = planEnabled && planState === 'saved' && !readOnly && !isRootAdmin && !PLAN_DATES_OPEN_TO_ALL;
-
+  // ── История изменений рейса (план + факт): подписка на ветку базы ───────
   /**
-   * Отправка запроса разового доступа: свежая версия сохранённого плана, одна
-   * запись на пару (рейс, пользователь); повторный запрос при ожидающем
-   * запрещён (транзакция в базе, не только интерфейс).
+   * Единый список изменений: живые записи `tripTimeline/tripHistory/<tripKey>`
+   * плюс старая история плана (planGuard.history — только чтение). Свежие
+   * сверху; новая запись появляется без перезагрузки — подписка.
    */
-  const submitPlanRequest = async () => {
-    if (requestSending || !planUserId || !planTripKey) return;
-    setRequestSending(true);
-    setRequestError('');
-    try {
-      const fresh = await dbService.getTimelinePlanGuardOnce(planTripKey);
-      const version = Number(fresh?.version) || planLock.version || 1;
-      const res = await dbService.createTimelinePlanRequest(
-        {
-          tripKey: planTripKey,
-          userId: planUserId,
-          userName: user.name,
-          carNumber: trip.carNumber || '',
-          route: draft.route || trip.plan?.direction || '',
-          ...(requestReason.trim() ? { reason: requestReason.trim() } : {}),
-          planVersion: version,
-        },
-        planLock.history,
-      );
-      if (res.ok) {
-        setRequestFormOpen(false);
-        setRequestReason('');
-        toast('Запрос отправлен. Ожидается решение администратора', 'success');
-      } else if (res.reason === 'already-pending') {
-        setRequestError('Запрос уже отправлен и ожидает решения — повторно отправлять нельзя.');
-      } else {
-        setRequestError('Не удалось отправить запрос — повторите отправку.');
-      }
-    } catch (err) {
-      setRequestError(`Не удалось отправить запрос: ${(err as Error).message}`);
-    } finally {
-      setRequestSending(false);
-    }
-  };
+  useEffect(() => {
+    const unsub = subscribeTripHistory(trip.key, (views) => setHistoryViews(views));
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
+  }, [trip.key]);
+  /** Видимая порция списка (кнопка «Показать ещё» порядок не меняет). */
+  const historyPage = useMemo(
+    () => historyPageSlice(historyViews, historyShown, HISTORY_PAGE_STEP),
+    [historyViews, historyShown],
+  );
 
   /**
    * «Изменено» — СРАВНЕНИЕ черновика с последним сохранённым состоянием по всем
@@ -2144,53 +2081,15 @@ export default function TripCard({
     });
   }, []);
 
-  // ── Контроль плана этапов: единое сохранение и разовые разрешения ───────
-  // Блокировка плановых дат остаётся ФАКТИЧЕСКИМ механизмом (planGuard +
-  // planPerms + история): одиночная кнопка «Сохранить» сама фиксирует первичное
-  // сохранение плана (черновик → «План сохранён») либо расходует разовое
-  // разрешение администратора — отдельной кнопки «Сохранить план этапов» нет.
+  // ── Единое сохранение окна и история изменений ──────────────────────────
+  // Кнопка «Сохранить» пишет всё содержимое окна одной атомарной операцией;
+  // изменения плана фиксирует ЕДИНАЯ история изменений (lib/tripHistory):
+  // одна успешная операция сохранения = одна запись истории.
   const planTripKey = trip.key;
-
-  const nextPlanHistory = useCallback(
-    (action: TimelinePlanHistoryEntry['action'], note: string): TimelinePlanHistoryEntry[] =>
-      [
-        ...planLock.history,
-        { at: new Date().toISOString(), by: user.name, ...(planUserId ? { byId: planUserId } : {}), action, note },
-      ].slice(-30),
-    [planLock.history, user.name, planUserId],
-  );
-
-  const describePlanChanges = useCallback(
-    (changes: PlanStageChanges): string => {
-      const parts: string[] = [];
-      changes.plannedUpdates.forEach((u) => {
-        const st = draft.stages.find((s) => s.id === u.id) || trip.stages.find((s) => s.id === u.id);
-        parts.push(
-          `${st ? stageFullName(stageTypes, st) : u.id}: план ${u.before ? fmtFull(u.before) : 'не указана'} → ${u.plannedDate ? fmtFull(u.plannedDate) : 'не указана'}`,
-        );
-      });
-      changes.circleUpdates.forEach((u) => {
-        const st = draft.stages.find((s) => s.id === u.id) || trip.stages.find((s) => s.id === u.id);
-        parts.push(
-          `${st ? stageFullName(stageTypes, st) : u.id}: круг ${u.before ?? 'не указан'} → ${u.circle ?? 'не указан'}`,
-        );
-      });
-      if (changes.circlesChanged) {
-        parts.push(`количество кругов рейса: ${normalizeCircles(trip.circles)} → ${draft.circles}`);
-      }
-      changes.adds.forEach((s) =>
-        parts.push(`добавлен этап «${stageFullName(stageTypes, s)}»${dayNum(s.plannedDate) != null ? ` (план ${fmtFull(s.plannedDate)})` : ''}`),
-      );
-      changes.removes.forEach((s) => parts.push(`удалён этап «${stageFullName(stageTypes, s)}»`));
-      return parts.join('; ') || 'без изменений';
-    },
-    [draft.stages, draft.circles, trip.stages, trip.circles, stageTypes],
-  );
 
   /**
    * Первое невалидное поле — для фокуса ДО записи (валидация по всем блокам).
-   * Проверяются: порядок плановых дат, право записи плана дохода и блокировка
-   * плановых дат (страховка поверх UI-гейтов).
+   * Проверяются: порядок плановых дат и право записи «Плана дохода».
    */
   const findValidationIssue = (): { message: string; focus: () => void } | null => {
     // Нарушение хронологии этапов (lib/stageSchedule.stageOrderConflicts) сохранение
@@ -2209,35 +2108,19 @@ export default function TripCard({
     if (isPlan && !canEditPlan && (draft.planStart !== baseline.draft.planStart || draft.planEnd !== baseline.draft.planEnd)) {
       return { message: 'Нет права редактирования «Плана дохода» — изменения не сохранены.', focus: () => {} };
     }
-    if (planEnabled && planState === 'saved' && !isRootAdmin && !PLAN_DATES_OPEN_TO_ALL) {
-      // Блокируемые изменения = правка УЖЕ ВНЕСЁННЫХ дат/состава; добавление
-      // этапов и заполнение пустых дат исполнителю разрешены и сюда не входят.
-      const blocked = computeBlockedPlanChanges(trip.stages, draft.stages, {
-        stored: normalizeCircles(trip.circles),
-        draft: draft.circles,
-      });
-      if (blocked.count > 0) {
-        return {
-          message:
-            'Изменение уже внесённых плановых дат заблокировано — доступно только с разового разрешения администратора. Добавление этапов и заполнение пустых дат сохраняются без разрешения.',
-          focus: () => {},
-        };
-      }
-    }
     return null;
   };
 
   /**
    * ЕДИНОЕ СОХРАНЕНИЕ ОКНА (кнопка «Сохранить», Enter, Ctrl/Cmd+S): всё
-   * содержимое окна — поля рейса, плановые даты «Плана дохода», круги, запас,
-   * этапы (добавленные/изменённые/удалённые) и состояние плана этапов —
-   * записывается ОДНОЙ атомарной операцией: либо всё, либо ничего. Валидация —
-   * до записи (фокус на первом невалидном поле); при ошибке окно остаётся
-   * открытым с введёнными значениями, показывается причина и «Повторить»;
-   * во время записи повторные Enter/клики игнорируются. Изменённые поля плана
-   * фиксируются ФАКТИЧЕСКИМ механизмом контроля плана (planGuard/planPerms/
-   * история): первичное сохранение черновика либо расход разового разрешения —
-   * в ТОЙ ЖЕ атомарной записи.
+   * содержимое окна — поля рейса, плановые даты «Плана дохода», круги, запас и
+   * этапы (добавленные/изменённые/удалённые) — записывается ОДНОЙ атомарной
+   * операцией: либо всё, либо ничего. Валидация — до записи (фокус на первом
+   * невалидном поле); при ошибке окно остаётся открытым с введёнными значениями,
+   * показывается причина и «Повторить»; во время записи повторные Enter/клики
+   * игнорируются. После успешной записи ЕДИНАЯ история изменений получает одну
+   * запись со списком всех изменённых полей (план и факт) — разрешений на
+   * изменение плана не требуется.
    */
   const saveAll = async (opts?: { close?: boolean }) => {
     if (savingRef.current) return;
@@ -2290,35 +2173,13 @@ export default function TripCard({
     // Обычные проверки (обязательные поля, даты, пересечения) остались.
     // Закрываем панель сверки, если она открыта: она не удерживает сохранение.
     if (warnInfo) setWarnInfo(null);
-    const perm = planLock.permission;
     const nowIso = new Date().toISOString();
-    // Изменение количества кругов и состава этапов — тоже изменение плана
-    // (участвует в счёте: разовое разрешение расходуется осознанно).
+    // Плановые/фактические правки этапов, состав и круги — изменения плана и
+    // факта; все они попадают в единую историю изменений рейса.
     const changes = computePlanStageChanges(trip.stages, draft.stages, {
       stored: normalizeCircles(trip.circles),
       draft: draft.circles,
     });
-    /**
-     * Блокируемые изменения (уже внесённые даты, состав/запас внесённых этапов,
-     * круги): только они требуют разового разрешения при сохранённом плане.
-     * Добавление этапа и заполнение пустых дат (canAddStage/canFillEmptyDates,
-     * lib/stageRights) сохраняются исполнителем в любой момент.
-     */
-    const blockedChanges = computeBlockedPlanChanges(trip.stages, draft.stages, {
-      stored: normalizeCircles(trip.circles),
-      draft: draft.circles,
-    });
-    /**
-     * Изменения плана ПО СУЩЕСТВУ (даты/состав/круги/привязка к кругам) — без
-     * них добавление этапов и заполнение пустых дат плана не меняет. При
-     * открытых плановых датах такие правки сохраняет любой исполнитель, но они
-     * фиксируются в истории плана (кто, когда, что именно).
-     */
-    const substantivePlanChange =
-      changes.plannedUpdates.length > 0 ||
-      changes.removes.length > 0 ||
-      changes.circleUpdates.length > 0 ||
-      changes.circlesChanged;
     /** Правки обычных полей этапов (факт, тип, место, крит. срок, порядок). */
     const fieldPatches: Array<{ id: string; patch: Record<string, unknown> }> = [];
     draft.stages.forEach((s) => {
@@ -2351,7 +2212,21 @@ export default function TripCard({
       directionOptions,
     );
     const metaChangedFields = (['comment', 'reason', 'measures'] as const).filter((k) => metaDraft[k] !== baseline.meta[k]);
-    const detailsParts: string[] = [changes.count > 0 ? describePlanChanges(changes) : cardBlocks.join(', ')];
+    const cycleDayLabel = (v: string): string => fmtFull(v);
+    const detailsParts: string[] = [
+      changes.count > 0
+        ? describePlanChanges(changes, {
+            nameOf: (s) => stageFullName(stageTypes, s),
+            nameById: (id) => {
+              const st = draft.stages.find((x) => x.id === id) || trip.stages.find((x) => x.id === id);
+              return st ? stageFullName(stageTypes, st) : id;
+            },
+            dayLabel: cycleDayLabel,
+            circlesBefore: normalizeCircles(trip.circles),
+            circlesAfter: draft.circles,
+          })
+        : cardBlocks.join(', '),
+    ];
     if (metaChangedFields.length) detailsParts.push(`прежние тексты рейса: ${metaChangedFields.join(', ')}`);
     const details = detailsParts.join('; ');
 
@@ -2469,114 +2344,48 @@ export default function TripCard({
       updates[`tripTimeline/tripMeta/${trip.key}/${k}`] = v ? v : null;
     });
 
+    // ── Единая история изменений: черновик записи этой операции ────────────
+    // Одна УСПЕШНАЯ операция сохранения = одна запись; сохранение без
+    // изменений записи не создаёт (draft = null). Автор — текущий пользователь
+    // (uid + имя), источник — сохранение окна таймлайна.
+    const historySnapshotBefore: TripHistorySnapshot = {
+      planStart: baseline.draft.planStart,
+      planEnd: baseline.draft.planEnd,
+      circles: baseline.draft.circles,
+      direction: directionStoreValue(directionOptions, baseline.draft.direction),
+      stages: trip.stages || [],
+    };
+    const historySnapshotAfter: TripHistorySnapshot = {
+      planStart: draft.planStart,
+      planEnd: draft.planEnd,
+      circles: draft.circles,
+      direction: directionStoreValue(directionOptions, draft.direction),
+      stages: draft.stages,
+    };
+    const historyDraft = tripHistoryDraftOf({
+      tripKey: trip.key,
+      before: historySnapshotBefore,
+      after: historySnapshotAfter,
+      by: user.name,
+      byUid: planUserId,
+      source: 'timeline',
+      nameOf: (s) => stageFullName(stageTypes, s),
+      summary: details,
+    });
+
     savingRef.current = true;
     setSavingAll(true);
     setSaveError('');
-    let permConsumedSnapshot: unknown = null;
-    let permConsumed = false;
     try {
-      // ── Фактический механизм контроля плана этапов ───────────────────────
-      if (planEnabled && changes.count > 0) {
-        const guardKey = `tripTimeline/planGuard/${planTripKey}`;
-        if (planState === 'draft') {
-          const fresh = await dbService.getTimelinePlanGuardOnce(planTripKey);
-          if (fresh && fresh.initialSavedAt) {
-            throw new Error('план уже сохранён другим пользователем — ничего не записано, обновите карточку (F5)');
-          }
-          updates[guardKey] = {
-            version: 1,
-            draftCreated: null,
-            initialSavedAt: nowIso,
-            initialSavedBy: user.name,
-            ...(planUserId ? { initialSavedById: planUserId } : {}),
-            updatedAt: nowIso,
-            updatedBy: user.name,
-            ...(planUserId ? { updatedById: planUserId } : {}),
-            history: [
-              {
-                at: nowIso,
-                by: user.name,
-                ...(planUserId ? { byId: planUserId } : {}),
-                action: 'initial',
-                note: `Первичное сохранение плана этапов (этапов: ${draft.stages.filter((s) => !String(s.id).endsWith('-fallback-load')).length})`,
-              },
-            ],
-          };
-        } else if (PLAN_DATES_OPEN_TO_ALL && substantivePlanChange) {
-          // Плановые даты открыты всем исполнителям: правку плана сохраняет
-          // любой исполнитель с правом записи, но само изменение плана
-          // фиксируется в истории плана (кто, когда, что) — тот же guard,
-          // разовых разрешений не требуется.
-          const baseVersion = Number(planGuard?.version) || planLock.version || 1;
-          const fresh = await dbService.getTimelinePlanGuardOnce(planTripKey);
-          const freshVersion = Number(fresh?.version) || (fresh?.initialSavedAt ? 1 : baseVersion);
-          if (fresh && freshVersion !== baseVersion) {
-            throw new Error(
-              `план изменился с момента открытия (версия ${freshVersion} вместо ${baseVersion}) — ничего не записано, чтобы не перезаписать чужие изменения; обновите данные (F5)`,
-            );
-          }
-          updates[guardKey] = {
-            ...(planGuard || {}),
-            version: baseVersion + 1,
-            ...(planGuard?.initialSavedAt ? { initialSavedAt: planGuard.initialSavedAt } : {}),
-            ...(planGuard?.initialSavedBy ? { initialSavedBy: planGuard.initialSavedBy } : {}),
-            ...(planGuard?.initialSavedById ? { initialSavedById: planGuard.initialSavedById } : {}),
-            ...(planLock.legacy || planGuard?.legacy ? { legacy: true } : {}),
-            updatedAt: nowIso,
-            updatedBy: user.name,
-            ...(planUserId ? { updatedById: planUserId } : {}),
-            history: nextPlanHistory(isRootAdmin ? 'admin-update' : 'update', details),
-          };
-        } else if (blockedChanges.count === 0) {
-          // Разрешённые правки БЕЗ изменения плана: добавление этапов и/или
-          // заполнение пустых плановых дат (права canAddStage/canFillEmptyDates,
-          // lib/stageRights). Сохраняются исполнителем без разового доступа;
-          // состояние плана и его версия не меняются — guard не трогаем вовсе.
-        } else if (perm || isRootAdmin) {
-          const baseVersion = perm ? Number(perm.planVersion) : Number(planGuard?.version) || planLock.version || 1;
-          const fresh = await dbService.getTimelinePlanGuardOnce(planTripKey);
-          const freshVersion = Number(fresh?.version) || (fresh?.initialSavedAt ? 1 : baseVersion);
-          if (fresh && freshVersion !== baseVersion) {
-            throw new Error(
-              `план изменился с момента открытия (версия ${freshVersion} вместо ${baseVersion}) — ничего не записано, чтобы не перезаписать чужие изменения; обновите данные (F5)`,
-            );
-          }
-          if (perm) {
-            const consumed = await dbService.consumeTimelinePlanPermission(planTripKey, planUserId);
-            if (!consumed.ok) {
-              throw new Error(
-                consumed.reason === 'failed'
-                  ? 'не удалось погасить разрешение (ошибка сети или записи) — ничего не записано, разрешение НЕ израсходовано, повторите сохранение'
-                  : 'разрешение уже использовано другим сохранением или отозвано — обновите данные',
-              );
-            }
-            permConsumed = true;
-            permConsumedSnapshot = consumed.snapshot ?? null;
-            updates[`tripTimeline/planPerms/${planTripKey}/${planUserId}`] = null;
-          }
-          updates[guardKey] = {
-            ...(planGuard || {}),
-            version: baseVersion + 1,
-            ...(planGuard?.initialSavedAt ? { initialSavedAt: planGuard.initialSavedAt } : {}),
-            ...(planGuard?.initialSavedBy ? { initialSavedBy: planGuard.initialSavedBy } : {}),
-            ...(planGuard?.initialSavedById ? { initialSavedById: planGuard.initialSavedById } : {}),
-            ...(planLock.legacy || planGuard?.legacy ? { legacy: true } : {}),
-            updatedAt: nowIso,
-            updatedBy: user.name,
-            ...(planUserId ? { updatedById: planUserId } : {}),
-            history: nextPlanHistory(perm ? 'update' : 'admin-update', details),
-          };
-        } else {
-          throw new Error('плановые даты этапов заблокированы — нужно разовое разрешение администратора');
-        }
-      }
-
       await dbService.saveTimelineWindowCommit(updates, user.name, user.role, details);
+      // История пишется сразу после УСПЕШНОЙ записи (одна запись на операцию;
+      // при отмене/ошибке записи истории нет). Дубль-защита — opKey записи.
+      if (historyDraft) void appendTripHistory(historyDraft);
 
       // Журнал: добавление этапа(ов) — запись в СУЩЕСТВУЮЩИЙ журнал действий
       // портала (auditLogs через dbService.logAction), без второго журнала.
-      // Для связанных рейсов история плана (planGuard.history) дополняется
-      // существующим механизмом при изменениях плана (см. details выше).
+      // Изменения плана и факта фиксирует ЕДИНАЯ история изменений рейса
+      // (одна запись на операцию сохранения, см. historyDraft выше).
       if (changes.adds.length > 0) {
         const names = changes.adds
           .map((s) => stageFullName(stageTypes, s))
@@ -2617,9 +2426,6 @@ export default function TripCard({
       // ЗАКРЫВАЕТСЯ (требование блока «направления»); Ctrl/Cmd+S и «Повторить»
       // сохраняют без закрытия.
       setBaseline({ draft: { ...draft, stages: draft.stages.map((s) => ({ ...s })) }, meta: { ...metaDraft } });
-      if (permConsumed) {
-        dbService.markTimelinePlanRequestUsed(planTripKey, planUserId, { byName: user.name, byId: planUserId });
-      }
       setSavedFlash(true);
       if (savedFlashTimer.current !== null) window.clearTimeout(savedFlashTimer.current);
       savedFlashTimer.current = window.setTimeout(() => setSavedFlash(false), 4000);
@@ -2639,9 +2445,6 @@ export default function TripCard({
         return;
       }
     } catch (err) {
-      if (permConsumed && permConsumedSnapshot) {
-        await dbService.restoreTimelinePlanPermission(planTripKey, planUserId, permConsumedSnapshot);
-      }
       const reason = ((err as Error)?.message || String(err) || '').trim();
       const message = `Не удалось сохранить: ${reason}. Введённые данные остались в окне — повторите сохранение.`;
       setSaveError(message);
@@ -2652,57 +2455,6 @@ export default function TripCard({
     }
   };
   saveAllRef.current = (opts?: { close?: boolean }) => void saveAll(opts);
-
-  /** Выдача разового разрешения (администратор): пользователь + текущая версия плана. */
-  const grantPlanPermission = async () => {
-    if (!isRootAdmin) return;
-    const sel = dispatchers.find((d) => d.id === grantUserId);
-    if (!sel) {
-      toast('Выберите пользователя для разрешения', 'error');
-      return;
-    }
-    if (planLock.permissions[sel.id]) {
-      const ok = await showConfirm(`У ${sel.name} уже есть действующее разрешение на этот рейс. Заменить его новым?`);
-      if (!ok) return;
-    }
-    const version = Number(planGuard?.version) || planLock.version || 1;
-    dbService.grantTimelinePlanPermission(
-      planTripKey,
-      {
-        userId: sel.id,
-        userName: sel.name,
-        grantedAt: new Date().toISOString(),
-        grantedBy: user.name,
-        ...(planUserId ? { grantedById: planUserId } : {}),
-        planVersion: version,
-      },
-      planLock.history,
-      user.name,
-      user.role,
-    );
-    // История запросов: прямая выдача — та же запись со статусом «одобрен»
-    // (источник: администратор) + уведомление пользователю. Один механизм.
-    dbService.recordDirectPlanGrant({
-      tripKey: planTripKey,
-      userId: sel.id,
-      userName: sel.name,
-      carNumber: trip.carNumber || '',
-      route: draft.route || trip.plan?.direction || '',
-      byName: user.name,
-      ...(planUserId ? { byId: planUserId } : {}),
-      planVersion: version,
-    });
-    setGrantOpen(false);
-    toast(`Разрешено одно изменение плана: ${sel.name}`, 'success');
-  };
-
-  const revokePlanPermission = async (uid: string, name: string) => {
-    if (!isRootAdmin) return;
-    const ok = await showConfirm(`Отозвать неиспользованное разрешение для ${name}?`);
-    if (!ok) return;
-    dbService.revokeTimelinePlanPermission(planTripKey, uid, planLock.history, user.name, user.role, planUserId);
-    toast('Разрешение отозвано', 'success');
-  };
 
   const draftTrip: WholeTrip = useMemo(
     () => ({
@@ -2734,6 +2486,14 @@ export default function TripCard({
    * (seq) слева-направо на полосе повторяет порядок строк сверху вниз.
    */
   const draftStagesSorted = useMemo(() => sortStagesRoute(draft.stages), [draft.stages]);
+  /**
+   * Интервалы между СОСЕДНИМИ этапами (по текущему порядку строк черновика):
+   * «План: N дн. · Факт: M дн.» — разница календарных дат БЕЗ включительного
+   * подсчёта (15.10→17.10 = 2, один день = 0); нет даты — «—»; обратный
+   * порядок дат — явная ошибка (не ноль). Всё вычисляемое: в базу и историю
+   * ничего не пишется (lib/timeline.stageIntervalsOf).
+   */
+  const stageIntervals = useMemo(() => stageIntervalsOf(draftStagesSorted), [draftStagesSorted]);
   /** ЖЁСТКОЕ нарушение хронологии (блокирует сохранение, подсвечивает строки). */
   const chronoConflicts = useMemo(() => stageOrderConflicts(draftStagesSorted), [draftStagesSorted]);
   const conflictStageIds = useMemo(
@@ -2769,6 +2529,29 @@ export default function TripCard({
   const weekendInside = hasWeekendInRange(planStart, planEnd);
   const factNeg = factReturn != null && factStart != null && factReturn < factStart;
 
+  /**
+   * Счётчики длительности окна (lib/planFromDraft.tripDurationsOf — единый
+   * счёт через Date.UTC, календарные дни ВКЛЮЧИТЕЛЬНО):
+   *  · план — план-старт → план-возвращение (тот же расчёт, что у «Плана дохода»);
+   *  · выполняемый — факт-старт → сегодня; завершённый — факт-старт → факт-возвращение;
+   *  · фактические даты плановыми НЕ подменяются: нет факта — счёта нет.
+   * Границы — из согласованного источника (draftTrip: план + оверрайд tripMeta),
+   * поэтому после правки даты счёт меняется без перезагрузки.
+   */
+  const durations = tripDurationsOf(draftTrip, today);
+  const planDurationText =
+    durations.planDays != null ? `Плановая длительность: ${durations.planDays} дн.` : 'Плановая длительность: —';
+  const factDurationKind: 'done' | 'ongoing' | 'before' | 'empty' =
+    durations.doneDays != null ? 'done' : durations.ongoingDays != null ? 'ongoing' : durations.planFrom != null || durations.planTo != null ? 'before' : 'empty';
+  const factDurationText =
+    durations.doneDays != null
+      ? `Фактическая длительность: ${durations.doneDays} дн.`
+      : durations.ongoingDays != null
+        ? `Фактически в рейсе: ${durations.ongoingDays} дн.`
+        : factDurationKind === 'before'
+          ? 'Факт: ещё не начат'
+          : '—';
+
   const cmpText = (c: { label: string; diffDays: number | null }): string => {
     if (c.label === 'Нет фактических данных') return c.label;
     if (c.diffDays == null || c.diffDays === 0) return c.label;
@@ -2793,11 +2576,11 @@ export default function TripCard({
   };
 
   const onStageField = (stageId: string, field: keyof TimelineStage, value: string | boolean) => {
-    // Плановая дата: пустое поле — по праву заполнения (в любой момент);
-    // уже внесённая — только администратор и существующий замок плана.
+    // Плановая дата: пустое поле — по праву заполнения, уже внесённая — по праву
+    // правки существующих дат (право записи в модуль; контроля плана нет).
     if (field === 'plannedDate') {
       const current = draft.stages.find((s) => s.id === stageId)?.plannedDate || '';
-      if (!canEditPlannedDateField(stageRights, current, canEditPlanned)) return;
+      if (!canEditPlannedDateField(stageRights, current)) return;
     }
     setDraft((d) => {
       const stages = d.stages.map((s) => {
@@ -2824,8 +2607,7 @@ export default function TripCard({
 
   /**
    * Запас этапа, дней — вручную (целое ≥ 0). Часть плана: пишется кнопкой
-   * «Сохранить» (после сохранения плана — тем же разовым разрешением, что и
-   * плановые даты: запас сдвигает эффективные сроки следующих этапов).
+   * «Сохранить» (кто и что изменил — в единой истории изменений рейса).
    */
   const onStageBuffer = (stageId: string, value: string) => {
     if (readOnly || !canEditPlanned) return;
@@ -2840,10 +2622,9 @@ export default function TripCard({
    * атомарным сохранением окна — один multi-path update).
    * Права (lib/stageRights.resolveStageMove):
    *  · один день / оба этапа без даты — исполнитель, даты не меняются;
-   *  · разные дни — только администратор: этапы обмениваются датами местами
-   *    (строка «встаёт ровно туда, куда её поставил пользователь»);
+   *  · разные дни — исполнитель с правом записи: этапы обмениваются датами
+   *    местами (строка «встаёт ровно туда, куда её поставил пользователь»);
    *  · пара «с датой ↔ без даты» не переставляется никому (порядок задают даты).
-   * Замок плана (canEditPlanned) действует как и раньше — не ослаблен.
    */
   const moveStage = (stageId: string, dir: -1 | 1): boolean => {
     if (readOnly || !canEditPlanned) return false;
@@ -2933,8 +2714,8 @@ export default function TripCard({
 
   /**
    * Привязка ЭТАПА к кругу рейса (номер 1..N; 0 — снять привязку). Это часть
-   * плана: изменение уходит в базу кнопкой «Сохранить» (после сохранения плана —
-   * с разовым разрешением администратора, гейт canEditPlanned).
+   * плана: изменение уходит в базу кнопкой «Сохранить» (кто и что изменил —
+   * в единой истории изменений рейса).
    */
   const onStageCircle = (stageId: string, n: number) => {
     if (readOnly || !canEditPlanned) return;
@@ -3094,21 +2875,6 @@ export default function TripCard({
     if (!ok) return;
     onDelete?.(trip);
   };
-
-  /**
-   * Есть несохранённые БЛОКИРУЕМЫЕ изменения плана (правка внесённых дат,
-   * состав/запас внесённых этапов, круги) — индикатор у состояния плана.
-   * Добавление этапа и заполнение пустых дат не считаются блокируемыми: их
-   * сохранение разрешено без разового доступа и индикатор не пугает зря.
-   */
-  const planDirtyNow = useMemo(
-    () =>
-      computeBlockedPlanChanges(trip.stages, draft.stages, {
-        stored: normalizeCircles(trip.circles),
-        draft: draft.circles,
-      }).count > 0,
-    [trip.stages, trip.circles, draft.stages, draft.circles],
-  );
 
   const outOfBounds = draft.stages.filter((s) => {
     const pd = dayNum(s.plannedDate);
@@ -3353,204 +3119,6 @@ export default function TripCard({
           <span className="text-[10px] text-[#9CA3AF]">план и факт рядом; отсутствие факта не считается задержкой</span>
         </div>
 
-        {/* Состояние плана этапов: черновик / сохранён (заблокирован) / разовое разрешение */}
-        {planEnabled ? (
-          <div data-ui="plan-state" data-state={planState} className="border border-[#E5E7EB] rounded-xl px-3 py-2 flex flex-col gap-1.5">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px]">
-              <span
-                className={`inline-flex items-center gap-1.5 font-semibold ${
-                  planState === 'draft' ? 'text-amber-700' : planState === 'permitted' ? 'text-[var(--accent-ink)]' : 'text-[#4B5563]'
-                }`}
-              >
-                <span
-                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${planState === 'draft' ? 'bg-amber-500' : planState === 'permitted' ? 'bg-[var(--accent)]' : 'bg-emerald-500'}`}
-                  aria-hidden="true"
-                />
-                {planState === 'draft'
-                  ? 'Черновик плана'
-                  : planState === 'permitted'
-                    ? 'Разрешено одно сохранение изменений'
-                    : PLAN_DATES_OPEN_TO_ALL
-                      ? 'План сохранён. Плановые даты открыты всем исполнителям'
-                      : 'План сохранён. Плановые даты этапов заблокированы'}
-              </span>
-              {planState === 'draft' ? (
-                <span className="text-[#6B7280]">
-                  {PLAN_DATES_OPEN_TO_ALL
-                    ? 'правка плановых дат доступна всем исполнителям с правом записи — разовое разрешение не требуется'
-                    : 'перед первым сохранением: после сохранения изменение плановых дат этапов будет доступно только с разового разрешения администратора'}
-                </span>
-              ) : null}
-              {planState === 'permitted' ? (
-                <span className="text-[#6B7280]">после успешного сохранения плановые даты снова будут заблокированы</span>
-              ) : null}
-              {planState === 'saved' && planLock.legacy ? (
-                <span className="text-[#6B7280]">автор и дата первоначального сохранения неизвестны — план существовал до включения контроля</span>
-              ) : null}
-              {planState === 'saved' && !planLock.legacy && planLock.initialSavedBy ? (
-                <span className="text-[#6B7280]">
-                  сохранён: {planLock.initialSavedBy}
-                  {planLock.initialSavedAt ? `, ${fmtFull(planLock.initialSavedAt.slice(0, 10))}` : ''}
-                </span>
-              ) : null}
-              {planState === 'saved' && !readOnly && !isRootAdmin && !PLAN_DATES_OPEN_TO_ALL ? (
-                <span className="text-[#6B7280]">изменение плановых дат — только с разового разрешения администратора</span>
-              ) : null}
-              {planState === 'saved' && !readOnly && !isRootAdmin && PLAN_DATES_OPEN_TO_ALL ? (
-                <span className="text-[#6B7280]">изменение плановых дат (в том числе уже внесённых) разрешено — разовое разрешение не требуется</span>
-              ) : null}
-              {/* Запрос разового доступа: диспетчер при заблокированном плане.
-                  Одна запись на пару (рейс, пользователь); пока ожидает решения —
-                  повторный запрос запрещён; после решения кнопка снова доступна. */}
-              {showRequestAccess ? (
-                <>
-                  {myPlanRequest?.status === 'pending' ? (
-                    <span data-ui="plan-request-pending" className="text-amber-700 font-semibold">
-                      Запрос отправлен. Ожидается решение администратора
-                      {myPlanRequest.createdAt ? ` (${fmtFull(myPlanRequest.createdAt.slice(0, 10))})` : ''}
-                    </span>
-                  ) : (
-                    <>
-                      {myPlanRequest?.status === 'rejected' ? (
-                        <span data-ui="plan-request-rejected" className="text-rose-600">
-                          Запрос отклонён{myPlanRequest.decisionComment ? `: ${myPlanRequest.decisionComment}` : ''} — план остаётся заблокированным
-                        </span>
-                      ) : null}
-                      {myPlanRequest?.status === 'used' ? (
-                        <span data-ui="plan-request-used" className="text-[#6B7280]">
-                          Разрешение использовано — план снова заблокирован
-                        </span>
-                      ) : null}
-                      {myPlanRequest?.status === 'revoked' ? (
-                        <span data-ui="plan-request-revoked" className="text-[#6B7280]">
-                          Ранее выданное разрешение отозвано администратором
-                        </span>
-                      ) : null}
-                      {myPlanRequest?.status === 'approved' ? null : (
-                        <button
-                          type="button"
-                          data-ui="plan-request-open"
-                          onClick={() => setRequestFormOpen((v) => !v)}
-                          className={UI.buttonGhost}
-                        >
-                          Запросить разовый доступ
-                        </button>
-                      )}
-                    </>
-                  )}
-                </>
-              ) : null}
-              {planState === 'saved' && isRootAdmin && !readOnly ? (
-                <span className="text-[#6B7280]">root-администратор может изменить план без разрешения</span>
-              ) : null}
-              {planDirtyNow ? (
-                <span data-ui="plan-dirty-hint" className="text-amber-700 font-semibold">
-                  изменения плана не сохранены — записываются кнопкой «Сохранить» внизу
-                </span>
-              ) : null}
-            </div>
-            {/* Форма запроса разового доступа: пояснение, причина, отправка. */}
-            {showRequestAccess && requestFormOpen ? (
-              <div data-ui="plan-request-form" className="border border-[#E5E7EB] rounded-xl px-3 py-2 flex flex-col gap-2">
-                <span className="text-[11px] text-[#6B7280]">
-                  Доступ позволит один раз сохранить изменения плана этапов этого рейса. Запрос автоматически связан с этим рейсом, вами и текущей сохранённой версией плана (v{planLock.version}).
-                </span>
-                <label className={UI.fieldLabel}>Причина запроса (необязательно)</label>
-                <textarea
-                  data-ui="plan-request-reason"
-                  rows={2}
-                  value={requestReason}
-                  disabled={requestSending}
-                  onChange={(e) => setRequestReason(e.target.value)}
-                  placeholder="Например: уточнена дата границы — перенос на 2 дня"
-                  className="w-full bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#121316] outline-none resize-y focus:border-[var(--accent)] disabled:opacity-60"
-                />
-                {requestError ? (
-                  <div className={UI.errorBox} role="alert">{requestError}</div>
-                ) : null}
-                <div className="flex flex-wrap items-center gap-2">
-                  <button type="button" data-ui="plan-request-submit" disabled={requestSending} onClick={submitPlanRequest} className={UI.buttonPrimary}>
-                    {requestSending ? 'Отправляется…' : 'Отправить запрос'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRequestFormOpen(false);
-                      setRequestError('');
-                    }}
-                    className={UI.buttonGhost}
-                  >
-                    Отмена
-                  </button>
-                </div>
-              </div>
-            ) : null}
-            {isRootAdmin && !readOnly && planState !== 'draft' ? (
-              <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                <button type="button" data-ui="grant-plan-perm" onClick={() => setGrantOpen((v) => !v)} className={UI.buttonGhost}>
-                  Разрешить одно изменение плана
-                </button>
-                {grantOpen ? (
-                  <>
-                    <select
-                      data-ui="grant-plan-user"
-                      value={grantUserId}
-                      onChange={(e) => setGrantUserId(e.target.value)}
-                      className="bg-white border border-[#E5E7EB] rounded-lg px-2 py-1.5 text-[11px] text-[#121316] outline-none transition-colors cursor-pointer focus:border-[var(--accent)]"
-                    >
-                      <option value="">— выберите пользователя —</option>
-                      {dispatchers.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button type="button" data-ui="grant-plan-confirm" onClick={grantPlanPermission} className={UI.buttonPrimary}>
-                      Выдать разрешение
-                    </button>
-                    <span className="text-[10px] text-[#9CA3AF]">действует для одного рейса и одного пользователя; после успешного сохранения сгорает</span>
-                  </>
-                ) : null}
-                {Object.values(planLock.permissions).length ? (
-                  <span className="flex flex-wrap items-center gap-2">
-                    {Object.values(planLock.permissions).map((p) => (
-                      <span key={p.userId} data-ui="plan-perm-row" className="inline-flex items-center gap-2 border border-[#E5E7EB] rounded-lg px-2 py-1">
-                        <span className="text-[#4B5563]">
-                          действует: {p.userName} · выдано {fmtFull((p.grantedAt || '').slice(0, 10))} · {p.grantedBy}
-                        </span>
-                        <button
-                          type="button"
-                          data-ui="revoke-plan-perm"
-                          data-uid={p.userId}
-                          onClick={() => revokePlanPermission(p.userId, p.userName)}
-                          className="text-rose-600 hover:underline cursor-pointer"
-                        >
-                          Отозвать
-                        </button>
-                      </span>
-                    ))}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
-            {planLock.history.length ? (
-              <details className="text-[11px] text-[#6B7280]">
-                <summary className="cursor-pointer select-none" data-ui="plan-history-toggle">
-                  История плана ({planLock.history.length})
-                </summary>
-                <div className="flex flex-col gap-0.5 pt-1">
-                  {[...planLock.history].reverse().map((h, i) => (
-                    <span key={`${h.at}-${i}`} data-ui="plan-history-row">
-                      {h.at ? fmtFull(h.at.slice(0, 10)) : '—'} · {PLAN_HISTORY_LABELS[h.action] || h.action} — {h.by}
-                      {h.note ? ` · ${h.note}` : ''}
-                    </span>
-                  ))}
-                </div>
-              </details>
-            ) : null}
-          </div>
-        ) : null}
-
         {/* Круги рейса: количество кругов — часть плана (изменение считается
             изменением плана). ОДНО поле записи рейса: правится и здесь, и в
             «Плане дохода» — копий нет. Для рейса с 2+ кругами этапы
@@ -3603,10 +3171,7 @@ export default function TripCard({
               ? 'этапы распределяются по кругам — колонка «Круг» в таблице этапов ниже'
               : 'количество кругов у рейса; задаётся здесь и в «Плане дохода» — одна запись, без копий'}
           </span>
-          {!readOnly && planEnabled && planState === 'saved' && !canEditPlanned ? (
-            <span className="text-amber-700">изменение количества кругов — изменение плана: нужно разовое разрешение администратора</span>
-          ) : null}
-          {!readOnly && planEnabled && planState !== 'draft' && canEditPlanned ? (
+          {!readOnly ? (
             <span className="text-[#6B7280]">изменение сохранится кнопкой «Сохранить» внизу</span>
           ) : null}
         </div>
@@ -3676,6 +3241,29 @@ export default function TripCard({
               Нет права редактирования «Плана дохода» — плановые даты показаны только для просмотра.
             </div>
           ) : null}
+        </div>
+
+        {/* Счётчики длительности — рядом с основными датами рейса (задание
+            владельца): календарные дни включительно, факт без подмены планом.
+            data-ui: trip-duration / -plan / -fact (+ data-kind факта:
+            done | ongoing | before | empty). */}
+        <div
+          data-ui="trip-duration"
+          className="border border-[#E5E7EB] rounded-xl px-3 py-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]"
+        >
+          <span className="font-semibold text-[#121316]">Длительность</span>
+          <span data-ui="trip-duration-plan" className="text-[#4B5563] tabular-nums">
+            {planDurationText}
+          </span>
+          <span
+            data-ui="trip-duration-fact"
+            data-kind={factDurationKind}
+            className={`tabular-nums ${
+              factDurationKind === 'ongoing' ? 'text-[#B45309] font-semibold' : factDurationKind === 'before' ? 'text-[#6B7280]' : 'text-[#4B5563]'
+            }`}
+          >
+            {factDurationText}
+          </span>
         </div>
 
         {/* Предупреждения */}
@@ -3788,8 +3376,8 @@ export default function TripCard({
                 const pDay = dayNum(s.plannedDate);
                 const fDay = dayNum(s.actualDate);
                 // Права на плановую дату этапа (lib/stageRights): пустое поле —
-                // заполняемо в любой момент; внесённое — только admin + замок.
-                const canEditPlanDate = canEditPlannedDateField(stageRights, s.plannedDate, canEditPlanned);
+                // заполняемо в любой момент, внесённое — по праву записи.
+                const canEditPlanDate = canEditPlannedDateField(stageRights, s.plannedDate);
                 const hasText = !!(s.reason || s.action);
                 const stState = stageStateOf(s, today);
                 const bufState = stageBufferStateOf(s, draftSchedule, today);
@@ -3806,6 +3394,11 @@ export default function TripCard({
                     ? downMove.reason
                     : '';
                 const inConflict = conflictStageIds.has(String(s.id));
+                // Интервал до СЛЕДУЮЩЕГО этапа (по текущему порядку строк):
+                // «План: N дн. · Факт: M дн.». Всё вычисляемое — в базу и
+                // историю изменений ничего не пишется (lib/timeline.stageIntervalsOf).
+                const iv = sIdx < draftStagesSorted.length - 1 ? stageIntervals[sIdx] : null;
+                const nextStage = iv ? draftStagesSorted[sIdx + 1] : null;
                 return (
                   <React.Fragment key={s.id}>
                     <tr
@@ -3875,9 +3468,9 @@ export default function TripCard({
                           title={
                             canEditPlanDate
                               ? pDay == null
-                                ? 'Пустая плановая дата заполняется в любой момент — сохранение без разового доступа'
+                                ? 'Пустая плановая дата заполняется в любой момент'
                                 : undefined
-                              : 'Плановая дата уже внесена: изменение — только администратор (для не-root — с разового разрешения по замку плана)'
+                              : 'Изменение внесённой плановой даты доступно по праву записи в модуль'
                           }
                         >
                           <DateInput value={s.plannedDate || ''} disabled={!canEditPlanDate} ariaLabel="Плановая дата этапа" onChange={(v) => onStageField(s.id, 'plannedDate', v)} />
@@ -3885,8 +3478,8 @@ export default function TripCard({
                             <span
                               data-ui="stage-date-lock"
                               className="shrink-0"
-                              title="Дата уже внесена — изменение только администратором (замок плана: разовое разрешение)"
-                              aria-label="Изменение внесённой даты — только администратор"
+                              title="Изменение внесённой даты недоступно: нет права записи в модуль"
+                              aria-label="Изменение внесённой даты недоступно"
                             >
                               <Lock className="w-3.5 h-3.5 text-[#9CA3AF]" aria-hidden="true" />
                             </span>
@@ -3917,7 +3510,7 @@ export default function TripCard({
                             title={
                               readOnly || canEditPlanned
                                 ? 'Запас этапа, дней (0 — запаса нет): сдвигает эффективный срок этапа и последующих'
-                                : 'Запас этапов — часть плана: после сохранения плана доступен только с разового разрешения администратора'
+                                : 'Запас этапов недоступен: нет права записи в модуль'
                             }
                             onChange={(e) => onStageBuffer(s.id, e.target.value)}
                             className="w-[58px] bg-white border border-[#E5E7EB] rounded-lg px-1.5 py-1 text-[11px] text-[#121316] outline-none focus:border-[var(--accent)] disabled:opacity-60"
@@ -4007,7 +3600,7 @@ export default function TripCard({
                             title={
                               readOnly || canEditPlanned
                                 ? 'Круг этапа: номер круга рейса (пусто — этап не распределён по кругам)'
-                                : 'Распределение этапов по кругам — часть плана: после сохранения доступно только с разового разрешения администратора'
+                                : 'Распределение этапов по кругам недоступно: нет права записи в модуль'
                             }
                             onChange={(e) => onStageCircle(s.id, e.target.value ? Number(e.target.value) : 0)}
                             className="bg-white border border-[#E5E7EB] rounded-lg px-2 py-1.5 text-[11px] text-[#121316] outline-none cursor-pointer focus:border-[var(--accent)] disabled:opacity-60"
@@ -4056,9 +3649,9 @@ export default function TripCard({
                                 (seq пересчитывается 1..N; он же — порядок
                                 слева-направо на полосе в пределах дня).
                                 · один день / оба без даты — исполнитель;
-                                · разные дни — только администратор (этапы
-                                  поменяются датами местами);
-                                · пара «с датой ↔ без даты» — замок с причиной
+                                · разные дни — исполнитель с правом записи
+                                  (этапы поменяются датами местами);
+                                · пара «с датой ↔ без даты» — недоступно с причиной
                                   (иконка, как у полей дат).
                                 Строку можно тащить (перетаскивание без
                                 библиотек — за ручку ⠿ или строку).
@@ -4084,7 +3677,7 @@ export default function TripCard({
                                     ? 'Этап уже первый в маршруте'
                                     : upMove.allowed
                                       ? upMove.kind === 'cross-day'
-                                        ? 'Выше по маршруту: этапы разных дней поменяются датами местами (администратор) — полоса повторит порядок строк'
+                                        ? 'Выше по маршруту: этапы разных дней поменяются датами местами — полоса повторит порядок строк'
                                         : 'Выше по маршруту: раньше внесён — левее в дне'
                                       : upMove.reason
                                 }
@@ -4104,7 +3697,7 @@ export default function TripCard({
                                     ? 'Этап уже последний в маршруте'
                                     : downMove.allowed
                                       ? downMove.kind === 'cross-day'
-                                        ? 'Ниже по маршруту: этапы разных дней поменяются датами местами (администратор) — полоса повторит порядок строк'
+                                        ? 'Ниже по маршруту: этапы разных дней поменяются датами местами — полоса повторит порядок строк'
                                         : 'Ниже по маршруту: позже внесён — правее в дне'
                                       : downMove.reason
                                 }
@@ -4112,8 +3705,8 @@ export default function TripCard({
                               >
                                 <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
                               </button>
-                              {/* Замок перестановки — тем же языком, что замок
-                                  полей дат (иконка + подсказка почему). */}
+                              {/* Причина недоступности перестановки (иконка +
+                                  подсказка) — как у полей дат. */}
                               {moveLockReason ? (
                                 <span
                                   data-ui="stage-move-lock"
@@ -4138,8 +3731,8 @@ export default function TripCard({
                             <span
                               data-ui="stage-move-lock"
                               className="shrink-0"
-                              title="План сохранён: перестановка этапов — как и правка внесённых дат — только с разового разрешения администратора"
-                              aria-label="План сохранён — перестановка только с разового разрешения администратора"
+                              title="Перестановка этапов недоступна: нет права записи в модуль"
+                              aria-label="Перестановка этапов недоступна"
                             >
                               <Lock className="w-3.5 h-3.5 text-[#9CA3AF]" aria-hidden="true" />
                             </span>
@@ -4147,6 +3740,38 @@ export default function TripCard({
                         </div>
                       </td>
                     </tr>
+                    {/* Интервал до следующего этапа — компактная строка между
+                        рядами: «План: N дн. · Факт: M дн.» (разница дат БЕЗ
+                        включительного подсчёта; «—» при отсутствии даты;
+                        обратный порядок — явная ошибка, не ноль). */}
+                    {iv && nextStage ? (
+                      <tr
+                        data-ui="stage-interval"
+                        data-interval-from={s.id}
+                        data-interval-to={nextStage.id}
+                        data-interval-err={iv.planReversed || iv.factReversed ? (iv.planReversed && iv.factReversed ? 'both' : iv.planReversed ? 'plan' : 'fact') : undefined}
+                        className="border-b border-[#E5E7EB] bg-[#F9FAFB]"
+                      >
+                        <td
+                          colSpan={draft.circles >= 2 ? 10 : 9}
+                          className="px-2 py-[3px] text-left text-[10px] text-[#6B7280]"
+                          title={
+                            iv.planReversed || iv.factReversed
+                              ? 'Дата следующего этапа раньше предыдущей — ошибка порядка дат; интервал не считается'
+                              : 'Интервал между соседними этапами: разница календарных дат без включительного подсчёта (один день = 0); нет даты — «—»; ничего не подставляется'
+                          }
+                        >
+                          <span
+                            data-interval-plan={iv.planDays ?? ''}
+                            data-interval-fact={iv.factDays ?? ''}
+                            data-interval-reversed={iv.planReversed || iv.factReversed ? '1' : undefined}
+                          >
+                            {stageIntervalText(iv)}
+                            {iv.planReversed || iv.factReversed ? ' — проверьте порядок дат' : ''}
+                          </span>
+                        </td>
+                      </tr>
+                    ) : null}
                   </React.Fragment>
                 );
               })}
@@ -4218,7 +3843,7 @@ export default function TripCard({
             {!canEditPlanned ? (
               <span className="text-[10px] text-[#6B7280]">
                 {stageRights.canEditExistingDates
-                  ? 'новый этап — с пустыми датами; правка уже внесённых дат — по замку плана (разовое разрешение)'
+                  ? 'новый этап — с пустыми датами; даты правятся по праву записи в модуль'
                   : 'новый этап — с пустыми датами; пустые даты можно заполнить сразу, уже внесённые даты правит администратор'}
               </span>
             ) : null}
@@ -4350,6 +3975,57 @@ export default function TripCard({
             onFocusStage={readOnly ? undefined : focusStage}
             onOpenBasePeriod={onOpenBasePeriod}
           />
+        </div>
+
+        {/* Единый блок «История изменений» (внизу окна рейса, перед кнопкой
+            «Сохранить»): план и факт, автор и время внесения, «было → стало».
+            Хранение — tripTimeline/tripHistory/<tripKey> (плюс старая история
+            плана, показанная без потери). Правка/удаление истории недоступны. */}
+        <div data-ui="trip-history" data-count={historyViews.length} className="border border-[#E5E7EB] rounded-xl px-3 py-2.5 flex flex-col gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-semibold text-[11px] text-[#121316]">История изменений</span>
+            <span className="text-[10px] text-[#9CA3AF]">кто и когда менял план и факт — записи создаются только сохранением</span>
+          </div>
+          {historyViews.length === 0 ? (
+            <span data-ui="trip-history-empty" className="text-[11px] text-[#9CA3AF]">Изменений пока нет</span>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {historyPage.visible.map((v) => (
+                <div key={v.key} data-ui="trip-history-row" data-legacy={v.legacy ? '1' : undefined} className="flex flex-col text-[11px] leading-[16px]">
+                  <span className="text-[#121316]">
+                    {v.atLabel} · {v.byLabel}
+                    {v.sourceLabel ? ` · ${v.sourceLabel}` : ''}
+                    {v.scopeLabel ? ` · ${v.scopeLabel}` : ''}
+                  </span>
+                  <span className="text-[#4B5563] break-words">
+                    {v.field}
+                    {v.from || v.to ? (
+                      <>
+                        {': '}
+                        <span className="text-[#6B7280]">{v.from || '—'}</span> → <span className="text-[#121316] font-medium">{v.to || '—'}</span>
+                      </>
+                    ) : null}
+                  </span>
+                  {v.note ? (
+                    <details className="text-[10px] text-[#9CA3AF]">
+                      <summary className="cursor-pointer select-none">подробнее</summary>
+                      <span className="break-words">{v.note}</span>
+                    </details>
+                  ) : null}
+                </div>
+              ))}
+              {historyPage.hidden > 0 ? (
+                <button
+                  type="button"
+                  data-ui="trip-history-more"
+                  onClick={() => setHistoryShown((n) => n + HISTORY_PAGE_STEP)}
+                  className={UI.buttonGhost}
+                >
+                  Показать ещё ({historyPage.hidden})
+                </button>
+              ) : null}
+            </div>
+          )}
         </div>
       </div>
     </ModalShell>
