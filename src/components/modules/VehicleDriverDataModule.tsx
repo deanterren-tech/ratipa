@@ -1,6 +1,6 @@
 import {useDialog} from '../DialogProvider'
 import { buildDispatcherDirectory, dispatcherFieldsFor } from '../../utils/dispatcher';
-import React, {useState, useEffect} from 'react'
+import React, {useState, useEffect, useMemo} from 'react'
 import { 
   FileText, 
   Plus, 
@@ -20,6 +20,7 @@ import {
   HardDrive,
   Truck,
   Star,
+  Calendar,
   LayoutGrid,
   Columns2,
   List
@@ -30,8 +31,20 @@ import {getCouplingsFlat, getDriversFlat, getFleetUnitsOnce} from '../../service
 import { ref, update } from 'firebase/database';
 import {UserProfile, AppSettings, PhoneNumber, Driver, CarRateGroup} from '../../types'
 import {formatDriverShortName} from '../../utils/driverSync'
+import {
+  buildDriverDirectory,
+  driverFullName,
+  driverLinkNotice,
+  normalizeDriverName,
+  resolveDriverId,
+  resolveDriverLink,
+  type DriverRecord,
+} from '../../utils/driverRegistry'
+import {displayDate, toISODate, dateInputValue, parseDateParts, dateYear} from '../../utils/dateText'
+import {openDatePicker} from '../../utils/openDatePicker'
 import {normalizePlate, formatPlate, formatCoupling} from '../../utils/salaryAutofill'
 import CouplingPicker from '../common/CouplingPicker';
+import DriverAutocomplete from '../common/DriverAutocomplete';
 import { useToast } from '../ToastProvider';
 import {UI} from '../../ui/kit'
 import {SectionHeader, SearchField, EmptyState, ErrorRow, BackButton} from '../../ui/components'
@@ -416,6 +429,7 @@ export interface VehicleDriverRecord {
   brandsLat: string;
   brandModel?: string;
   trailerMake?: string;
+  driverId?: string;
   driverNameRu: string;
   driverNameLat: string;
   birthDate: string;
@@ -424,12 +438,14 @@ export interface VehicleDriverRecord {
   passportStart: string;
   passportEnd: string;
   passportIssuedBy: string;
+  licenseNumber?: string;
   phones: PhoneNumber[];
   dimensions?: string;
   weight?: string;
   vehicleType?: string;
   year?: string;
   trailerNumber?: string;
+  trailerId?: string;
   driverPhone?: string;
   rate?: number;
   coupling?: string;
@@ -437,6 +453,71 @@ export interface VehicleDriverRecord {
   dispatcherName?: string;
   dispatcher: string;
   lastPassportVerificationYear?: number;
+}
+
+/**
+ * Поле даты в форме: текст ДД/ММ/ГГГГ + скрытый нативный календарь.
+ * Хранит значение ISO (новые данные) и читает старые форматы (ДД.ММ.ГГГГ).
+ */
+function VddDateField({ id, label, value, onChange, required }: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean;
+}) {
+  const openPicker = () => openDatePicker(`picker-${id}`);
+  return (
+    <div className="flex flex-col gap-2">
+      <label className={UI.fieldLabel} htmlFor={`vdd-date-${id}`}>
+        {label} {required ? <span className="text-rose-500">*</span> : null}
+      </label>
+      <div className="relative">
+        <input
+          id={`vdd-date-${id}`}
+          type="text"
+          readOnly
+          value={displayDate(value)}
+          placeholder="ДД/ММ/ГГГГ"
+          onClick={openPicker}
+          data-ui={`vdd-date-${id}`}
+          className={`${UI.input} cursor-pointer pr-11`}
+        />
+        <input
+          type="date"
+          id={`picker-${id}`}
+          value={dateInputValue(value)}
+          onChange={(e) => onChange(toISODate(e.target.value) || e.target.value)}
+          className="absolute inset-0 opacity-0 md:pointer-events-none"
+          aria-hidden="true"
+          tabIndex={-1}
+        />
+        <button
+          type="button"
+          onClick={openPicker}
+          title={`Открыть календарь: ${label}`}
+          aria-label={`Открыть календарь: ${label}`}
+          className="absolute right-1 top-1/2 flex min-h-[36px] min-w-[36px] -translate-y-1/2 items-center justify-center rounded-lg text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)] pointer-events-none md:pointer-events-auto"
+        >
+          <Calendar className="w-4 h-4" aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Требуется ли ежегодная сверка паспорта: понимает и старый формат
+ * (ДД.ММ.ГГГГ / ДД/ММ/ГГГГ), и новый ISO — единый разбор дат.
+ */
+function passportNeedsVerification(rec: VehicleDriverRecord, currentYear: number): boolean {
+  const start = dateYear(rec.passportStart);
+  if (!start) return false;
+  if (currentYear <= start) return false;
+  const parts = parseDateParts(rec.passportStart)!;
+  const anniversary = new Date(currentYear, parts.m - 1, parts.d);
+  const passed = new Date() >= anniversary;
+  return passed && rec.lastPassportVerificationYear !== currentYear;
 }
 
 export default function VehicleDriverDataModule({ user }: VehicleDriverDataModuleProps) {
@@ -491,11 +572,13 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Закрытие модалки редактирования по ESC (capture-фаза, как в PlanDohodModule)
+  // Закрытие модалки редактирования по ESC (capture-фаза, как в PlanDohodModule).
+  // Если открыт список выбора водителя — Esc закрывает его, а не окно.
   useEffect(() => {
     if (!modalOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (document.querySelector('[data-driver-picker-open="1"]')) return;
         e.preventDefault();
         setModalOpen(false);
       }
@@ -513,6 +596,8 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   const [existingVehicleBrands, setExistingVehicleBrands] = useState<string[]>([]);
   const [existingTrailerBrands, setExistingTrailerBrands] = useState<string[]>([]);
   const [lastLookedUpNumber, setLastLookedUpNumber] = useState('');
+  /** Идентификатор водителя из единого реестра ('' — связь не выбрана). */
+  const [driverId, setDriverId] = useState('');
   const [driverNameRu, setDriverNameRu] = useState('');
   const [driverNameLat, setDriverNameLat] = useState('');
   const [birthDate, setBirthDate] = useState('');
@@ -521,6 +606,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   const [passportStart, setPassportStart] = useState('');
   const [passportEnd, setPassportEnd] = useState('');
   const [passportIssuedBy, setPassportIssuedBy] = useState('');
+  const [licenseNumber, setLicenseNumber] = useState('');
   const [phones, setPhones] = useState<PhoneNumber[]>([]);
   const [dispatcher, setDispatcher] = useState('');
   const [dimensions, setDimensions] = useState('');
@@ -672,6 +758,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     if (matchedVehicle && matchedVehicle.driverId) {
       const matchedDriver = drivers.find(d => d.id === matchedVehicle.driverId);
       if (matchedDriver) {
+        if (!driverId) setDriverId(String(matchedDriver.id));
         if (!driverNameRu) {
           setDriverNameRu(matchedDriver.name || '');
         }
@@ -684,7 +771,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
         }
       }
     }
-  }, [vehicleNumbers, fleetVehicles, drivers, editingId, driverNameRu, driverNameLat, phones.length]);
+  }, [vehicleNumbers, fleetVehicles, drivers, editingId, driverId, driverNameRu, driverNameLat, phones.length]);
 
 
   // Process passport verification queue from the unified base (vehicleFleet)
@@ -695,19 +782,8 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     const currentYear = today.getFullYear();
 
     const pendingVerifications = verifyFleet.filter(rec => {
-      if (!rec.passportStart) return false;
-      const parts = rec.passportStart.split('.');
-      if (parts.length !== 3) return false;
-
-      const day = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1;
-      const year = parseInt(parts[2], 10);
-
-      if (currentYear <= year) return false;
-
-      const anniversaryDate = new Date(currentYear, month, day);
-      const isAnniversaryPassed = today >= anniversaryDate;
-      const needsVerification = rec.lastPassportVerificationYear !== currentYear;
+      // Единый разбор дат: и старый ДД.ММ.ГГГГ, и ISO
+      if (!passportNeedsVerification(rec, currentYear)) return false;
 
       // Уже пропущено в этой сессии
       if (skippedVerificationIds.has(rec.id)) return false;
@@ -715,7 +791,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       // Показываем только диспетчеру этого авто
       if (rec.dispatcher && rec.dispatcher !== user.name) return false;
 
-      return isAnniversaryPassed && needsVerification;
+      return true;
     });
 
     // Recompute the queue from the freshest data. Keep already-shown records
@@ -746,9 +822,11 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
         console.error('[PassportVerify] saveVehicleDriverRecord failed', e);
       }
       if (database) {
-        // Write to the unified base (vehicleFleet) keyed by the record id (same key the card renders from).
+        // Пишем в ОСНОВНУЮ ветку автомобилей (tractors) — ту же, из которой
+        // читаются карточки. Ветка vehicleFleet — легаси-зеркало, новые
+        // отметки в неё больше не дублируются.
         if (rec.id) {
-          await update(ref(database, `vehicleFleet/${rec.id}`), { lastPassportVerificationYear: currentYear }).catch(() => {});
+          await update(ref(database, `tractors/${rec.id}`), { lastPassportVerificationYear: currentYear }).catch(() => {});
         }
       }
       toast('Паспортные данные подтверждены', 'success');
@@ -824,6 +902,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     setFormBrandModel('');
     setFormTrailerMake('');
     setLastLookedUpNumber('');
+    setDriverId('');
     setDriverNameRu('');
     setDriverNameLat('');
     setBirthDate('');
@@ -832,6 +911,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     setPassportStart('');
     setPassportEnd('');
     setPassportIssuedBy('');
+    setLicenseNumber('');
     setPhones([{ id: "phone_1", number: '', isPrimary: true }]);
     setDispatcher('');
     setSaveError('');
@@ -851,6 +931,9 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     setFormTrailerMake(matched.trailerMake || rec.brandsLat || '');
     setLastLookedUpNumber((rec.vehicleNumbers || '').trim().toUpperCase().replace(/\s+/g, ''));
 
+    // Связь с реестром: id явный или восстановленный по имени (в форме видно выбор)
+    const linkedId = resolveDriverId(rec, driverDir);
+    setDriverId(linkedId);
     setDriverNameRu(rec.driverNameRu || '');
     setDriverNameLat(rec.driverNameLat || '');
     setBirthDate(rec.birthDate || '');
@@ -859,6 +942,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     setPassportStart(rec.passportStart || '');
     setPassportEnd(rec.passportEnd || '');
     setPassportIssuedBy(rec.passportIssuedBy || '');
+    setLicenseNumber(rec.licenseNumber || '');
     setPhones(rec.phones && rec.phones.length > 0 ? rec.phones : [{ id: "phone_1", number: '', isPrimary: true }]);
     // Предзаполняем диспетчера из маппинга (Диспозиция / План дохода), если есть
     const recPlate = normalizePlate(rec.carNumber || rec.vehicleNumbers || '');
@@ -905,6 +989,19 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       cleanedPhones[0].isPrimary = true;
     }
 
+    // Связь с ЕДИНЫМ реестром водителей: явный выбор из списка или точное
+    // совпадение по ФИО с существующей записью. Новый водитель из текста не
+    // создаётся — если связи нет, запись сохраняется с видимой пометкой
+    // «нет в реестре», а добавить водителя можно только явным действием.
+    let linkedDriverId = driverId;
+    if (!linkedDriverId) {
+      const byName = driverDir.byName.get(normalizeDriverName(driverNameRu));
+      if (byName) linkedDriverId = String(byName.id);
+    }
+    if (!linkedDriverId) {
+      toast(`Водитель «${driverNameRu.trim()}» не найден в справочнике — запись сохранится без связи. Выберите водителя в списке или добавьте его кнопкой «Добавить в справочник».`, 'error');
+    }
+
     const recordId = editingId || "rec_" + Date.now();
     const existingRec = records.find(r => r.id === recordId);
 
@@ -915,14 +1012,16 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       brandsLat: formTrailerMake.trim() || brandsLat.trim() || '',
       brandModel: formBrandModel.trim(),
       trailerMake: formTrailerMake.trim(),
+      driverId: linkedDriverId || undefined,
       driverNameRu: driverNameRu.trim(),
       driverNameLat: driverNameLat.trim(),
-      birthDate: birthDate.trim(),
+      birthDate: toISODate(birthDate) || birthDate.trim(),
       passportNumber: passportNumber.trim(),
       personalId: personalId.trim(),
-      passportStart: passportStart.trim(),
-      passportEnd: passportEnd.trim(),
+      passportStart: toISODate(passportStart) || passportStart.trim(),
+      passportEnd: toISODate(passportEnd) || passportEnd.trim(),
       passportIssuedBy: passportIssuedBy.trim(),
+      licenseNumber: licenseNumber.trim() || undefined,
       phones: cleanedPhones,
       dispatcher: dispatcher.trim(),
       dimensions: dimensions.trim() || undefined,
@@ -1041,8 +1140,17 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     .map(u => u.name)
     .filter((v, i, a) => a.indexOf(v) === i); // deduplicate
 
-  // Fallback default dispatchers if list is empty
-  const defaultDispatchers = dispatchersList.length > 0 ? dispatchersList : ['Юрий', 'Алексей', 'Татьяна', 'Сергей'];
+  // Никаких выдуманных имён-заглушек: если список диспетчеров пуст, он пуст
+  // (старый fallback ['Юрий','Алексей','Татьяна','Сергей'] подмешивал в фильтры
+  // и формы несуществующих диспетчеров).
+  const defaultDispatchers = dispatchersList;
+
+  // Единый реестр водителей: подбор записи по driverId/имени и пометки проблем связи.
+  const driverDir = useMemo(() => buildDriverDirectory((drivers || [])), [drivers]);
+  const driverLink = useMemo(
+    () => resolveDriverLink({ driverId, driverNameRu, driverName: driverNameRu }, driverDir),
+    [driverDir, driverId, driverNameRu],
+  );
 
   const filteredRecords = records.filter(rec => {
     // 1. Dispatcher filter
@@ -1066,19 +1174,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     }
 
     // 3. Status/Verification filter
-    const isAnniversaryPassed = rec.passportStart ? (() => {
-      const parts = rec.passportStart.split('.');
-      if (parts.length === 3) {
-        const day = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1;
-        const year = parseInt(parts[2], 10);
-        const anniversary = new Date(new Date().getFullYear(), month, day);
-        return new Date() >= anniversary && new Date().getFullYear() > year;
-      }
-      return false;
-    })() : false;
-    const needsVerificationThisYear = rec.lastPassportVerificationYear !== new Date().getFullYear();
-    const isVerificationRequired = isAnniversaryPassed && needsVerificationThisYear;
+    const isVerificationRequired = passportNeedsVerification(rec, new Date().getFullYear());
     
     // Статус «На базе / В рейсе»: есть номер авто в «Учёте выезда» (baza) → На базе, иначе → В рейсе
     const recPlate = normalizePlate(rec.carNumber || rec.vehicleNumbers || '');
@@ -1124,19 +1220,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   });
 
   const renderCard = (rec: VehicleDriverRecord) => {
-    const isAnniversaryPassed = rec.passportStart ? (() => {
-      const parts = rec.passportStart.split('.');
-      if (parts.length === 3) {
-        const day = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1;
-        const year = parseInt(parts[2], 10);
-        const anniversary = new Date(new Date().getFullYear(), month, day);
-        return new Date() >= anniversary && new Date().getFullYear() > year;
-      }
-      return false;
-    })() : false;
-    const needsVerificationThisYear = rec.lastPassportVerificationYear !== new Date().getFullYear();
-    const showVerificationIndicator = isAnniversaryPassed && needsVerificationThisYear && (!rec.dispatcher || rec.dispatcher === user.name);
+    const showVerificationIndicator = passportNeedsVerification(rec, new Date().getFullYear()) && (!rec.dispatcher || rec.dispatcher === user.name);
 
     const { brandModel, trailerMake } = resolveBrandsForRecord(rec);
     const matchedTariff = resolveTariffForRecord(rec);
@@ -1161,19 +1245,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
   };
 
   const renderRow = (rec: VehicleDriverRecord) => {
-    const isAnniversaryPassed = rec.passportStart ? (() => {
-      const parts = rec.passportStart.split('.');
-      if (parts.length === 3) {
-        const day = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1;
-        const year = parseInt(parts[2], 10);
-        const anniversary = new Date(new Date().getFullYear(), month, day);
-        return new Date() >= anniversary && new Date().getFullYear() > year;
-      }
-      return false;
-    })() : false;
-    const needsVerificationThisYear = rec.lastPassportVerificationYear !== new Date().getFullYear();
-    const showVerificationIndicator = isAnniversaryPassed && needsVerificationThisYear && (!rec.dispatcher || rec.dispatcher === user.name);
+    const showVerificationIndicator = passportNeedsVerification(rec, new Date().getFullYear()) && (!rec.dispatcher || rec.dispatcher === user.name);
     const { brandModel, trailerMake } = resolveBrandsForRecord(rec);
     const matchedTariff = resolveTariffForRecord(rec);
 
@@ -1566,13 +1638,14 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   <label className={UI.fieldLabel}>
                     Гос. номера Тягач / Полуприцеп <span className="text-rose-500">*</span>
                   </label>
-                  <CouplingPicker
+                    <CouplingPicker
                     onSelect={(rec) => {
                       if (!rec) return;
                       setVehicleNumbers(formatCoupling((rec.carNumber || rec.vehicleNumbers || '').toUpperCase()));
                       // Подставляем марки, водителя, паспорт и телефоны из выбранного авто
                       if (rec.brandModel) setFormBrandModel(rec.brandModel);
                       if (rec.trailerMake) setFormTrailerMake(rec.trailerMake);
+                      if (rec.driverId) setDriverId(String(rec.driverId));
                       if (rec.driverNameRu) setDriverNameRu(rec.driverNameRu);
                       if (rec.driverNameLat) setDriverNameLat(rec.driverNameLat);
                       if (rec.birthDate) setBirthDate(rec.birthDate);
@@ -1581,6 +1654,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                       if (rec.passportStart) setPassportStart(rec.passportStart);
                       if (rec.passportEnd) setPassportEnd(rec.passportEnd);
                       if (rec.passportIssuedBy) setPassportIssuedBy(rec.passportIssuedBy);
+                      if (rec.licenseNumber) setLicenseNumber(rec.licenseNumber);
                       if (rec.phones && rec.phones.length > 0) setPhones(rec.phones);
                       if (rec.dispatcher) setDispatcher(rec.dispatcher);
                       if (rec.trailerNumber) setTrailerNumber(rec.trailerNumber);
@@ -1636,7 +1710,60 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   </datalist>
                 </div>
 
-                {/* 4. Водитель (рус) */}
+                {/* 4. Водитель — ССЫЛКА на единый реестр (обязательный выбор) */}
+                <div className="md:col-span-2 flex flex-col gap-2 bg-white border border-[#E5E7EB] rounded-xl p-4">
+                  <label className={UI.fieldLabel}>
+                    Водитель (из единого справочника) <span className="text-rose-500">*</span>
+                  </label>
+                  <DriverAutocomplete
+                    value={driverId}
+                    valueName={driverNameRu}
+                    onSelect={(d, meta) => {
+                      if (!d) {
+                        setDriverId('');
+                        return;
+                      }
+                      if (meta.status === 'service') {
+                        toast('Это служебная запись, а не водитель — выберите водителя из списка.', 'error');
+                        return;
+                      }
+                      setDriverId(String(d.id));
+                      // Подставляем данные записи реестра в поля формы
+                      const full = driverFullName(d);
+                      setDriverNameRu(full || '');
+                      if (d.nameLat) setDriverNameLat(String(d.nameLat));
+                      if (d.birthDate) setBirthDate(String(d.birthDate));
+                      if (d.passport) setPassportNumber(String(d.passport));
+                      if (d.personalId) setPersonalId(String(d.personalId));
+                      if (d.passportStart) setPassportStart(String(d.passportStart));
+                      if (d.passportEnd) setPassportEnd(String(d.passportEnd));
+                      if (d.passportIssued) setPassportIssuedBy(String(d.passportIssued));
+                      if (d.licenseNumber || d.license) setLicenseNumber(String(d.licenseNumber || d.license));
+                      setSaveError('');
+                    }}
+                    placeholder="Поиск по ФИО или телефону…"
+                    className={UI.input}
+                    dataUi="vdd-driver"
+                    allowCreate
+                    author={user.name}
+                    authorRole={user.role}
+                    ariaLabel="Водитель (из единого справочника)"
+                  />
+                  {driverLink.status === 'missing' || driverLink.status === 'service' ? (
+                    <p className="text-[11px] font-medium text-amber-600" data-ui="vdd-driver-notice" role="status">
+                      {driverLinkNotice(driverLink)}
+                    </p>
+                  ) : driverLink.status === 'archived' ? (
+                    <p className="text-[11px] font-medium text-amber-600" data-ui="vdd-driver-notice" role="status">
+                      {driverLinkNotice(driverLink)}
+                    </p>
+                  ) : null}
+                  <p className={UI.hint}>
+                    Выбор из справочника обязателен для связи. Если водителя нет в списке — нажмите «Добавить в справочник» при поиске: запись появится во всех разделах.
+                  </p>
+                </div>
+
+                {/* 5. Водитель (рус) */}
                 <div className="flex flex-col gap-2">
                   <label className={UI.fieldLabel}>
                     ФИО Водителя (Русский) <span className="text-rose-500">*</span>
@@ -1644,13 +1771,23 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   <input
                     type="text"
                     value={driverNameRu}
-                    onChange={e => setDriverNameRu(e.target.value)}
+                    onChange={e => {
+                      const v = e.target.value;
+                      setDriverNameRu(v);
+                      // Правка ФИО: если текст перестал совпадать с выбранной
+                      // записью реестра — связь снимается (её нужно выбрать заново)
+                      if (driverId) {
+                        const rec = driverDir.byId.get(String(driverId));
+                        if (!rec || normalizeDriverName(driverFullName(rec)) !== normalizeDriverName(v)) setDriverId('');
+                      }
+                    }}
                     placeholder="Устинов Олег Леонидович"
+                    data-ui="vdd-driver-name"
                     className={UI.input}
                   />
                 </div>
 
-                {/* 5. Водитель (лат) */}
+                {/* 6. Водитель (лат) */}
                 <div className="flex flex-col gap-2">
                   <label className={UI.fieldLabel}>
                     ФИО Водителя (Латиница)
@@ -1664,19 +1801,8 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                   />
                 </div>
 
-                {/* 6. Дата рождения */}
-                <div className="flex flex-col gap-2">
-                  <label className={UI.fieldLabel}>
-                    Дата рождения <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={birthDate}
-                    onChange={e => setBirthDate(e.target.value)}
-                    placeholder="08.02.1973"
-                    className={UI.input}
-                  />
-                </div>
+                {/* 7. Дата рождения — ДД/ММ/ГГГГ + календарь, хранится ISO */}
+                <VddDateField id="birth" label="Дата рождения" required value={birthDate} onChange={setBirthDate} />
 
                 {/* 7. Паспорт */}
                 <div className="flex flex-col gap-2">
@@ -1702,37 +1828,31 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={personalId}
                     onChange={e => setPersonalId(e.target.value)}
                     placeholder="3080273A018PB6"
+                    data-ui="vdd-personal-id"
                     className={UI.input}
                   />
                 </div>
 
-                {/* 9. Дата выдачи */}
+                {/* 8b. Вод. удостоверение — существующее редактируемое поле записи */}
                 <div className="flex flex-col gap-2">
                   <label className={UI.fieldLabel}>
-                    Дата выдачи паспорта (Срок от) <span className="text-rose-500">*</span>
+                    Вод. удостоверение
                   </label>
                   <input
                     type="text"
-                    value={passportStart}
-                    onChange={e => setPassportStart(e.target.value)}
-                    placeholder="09.01.2024"
+                    value={licenseNumber}
+                    onChange={e => setLicenseNumber(e.target.value)}
+                    placeholder="Номер ВУ"
+                    data-ui="vdd-license-number"
                     className={UI.input}
                   />
                 </div>
+
+                {/* 9. Дата выдачи — ДД/ММ/ГГГГ + календарь, хранится ISO */}
+                <VddDateField id="passport-start" label="Дата выдачи паспорта (Срок от)" required value={passportStart} onChange={setPassportStart} />
 
                 {/* 10. Дата окончания */}
-                <div className="flex flex-col gap-2">
-                  <label className={UI.fieldLabel}>
-                    Дата окончания паспорта (Срок до) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={passportEnd}
-                    onChange={e => setPassportEnd(e.target.value)}
-                    placeholder="09.01.2034"
-                    className={UI.input}
-                  />
-                </div>
+                <VddDateField id="passport-end" label="Дата окончания паспорта (Срок до)" required value={passportEnd} onChange={setPassportEnd} />
 
                 {/* 11. Кем выдан */}
                 <div className="flex flex-col gap-2 md:col-span-2">
@@ -1744,6 +1864,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
                     value={passportIssuedBy}
                     onChange={e => setPassportIssuedBy(e.target.value)}
                     placeholder="Фрунзенским РУВД г. Минска"
+                    data-ui="vdd-passport-issued"
                     className={UI.input}
                   />
                 </div>

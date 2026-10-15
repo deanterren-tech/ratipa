@@ -24,7 +24,8 @@ interface CouplingPickerProps {
 
 /**
  * Reusable coupling (tractor+trailer) picker.
- * Reads from the single source of truth (vehicleFleet via dbService.getVehicleDriverData).
+ * Reads from the single source of truth (единая база сцепок: couplings + tractors
+ * + trailers + drivers через getCouplingsFlat).
  * On select, returns the full coupling record so callers can auto-fill driver, brand, etc.
  * mode="driver"  — search by driver name (returns full coupling rec).
  * mode="combined" — single field that suggests BOTH locations and couplings (Дозволы: Авто/Локация).

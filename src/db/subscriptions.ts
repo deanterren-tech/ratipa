@@ -172,8 +172,10 @@ export const sharedGetDrivers = createSharedSubscription<Driver[]>(
         const data = snapshot.val();
         if (data) {
           const list: Driver[] = Object.keys(data).map((key) => ({
-            id: key,
+            // id = ключ записи — постоянный идентификатор реестра; поля записи
+            // его не переопределяют (иначе ссылки из машин ломались бы).
             ...data[key],
+            id: key,
             name: String(data[key].name || ""),
             lastNameRu: data[key].lastNameRu ? String(data[key].lastNameRu) : undefined,
             firstNameRu: data[key].firstNameRu ? String(data[key].firstNameRu) : undefined,

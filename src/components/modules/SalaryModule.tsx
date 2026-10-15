@@ -29,6 +29,7 @@ import {normalizePlate, findCarByPlate, getDriverById, getDriverIdForCar, format
 // жёсткая пара «Турция/Китай» в форме больше его не дублирует.
 import { directionOptionsFromDb, effectiveDirectionOptions } from './tripTimeline/lib/directionCatalog'
 import {formatDriverShortName} from '../../utils/driverSync'
+import {normalizeDriverName, driverFullName, primaryPhone, selectableDrivers, buildNewDriver} from '../../utils/driverRegistry'
 import {computeSalaryTotals, resolveCarRateFrom, deriveStoredRates, salaryNumber, compareByEntryTimeDesc, type RateSource, type ResolvedCarRate} from '../../utils/salaryCalc'
 import {CarConflictModal} from '../common/CarConflictModal'
 import {CarConflict} from '../../utils/carConflictHandler'
@@ -702,29 +703,18 @@ ${conflicts
 
     const trimmedDriver = driverName.trim();
     if (trimmedDriver && trimmedDriver !== 'НЕ УКАЗАНО') {
-      const exists = drivers.some(d => 
-        String(d.name || '').trim().toLowerCase() === trimmedDriver.toLowerCase() ||
-        (d.shortNameRu && d.shortNameRu.trim().toLowerCase() === trimmedDriver.toLowerCase())
+      const normVal = normalizeDriverName(trimmedDriver);
+      const exists = drivers.some(d =>
+        normalizeDriverName(d.name || '') === normVal ||
+        normalizeDriverName(driverFullName(d)) === normVal ||
+        (d.shortNameRu && normalizeDriverName(d.shortNameRu) === normVal)
       );
       if (!exists) {
-        const confirmAdd = await showConfirm(`Водитель "${trimmedDriver}" отсутствует в справочнике. Занести его в справочник?`);
+        const confirmAdd = await showConfirm(`Водитель «${trimmedDriver}» отсутствует в справочнике. Занести его в справочник?`);
         if (confirmAdd) {
-          const parts = trimmedDriver.split(/\s+/);
-          const last = parts[0] || '';
-          const first = parts[1] || '';
-          const middle = parts[2] || '';
-          const computedShort = formatDriverShortName(last, first, middle);
-
-          const newDriver: Driver = {
-            id: "dr_" + Date.now(),
-            name: trimmedDriver,
-            lastNameRu: last,
-            firstNameRu: first,
-            middleNameRu: middle,
-            shortNameRu: computedShort || trimmedDriver,
-          };
-          dbService.saveDriver(newDriver, user.name, user.role);
-          toast(`Водитель "${trimmedDriver}" добавлен в справочник!`, 'success');
+          const newDriver = buildNewDriver('drv_' + Date.now(), trimmedDriver);
+          dbService.saveDriver(newDriver as Driver, user.name, user.role);
+          toast(`Водитель «${driverFullName(newDriver)}» добавлен в справочник`, 'success');
         }
       }
     }
@@ -823,6 +813,7 @@ ${conflicts
                 <input
                   id="salary-driver-name"
                   type="text"
+                  list="salary-drivers-dl"
                   value={driverName}
                   onChange={e => setDriverName(e.target.value)}
                   placeholder="—"
@@ -1449,9 +1440,11 @@ ${conflicts
                 <label className={UI.fieldLabel} htmlFor="salary-edit-driver">ФИО Водителя</label>
                 <input id="salary-edit-driver" type="text" list="salary-drivers-dl" value={editingSalaryData.driver || ''} onChange={e => {
                      const val = e.target.value;
+                     const normVal = normalizeDriverName(val);
                      const foundDriver = drivers.find(d =>
-                        String(d.name || '').trim().toLowerCase() === val.trim().toLowerCase() ||
-                        (d.shortNameRu && d.shortNameRu.trim().toLowerCase() === val.trim().toLowerCase())
+                        normalizeDriverName(d.name || '') === normVal ||
+                        normalizeDriverName(driverFullName(d)) === normVal ||
+                        (d.shortNameRu && normalizeDriverName(d.shortNameRu) === normVal)
                      );
                      let updatedData: Partial<SalaryLog> = { ...editingSalaryData, driver: val };
 
@@ -1650,8 +1643,8 @@ ${conflicts
         )}
 
         <datalist id="salary-drivers-dl">
-            {drivers.map(drv => (
-                <option key={drv.id} value={drv.shortNameRu || formatDriverShortName(drv)} />
+            {selectableDrivers(drivers).map(drv => (
+                <option key={drv.id} value={driverFullName(drv)} label={primaryPhone(drv) || undefined} />
             ))}
         </datalist>
 

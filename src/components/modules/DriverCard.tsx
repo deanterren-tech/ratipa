@@ -1,6 +1,7 @@
 import {useState, useEffect} from 'react'
 import {dbService} from '../../api'
 import {getDriversFlat, getCouplingsFlat} from '../../services/fleetService'
+import {buildDriverDirectory, normalizeDriverName} from '../../utils/driverRegistry'
 import {User, Truck, Banknote, FileText, X, ArrowRight} from 'lucide-react'
 import {UI} from '../../ui/kit'
 import { BackButton } from '../../ui/components'
@@ -20,14 +21,15 @@ export default function DriverCard({ driverId, driverName, onClose, onOpenCoupli
   const [salaries, setSalaries] = useState<any[]>([]);
 
   useEffect(() => {
-    // driver passport data
+    // driver passport data — только из единого реестра:
+    // сначала по стабильному id, затем по ТОЧНОМУ совпадению ФИО (никаких
+    // «похожих» совпадений по фамилии — легко открыть чужую карточку).
     const u1 = getDriversFlat((list: any[]) => {
-      const surname = (driverName || "").trim().split(/\s+/)[0].toLowerCase();
-      const found = (list || []).find((d) =>
-        d.id === driverId ||
-        (d.shortNameRu || d.name || '').toLowerCase().includes(surname) ||
-        (surname && (d.lastNameRu || d.name || '').toLowerCase().startsWith(surname))
-      );
+      const dir = buildDriverDirectory(list || []);
+      let found = driverId ? dir.byId.get(String(driverId)) || null : null;
+      if (!found && driverName) {
+        found = dir.byName.get(normalizeDriverName(driverName)) || null;
+      }
       setDriver(found || null);
     });
     // coupling (which car) - search center by driverId or name

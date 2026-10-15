@@ -64,6 +64,7 @@ export interface FleetUnit {
     weight?: string | null;
     rateGroupId?: string | null;
     driver2?: string | null;
+    driver2Id?: string | null;
     dispatcherName2?: string | null;
   };
 }
@@ -145,6 +146,7 @@ export const subscribeFleetUnits = (callback: (units: FleetUnit[]) => void): (()
           weight: c.weight ?? null,
           rateGroupId: c.rateGroupId ?? null,
           driver2: c.driver2 ?? null,
+          driver2Id: c.driver2Id ?? null,
           dispatcherName2: c.dispatcherName2 ?? null,
         },
       };
@@ -197,7 +199,30 @@ export const getFleetUnitsOnce = (callback: (units: any[]) => void): void => {
         driver: driver || null,
         dispatcher: dispatcher || (c.dispatcherName ? { name: c.dispatcherName } : null),
         status: c.status || 'base',
-        raw: { tractorId: c.tractorId ?? null, trailerId: c.trailerId ?? null, trailerNumber: c.trailerNumber ?? null, trailerBrand: c.trailerBrand ?? null, driverId: c.driverId ?? null, dispatcherName: c.dispatcherName ?? null, dispatcherId: c.dispatcherId ?? null, status: c.status },
+        raw: {
+          tractorId: c.tractorId ?? null,
+          trailerId: c.trailerId ?? null,
+          trailerNumber: c.trailerNumber ?? null,
+          trailerBrand: c.trailerBrand ?? null,
+          trailerMake: c.trailerMake ?? null,
+          driverId: c.driverId ?? null,
+          dispatcherName: c.dispatcherName ?? null,
+          dispatcherId: c.dispatcherId ?? null,
+          status: c.status,
+          // Ключевые поля дублируются в couplings (приоритетнее tractors) —
+          // состав тот же, что у подписки, чтобы разовое чтение не «пустело».
+          brand: c.brand ?? null,
+          brandModel: c.brandModel ?? null,
+          brands: c.brands ?? null,
+          brandRu: c.brandRu ?? null,
+          vehicleType: c.vehicleType ?? null,
+          dimensions: c.dimensions ?? null,
+          weight: c.weight ?? null,
+          rateGroupId: c.rateGroupId ?? null,
+          driver2: c.driver2 ?? null,
+          driver2Id: c.driver2Id ?? null,
+          dispatcherName2: c.dispatcherName2 ?? null,
+        },
       };
     });
     callback(units.map(_mapUnitToFlat));
@@ -265,9 +290,11 @@ const _mapUnitToFlat = (u: any) => {
   trailerMake: u.raw?.trailerMake || u.tractor?.trailerMake || u.trailer?.trailerBrand || '',
   driverId: u.raw?.driverId || '',
   driverName: u.driver?.shortNameRu || u.driver?.name || u.tractor?.driverName || u.tractor?.driverNameRu || '',
-  driverNameRu: u.driver?.shortNameRu || u.tractor?.driverNameRu || u.tractor?.driverName || '',
+  driverNameRu: u.driver?.shortNameRu || u.driver?.name || u.tractor?.driverNameRu || u.tractor?.driverName || '',
   driverNameLat: u.driver?.nameLat || u.tractor?.driverNameLat || '',
-  phones: u.tractor?.phones?.length ? u.tractor?.phones : (u.driver?.phones || []),
+  // Телефоны — из ЕДИНОГО реестра водителей (drivers.phones); копия в тягаче —
+  // только запасной вариант для старых записей без связи с водителем.
+  phones: (u.driver?.phones?.length ? u.driver?.phones : (u.driver?.phone ? [{ id: 'phone_1', number: u.driver.phone, isPrimary: true }] : null)) || u.tractor?.phones || [],
   passportNumber: drv('passport', 'passportNumber'),
   personalId: drv('personalId'),
   birthDate: drv('birthDate'),
@@ -286,6 +313,7 @@ const _mapUnitToFlat = (u: any) => {
   vehicleType: u.raw?.vehicleType || u.tractor?.vehicleType,
   rateGroupId: u.raw?.rateGroupId || (u.tractor as any)?.rateGroupId || '',
   driver2: u.raw?.driver2 || (u.tractor as any)?.driver2 || '',
+  driver2Id: u.raw?.driver2Id || (u.tractor ? String(u.tractor['driver2Id'] ?? '') : '') || '',
   dispatcherId: u.raw?.dispatcherId || '',
 });};
 

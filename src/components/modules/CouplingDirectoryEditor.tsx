@@ -3,10 +3,17 @@ import {createPortal} from 'react-dom'
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
 import {dbService, directoryService} from '../../api'
-import {getCouplingsFlat, getDriversFlat, getDispatchersFlat} from '../../services/fleetService'
-import {Truck, Plus, Trash2, Pencil, Link2, Check, Layers, Tag, Users} from 'lucide-react'
+import {getCouplingsFlat, getDriversFlat, getDispatchersFlat, getTrailersFlat} from '../../services/fleetService'
+import {Truck, Plus, Trash2, Pencil, Link2, Check, Layers, Tag, Users, AlertTriangle} from 'lucide-react'
 import {UserProfile} from '../../types'
 import {normalizePlate, formatPlate} from '../../utils/salaryAutofill'
+import {
+  buildDriverDirectory,
+  driverFullName,
+  driverLinkNotice,
+  resolveDriverLink,
+} from '../../utils/driverRegistry'
+import DriverAutocomplete from '../common/DriverAutocomplete';
 import CouplingCard from './CouplingCard';
 import DriverCard from './DriverCard';
 import {UI} from '../../ui/kit'
@@ -28,15 +35,18 @@ interface CouplingRow {
   id: string;
   carNumber: string;
   trailerNumber?: string;
+  trailerId?: string;
   brand?: string;
   trailerBrand?: string;
   brandRu?: string;
   vehicleType?: string;
   dimensions?: string;
   weight?: string;
+  year?: string;
   driverId?: string;
   driverName?: string;
   driver2?: string;
+  driver2Id?: string;
   dispatcher?: string;
   rateGroupId?: string;
   status?: string;
@@ -81,10 +91,13 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   const [vehicleBrands, setVehicleBrands] = useState<any[]>([]);
   const [trailerBrands, setTrailerBrands] = useState<any[]>([]);
   const [tractors, setTractors] = useState<any[]>([]);
+  const [trailers, setTrailers] = useState<any[]>([]);
   const [statusTypes, setStatusTypes] = useState<any[]>([]);
   // Номера авто из «Учёта выезда» (baza) для статуса «На базе / В рейса»
   const [bazaCars, setBazaCars] = useState<string[]>([]);
   const savedMapRef = useRef<Record<string, any>>({});
+  /** Идёт сохранение — кнопка блокируется (нет дублей при повторном нажатии). */
+  const [isSaving, setIsSaving] = useState(false);
 
   const [search, setSearch] = useState('');
   const [focusIdx, setFocusIdx] = useState(-1);
@@ -108,15 +121,21 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
           id: c.id,
           carNumber: c.carNumber || c.vehicleNumbers || '',
           trailerNumber: saved?.trailerNumber || c.trailerNumber || '',
+          trailerId: c.trailerId || '',
           brand: saved?.brand || c.brand || c.brandModel || '',
           trailerBrand: saved?.trailerBrand || c.trailerBrand || c.trailerMake || '',
           brandRu: c.brandRu || '',
           vehicleType: c.vehicleType || '',
           dimensions: c.dimensions || '',
           weight: c.weight || '',
+          year: c.year != null ? String(c.year) : '',
           driverId: c.driverId || '',
-          driverName: c.driverNameRu || c.driverName || c.driverShortNameRu || '',
-          driver2: c.driver2 || '',
+          // Имя для отображения: при живой связи с реестром берётся из записи
+          // водителя (см. driverLinkOf), текст couplings — только запасной вариант
+          // для записей без ссылки (показывается вместе с пометкой проблемы).
+          driverName: c.driverNameRu || c.driverName || '',
+          driver2: saved?.driver2 || c.driver2 || '',
+          driver2Id: c.driver2Id || '',
           dispatcher: c.dispatcher || '',
           rateGroupId: c.rateGroupId || '',
           status: c.status || 'base',
@@ -130,6 +149,8 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
     const u6 = directoryService.getTrailerBrands((l: any[]) => setTrailerBrands(l || []));
     const u7 = directoryService.getStatusTypes((l: any[]) => setStatusTypes(l || []));
     const u8 = dbService.getTractors((l: any[]) => setTractors(l || []));
+    // Реестр прицепов — единая база прицепов (trailers) для ссылки trailerId
+    const u8b = getTrailersFlat((l: any[]) => setTrailers(l || []));
     // Подписка на «Учёт выезда» (baza) для статуса «На базе / В рейса»
     const u9 = (dbService as any).getBazaRecords
       ? (dbService as any).getBazaRecords((list: any[]) => {
@@ -137,12 +158,27 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
           setBazaCars(plates);
         })
       : () => {};
-    return () => { u1(); u2(); u3(); u4(); u5(); u6(); u7(); u8(); u9(); };
+    return () => { u1(); u2(); u3(); u4(); u5(); u6(); u7(); u8(); u8b(); u9(); };
   }, []);
 
+  // Единый реестр водителей: и список выбора, и подписи в таблице строятся здесь.
+  const driverDir = useMemo(() => buildDriverDirectory(drivers), [drivers]);
+
+  /** Актуальное ФИО водителя из реестра по id (или ''. если связи нет). */
   const driverName = (id?: string) => {
-    const d = drivers.find((x) => x.id === id);
-    return d ? (d.shortNameRu || d.name || d.firstNameRu || '') : '';
+    if (!id) return '';
+    const d = driverDir.byId.get(String(id));
+    return d ? driverFullName(d) : '';
+  };
+  /** Состояние связи строки со справочником водителей (проблемы показываем явно). */
+  const driverLinkOf = (c: CouplingRow) => resolveDriverLink({ driverId: c.driverId, driverNameRu: c.driverName }, driverDir);
+  const driver2LinkOf = (c: CouplingRow) => resolveDriverLink({ driver2Id: c.driver2Id, driver2: c.driver2 }, driverDir, 'driver2');
+  const driverNoticeOf = (c: CouplingRow) => {
+    const l1 = driverLinkOf(c);
+    if (l1.status === 'missing' || l1.status === 'service') return driverLinkNotice(l1);
+    const l2 = driver2LinkOf(c);
+    if (l2.status === 'missing' || l2.status === 'service') return driverLinkNotice(l2, 'driver2');
+    return '';
   };
   const dispName = (id?: string) => {
     const d = dispatchers.find((x) => (x.id || x.key) === id);
@@ -188,20 +224,27 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   const openAdd = () => {
     setEditing(null);
     setForm({
-      carNumber: '', trailerNumber: '', brand: '', trailerBrand: '', brandRu: '',
+      carNumber: '', trailerNumber: '', trailerId: '', brand: '', trailerBrand: '', brandRu: '',
       vehicleType: DEFAULT_VEHICLE.vehicleType, dimensions: DEFAULT_VEHICLE.dimensions, weight: DEFAULT_VEHICLE.weight,
-      driverId: '', driver2: '',
+      year: '',
+      driverId: '', driver2: '', driver2Id: '',
       dispatcher: '', rateGroupId: '', status: 'base',
     });
     setModalOpen(true);
   };
   const openEdit = (c: CouplingRow) => {
     setEditing(c);
+    // Живую связь восстанавливаем до стабильного id (реестр), текст — запасной вариант.
+    const l1 = driverLinkOf(c);
+    const linkedDriverId = (l1.status === 'ok' || l1.status === 'archived') ? l1.id : (c.driverId || '');
     setForm({
-      carNumber: c.carNumber, trailerNumber: c.trailerNumber || '', brand: c.brand || '',
+      carNumber: c.carNumber, trailerNumber: c.trailerNumber || '', trailerId: c.trailerId || '',
+      brand: c.brand || '',
       trailerBrand: c.trailerBrand || '', brandRu: c.brandRu || '', vehicleType: c.vehicleType || '',
-      dimensions: c.dimensions || '', weight: c.weight || '', driverId: c.driverId || '',
-      driver2: c.driver2 || '', dispatcher: dispIdByName(c.dispatcher),
+      dimensions: c.dimensions || '', weight: c.weight || '', year: c.year || '',
+      driverId: linkedDriverId,
+      driver2: c.driver2 || '', driver2Id: c.driver2Id || '',
+      dispatcher: dispIdByName(c.dispatcher),
       rateGroupId: c.rateGroupId || '', status: c.status || 'base',
     });
     setModalOpen(true);
@@ -229,35 +272,47 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
     // перестала совпадать с опцией выпадающего списка).
     const brandVal = (form.brand && form.brand.trim() !== '') ? safe(form.brand) : (hasEdit ? editBrand : '');
     const trailerBrandVal = (form.trailerBrand && form.trailerBrand.trim() !== '') ? safe(form.trailerBrand) : (hasEdit ? editTrailerBrand : '');
+    // Водители — ССЫЛКИ на единый реестр: id + актуальное ФИО из записи.
+    const driverRec = form.driverId ? driverDir.byId.get(String(form.driverId)) : null;
+    const driver2Rec = form.driver2Id ? driverDir.byId.get(String(form.driver2Id)) : null;
+    // Прицеп: связываем с единым реестром прицепов (trailers) по нормализованному номеру.
+    const trailerNumber = safe(form.trailerNumber).toUpperCase();
+    const trailerRec = trailerNumber
+      ? (trailers || []).find((t: any) => normalizePlate(t.trailerNumber || t.id || '') === normalizePlate(trailerNumber))
+      : null;
     const rec: any = {
       id,
       carNumber: carNumber.toUpperCase(),
-      trailerNumber: safe(form.trailerNumber).toUpperCase(),
+      trailerNumber,
+      trailerId: trailerRec ? (trailerRec.id || null) : (form.trailerId || null),
       brand: brandVal,
       trailerBrand: trailerBrandVal,
       brandRu: safe(form.brandRu),
       vehicleType: safe(form.vehicleType) || DEFAULT_VEHICLE.vehicleType,
       dimensions: safe(form.dimensions) || DEFAULT_VEHICLE.dimensions,
       weight: safe(form.weight) || DEFAULT_VEHICLE.weight,
-      driverId: form.driverId || null,
-      driverNameRu: driverName(form.driverId) || null,
-      driver2: safe(form.driver2) || null,
+      year: safe(form.year) || null,
+      driverId: driverRec ? String(driverRec.id) : null,
+      driverNameRu: driverRec ? driverFullName(driverRec) : null,
+      driver2: driver2Rec ? driverFullName(driver2Rec) : (safe(form.driver2) || null),
+      driver2Id: driver2Rec ? String(driver2Rec.id) : null,
       dispatcher: dispName,
       dispatcherName: dispName,
       dispatcherId: dispAccountId || null,
       rateGroupId: form.rateGroupId || null,
       status: form.status || 'base',
     };
-    console.log('[handleSave] start', { carNumber: form.carNumber, dispatcher: form.dispatcher });
+    if (isSaving) return;
+    setIsSaving(true);
     try {
       await dbService.saveVehicleDriverRecord(rec, user.name, user.role);
-      console.log('[handleSave] saved ok');
       // Немедленно обновляем локальный список, чтобы избежать гонки с кешем getCouplingsFlat
       savedMapRef.current[id] = {
         trailerNumber: (rec.trailerNumber || '').toUpperCase(),
         trailerBrand: rec.trailerBrand || '',
         brand: rec.brand || '',
         carNumber: rec.carNumber || '',
+        driver2: rec.driver2 || '',
       };
       setCouplings((prev) => prev.map((c) =>
         c.id === id ? {
@@ -266,6 +321,11 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
           trailerBrand: (rec.trailerBrand || c.trailerBrand || ''),
           brand: rec.brand || c.brand || '',
           carNumber: rec.carNumber || c.carNumber || '',
+          year: rec.year != null ? String(rec.year) : c.year,
+          driverId: rec.driverId || '',
+          driverName: rec.driverNameRu || '',
+          driver2: rec.driver2 || '',
+          driver2Id: rec.driver2Id || '',
         } : c
       ));
       toast(editing ? 'Сцепка обновлена' : 'Сцепка добавлена', 'success');
@@ -273,6 +333,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
       console.error('[handleSave] saveVehicleDriverRecord failed:', err);
       toast('Ошибка сохранения: ' + (err?.message || err), 'error');
     } finally {
+      setIsSaving(false);
       setModalOpen(false);
       // Проверяем один раз (не внутри подписки, чтобы не дублировать toasts).
       // couplings пишется под НОРМАЛИЗОВАННЫМ ключом — сравниваем с ним.
@@ -500,16 +561,50 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
                     </td>
                     <td className={UI.td}>{[c.brand, c.trailerBrand].filter(Boolean).join(' / ') || '—'}</td>
                     <td className={UI.td}>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setViewCard({ type: 'driver', driverId: c.driverId || '', driverName: c.driverName || driverName(c.driverId) }); }}
-                        className="inline-flex items-center gap-2 text-left hover:underline cursor-pointer max-w-[220px]"
-                      >
-                        <span className="w-5 h-5 rounded-full bg-[var(--accent-10)] text-[var(--accent-ink)] flex items-center justify-center text-[10px] font-semibold shrink-0">
-                          {initials(c.driverName || driverName(c.driverId))}
-                        </span>
-                        <span className="truncate text-[#121316] font-semibold">{c.driverName || driverName(c.driverId) || '—'}</span>
-                      </button>
+                      {(() => {
+                        const link = driverLinkOf(c);
+                        const l2 = driver2LinkOf(c);
+                        const name = link.displayName;
+                        const warn = link.status === 'missing' || link.status === 'service';
+                        const empty = link.status === 'empty' && !name;
+                        return (
+                          <div className="flex flex-col gap-0.5 min-w-0">
+                            <div className="inline-flex items-center gap-2 min-w-0">
+                              <button
+                                type="button"
+                                data-ui="coupling-driver-link"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (link.status === 'ok' || link.status === 'archived' || link.status === 'service') {
+                                    setViewCard({ type: 'driver', driverId: link.id, driverName: name });
+                                  }
+                                }}
+                                className={`inline-flex items-center gap-2 text-left max-w-[220px] ${empty ? 'cursor-default' : 'hover:underline cursor-pointer'}`}
+                                title={driverNoticeOf(c) || name || undefined}
+                              >
+                                <span className="w-5 h-5 rounded-full bg-[var(--accent-10)] text-[var(--accent-ink)] flex items-center justify-center text-[10px] font-semibold shrink-0">
+                                  {initials(name)}
+                                </span>
+                                <span className={`truncate font-semibold ${empty ? 'text-[#9CA3AF] italic font-normal' : 'text-[#121316]'}`}>
+                                  {name || 'Без водителя'}
+                                </span>
+                              </button>
+                              {link.status === 'archived' && (
+                                <span className="shrink-0 text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md">архив</span>
+                              )}
+                              {warn && (
+                                <span className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-medium text-rose-600" title={driverNoticeOf(c)}>
+                                  <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+                                  {link.status === 'service' ? 'служебное' : 'нет в реестре'}
+                                </span>
+                              )}
+                              {l2.status !== 'empty' && (
+                                <span className="shrink-0 text-[10px] text-[#9CA3AF]" title={`Второй водитель: ${l2.displayName}`}>+2-й</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className={UI.td}>
                       <span className="inline-flex items-center gap-1.5 text-xs text-[#4B5563] whitespace-nowrap">
@@ -549,26 +644,79 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
           ariaLabel={editing ? 'Редактировать сцепку' : 'Новая сцепка'}
           footer={
             <>
-              <button type="button" onClick={() => setModalOpen(false)} className={UI.buttonGhost}>Отмена</button>
-              <button type="button" onClick={handleSave} className={UI.buttonPrimary}>Сохранить</button>
+              <button type="button" onClick={() => setModalOpen(false)} disabled={isSaving} className={UI.buttonGhost}>Отмена</button>
+              <button type="button" onClick={handleSave} disabled={isSaving} data-ui="coupling-save" className={UI.buttonPrimary}>
+                {isSaving ? 'Сохранение…' : 'Сохранить'}
+              </button>
             </>
           }
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Тягач *" value={form.carNumber} onChange={(v) => setForm({ ...form, carNumber: v })} placeholder="AB 9271-7" />
+            <Field label="Тягач *" value={form.carNumber} onChange={(v) => setForm({ ...form, carNumber: v })} placeholder="AB 9271-7" dataUi="coupling-car-number" />
             <p className={`${UI.hint} text-amber-600 sm:col-span-2 -mt-1`}>Госномера тягача и прицепа вносите на латинице (напр. AB 9271-7, A 1635 E-7).</p>
-            <Field label="Прицеп" value={form.trailerNumber} onChange={(v) => setForm({ ...form, trailerNumber: v })} placeholder="А 1635 Е-7" />
+            <Field label="Прицеп" value={form.trailerNumber} onChange={(v) => setForm({ ...form, trailerNumber: v })} placeholder="А 1635 Е-7" dataUi="coupling-trailer-number" />
             <SelectField label="Марка тягача" value={form.brand} onChange={(v) => setForm({ ...form, brand: v })}
               options={vehicleBrands.map((b) => ({ v: b.key || b.name, l: b.name }))} allowCustom />
             <SelectField label="Марка прицепа" value={form.trailerBrand} onChange={(v) => setForm({ ...form, trailerBrand: v })}
               options={trailerBrands.map((b) => ({ v: b.key || b.name, l: b.name }))} allowCustom />
             <Field label="Марка/модель (рус.)" value={form.brandRu} onChange={(v) => setForm({ ...form, brandRu: v })} placeholder="Мерседес Бенц" />
-            <SelectField label="Водитель" value={form.driverId} onChange={(v) => setForm({ ...form, driverId: v })}
-              options={drivers.map((d) => ({ v: d.id, l: d.shortNameRu || d.name || d.firstNameRu || d.id }))} />
+            <Field label="Год выпуска" value={form.year} onChange={(v) => setForm({ ...form, year: v })} placeholder="2018" dataUi="coupling-year" />
+            <div className="flex flex-col gap-2">
+              <label className={UI.fieldLabel}>Водитель (из справочника)</label>
+              <DriverAutocomplete
+                value={form.driverId || ''}
+                valueName={form.driverId && driverDir.byId.get(String(form.driverId)) ? driverFullName(driverDir.byId.get(String(form.driverId))!) : ''}
+                onSelect={(d, meta) => {
+                  if (!d) {
+                    setForm((f) => ({ ...f, driverId: '' }));
+                    return;
+                  }
+                  if (meta.status === 'service') {
+                    setForm((f) => ({ ...f, driverId: '' }));
+                    toast('Это служебная запись, а не водитель — назначение очищено. Выберите водителя заново.', 'error');
+                    return;
+                  }
+                  setForm((f) => ({ ...f, driverId: String(d.id) }));
+                }}
+                placeholder="Поиск по ФИО или телефону…"
+                className={UI.input}
+                dataUi="coupling-driver"
+                allowCreate={isWritePermitted}
+                author={user.name}
+                authorRole={user.role}
+                ariaLabel="Водитель (основной)"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className={UI.fieldLabel}>Водитель №2 (если есть)</label>
+              <DriverAutocomplete
+                value={form.driver2Id || ''}
+                valueName={form.driver2 || ''}
+                onSelect={(d, meta) => {
+                  if (!d) {
+                    setForm((f) => ({ ...f, driver2Id: '', driver2: '' }));
+                    return;
+                  }
+                  if (meta.status === 'service') {
+                    setForm((f) => ({ ...f, driver2Id: '', driver2: '' }));
+                    toast('Это служебная запись, а не водитель — назначение очищено.', 'error');
+                    return;
+                  }
+                  setForm((f) => ({ ...f, driver2Id: String(d.id), driver2: driverFullName(d) }));
+                }}
+                placeholder="Поиск по ФИО или телефону…"
+                className={UI.input}
+                dataUi="coupling-driver2"
+                allowCreate={isWritePermitted}
+                author={user.name}
+                authorRole={user.role}
+                excludeIds={form.driverId ? [form.driverId] : []}
+                ariaLabel="Водитель №2"
+              />
+            </div>
             <Field label="Тип ТС" value={form.vehicleType} onChange={(v) => setForm({ ...form, vehicleType: v })} placeholder="Тенты 90м3" />
             <Field label="Габариты полуприцепа" value={form.dimensions} onChange={(v) => setForm({ ...form, dimensions: v })} placeholder="13,6м x 2,45м x 2,7м" />
             <Field label="Вес ТС (Тягач+пп)" value={form.weight} onChange={(v) => setForm({ ...form, weight: v })} placeholder="1) 14,6т" />
-            <Field label="Водитель №2 (если есть)" value={form.driver2} onChange={(v) => setForm({ ...form, driver2: v })} placeholder="ФИО второго водителя" />
             <SelectField label="Диспетчер" value={form.dispatcher} onChange={(v) => setForm({ ...form, dispatcher: v })}
               options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
             <SelectField label="Группа ставок" value={form.rateGroupId} onChange={(v) => setForm({ ...form, rateGroupId: v })}
@@ -657,11 +805,12 @@ function StatRow({ color, label, value }: { color: 'graphite' | 'emerald' | 'amb
   );
 }
 
-function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+function Field({ label, value, onChange, placeholder, dataUi }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; dataUi?: string }) {
   return (
     <div className="flex flex-col gap-2">
       <label className={UI.fieldLabel}>{label}</label>
       <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+        data-ui={dataUi}
         className={UI.input} />
     </div>
   );

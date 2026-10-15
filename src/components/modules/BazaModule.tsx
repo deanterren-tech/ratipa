@@ -34,6 +34,15 @@ import {
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
 import {formatDriverShortName} from '../../utils/driverSync'
+import {
+  buildNewDriver,
+  driverFullName,
+  normalizeDriverName,
+  normalizePhone,
+  driverPhones,
+  primaryPhone,
+  selectableDrivers,
+} from '../../utils/driverRegistry'
 import {applySharedCarToBazaRecord, applySharedDriverToBazaRecord, normalizePlate} from '../../utils/bazaSync'
 import CouplingPicker from '../common/CouplingPicker';
 import { resolvePermission } from '../../utils/permissions';
@@ -639,43 +648,12 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
     }
 
     const trimmedDriver = formData.driverName.trim();
-    let driverId = '';
-    let driverShortNameRu = '';
-    let migrationStatus = 'unmatched';
-
-    if (trimmedDriver) {
-      const existingDriver = drivers.find(d => 
-        d.name.trim().toLowerCase() === trimmedDriver.toLowerCase() ||
-        (d.shortNameRu && d.shortNameRu.trim().toLowerCase() === trimmedDriver.toLowerCase())
-      );
-      if (!existingDriver) {
-        const parts = trimmedDriver.split(/\s+/);
-          const last = parts[0] || '';
-          const first = parts[1] || '';
-          const middle = parts[2] || '';
-          const computedShort = formatDriverShortName(last, first, middle);
-
-          const newDriverId = "dr_" + Date.now();
-          const newDriver = {
-            id: newDriverId,
-            name: trimmedDriver,
-            lastNameRu: last,
-            firstNameRu: first,
-            middleNameRu: middle,
-            shortNameRu: computedShort || trimmedDriver,
-          };
-          dbService.saveDriver(newDriver, ratipaUser.name, ratipaUser.role);
-          toast(`Водитель "${trimmedDriver}" добавлен в справочник!`, 'success');
-          
-          driverId = newDriverId;
-          driverShortNameRu = newDriver.shortNameRu;
-          migrationStatus = 'matched';
-      } else {
-        driverId = existingDriver.id;
-        driverShortNameRu = existingDriver.shortNameRu || formatDriverShortName(existingDriver);
-        migrationStatus = 'matched';
-      }
-    }
+    // Связь с реестром водителей: поиск существующей записи, добавление —
+    // только по явному подтверждению (без «скрытых» водителей из текста).
+    const driverLink = await resolveOrConfirmDriverLink(trimmedDriver);
+    const driverId = driverLink.driverId;
+    const driverShortNameRu = driverLink.driverShortNameRu;
+    const migrationStatus = driverLink.migrationStatus;
 
     // Write to 'baza' (manual Учёт выезда journal). Center (vehicleFleet) is NOT
     // modified — it's the reference base, selected via CouplingPicker. If the car was
@@ -713,9 +691,6 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
        // Auto-status: car now appears in Учёт выезда → it's on base.
        if (couplingId) {
          dbService.setVehicleStatus(couplingId, 'base');
-         set(ref(db, `vehicleFleet/${couplingId}/status`), 'base').catch((err) => {
-              console.warn('[Baza] set vehicleFleet status=base failed:', err);
-            });
        }
        setFormData({ carNumber: '', driverName: '', dateArrival: '', dateLoading: '', dateRepairStart: '', dateRepairEnd: '', dateDeparture: '', comment: '' });
     }).catch((err) => {
@@ -743,6 +718,49 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
     setIsCarModalOpen(true);
   };
 
+  /**
+   * Связь введённого вручную ФИО со справочником водителей.
+   *
+   * Существующую запись ищем по нормализованному ФИО (полному и короткому) и
+   * телефону. Новую запись НЕ создаём скрыто: сначала явное подтверждение
+   * диалогом — иначе в справочнике появлялись «фантомные» водители вида
+   * «без В.» / частичных ФИО, а они попадали в списки выбора у машин.
+   */
+  const resolveOrConfirmDriverLink = async (
+    typedName: string,
+  ): Promise<{ driverId: string; driverShortNameRu: string; migrationStatus: string }> => {
+    const trimmed = String(typedName || '').trim();
+    if (!trimmed) return { driverId: '', driverShortNameRu: '', migrationStatus: 'unmatched' };
+    const norm = normalizeDriverName(trimmed);
+    const existing = drivers.find((d) =>
+      normalizeDriverName(d.name || '') === norm ||
+      normalizeDriverName(driverFullName(d)) === norm ||
+      (d.shortNameRu && normalizeDriverName(d.shortNameRu) === norm) ||
+      driverPhones(d).some((p) => normalizePhone(p.number) === normalizePhone(trimmed))
+    );
+    if (existing) {
+      return {
+        driverId: String(existing.id),
+        driverShortNameRu: existing.shortNameRu || formatDriverShortName(existing),
+        migrationStatus: 'matched',
+      };
+    }
+    const confirmed = await showConfirm(
+      `Водитель «${trimmed}» отсутствует в справочнике водителей. Добавить его в справочник?`,
+    );
+    if (!confirmed) {
+      return { driverId: '', driverShortNameRu: '', migrationStatus: 'unmatched' };
+    }
+    const rec = buildNewDriver('drv_' + Date.now(), trimmed);
+    dbService.saveDriver(rec, ratipaUser.name, ratipaUser.role);
+    toast(`Водитель «${driverFullName(rec)}» добавлен в справочник`, 'success');
+    return {
+      driverId: String(rec.id),
+      driverShortNameRu: String(rec.shortNameRu || ''),
+      migrationStatus: 'matched',
+    };
+  };
+
   const updateCarField = async (id: string, field: string, newValue: string) => {
       // Та же проверка, что и у формы (canEditField): модуль, переопределения полей
       // и старая per-field модель — единый порядок, без второго списка разрешений.
@@ -765,42 +783,12 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
       let extraUpdates: any = {};
       if (field === 'driverName' && val.trim() !== '') {
         const trimmedDriver = val.trim();
-        let driverId = '';
-        let driverShortNameRu = '';
-        let migrationStatus = 'unmatched';
-
-        const existingDriver = drivers.find(d => 
-          d.name.trim().toLowerCase() === trimmedDriver.toLowerCase() ||
-          (d.shortNameRu && d.shortNameRu.trim().toLowerCase() === trimmedDriver.toLowerCase())
-        );
-
-        if (!existingDriver) {
-          const parts = trimmedDriver.split(/\s+/);
-            const last = parts[0] || '';
-            const first = parts[1] || '';
-            const middle = parts[2] || '';
-            const computedShort = formatDriverShortName(last, first, middle);
-
-            const newDriverId = "dr_" + Date.now();
-            const newDriver = {
-              id: newDriverId,
-              name: trimmedDriver,
-              lastNameRu: last,
-              firstNameRu: first,
-              middleNameRu: middle,
-              shortNameRu: computedShort || trimmedDriver,
-            };
-            dbService.saveDriver(newDriver, ratipaUser.name, ratipaUser.role);
-            toast(`Водитель "${trimmedDriver}" добавлен в справочник!`, 'success');
-
-            driverId = newDriverId;
-            driverShortNameRu = newDriver.shortNameRu;
-            migrationStatus = 'matched';
-        } else {
-          driverId = existingDriver.id;
-          driverShortNameRu = existingDriver.shortNameRu || formatDriverShortName(existingDriver);
-          migrationStatus = 'matched';
-        }
+        // Явная связь с реестром: существующая запись или подтверждённое
+        // добавление (никаких «скрытых» водителей из введённого текста).
+        const driverLink = await resolveOrConfirmDriverLink(trimmedDriver);
+        const driverId = driverLink.driverId;
+        const driverShortNameRu = driverLink.driverShortNameRu;
+        const migrationStatus = driverLink.migrationStatus;
 
         extraUpdates = {
           driverId: driverId || null,
@@ -861,38 +849,12 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
 
       if (field === 'driverName' && val.trim() !== '') {
         const trimmedDriver = val.trim();
-        let driverId = '';
-        let driverShortNameRu = '';
-        let migrationStatus = 'unmatched';
-        const existingDriver = drivers.find(d =>
-          d.name.trim().toLowerCase() === trimmedDriver.toLowerCase() ||
-          (d.shortNameRu && d.shortNameRu.trim().toLowerCase() === trimmedDriver.toLowerCase())
-        );
-        if (!existingDriver) {
-          const parts = trimmedDriver.split(/\s+/);
-            const last = parts[0] || '';
-            const first = parts[1] || '';
-            const middle = parts[2] || '';
-            const computedShort = formatDriverShortName(last, first, middle);
-            const newDriverId = 'dr_' + Date.now();
-            const newDriver = {
-              id: newDriverId,
-              name: trimmedDriver,
-              lastNameRu: last,
-              firstNameRu: first,
-              middleNameRu: middle,
-              shortNameRu: computedShort || trimmedDriver,
-            };
-            dbService.saveDriver(newDriver, ratipaUser.name, ratipaUser.role);
-            toast(`Водитель "${trimmedDriver}" добавлен в справочник!`, 'success');
-            driverId = newDriverId;
-            driverShortNameRu = newDriver.shortNameRu;
-            migrationStatus = 'matched';
-        } else {
-          driverId = existingDriver.id;
-          driverShortNameRu = existingDriver.shortNameRu || formatDriverShortName(existingDriver);
-          migrationStatus = 'matched';
-        }
+        // Явная связь с реестром: существующая запись или подтверждённое
+        // добавление (без «скрытых» водителей из текста).
+        const driverLink = await resolveOrConfirmDriverLink(trimmedDriver);
+        const driverId = driverLink.driverId;
+        const driverShortNameRu = driverLink.driverShortNameRu;
+        const migrationStatus = driverLink.migrationStatus;
         updates.driverId = driverId || null;
         updates.driverRaw = trimmedDriver;
         updates.driverShortNameRu = driverShortNameRu || null;
@@ -1031,9 +993,6 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
             const stillInBaza = cars.some(c => c.id !== id && (c.couplingId === cid || (c.carNumber || '').replace(/[^А-ЯA-Z0-9]/g, '') === (carNumber || '').replace(/[^А-ЯA-Z0-9]/g, '')));
             if (!stillInBaza) {
               dbService.setVehicleStatus(cid, 'trip');
-              set(ref(db, `vehicleFleet/${cid}/status`), 'trip').catch((err) => {
-                    console.warn('[Baza] set vehicleFleet status=trip failed:', err);
-                  });
             }
           }
 
@@ -1344,12 +1303,13 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
                     <input
                       id="form-add-driver"
                       type="text"
+                      list="baza-drivers-dl"
                       value={formData.driverName || ''}
                       onChange={(e) => setFormData((f) => ({ ...f, driverName: e.target.value }))}
                       className={UI.input}
                       placeholder="Фамилия Имя Отчество"
                     />
-                    <span className={UI.hint}>Заполняется из сцепки. Если поправить — запись появится в базе водителей.</span>
+                    <span className={UI.hint}>Заполняется из сцепки. Введённого вручную водителя придётся подтвердить — тогда он появится в базе водителей.</span>
                   </div>
                 </div>
               </section>
@@ -1851,8 +1811,8 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
       </ModalShell>
 
       <datalist id="baza-drivers-dl">
-        {drivers.map((drv: any) => (
-          <option key={drv.id} value={drv.shortNameRu || formatDriverShortName(drv)} />
+        {selectableDrivers(drivers).map((drv) => (
+          <option key={drv.id} value={driverFullName(drv)} label={primaryPhone(drv) || undefined} />
         ))}
       </datalist>
     </>

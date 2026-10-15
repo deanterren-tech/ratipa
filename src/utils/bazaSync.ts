@@ -1,6 +1,16 @@
 import {  ref, get, update, push, set } from 'firebase/database';
 import { database } from '../api';
 
+/**
+ * Хелперы журнала «Учёт выезда» + ЛЕГАСИ-ПЕРЕНОС старых записей.
+ *
+ * `normalizePlate` / `applyShared*ToBazaRecord` используются Базой (чтение —
+ * общие нормализация и подстановка данных из единых веток). Функция переноса
+ * `migrateLegacyBazaCars` НЕ вызывается: ветка `vehicleFleet` — легаси-зеркало
+ * основной `tractors`; новый код пишет в `tractors`/`couplings`
+ * (см. src/firebase.ts, saveVehicleDriverRecord).
+ */
+
 export function normalizePlate(value: string): string {
   if (!value) return '';
   return value.toUpperCase().replace(/[^А-ЯA-Z0-9]/g, '');

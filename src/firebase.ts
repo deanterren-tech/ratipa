@@ -1602,6 +1602,7 @@ export const dbService = {
       driverName: rec.driverName || rec.driverNameRu || null,
       driverNameRu: rec.driverNameRu || rec.driverName || null,
       driver2: rec.driver2 || null,
+      driver2Id: rec.driver2Id || null,
       dispatcher: disp || null,
       dispatcherName: disp || null,
       dispatcherId: dispId || null,
@@ -1613,6 +1614,8 @@ export const dbService = {
       weight: rec.weight || null,
       status: rec.status || 'base',
       rateGroupId: rec.rateGroupId || null,
+      // Год выпуска — как и прочие поля авто, хранится и в сцепке (единый вид записи)
+      year: rec.year != null && rec.year !== '' ? rec.year : null,
     };
     // убираем undefined
     for (const [k, v] of Object.entries(couplingRec)) {
@@ -1647,9 +1650,16 @@ export const dbService = {
       }
       mainPromise = update(ref(database, `tractors/${normSafeId || safeId}`), cleaned)
         .then(async () => {
-          // Сначала проверяем, есть ли уже водитель с таким именем в справочнике
-          let driverId = rec.driverId || safeId;
-          if (!rec.driverId) {
+          // СВЯЗЬ С ЕДИНЫМ РЕЕСТРОМ ВОДИТЕЛЕЙ.
+          // Явный driverId — единственный стабильный способ связи. Если его нет,
+          // пробуем найти СУЩЕСТВУЮЩУЮ запись по точному ФИО/короткому имени.
+          // Новый водитель из текста НЕ создаётся: раньше ключом служил id машины,
+          // из-за чего в справочнике появлялись «фантомные» водители (ветка
+          // `drivers` с ключами вида AB92717) — это и было причиной «лишних
+          // записей» в списках выбора. Создать водителя можно только явным
+          // действием (форма водителя или кнопка «Добавить в справочник» в списке).
+          let driverId: string | null = rec.driverId ? String(rec.driverId) : null;
+          if (!driverId) {
             const driverName = (rec.driverNameRu || rec.driverName || '').trim().toLowerCase();
             if (driverName) {
               try {
@@ -1675,37 +1685,56 @@ export const dbService = {
               }
             }
           }
-          const driverData: Record<string, any> = {
-            id: driverId,
-            name: rec.driverNameRu || rec.driverName || null,
-            shortNameRu: rec.driverNameRu || rec.driverName || null,
-            nameLat: rec.driverNameLat || null,
-            dispatcher: disp || null,
-            dispatcherName: disp || null,
-            dispatcherId: dispId || null,
-            phone: rec.phone || rec.driverPhone || null,
-            phones: Array.isArray(rec.phones) ? rec.phones : (rec.phone || rec.driverPhone ? [{ id: 'phone_1', number: rec.phone || rec.driverPhone, isPrimary: true }] : []),
-            passport: rec.passportNumber || null,
-            personalId: rec.personalId || null,
-            birthDate: rec.birthDate || null,
-            passportStart: rec.passportStart || null,
-            passportEnd: rec.passportEnd || null,
-            passportIssued: rec.passportIssuedBy || null,
-            licenseNumber: rec.licenseNumber || null,
-            // Сохраняем полные части имени, чтобы в Базе водителей отображалось ФИО полностью
-            lastNameRu: rec.lastNameRu || (rec.driverNameRu ? rec.driverNameRu.split(' ')[0] || '' : '') || null,
-            firstNameRu: rec.firstNameRu || (rec.driverNameRu ? rec.driverNameRu.split(' ')[1] || '' : '') || null,
-            middleNameRu: rec.middleNameRu || (rec.driverNameRu ? rec.driverNameRu.split(' ')[2] || '' : '') || null,
-          };
-          for (const [k, v] of Object.entries(driverData)) {
-            if (v === undefined) driverData[k] = null;
+          if (driverId) {
+            // Пишем в карточку водителя ТОЛЬКО реально переданные поля.
+            // Сохранение сцепки (без паспортных полей) не должно затирать
+            // телефоны/паспорт водителя пустыми значениями — это ломало
+            // телефон водителя при каждом сохранении машины.
+            const driverData: Record<string, any> = { id: driverId };
+            const hasVal = (v: unknown) => v !== undefined && v !== null;
+            const putIf = (k: string, v: unknown) => { if (hasVal(v)) driverData[k] = v; };
+            const nameRuThe = rec.driverNameRu || rec.driverName;
+            putIf('name', nameRuThe);
+            putIf('shortNameRu', nameRuThe);
+            putIf('nameLat', rec.driverNameLat);
+            putIf('dispatcher', disp || undefined);
+            putIf('dispatcherName', disp || undefined);
+            putIf('dispatcherId', dispId || undefined);
+            const phonesVal = Array.isArray(rec.phones) ? rec.phones : undefined;
+            if (phonesVal) {
+              putIf('phones', phonesVal);
+              // phone — зеркало основного номера (старые разделы читают его)
+              const primary = phonesVal.find((p: any) => p && p.isPrimary) || phonesVal[0];
+              putIf('phone', rec.phone || rec.driverPhone || primary?.number || '');
+            } else {
+              putIf('phone', rec.phone || rec.driverPhone);
+            }
+            putIf('passport', rec.passportNumber);
+            putIf('personalId', rec.personalId);
+            putIf('birthDate', rec.birthDate);
+            putIf('passportStart', rec.passportStart);
+            putIf('passportEnd', rec.passportEnd);
+            putIf('passportIssued', rec.passportIssuedBy);
+            putIf('licenseNumber', rec.licenseNumber);
+            // Части имени: явные поля, иначе разбор ФИО (только когда ФИО есть)
+            if (hasVal(nameRuThe)) {
+              const parts = String(nameRuThe).trim().split(/\s+/);
+              putIf('lastNameRu', rec.lastNameRu || parts[0] || '');
+              putIf('firstNameRu', rec.firstNameRu || parts[1] || '');
+              putIf('middleNameRu', rec.middleNameRu || parts[2] || '');
+            }
+            await update(ref(database, `drivers/${driverId}`), driverData)
+              .catch((e) => handleFailure('firebase', e, { path: 'drivers', userMessage: 'Не удалось сохранить водителя' }));
+          } else if (rec.driverNameRu || rec.driverName) {
+            // Связи нет — запись сохраняется, но назначение остаётся «не в реестре»:
+            // это видимое состояние (карточки показывают пометку), а не скрытый водитель.
+            console.warn('[saveVehicleDriverRecord] водитель не связан с реестром:', rec.driverNameRu || rec.driverName);
           }
-          await update(ref(database, `drivers/${driverId}`), driverData)
-            .catch((e) => handleFailure('firebase', e, { path: 'drivers', userMessage: 'Не удалось сохранить водителя' }));
-          // ВСЕГДА пишем сцепку (иначе новое авто без диспетчера не появляется в Базе сцепок)
-          // ВАЖНО: используем driverId после дедупликации
+          // ВСЕГДА пишем сцепку (иначе новое авто без диспетчера не появляется в Базе сцепок).
+          // Ключ — тот же нормализованный id, что и у тягача: одни и те же данные
+          // не должны расходиться по двум разным ключам (латиница + кириллица).
           const couplingRecWithDriver = { ...couplingRec, driverId };
-          await update(ref(database, `couplings/${safeId}`), couplingRecWithDriver)
+          await update(ref(database, `couplings/${normSafeId || safeId}`), couplingRecWithDriver)
             .catch((e) => handleFailure('firebase', e, { path: 'couplings', userMessage: 'Не удалось сохранить сцепку' }));
           // Save brand to master-nodes under directories/vehicleBrands / trailerBrands
           if (brand) {
@@ -3362,28 +3391,49 @@ export const dbService = {
 
   saveDriver: (d: Driver, user: string, role: string) => {
     catalogCache.drivers = null;
-    const payload = {
-      name: d.name,
-      lastNameRu: d.lastNameRu || "",
-      firstNameRu: d.firstNameRu || "",
-      middleNameRu: d.middleNameRu || "",
-      lastNameLat: d.lastNameLat || "",
-      firstNameLat: d.firstNameLat || "",
-      middleNameLat: d.middleNameLat || "",
-      shortNameRu: d.shortNameRu || "",
-      shortNameLat: d.shortNameLat || "",
-      phone: d.phone || "",
-      license: d.license || "",
-      passport: d.passport || "",
-      personalId: d.personalId || "",
-      birthDate: d.birthDate || "",
-      passportStart: d.passportStart || "",
-      passportEnd: d.passportEnd || "",
-      passportIssued: d.passportIssued || "",
-      rateGroupId: d.rateGroupId || "",
-      dispatcher: d.dispatcher || "",
-      comment: d.comment || "",
+    // Пишем только те поля, которые передал вызывающий (undefined не трогаем —
+    // частичное сохранение не должно стирать остальные поля записи).
+    const payload: Record<string, unknown> = {};
+    const srcArr = Array.isArray(d.phones) ? d.phones : undefined;
+    // Телефоны — единое поле `phones`; старое `phone` — зеркало основного номера
+    // (его читают старые разделы), поддерживается в одном месте.
+    const put = (key: string, value: unknown) => {
+      if (value === undefined || value === null) return;
+      payload[key] = value;
     };
+    put('name', d.name);
+    put('nameLat', d.nameLat);
+    put('lastNameRu', d.lastNameRu);
+    put('firstNameRu', d.firstNameRu);
+    put('middleNameRu', d.middleNameRu);
+    put('lastNameLat', d.lastNameLat);
+    put('firstNameLat', d.firstNameLat);
+    put('middleNameLat', d.middleNameLat);
+    put('shortNameRu', d.shortNameRu);
+    put('shortNameLat', d.shortNameLat);
+    put('phones', srcArr);
+    put('license', d.license);
+    put('licenseNumber', d.licenseNumber);
+    put('passport', d.passport);
+    put('personalId', d.personalId);
+    put('birthDate', d.birthDate);
+    put('passportStart', d.passportStart);
+    put('passportEnd', d.passportEnd);
+    put('passportIssued', d.passportIssued);
+    put('rateGroupId', d.rateGroupId);
+    put('dispatcher', d.dispatcher);
+    put('dispatcherName', d.dispatcherName);
+    put('dispatcherId', d.dispatcherId);
+    put('comment', d.comment);
+    // Архивная запись (поле вне базового типа Driver)
+    put('archived', (d as { archived?: boolean }).archived);
+    // Телефон: явный d.phone, иначе зеркало основного номера из единого списка
+    const primaryPhoneNumber = srcArr && srcArr.length > 0
+      ? (srcArr.find((p) => p && p.isPrimary) || srcArr[0])?.number || ''
+      : undefined;
+    put('phone', d.phone !== undefined ? d.phone : primaryPhoneNumber);
+    if (payload.license !== undefined && payload.licenseNumber === undefined) payload.licenseNumber = payload.license;
+    if (payload.licenseNumber !== undefined && payload.license === undefined) payload.license = payload.licenseNumber;
     if (useFirebase) {
       // update() вместо set() — не затирает поля, которые могли быть
       // записаны в drivers другими модулями (защита от потери данных).
@@ -3391,8 +3441,9 @@ export const dbService = {
     } else {
       const local = getLocalStorageData<Driver[]>("ratipa_drivers", []);
       const idx = local.findIndex((x) => x.id === d.id);
-      if (idx >= 0) local[idx] = { ...d, ...payload };
-      else local.push({ ...d, ...payload });
+      const merged = Object.assign({}, idx >= 0 ? local[idx] : {}, d, payload);
+      if (idx >= 0) local[idx] = merged;
+      else local.push(merged);
       setLocalStorageData("ratipa_drivers", local);
     }
     dbService.logAction(

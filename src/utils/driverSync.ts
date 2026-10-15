@@ -3,6 +3,14 @@ import { database } from '../api';
 import { Driver, Vehicle } from '../types';
 
 /**
+ * ЛЕГАСИ-МИГРАЦИОННЫЕ ХЕЛПЕРЫ (не вызываются ни одним модулем).
+ * Исторические ветки `driversPool` / `vehicleFleet` заменены едиными
+ * `drivers` / `tractors` + `couplings` (см. services/fleetService.ts и
+ * utils/driverRegistry.ts). Файл оставлен до чистовой миграции данных;
+ * новый код сюда не добавлять.
+ */
+
+/**
  * Formats a driver's name to a short Russian format "LastName I.O."
  * Handles either a Driver object, or separate lastName, firstName, middleName strings.
  */
