@@ -78,7 +78,70 @@ export interface TimelineData {
   stageTemplates: StageTemplate[];
 }
 
-const normalizeManualTrip = (raw: TimelineTrip, carIndex: Map<string, CarRef>, dir: DispatcherDirectory): WholeTrip => {
+const plateKey = (value: unknown): string => String(value || '').toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '');
+
+/**
+ * Диспетчер из связанной записи «Плана дохода».
+ *
+ * Первопричина жалобы «машина потеряла диспетчера»: у ручного рейса таймлайна
+ * собственного диспетчера нет, карточка машины в парке тоже может быть без
+ * назначения — и рейс показывался «без диспетчера», хотя в связанном плане
+ * дохода диспетчер есть (план — достоверный источник назначения).
+ *
+ * Берём назначение только при ОДНОЗНАЧНОМ соответствии: по одному номеру
+ * машины может быть несколько планов, поэтому в индекс попадают лишь машины,
+ * у которых все планы указывают одного диспетчера. Иначе — не угадываем.
+ */
+const CYR2LAT: Record<string, string> = { А: 'A', В: 'B', Е: 'E', К: 'K', М: 'M', Н: 'H', О: 'O', Р: 'P', С: 'C', Т: 'T', У: 'Y', Х: 'X', І: 'I', Ё: 'E' };
+const LAT2CYR: Record<string, string> = Object.fromEntries(Object.entries(CYR2LAT).map(([c, l]) => [l, c]));
+/** Варианты ключа номера: как есть, латиницей и кириллицей (раскладка клавиатуры). */
+const plateKeys = (value: unknown): string[] => {
+  const raw = String(value || '');
+  return [...new Set([raw, [...raw].map((ch) => CYR2LAT[ch] || ch).join(''), [...raw].map((ch) => LAT2CYR[ch] || ch).join('')].map(plateKey).filter(Boolean))];
+};
+
+const buildPlanDispatcherIndex = (plans: Array<Record<string, unknown>>): Map<string, { id: string; name: string }> => {
+  const seen = new Map<string, Set<string>>();
+  const value = new Map<string, { id: string; name: string }>();
+  plans.forEach((p) => {
+    const key = plateKey(p?.carNumber);
+    const name = String(p?.dispatcherName || p?.dispatcher || '').trim();
+    if (!key || !name) return;
+    const id = String(p?.dispatcherId || '').trim();
+    if (!seen.has(key)) seen.set(key, new Set());
+    seen.get(key)!.add(name);
+    if (!value.has(key)) value.set(key, { id, name });
+  });
+  const result = new Map<string, { id: string; name: string }>();
+  seen.forEach((names, key) => {
+    if (names.size === 1) result.set(key, value.get(key)!);
+  });
+  return result;
+};
+
+/**
+ * Справочник «машина → диспетчер» (`dispatchers_car_mapping`) — назначение
+ * ведётся людьми и является источником истины. Ключи сравниваем с учётом
+ * раскладки: в справочнике «АО 8806-7», в рейсе бывает «AO 8806-7» — раньше
+ * из-за этого рейс показывался «без диспетчера».
+ */
+const buildDirectoryDispatcherIndex = (mapping: Record<string, string>): Map<string, string> => {
+  const index = new Map<string, string>();
+  Object.entries(mapping || {}).forEach(([plate, name]) => {
+    const clean = String(name || '').trim();
+    if (!clean) return;
+    plateKeys(plate).forEach((key) => index.set(key, clean));
+  });
+  return index;
+};
+
+const normalizeManualTrip = (
+  raw: TimelineTrip,
+  carIndex: Map<string, CarRef>,
+  dir: DispatcherDirectory,
+  planDispatchers?: Map<string, { id: string; name: string }>,
+  directoryDispatchers?: Map<string, string>,
+): WholeTrip => {
   const stages = normalizeStages(raw.stages);
   const withStages = withFallbackStages({
     ...raw,
@@ -88,12 +151,24 @@ const normalizeManualTrip = (raw: TimelineTrip, carIndex: Map<string, CarRef>, d
     archived: raw.archived === true,
     stages,
   });
+  // Карточка машины из справочника парка: ищем по нормализованному номеру в трёх
+  // раскладках (в данных 8806 встречается и «АО 8806-7», и «AO 8806-7», и «АО8806-7» —
+  // из-за этого карточка не находилась и рейс показывался «без диспетчера»).
   const car =
-    (raw.vehicleId ? carIndex.get(String(raw.vehicleId).toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '')) : undefined) ||
+    (raw.vehicleId ? carIndex.get(plateKey(raw.vehicleId)) : undefined) ||
+    plateKeys(raw.vehicleId || raw.carNumber || '').map((k) => carIndex.get(k)).find(Boolean) ||
     resolveCarForText(carIndex, raw.carNumber || '');
-  const dispatcherId = raw.dispatcherId || car?.dispatcherId || '';
+  // Поле диспетчера НИКОГДА не затирается пустым: своя запись → карточка
+  // машины → однозначное назначение из связанного плана дохода → справочник.
+  const plateLookup = plateKeys(raw.carNumber || car?.carNumber || '');
+  const directoryName = plateLookup.map((k) => directoryDispatchers?.get(k)).find(Boolean) || '';
+  const planDispatcher = plateLookup.map((k) => planDispatchers?.get(k)).find(Boolean);
+  // Своя запись → справочник «машина → диспетчер» → карточка парка → связанный
+  // план дохода → имя по id из справочника диспетчеров. Пустое значение НЕ
+  // затирает уже существующее назначение.
+  const dispatcherId = raw.dispatcherId || car?.dispatcherId || planDispatcher?.id || (directoryName ? '' : '') || '';
   const dispatcherName =
-    raw.dispatcherName || car?.dispatcherName || (dispatcherId && dir.byId.get(dispatcherId)?.name) || '';
+    raw.dispatcherName || directoryName || car?.dispatcherName || planDispatcher?.name || (dispatcherId && dir.byId.get(dispatcherId)?.name) || '';
   // Плановые границы ручного рейса: если в записи есть собственные startDate/
   // endDate (например, отредактированы в окне таймлайна), они показываются как
   // границы плана; этапы при этом не двигаются автоматически.
@@ -192,7 +267,8 @@ export function useTimelineData(): TimelineData {
   const fleetCars = useMemo(() => uniqueFleetCars(carIndex), [carIndex]);
 
   const tripsAll = useMemo(() => {
-    const manual = manualTrips.map((t) => normalizeManualTrip(t, carIndex, dir));
+    const planDispatcherIndex = buildPlanDispatcherIndex(planTrips);
+    const manual = manualTrips.map((t) => normalizeManualTrip(t, carIndex, dir, planDispatcherIndex));
     const fromPlan = planTripsToWholeTrips(planTrips, carIndex, dir, stagesStore);
     return [...manual, ...fromPlan];
   }, [manualTrips, planTrips, carIndex, dir, stagesStore]);
