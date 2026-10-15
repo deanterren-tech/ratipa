@@ -11,9 +11,13 @@
  *  · пороги правдоподобия — ОДНО место (BIRTH_* константы);
  *  · разбор и нормализация даты — через utils/dateText (единый разбор
  *    форматов портала: ISO ГГГГ-ММ-ДД, ДД/ММ/ГГГГ, ДД.ММ.ГГГГ);
- *  · выбор кандидатов «кому нужно окно» с параметром «кто смотрит»:
- *    обычный сотрудник видит только СВОИХ водителей (dispatcherId = его id),
- *    администратор реестра — всех (чтобы проверить).
+ *  · выбор кандидатов «кому нужно окно» — АДРЕСНО: только водители, чей
+ *    ответственный диспетчер (drivers/{id}.dispatcherId — стабильный id учётки
+ *    из users_list) совпадает с смотрящим. Право settings=write даёт
+ *    возможность СОХРАНИТЬ дату, но НЕ даёт видеть чужих водителей: записи без
+ *    ответственного и чужие записи в персональное окно не попадают ни у кого,
+ *    включая root/администратора — они проверяют полноту данных отдельным
+ *    административным инструментом (см. components/modules/AdminDriverDataBlock).
  *
  * Право правки — из общей системы прав портала (resolvePermission, те же
  * ключи, что открывают справочник водителей и данные авто/водителей), без
@@ -237,16 +241,18 @@ export function canEditDriverRegistry(
 }
 
 /**
- * Видит ли смотрящий чужих водителей. Да — администратор портала (то же право,
- * которым открывается раздел «Администрирование»), чтобы у него была
- * возможность проверить данные всех диспетчеров. Остальные — только своих.
+ * Ответственный диспетчер записи — СТРОГО по стабильному id: смотрящий должен
+ * быть указан в самой записи водителя (drivers/{id}.dispatcherId — id учётки из
+ * users_list), а не совпадать именем. Пустой dispatcherId = «ответственный не
+ * назначен»: запись не принадлежит никому и в персональное окно не попадает.
  */
-export function seesAllDriversInBirthPrompt(
+export function isResponsibleDispatcher(
   user: BirthPromptViewer | null | undefined,
-  rolePermissions?: Record<string, Record<string, string>>,
+  driver: BirthPromptDriverLike | null | undefined,
 ): boolean {
-  if (!user) return false;
-  return resolvePermission(user, 'admin', rolePermissions) === 'write';
+  const uid = String(user?.uid ?? '').trim();
+  const owner = String(driver?.dispatcherId ?? '').trim();
+  return !!uid && !!owner && owner === uid;
 }
 
 /* ---------------------------------------------------------------------------
@@ -290,8 +296,12 @@ function isArchivedRecord(d: BirthPromptDriverLike): boolean {
 /**
  * Водители, кому нужно окно, в порядке показа.
  *
- * Охват: администратор реестра — все записи; остальные — только свои
- * (dispatcherId = uid смотрящего). Служебные и архивные записи пропускаются.
+ * Адресность: в список попадают ТОЛЬКО записи, за которые смотрящий назначен
+ * ответственным (dispatchers/{id} — стабильный id). Право правки реестра
+ * (settings=write) — условие возможности сохранить, а не охвата: чужие записи
+ * и записи без ответственного не попадают сюда ни у кого, в том числе у
+ * root/администратора (полнота данных проверяется административным
+ * инструментом). Служебные и архивные записи пропускаются.
  */
 export function selectBirthPromptCandidates(
   drivers: BirthPromptDriverLike[] | null | undefined,
@@ -306,7 +316,6 @@ export function selectBirthPromptCandidates(
   if (!canEditDriverRegistry(viewer, opts.rolePermissions)) return [];
   if (!viewerUid) return [];
 
-  const seesAll = seesAllDriversInBirthPrompt(viewer, opts.rolePermissions);
   const carByDriver = new Map<string, string>();
   for (const c of opts.couplings || []) {
     const driverId = String(c?.driverId ?? '').trim();
@@ -320,7 +329,7 @@ export function selectBirthPromptCandidates(
     const id = String(d?.id ?? '').trim();
     if (!id) continue;
     if (isServiceRecord(d) || isArchivedRecord(d)) continue;
-    if (!seesAll && String(d?.dispatcherId ?? '').trim() !== viewerUid) continue;
+    if (!isResponsibleDispatcher(viewer, d)) continue;
     const verdict = checkBirthDate(d?.birthDate, opts.now);
     if (!verdict.needsInput || !verdict.problem) continue;
     out.push({
@@ -436,3 +445,92 @@ export const BIRTH_PROMPT_WHY =
 /** Что делает «Позже» — без обмана: окно вернётся при следующем входе. */
 export const BIRTH_PROMPT_LATER_HINT =
   '«Позже» закроет окно до следующего входа в портал — дату всё равно придётся внести.';
+
+/* ---------------------------------------------------------------------------
+ * Живая очередь окна: кандидаты из подписки реестра + что уже внесено
+ * ------------------------------------------------------------------------- */
+
+/** Состояние очереди окна на текущий момент — из живого списка кандидатов. */
+export interface BirthPromptQueueState {
+  /** Уже внесённые за этот заход окна (в порядке внесения). */
+  doneIds: string[];
+  /** Ещё не внесённые — очередь показа; первый элемент = текущий водитель. */
+  pendingIds: string[];
+  /** Полный порядок показа: внесённые впереди, затем очередь. */
+  ids: string[];
+  /** Сколько уже внесено. */
+  pos: number;
+  /** Счётчик окна: внесённые + остаток очереди. */
+  total: number;
+}
+
+/**
+ * Живая очередь окна. Кандидаты приходят из подписки реестра, поэтому очередь
+ * пересчитывается сама, без перезагрузки: внесённая дата уходит в `done`
+ * (счётчик успехов растёт), переназначение ответственного убирает запись из
+ * кандидатов (уходит у старого), вновь появившиеся записи встают в очередь.
+ * `dropped` — записи, которые в этом заходе больше не показываем (переназначили
+ * или дата уже внесена параллельно).
+ */
+export function birthPromptQueue(
+  candidates: BirthPromptCandidate[] | null | undefined,
+  state: { done?: string[] | null; dropped?: string[] | null } = {},
+): BirthPromptQueueState {
+  const doneIds = (state.done || []).map(String);
+  const doneSet = new Set(doneIds);
+  const droppedSet = new Set((state.dropped || []).map(String));
+  const pendingIds = (candidates || [])
+    .map((c) => String(c?.id ?? '').trim())
+    .filter((id) => !!id && !doneSet.has(id) && !droppedSet.has(id));
+  return {
+    doneIds,
+    pendingIds,
+    ids: [...doneIds, ...pendingIds],
+    pos: doneIds.length,
+    total: doneIds.length + pendingIds.length,
+  };
+}
+
+/* ---------------------------------------------------------------------------
+ * Проверка права ЗАПИСИ в момент сохранения
+ * ------------------------------------------------------------------------- */
+
+/** Почему запись даты сейчас запрещена (null — можно писать). */
+export type BirthSaveBlockReason =
+  | 'not-found'
+  | 'no-right'
+  | 'not-responsible'
+  | 'already-filled';
+
+/**
+ * Можно ли СЕЙЧАС записать дату по этой записи — проверка в момент сохранения,
+ * а не только при открытии окна: право правки, ответственность по стабильному
+ * id и то, что дата всё ещё требует ввода (её могли внести параллельно).
+ */
+export function birthSaveBlockReason(
+  user: BirthPromptViewer | null | undefined,
+  driver: BirthPromptDriverLike | null | undefined,
+  opts: { rolePermissions?: Record<string, Record<string, string>>; now?: Date } = {},
+): BirthSaveBlockReason | null {
+  if (!driver || !String(driver.id ?? '').trim()) return 'not-found';
+  if (!canEditDriverRegistry(user, opts.rolePermissions)) return 'no-right';
+  if (!isResponsibleDispatcher(user, driver)) return 'not-responsible';
+  if (!needsBirthDate(driver.birthDate, opts.now)) return 'already-filled';
+  return null;
+}
+
+/** Текст отказа для окна — по причине из birthSaveBlockReason. */
+export function birthSaveBlockLabel(reason: BirthSaveBlockReason): string {
+  switch (reason) {
+    case 'not-found':
+      return 'Запись водителя не найдена — окно обновится само.';
+    case 'no-right':
+      return 'Нет права правки реестра водителей — дату вносит ответственный диспетчер.';
+    case 'not-responsible':
+      return 'Водитель больше не закреплён за вами — запрос переназначен ответственному.';
+    case 'already-filled':
+      return 'Дата рождения уже внесена — запись снята с очереди.';
+    default:
+      return '';
+  }
+}

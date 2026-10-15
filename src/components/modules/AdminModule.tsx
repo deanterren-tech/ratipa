@@ -25,6 +25,7 @@ import AdminAuditLogsBlock from './AdminAuditLogsBlock';
 import AdminWelcomePhrasesBlock from './AdminWelcomePhrasesBlock';
 import AdminBroadcastBlock from './AdminBroadcastBlock';import AdminLinksBlock from './AdminLinksBlock';
 import AdminAnnouncementsBlock from './AdminAnnouncementsBlock';
+import AdminDriverDataBlock from './AdminDriverDataBlock';
 import CurrentPlanningSettingsBlock from './CurrentPlanningSettingsBlock';
 import PlanZagruzokSettingsBlock from './PlanZagruzokSettingsBlock';
 import {pdService} from '../../api';
@@ -35,7 +36,7 @@ interface AdminModuleProps {
   user: UserProfile;
 }
 
-type AdminTab = 'users' | 'broadcast' | 'links' | 'integrations' | 'planning' | 'system' | 'agent' | 'errors';
+type AdminTab = 'users' | 'driverData' | 'broadcast' | 'links' | 'integrations' | 'planning' | 'system' | 'agent' | 'errors';
 
 /** Подтверждение сохранения настроек — одинаковое на всех вкладках с инлайновой записью. */
 function SaveFlash() {
@@ -69,6 +70,8 @@ export default function AdminModule({ user }: AdminModuleProps) {
   const [searchLogs, setSearchLogs] = useState('');
   const [userListCount, setUserListCount] = useState(0);
   const [dispatchersCount, setDispatchersCount] = useState(0);
+  /** Неполные записи водителей — бейдж вкладки «Данные водителей». */
+  const [driverDataIssues, setDriverDataIssues] = useState(0);
   const [customPhrasesText, setCustomPhrasesText] = useState('');
   const [activeTab, setActiveTab] = useState<AdminTab>('users');
   useEffect(() => {
@@ -191,6 +194,7 @@ export default function AdminModule({ user }: AdminModuleProps) {
 
   const tabsList = [
     { key: 'users', label: 'Сотрудники и доступ', count: userListCount },
+    { key: 'driverData', label: 'Данные водителей', count: driverDataIssues },
     { key: 'broadcast', label: 'Сообщения', count: settings?.customPhrases?.length || 0 },
     { key: 'links', label: 'Ссылки и материалы', count: (settings?.quickLinks?.length || 0) + (settings?.externalTabs?.length || 0) },
     { key: 'integrations', label: 'Интеграции', count: integrationCount },
@@ -232,6 +236,13 @@ export default function AdminModule({ user }: AdminModuleProps) {
         <div className={activeTab === 'users' ? 'space-y-8' : 'hidden'}>
           <UserManagementBlock user={user} />
           <AdminOnlinePresenceBlock user={user} />
+        </div>
+
+        {/* ДАННЫЕ ВОДИТЕЛЕЙ: административная проверка неполных записей.
+            Персональное окно даты рождения адресное (только ответственный),
+            поэтому полноту реестра администратор проверяет здесь. */}
+        <div className={activeTab === 'driverData' ? 'space-y-8' : 'hidden'}>
+          <AdminDriverDataBlock user={user} onIssueCountChange={setDriverDataIssues} />
         </div>
 
         {/* СИСТЕМА: состояние базы, порядок меню, сессии, журнал действий */}

@@ -1,20 +1,32 @@
 /**
- * Окно «Дата рождения водителя» — диспетчер вносит правильную дату рождения
- * своего водителя при входе в портал.
+ * Окно «Дата рождения водителя» — ответственный диспетчер вносит правильную дату
+ * рождения СВОЕГО водителя при входе в портал.
  *
- * Правила (заказчик): дата рождения нужна для документов; если у водителя,
- * находящегося в ведении диспетчера, дата отсутствует или неправдоподобна —
- * окно возникает при входе и дату нужно внести. Запись идёт ТОЛЬКО в поле
- * `birthDate` ветки `drivers` — существующим путём (dbService.saveDriver,
- * он же чинит остальные поля записи и остальные формы не затираются).
+ * Адресность (заказчик): окно показывается только тому диспетчеру, который
+ * назначен ответственным за конкретного водителя — строго по стабильному id
+ * (drivers/{id}.dispatcherId = id учётки из users_list). Право settings=write
+ * даёт возможность СОХРАНИТЬ дату, но не даёт видеть чужих: чужие записи и
+ * записи без ответственного не попадают ни в окно, ни в счётчик ни у кого,
+ * включая root/администратора. Полноту данных администратор проверяет отдельным
+ * инструментом (Администрирование → «Данные водителей»).
+ *
+ * Запись идёт ТОЛЬКО в поле `birthDate` ветки `drivers` — существующим путём
+ * (dbService.saveDriver, он же чинит остальные поля записи и остальные формы не
+ * затираются).
  *
  * Поведение окна:
  *  · один раз за запуск портала на пользователя (localStorage-ключ
  *    ratipa_birth_prompt_<uid> + метка запуска — паттерн анонсов);
+ *  · очередь ЖИВАЯ: приходит из подписки реестра, поэтому после сохранения
+ *    даты (и при переназначении ответственного) список и счётчик обновляются
+ *    без перезагрузки — запись уходит у старого диспетчера и появляется у
+ *    нового, если тот ещё не видел окно в этой сессии;
  *  · «Позже» закрывает до следующего входа и об этом честно написано;
  *  · не появляется, пока открыто другое окно или раздел ещё грузится;
  *  · несколько водителей — по одному на экран с прогрессом «1 из 3»;
- *  · при ошибке записи окно не закрывается, дата не считается внесённой.
+ *  · при ошибке записи окно не закрывается, дата не считается внесённой;
+ *  · при сохранении перепроверяются право правки, ответственность по стабильному
+ *    id и то, что дата всё ещё требует ввода (её могли внести параллельно).
  */
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {createPortal} from 'react-dom'
@@ -29,18 +41,21 @@ import {displayDate, dateInputValue, toISODate} from '../../utils/dateText'
 import {openDatePicker} from '../../utils/openDatePicker'
 import {driverFullName, primaryPhone, type DriverRecord} from '../../utils/driverRegistry'
 import {
+  birthPromptQueue,
+  birthPromptTitle,
+  birthPromptProgress,
+  birthSaveBlockLabel,
+  birthSaveBlockReason,
   checkBirthDate,
   markBirthPromptShown,
   selectBirthPromptCandidates,
   wasBirthPromptShown,
-  birthPromptTitle,
-  birthPromptProgress,
   BIRTH_PROMPT_WHY,
   BIRTH_PROMPT_LATER_HINT,
   type BirthPromptCandidate,
 } from '../../utils/driverBirthPrompt'
 
-/** Сцепка в объёме, нужном подписи «машина» (formа — как в справочнике водителей). */
+/** Сцепка в объёме, нужном подписи «машина» (форма — как в справочнике водителей). */
 interface CouplingLike {
   driverId?: string
   carNumber?: string
@@ -64,10 +79,10 @@ export default function DriverBirthPrompt({
   const [driversLoaded, setDriversLoaded] = useState(false)
   const [couplings, setCouplings] = useState<CouplingLike[]>([])
 
-  /** Открыто ли окно; очередь водителей (id) на момент открытия и внесённые даты. */
+  /** Открыто ли окно; что уже внесено и что снято с очереди в этом заходе. */
   const [open, setOpen] = useState(false)
-  const [queue, setQueue] = useState<string[]>([])
   const [done, setDone] = useState<string[]>([])
+  const [dropped, setDropped] = useState<string[]>([])
   /** Значение поля даты (ISO) и текст ошибки — ошибка НЕ закрывает окно. */
   const [value, setValue] = useState('')
   const [error, setError] = useState('')
@@ -98,15 +113,23 @@ export default function DriverBirthPrompt({
     [user?.uid, user?.role, user?.permissions, user?.customPermissions, user?.name],
   )
 
-  /** Кому нужно окно: свои водители (диспетчер) или все (администратор реестра). */
+  /**
+   * Кому нужно окно: только водители, где смотрящий — ответственный
+   * (dispatcherId = его id). Список живой — из подписки реестра.
+   */
   const candidates = useMemo(
     () => selectBirthPromptCandidates(drivers, viewer, {rolePermissions, couplings}),
     [drivers, viewer, rolePermissions, couplings],
   )
 
+  /** Живая очередь и счётчик окна — пересчитываются из подписки, без перезагрузки. */
+  const queue = useMemo(() => birthPromptQueue(candidates, {done, dropped}), [candidates, done, dropped])
+
   /**
    * Автозапуск при входе: один раз за запуск портала, после загрузки данных и
-   * только когда экран свободен (другое окно/раздел не перебиваем).
+   * только когда экран свободен (другое окно/раздел не перебиваем). Сюда же
+   * попадает случай «запрос переназначили на меня в этой сессии»: кандидаты
+   * приходят из подписки, окно поднимается без перезагрузки.
    */
   useEffect(() => {
     if (!user?.uid || !driversLoaded || openedRef.current || open) return;
@@ -127,8 +150,8 @@ export default function DriverBirthPrompt({
       }
       if (otherDialog || loading || splash) return; // экран занят — уступаем до следующего входа
       openedRef.current = true
-      setQueue(candidates.map((c) => c.id))
       setDone([])
+      setDropped([])
       setValue('')
       setError('')
       markBirthPromptShown(user.uid)
@@ -139,10 +162,22 @@ export default function DriverBirthPrompt({
     // candidates пересчитывается подпиской — повтор эффекта гасит openedRef
   }, [user?.uid, driversLoaded, candidates, open])
 
+  /**
+   * Очередь опустела (всё внесено или записи переназначены) — окно закрываем.
+   * Счётчик при этом обновляется сам: он собран из живой очереди.
+   */
+  useEffect(() => {
+    if (!open || saving) return;
+    if (queue.pendingIds.length > 0) return;
+    setOpen(false);
+    setError('');
+    setValue('');
+  }, [open, saving, queue.pendingIds.length])
+
   /** Текущий водитель очереди: свежие данные берём из подписки реестра. */
-  const pendingIds = queue.filter((id) => !done.includes(id))
-  const currentId = pendingIds[0] || ''
-  const pos = queue.length - pendingIds.length
+  const currentId = queue.pendingIds[0] || ''
+  const pos = queue.pos
+  const total = Math.max(queue.total, 1)
   const candidate: BirthPromptCandidate | undefined = candidates.find((c) => c.id === currentId)
   const driver = drivers.find((d) => String(d.id) === currentId) || null
   const driverName = candidate?.name || driverFullName(driver) || 'Водитель'
@@ -159,9 +194,28 @@ export default function DriverBirthPrompt({
     setValue('')
   }, [])
 
-  /** Сохранить дату — единственным путём записи водителя (dbService.saveDriver). */
+  /** Снять запись с очереди в этом заходе (переназначили / дата уже внесена). */
+  const dropCurrent = useCallback((id: string) => {
+    setDropped((prev) => (prev.includes(id) ? prev : [...prev, id]))
+  }, [])
+
+  /**
+   * Сохранить дату — единственным путём записи водителя (dbService.saveDriver).
+   * Перед записью перепроверяем: право правки, ответственность по стабильному
+   * id и что дата всё ещё требует ввода (её могли внести параллельно).
+   */
   const save = useCallback(async () => {
     if (savingRef.current || !currentId) return
+    const fresh = drivers.find((d) => String(d.id) === currentId) || null
+    const block = birthSaveBlockReason(viewer, fresh, {rolePermissions})
+    if (block) {
+      // Запись больше не наша забота: снимаем с очереди и честно говорим почему.
+      dropCurrent(currentId)
+      const msg = birthSaveBlockLabel(block)
+      setError(msg)
+      if (block === 'not-responsible' || block === 'already-filled') toast(msg, block === 'already-filled' ? 'success' : 'error')
+      return
+    }
     const verdict = checkBirthDate(value)
     if (verdict.needsInput || !verdict.iso) {
       setError(verdict.reason || 'Внесите дату рождения в виде ДД/ММ/ГГГГ.')
@@ -184,11 +238,10 @@ export default function DriverBirthPrompt({
         user?.role || 'dispatcher',
       )
       toast(`Дата рождения сохранена: ${driverName}`, 'success')
-      const nextDone = [...done, currentId]
-      setDone(nextDone)
+      setDone((prev) => (prev.includes(currentId) ? prev : [...prev, currentId]))
       setValue('')
-      const left = queue.filter((id) => !nextDone.includes(id))
-      if (left.length === 0) setOpen(false)
+      // Очередь и счётчик обновляются сами: подписка реестра уберёт запись из
+      // кандидатов, окно закроется, когда очередь опустеет.
     } catch (e) {
       // Окно остаётся открытым, дата НЕ считается внесённой.
       const msg = e instanceof Error ? e.message : String(e)
@@ -198,11 +251,11 @@ export default function DriverBirthPrompt({
       savingRef.current = false
       setSaving(false)
     }
-  }, [currentId, value, done, queue, driverName, toast, user?.name, user?.uid, user?.role])
+  }, [currentId, value, drivers, viewer, rolePermissions, driverName, toast, user?.name, user?.uid, user?.role, dropCurrent])
 
-  if (!open) return null
+  // Пока очередь пуста, показывать нечего (окно закрывается эффектом выше).
+  if (!open || !currentId) return null
 
-  const total = Math.max(queue.length, 1)
   const currentVerdict = checkBirthDate(value)
 
   return createPortal(
@@ -233,7 +286,7 @@ export default function DriverBirthPrompt({
             {birthPromptProgress(pos, total)}
           </span>
           <div className="flex items-center gap-1" aria-hidden="true">
-            {queue.map((id, i) => (
+            {queue.ids.map((id, i) => (
               <span
                 key={id}
                 className={`h-1.5 rounded-full transition-colors ${i <= pos ? 'w-6 bg-[var(--accent)]' : 'w-3 bg-[#E5E7EB]'}`}

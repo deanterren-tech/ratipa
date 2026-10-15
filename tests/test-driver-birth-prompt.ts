@@ -21,21 +21,29 @@ import {
   BIRTH_YEAR_MIN,
   birthDateProblemLabel,
   birthPromptProgress,
+  birthPromptQueue,
   birthPromptStorageKey,
   birthPromptTitle,
+  birthSaveBlockLabel,
+  birthSaveBlockReason,
   canEditDriverRegistry,
   checkBirthDate,
+  isResponsibleDispatcher,
   markBirthPromptShown,
   needsBirthDate,
   normalizeBirthDate,
   selectBirthPromptCandidates,
-  seesAllDriversInBirthPrompt,
   todayISO,
   wasBirthPromptShown,
   type BirthPromptDriverLike,
   type BirthPromptStorage,
   type BirthPromptViewer,
 } from '../src/utils/driverBirthPrompt.ts';
+import {
+  buildDriverDataQualityRows,
+  driverDataIssueLabel,
+} from '../src/utils/driverDataQuality.ts';
+import type { DriverRecord } from '../src/utils/driverRegistry.ts';
 
 let checks = 0;
 const fails: string[] = [];
@@ -138,10 +146,14 @@ ok(canEditDriverRegistry(viewer({ role: 'dispatcher' }), { dispatcher: { setting
 // Явные права роли из настроек имеют приоритет над базовыми.
 ok(!canEditDriverRegistry(viewer({ role: 'dispatcher' }), { dispatcher: { settings: 'none', vehicleDriverData: 'none' } }), 'права роли из настроек: settings=none — окна нет');
 ok(canEditDriverRegistry(viewer({ role: 'logist' }), { logist: { settings: 'write' } }), 'права роли из настроек: settings=write — окно есть');
-ok(seesAllDriversInBirthPrompt(viewer({ role: 'root_admin' })), 'root_admin видит всех');
-ok(seesAllDriversInBirthPrompt(viewer({ role: 'admin' })), 'администратор реестра видит всех');
-ok(!seesAllDriversInBirthPrompt(viewer({ role: 'dispatcher', permissions: { settings: 'write' } })), 'диспетчер видит только своих');
-ok(!seesAllDriversInBirthPrompt(null), 'без профиля — охвата нет');
+// Адресность: ответственный — СТРОГО по стабильному id записи (drivers.dispatcherId),
+// не по имени и не по праву: settings=write даёт лишь возможность СОХРАНИТЬ.
+ok(isResponsibleDispatcher(viewer({ uid: 'u-1', role: 'dispatcher' }), { id: 'd', dispatcherId: 'u-1' }), 'ответственный совпадает по id');
+ok(!isResponsibleDispatcher(viewer({ uid: 'u-1', name: 'Матвей', role: 'dispatcher' }), { id: 'd', dispatcherId: 'u-2', dispatcherName: 'Матвей' }), 'совпадение по имени — не ответственный (только id)');
+ok(!isResponsibleDispatcher(viewer({ uid: 'u-1', role: 'dispatcher' }), { id: 'd', dispatcherId: '' }), 'пустой ответственный — никто не ответственный');
+ok(!isResponsibleDispatcher(viewer({ uid: '', role: 'dispatcher' }), { id: 'd', dispatcherId: '' }), 'без uid ответственного нет');
+ok(!isResponsibleDispatcher(null, { id: 'd', dispatcherId: 'u-1' }), 'без профиля ответственного нет');
+ok(isResponsibleDispatcher(viewer({ uid: 'root-1', role: 'root_admin' }), { id: 'd', dispatcherId: 'root-1' }), 'root_admin — ответственный там, где прямо назначен (по id)');
 
 /* ── 3. Выбор кандидатов ────────────────────────────────────────────────── */
 
@@ -166,7 +178,7 @@ eq(own.find((c) => c.id === 'd-bad-year')?.current, '01.01.1930', 'текуще�
 eq(own.find((c) => c.id === 'd-phones')?.phone, '+375 22', 'основной телефон из phones');
 eq(own.find((c) => c.id === 'd-empty')?.car, '', 'без сцепки машины нет');
 ok(!own.some((c) => c.id === 'd-foreign'), 'чужой водитель в список не попадает');
-ok(!own.some((c) => c.id === 'd-orphan'), 'водитель без диспетчера — только для администратора');
+ok(!own.some((c) => c.id === 'd-orphan'), 'водитель без ответственного в окно не попадает');
 ok(!own.some((c) => c.id === 'd-archived'), 'архивная запись не мешает диспетчеру');
 ok(!own.some((c) => c.id === 'd-service'), 'служебная запись («без В.») не человек');
 ok(!own.some((c) => c.id === 'd-ok'), 'правдоподобная дата в окно не попадает');
@@ -179,12 +191,38 @@ const withCar = selectBirthPromptCandidates(DISP, dispatcherViewer, { now: NOW, 
 eq(withCar.find((c) => c.id === 'd-empty')?.car, 'АА1234-5', 'машина берётся из сцепки (carNumber)');
 eq(withCar.find((c) => c.id === 'd-phones')?.car, 'ВВ0001-2', 'машина берётся из сцепки (vehicleNumbers)');
 
-// Право есть, но водителей без диспетчера у диспетчера нет.
-const all = selectBirthPromptCandidates(DISP, viewer({ role: 'root_admin', uid: 'root-1', permissions: {} }), { now: NOW });
-eq(all.length, 6, 'администратор видит все записи, кроме служебной и архивной');
-ok(all.some((c) => c.id === 'd-foreign') && all.some((c) => c.id === 'd-orphan'), 'администратору видны и «чужие», и записи без диспетчера');
-const adminOwn = selectBirthPromptCandidates(DISP, viewer({ role: 'admin', uid: 'adm-1', permissions: {} }), { now: NOW });
-eq(adminOwn.length, 6, 'роль admin — охват «все записи» (для проверки данных)');
+// Адресность для ВСЕХ ролей: чужие записи и записи без ответственного не
+// попадают в персональное окно ни у кого, включая root/администратора —
+// они проверяют полноту данных отдельным административным инструментом.
+const rootAll = selectBirthPromptCandidates(DISP, viewer({ role: 'root_admin', uid: 'root-1', permissions: {} }), { now: NOW });
+eq(rootAll.length, 0, 'root_admin без назначенных водителей окна не получает');
+ok(!rootAll.some((c) => c.id === 'd-foreign') && !rootAll.some((c) => c.id === 'd-orphan'), 'чужие и записи без ответственного не попадают и к root_admin');
+const adminAll = selectBirthPromptCandidates(DISP, viewer({ role: 'admin', uid: 'adm-1', permissions: {} }), { now: NOW });
+eq(adminAll.length, 0, 'роль admin без назначенных водителей окна не получает');
+// Право settings=write — возможность СОХРАНИТЬ, а не охват: даже с полными
+// правами (admin/vehicleDriverData=write) диспетчер видит только свои записи.
+const wideRights = viewer({ role: 'dispatcher', uid: 'u-1', permissions: { settings: 'write' }, customPermissions: { admin: 'write', vehicleDriverData: 'write' } });
+const wideOwn = selectBirthPromptCandidates(DISP, wideRights, { now: NOW });
+eq(wideOwn.length, 4, 'settings=write не расширяет охват — только свои записи по id');
+ok(!wideOwn.some((c) => c.id === 'd-foreign') && !wideOwn.some((c) => c.id === 'd-orphan'), 'права не дают видеть чужих и записи без ответственного');
+// root_admin — ответственный по id: видит ровно свой водитель без даты (адресность, не роль).
+const rootOwn = selectBirthPromptCandidates(
+  [...DISP, driver({ id: 'd-root', name: 'Яров Ярослав', birthDate: '', dispatcherId: 'root-1' })],
+  viewer({ role: 'root_admin', uid: 'root-1', permissions: {} }),
+  { now: NOW },
+);
+eq(rootOwn.length, 1, 'root_admin как ответственный видит только своего водителя');
+eq(rootOwn[0]?.id, 'd-root', 'адресность root_admin — по id, а не по роли');
+// Переназначение ответственного пересчитывает очередь: у старого запись исчезает,
+// у нового — появляется (это же повторяет живая подписка в окне).
+const reassigned = DISP.map((d) => (d.id === 'd-empty' ? { ...d, dispatcherId: 'u-2' } : d));
+const afterReassignA = selectBirthPromptCandidates(reassigned, dispatcherViewer, { now: NOW });
+ok(!afterReassignA.some((c) => c.id === 'd-empty'), 'переназначение: запись ушла у старого ответственного');
+const viewerB = viewer({ role: 'dispatcher', uid: 'u-2', permissions: { settings: 'write' } });
+const afterReassignB = selectBirthPromptCandidates(reassigned, viewerB, { now: NOW });
+ok(afterReassignB.some((c) => c.id === 'd-empty'), 'переназначение: запись пришла к новому ответственному');
+ok(afterReassignB.some((c) => c.id === 'd-foreign') && !afterReassignB.some((c) => c.id === 'd-phones'), 'у нового ответственного — только его записи (u-2)');
+ok(!afterReassignB.some((c) => c.id === 'd-orphan'), 'запись без ответственного не приходит никому и после переназначений');
 
 // Без права правки окно не поднимается вообще.
 eq(selectBirthPromptCandidates(DISP, viewer({ role: 'mechanic', uid: 'u-1', permissions: { settings: 'none' } }), { now: NOW }).length, 0, 'механик кандидатов не видит');
@@ -222,6 +260,102 @@ eq(birthPromptProgress(2, 3), '3 из 3', 'прогресс «3 из 3»');
 eq(birthPromptProgress(0, 1), '1 из 1', 'один водитель — «1 из 1»');
 eq(birthPromptTitle(1), 'Дата рождения водителя', 'заголовок для одного');
 eq(birthPromptTitle(3), 'Даты рождения водителей', 'заголовок для списка');
+
+/* ── 6. Живая очередь и счётчик окна ────────────────────────────────────── */
+
+// Очередь собирается из живых кандидатов (подписка реестра): счётчик окна =
+// внесённые + остаток очереди; после сохранения прогресс растёт без перезагрузки.
+const q0 = birthPromptQueue(own, {});
+eq(q0.total, own.length, 'счётчик = длина очереди');
+eq(q0.pos, 0, 'до сохранений прогресс с нуля');
+eq(q0.pendingIds[0], 'd-absent', 'первый в очереди — первый по ФИО');
+eq(q0.ids.length, own.length, 'сегментов прогресса — по числу записей');
+
+const q1 = birthPromptQueue(own, { done: ['d-absent'] });
+eq(q1.pos, 1, 'после сохранения прогресс сдвинулся');
+eq(q1.total, own.length, 'счётчик эпизода не уменьшился после сохранения');
+eq(q1.pendingIds[0], 'd-empty', 'очередь перешла к следующей записи');
+
+// Подписка реестра убрала запись из кандидатов — успех остаётся учтённым,
+// очередь и счётчик не «прыгают назад».
+const q2 = birthPromptQueue(own.filter((c) => c.id !== 'd-absent'), { done: ['d-absent'] });
+eq(q2.total, own.length, 'подписка убрала запись — счётчик успехов сохранился');
+eq(q2.pendingIds.length, own.length - 1, 'в очереди на одну запись меньше');
+ok(!q2.pendingIds.includes('d-absent'), 'внесённая запись не возвращается в очередь');
+
+// Переназначение ответственного в живых данных: запись снята (dropped) или
+// ушла из кандидатов — в счётчике её больше нет.
+const q3 = birthPromptQueue(own, { dropped: ['d-absent'] });
+eq(q3.total, own.length - 1, 'снятая с очереди запись уходит из счётчика');
+ok(!q3.pendingIds.includes('d-absent'), 'снятая запись не показывается');
+const q4 = birthPromptQueue(own.filter((c) => c.id !== 'd-bad-year'), {});
+eq(q4.total, own.length - 1, 'переназначенная запись убирает счётчик у старого');
+const q5 = birthPromptQueue([...own.filter((c) => c.id !== 'd-bad-year'), { ...own.find((c) => c.id === 'd-bad-year')!, id: 'd-moved' }], {});
+eq(q5.total, own.length, 'у нового ответственного счётчик вырос на ту же запись');
+
+// Полная очистка очереди — окно закрывается (в компоненте это эффект).
+const q6 = birthPromptQueue([], { done: [] });
+eq(q6.total, 0, 'пустая очередь — счётчик 0');
+eq(q6.pendingIds.length, 0, 'пустая очередь — показывать нечего');
+
+/* ── 7. Проверка права ЗАПИСИ в момент сохранения ───────────────────────── */
+
+eq(birthSaveBlockReason(dispatcherViewer, driver({ id: 'd-1', birthDate: '', dispatcherId: 'u-1' }), { now: NOW }), null, 'свой водитель без даты — запись разрешена');
+eq(birthSaveBlockReason(dispatcherViewer, driver({ id: 'd-2', birthDate: '', dispatcherId: 'u-2' }), { now: NOW }), 'not-responsible', 'чужой водитель — запись запрещена (переназначен)');
+eq(birthSaveBlockReason(dispatcherViewer, driver({ id: 'd-3', birthDate: '1980-01-01', dispatcherId: 'u-1' }), { now: NOW }), 'already-filled', 'дата уже внесена параллельно — повторно не пишем');
+eq(birthSaveBlockReason(dispatcherViewer, driver({ id: 'd-4', birthDate: '', dispatcherId: undefined }), { now: NOW }), 'not-responsible', 'без ответственного запись запрещена');
+eq(birthSaveBlockReason(viewer({ role: 'accountant', uid: 'u-9' }), driver({ id: 'd-5', birthDate: '', dispatcherId: 'u-9' }), { now: NOW }), 'no-right', 'без права settings=write запись запрещена даже своему');
+eq(birthSaveBlockReason(dispatcherViewer, null, { now: NOW }), 'not-found', 'запись исчезла — запись запрещена');
+eq(birthSaveBlockReason(dispatcherViewer, driver({ id: 'd-6', birthDate: '01.01.1930', dispatcherId: 'u-1' }), { now: NOW }), null, 'неправдоподобная дата своего водителя — перезапись разрешена');
+ok(birthSaveBlockLabel('not-responsible').includes('переназначен'), 'подпись отказа: переназначение');
+ok(birthSaveBlockLabel('already-filled').includes('уже внесена'), 'подпись отказа: дата уже внесена');
+ok(birthSaveBlockLabel('no-right').length > 0 && birthSaveBlockLabel('not-found').length > 0, 'подписи отказов не пусты');
+
+/* ── 8. Административная проверка неполных данных ───────────────────────── */
+
+// Персональное окно чужие записи не показывает — полноту реестра администратор
+// проверяет отдельным инструментом (строки ниже — его чистый слой).
+const USERS = [
+  { uid: 'u-1', name: 'Виталий Козловский', role: 'dispatcher' },
+  { uid: 'u-2', name: 'Матвей Солодкий', role: 'dispatcher' },
+];
+const QFIX: DriverRecord[] = [
+  { id: 'q-1', lastNameRu: 'Альфа', firstNameRu: 'А', dispatcherId: 'u-1', birthDate: '' },
+  { id: 'q-2', lastNameRu: 'Бета', firstNameRu: 'Б', dispatcherId: '', dispatcherName: 'Матвей Солодкий', birthDate: '1980-01-01' },
+  { id: 'q-3', lastNameRu: 'Гамма', firstNameRu: 'Г', dispatcherId: '', birthDate: '' },
+  { id: 'q-4', lastNameRu: 'Дельта', firstNameRu: 'Д', dispatcherId: 'u-9', birthDate: '1980-01-01' },
+  { id: 'q-5', lastNameRu: 'Омега', firstNameRu: 'О', dispatcherId: 'u-2', birthDate: '14/07/1991' },
+  { id: 'q-6', lastNameRu: 'без В.', firstNameRu: '', dispatcherId: '', birthDate: '' },
+  { id: 'q-7', lastNameRu: 'Архив', firstNameRu: 'А', dispatcherId: '', birthDate: '', archived: true },
+];
+const qcouplings = [{ driverId: 'q-1', carNumber: 'АА0001-1' }];
+const rows = buildDriverDataQualityRows(QFIX, { users: USERS, couplings: qcouplings, now: NOW });
+eq(rows.length, 4, 'в проверку попадают только неполные записи (4 из 7)');
+eq(rows.map((r) => r.id).join(','), 'q-1,q-2,q-3,q-4', 'порядок — по ФИО (ru), служебные/архивные мимо');
+eq(rows.filter((r) => r.issues.includes('birth-date')).length, 2, 'счётчик «без даты рождения» = 2');
+eq(rows.filter((r) => r.issues.includes('dispatcher') || r.issues.includes('dispatcher-unknown')).length, 3, 'счётчик «без ответственного» = 3');
+const rowQ1 = rows.find((r) => r.id === 'q-1');
+eq(rowQ1?.dispatcherName, 'Виталий Козловский', 'ответственный разрешается по стабильному id');
+eq(rowQ1?.car, 'АА0001-1', 'машина берётся из сцепки');
+const rowQ2 = rows.find((r) => r.id === 'q-2');
+eq(rowQ2?.dispatcherId, '', 'без id ответственный не назначен, даже если в записи есть имя');
+eq(rowQ2?.dispatcherText, 'Матвей Солодкий', 'устаревший текст ответственного виден как подсказка');
+ok(rowQ2?.issues.includes('dispatcher') === true, 'причина: ответственный не назначен');
+const rowQ3 = rows.find((r) => r.id === 'q-3');
+ok(rowQ3?.issues.includes('birth-date') && rowQ3?.issues.includes('dispatcher'), 'у записи могут быть обе проблемы сразу');
+ok((rowQ3?.birthReason || '').includes('не заполнена'), 'причина по дате берётся из общих правил');
+const rowQ4 = rows.find((r) => r.id === 'q-4');
+ok(rowQ4?.issues.includes('dispatcher-unknown') === true, 'id без учётки в users_list — битая связь');
+eq(rowQ4?.dispatcherName, '', 'имя не выдумывается для неизвестной учётки');
+ok(!rows.some((r) => r.id === 'q-5'), 'полная запись в проверку не попадает');
+ok(!rows.some((r) => r.id === 'q-6') && !rows.some((r) => r.id === 'q-7'), 'служебная и архивная записи пропускаются');
+// Пока список учёток не загружен, «неизвестная учётка» не выдумывается.
+const rowsNoUsers = buildDriverDataQualityRows(QFIX, { now: NOW });
+ok(!rowsNoUsers.some((r) => r.id === 'q-4'), 'без загруженных учёток связь не считается битой');
+ok(driverDataIssueLabel('birth-date') === 'Дата рождения', 'подпись проблемы: дата рождения');
+ok(driverDataIssueLabel('dispatcher') === 'Ответственный не назначен', 'подпись проблемы: нет ответственного');
+ok(driverDataIssueLabel('dispatcher-unknown').includes('учётка'), 'подпись проблемы: битая связь');
+eq(buildDriverDataQualityRows(null, { users: USERS }).length, 0, 'пустой реестр — пустая проверка');
 
 /* ── Итог ───────────────────────────────────────────────────────────────── */
 
