@@ -72,7 +72,13 @@ export const carKeyOf = (carId: string | null | undefined, carNumber: string): s
   carId ? `car:${carId}` : `plate:${plateKeyOf(carNumber)}`;
 
 /** Ключ номера для сопоставления (учитывает раскладку кириллица/латиница). */
-export const plateKeyOf = (s: unknown): string => keyVariants(s)[0] || '';
+export const plateKeyOf = (s: unknown): string => {
+  // Канонический вариант номера: латиница (в данных встречаются «АО 8806-7»,
+  // «AO 8806-7» и «АО8806-7» — без сведения раскладок одна машина давала две
+  // строки таймлайна и попадала в две группы диспетчеров).
+  const variants = keyVariants(s);
+  return variants[1] || variants[0] || '';
+};
 
 /** Индекс автомобилей по вариантам номера и id (для резервного поиска). */
 export const buildCarIndex = (couplingsFlat: Array<Record<string, unknown>>): Map<string, CarRef> => {

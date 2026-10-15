@@ -429,7 +429,7 @@ const buildRows = (
   };
   tripCandidates.forEach((t) => ensureCar(t.carKey, t.carNumber, '', t.dispatcherId, t.dispatcherName));
   baseCandidates.forEach((p) => ensureCar(p.carKey, p.carNumber, p.carId, p.dispatcherId, p.dispatcherName));
-  fleetCars.forEach((c) => ensureCar(`car:${c.carId || c.carNumber}`, c.carNumber, c.carId, c.dispatcherId, c.dispatcherName));
+  fleetCars.forEach((c) => ensureCar(c.carId ? `car:${c.carId}` : `plate:${plateKeyOf(c.carNumber)}`, c.carNumber, c.carId, c.dispatcherId, c.dispatcherName));
 
   const visible = (a: number, b: number): boolean => b >= vs && a <= ve;
 
@@ -733,7 +733,15 @@ const buildRows = (
       .map((t) => tripRangeOf(t))
       .filter((r): r is NonNullable<typeof r> => !!r);
     // Текущее назначение (справочник сцепок) — основа группировки во «Все».
-    const current = carCurrentDispatcher.get(car.carKey) || null;
+    // Текущий диспетчер: справочник сцепок → диспетчер активного (неархивного)
+    // рейса машины → значение карточки. Группировка «Все» идёт по нему, поэтому
+    // одна машина не распадается на две группы из-за истории.
+    const activeTripDispatcher = myTrips.find((t) => !t.archived && (t.dispatcherId || t.dispatcherName)) || null;
+    const current =
+      carCurrentDispatcher.get(car.carKey) ||
+      (activeTripDispatcher && (activeTripDispatcher.dispatcherId || activeTripDispatcher.dispatcherName)
+        ? { id: activeTripDispatcher.dispatcherId, name: activeTripDispatcher.dispatcherName }
+        : null);
     rows.push({
       carKey: car.carKey,
       carNumber: car.carNumber,
