@@ -12,6 +12,7 @@ import DozvolaPermitModal from "./DozvolaPermitModal";
 import CouplingPicker from "../../common/CouplingPicker";
 import { BackButton } from "../../../ui/components";
 import DozvolaExpirySummary from "./DozvolaExpirySummary";
+import { filterDozvolaItems, isRegistryFilterCompatible } from './dozvolaRegistryFilter';
 
 const canWriteRTDB = () => useFirebase;
 
@@ -709,6 +710,9 @@ const pickType = (type: string) => {
 const pickStatus = (status: string) => {
   const next = selectedStatus === status ? 'all' : status;
   setSelectedStatus(next);
+  // Несовместимый фильтр «Статус» (например, «В офисе» + архив) не должен
+  // прятать содержимое новой вкладки — сбрасываем сразу, тем же кликом.
+  if (!isRegistryFilterCompatible(selectedCountryFilter, next)) setSelectedCountryFilter('all');
   pushFilters(selectedType, next);
 };
 
@@ -1240,10 +1244,19 @@ const setCurrentSelectedTab = (type: string) => {
       .join(' · ');
   }, [selectedItems, dozvolsData]);
 
+  // Смена вкладки/уточнения/фильтров/поиска — это новая выборка: выделение строк
+  // предыдущей не переносится (иначе массовые действия затронули бы скрытые записи).
   useEffect(() => {
     setSelectedItems(new Set());
     setBulkResult(null);
-  }, [currentSelectedTab, selectedStatus, lostExpiredFilter, searchQuery, selectedCountryFilter]);
+  }, [currentSelectedTab, selectedStatus, lostExpiredFilter, selectedStatusFilter, searchQuery, selectedCountryFilter]);
+
+  // Фильтр «Статус» (выпадающий список) несовместимый с вкладкой (например,
+  // «В офисе» + архив) сбрасывается, совместимый — сохраняется. Действует и при
+  // входе по URL: прямая ссылка, «Назад»/«Вперёд» браузера.
+  useEffect(() => {
+    setSelectedCountryFilter((prev) => (isRegistryFilterCompatible(prev, selectedStatus) ? prev : 'all'));
+  }, [selectedStatus]);
 
   // Местонахождение и статус всегда меняются согласованно, одной операцией:
   //  - выбран автомобиль/сцепка → «В рейсе», транспорт сохраняется;
@@ -1432,86 +1445,19 @@ const setCurrentSelectedTab = (type: string) => {
     };
   }, [dozvolsData, selectedType]);
 
-  const items = useMemo(() => {
-    let list = rawItems;
-    if (selectedStatus === "archive") {
-      list = list.filter((i) => i.status === "used");
-    } else if (selectedStatus === "office_returns") {
-      list = list.filter((i) => i.status === "office_return");
-    } else if (selectedStatus === "lost_expired") {
-      // Одна вкладка на два разных статуса — сами статусы в данных сохраняются
-      list = list.filter((i) => i.status === "lost" || i.status === "expired");
-      if (lostExpiredFilter !== 'all') {
-        list = list.filter((i) => i.status === lostExpiredFilter);
-      }
-    } else if (selectedStatus === "expiring") {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      list = list.filter((i) => {
-        if (!i.expiryDate) return false;
-        const expiry = new Date(i.expiryDate);
-        if (isNaN(expiry.getTime())) return false;
-        expiry.setHours(0, 0, 0, 0);
-        const diffDays = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        return diffDays <= 30;
-      });
-    } else {
-      list = list.filter(
-        (i) =>
-          i.status !== "used" &&
-          i.status !== "expired" &&
-          i.status !== "office_return",
-      );
-    }
-
-    if (selectedCountryFilter !== "all") {
-      if (selectedCountryFilter === "copy_yes")
-        list = list.filter(
-          (i) =>
-            i.isCopy === true &&
-            i.status !== "office_return" &&
-            i.status !== "used" &&
-            i.status !== "expired",
-        );
-      else if (selectedCountryFilter === "copy_no")
-        list = list.filter(
-          (i) =>
-            i.isCopy === false ||
-            i.status === "office_return" ||
-            i.status === "used" ||
-            i.status === "expired",
-        );
-      else list = list.filter((i) => i.status === selectedCountryFilter);
-    }
-
-    if (selectedStatusFilter !== "all") {
-      list = list.filter((i) => i.status === selectedStatusFilter);
-    }
-
-    if (searchQuery) {
-      const s = searchQuery.toLowerCase();
-      list = list.filter(
-        (i) =>
-          (i.number || i.permitNumber || "").toLowerCase().includes(s) ||
-          (i.car || i.assignedVehicle || "").toLowerCase().includes(s) ||
-          (i.comment || i.comments || "").toLowerCase().includes(s) ||
-          (i.type || "").toLowerCase().includes(s),
-      );
-    }
-
-    const sorted = [...list];
-    sorted.sort((a, b) => {
-      let valA = a[currentSortField] || "";
-      let valB = b[currentSortField] || "";
-      if (typeof valA === "string") valA = valA.toUpperCase();
-      if (typeof valB === "string") valB = valB.toUpperCase();
-      if (valA < valB) return currentSortOrder === "asc" ? -1 : 1;
-      if (valA > valB) return currentSortOrder === "asc" ? 1 : -1;
-      return 0;
-    });
-
-    return sorted;
-  }, [rawItems, currentSelectedTab, selectedCountryFilter, selectedStatusFilter, searchQuery, currentSortField, currentSortOrder]);
+  // Строки таблицы. ЕДИНЫЙ путь: вкладка статуса и все фильтры входят и в
+  // вычисление, и в зависимости — смена вкладки пересчитывает выборку сразу
+  // (раньше вкладка отсутствовала в зависимостях: таблица показывала строки
+  // предыдущей вкладки до перезагрузки страницы).
+  const items = useMemo(() => filterDozvolaItems(rawItems, {
+    statusTab: selectedStatus,
+    lostExpiredFilter,
+    countryFilter: selectedCountryFilter,
+    statusFilter: selectedStatusFilter,
+    searchQuery,
+    sortField: currentSortField,
+    sortOrder: currentSortOrder,
+  }), [rawItems, selectedStatus, lostExpiredFilter, selectedCountryFilter, selectedStatusFilter, searchQuery, currentSortField, currentSortOrder]);
 
   // Выбор всех записей, соответствующих текущим фильтрам и поиску
   const visibleIds = useMemo(() => items.map((i: any) => i.id), [items]);
@@ -1533,10 +1479,11 @@ const setCurrentSelectedTab = (type: string) => {
   // Ленивая подгрузка: показываем порцию, кнопка «Показать ещё» догружает следующую.
   const PAGE_SIZE = 50;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  // Сбрасываем видимое количество при смене фильтра/поиска/сортировки
+  // Сбрасываем видимое количество при смене вкладки статуса, уточнения,
+  // фильтров, поиска и сортировки — новая выборка всегда начинается с первой страницы.
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [currentSelectedTab, selectedCountryFilter, searchQuery, currentSortField, currentSortOrder]);
+  }, [currentSelectedTab, selectedStatus, lostExpiredFilter, selectedCountryFilter, selectedStatusFilter, searchQuery, currentSortField, currentSortOrder]);
   const visibleItems = items.slice(0, visibleCount);
   const hasMore = visibleCount < items.length;
 
@@ -1637,6 +1584,8 @@ const setCurrentSelectedTab = (type: string) => {
               ].map((tab) => (
                 <button
                   key={tab.key}
+                  data-ui="dozvola-status-tab"
+                  data-tab-key={tab.key}
                   onClick={() => pickStatus(tab.key)}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
                     selectedStatus === tab.key
@@ -1666,6 +1615,8 @@ const setCurrentSelectedTab = (type: string) => {
                 ].map((f) => (
                   <button
                     key={f.key}
+                    data-ui="dozvola-lost-subtab"
+                    data-tab-key={f.key}
                     onClick={() => setLostExpiredFilter(f.key as any)}
                     className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
                       lostExpiredFilter === f.key
