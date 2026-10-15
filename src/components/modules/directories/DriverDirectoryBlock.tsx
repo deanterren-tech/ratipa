@@ -20,6 +20,8 @@ import {displayDate, toISODate, dateInputValue} from '../../../utils/dateText'
 import {openDatePicker} from '../../../utils/openDatePicker'
 import {formatDriverShortName} from '../../../utils/driverSync'
 import DriverCard from '../DriverCard'
+import VehicleCard from '../VehicleCard'
+import {useFleetCardStack, fleetCardRefKey} from '../../../hooks/useFleetCards'
 import {UI} from '../../../ui/kit'
 import {SectionHeader, SearchField, EmptyState, ModalShell} from '../../../ui/components'
 
@@ -99,7 +101,8 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
   const [phones, setPhones] = useState<PhoneNumber[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState('');
-  const [viewCard, setViewCard] = useState<{ type: 'driver'; driverId?: string; driverName?: string } | null>(null);
+  // Полные карточки — общий стек портала (водитель → его машина).
+  const {stack: cards, push: pushCard, pop: popCard} = useFleetCardStack();
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -416,7 +419,7 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
                   <tr
                     key={id}
                     data-ui="driver-row"
-                    onClick={() => setViewCard({ type: 'driver', driverId: id, driverName: name })}
+                    onClick={() => pushCard({ type: 'driver', driverId: id, driverName: name })}
                     className={`${UI.tr} cursor-pointer ${isSel ? 'bg-[var(--accent-10)]' : ''} ${focusIdx === i ? 'ring-2 ring-[var(--accent-50)] ring-inset' : ''}`}
                     onMouseEnter={() => setFocusIdx(i)}
                   >
@@ -466,6 +469,41 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
           </table>
         </div>
       )}
+
+      {/* Полные карточки — один стек: водитель → его машина. Нижние остаются
+          смонтированными (hidden) — возврат сохраняет контекст и несохранённые
+          изменения открытой формы редактирования. Рендерятся ДО форм, чтобы
+          открытая из карточки форма была выше карточки. */}
+      {cards.map((card, i) => {
+        const isTop = i === cards.length - 1;
+        const node = card.type === 'driver' ? (
+          <DriverCard
+            driverId={card.driverId}
+            driverName={card.driverName}
+            canEdit={isWritePermitted}
+            onEdit={(id) => {
+              const rec = drivers.find((d) => String(d.id) === String(id));
+              if (rec) openEdit(rec);
+            }}
+            onClose={popCard}
+            onOpenCoupling={(carNumber) => pushCard({ type: 'vehicle', carNumber })}
+          />
+        ) : (
+          <VehicleCard
+            carNumber={card.carNumber}
+            vehicleId={card.vehicleId}
+            canEdit={false}
+            onOpenDriver={(driverId, driverName) => pushCard({ type: 'driver', driverId, driverName })}
+            onClose={popCard}
+          />
+        );
+        return createPortal(
+          <div key={fleetCardRefKey(card)} className={isTop ? undefined : 'hidden'} aria-hidden={isTop ? undefined : true}>
+            {node}
+          </div>,
+          document.body,
+        );
+      })}
 
       {/* MODAL add/edit */}
       {createPortal(
@@ -626,17 +664,6 @@ export default function DriverDirectoryBlock({ user, isWritePermitted = true }: 
           <SelectField label="Диспетчер" value={bulkValue} onChange={setBulkValue}
             options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
         </ModalShell>,
-        document.body
-      )}
-
-      {/* Driver card */}
-      {viewCard?.type === 'driver' && createPortal(
-        <DriverCard
-          driverId={viewCard.driverId || ''}
-          driverName={viewCard.driverName || ''}
-          onClose={() => setViewCard(null)}
-          onOpenCoupling={() => setViewCard(null)}
-        />,
         document.body
       )}
     </div>

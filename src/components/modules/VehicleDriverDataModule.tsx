@@ -45,6 +45,9 @@ import {openDatePicker} from '../../utils/openDatePicker'
 import {normalizePlate, formatPlate, formatCoupling} from '../../utils/salaryAutofill'
 import CouplingPicker from '../common/CouplingPicker';
 import DriverAutocomplete from '../common/DriverAutocomplete';
+import VehicleCard from './VehicleCard';
+import DriverCard from './DriverCard';
+import {useFleetCardStack, fleetCardRefKey} from '../../hooks/useFleetCards';
 import { useToast } from '../ToastProvider';
 import {UI} from '../../ui/kit'
 import {SectionHeader, SearchField, EmptyState, ErrorRow, BackButton} from '../../ui/components'
@@ -65,7 +68,8 @@ const VehicleDriverCard = React.memo(({
   matchedTariff,
   dispatchersList,
   onUpdateDispatcher,
-  bazaCars
+  bazaCars,
+  onOpen
 }: {
   rec: VehicleDriverRecord;
   copiedId: string | null;
@@ -79,6 +83,8 @@ const VehicleDriverCard = React.memo(({
   dispatchersList: string[];
   onUpdateDispatcher: (rec: VehicleDriverRecord, dispatcher: string) => void;
   bazaCars: string[];
+  /** Нажатие на карточку — открыть полную карточку автомобиля (по vehicleId). */
+  onOpen: (rec: VehicleDriverRecord) => void;
 }) => {
   const brandsText = brandModel ? `${brandModel}${trailerMake ? ' / ' + trailerMake : ''}` : (rec.brandsLat || '');
   const plate = normalizePlate(rec.carNumber || rec.vehicleNumbers || '');
@@ -86,7 +92,9 @@ const VehicleDriverCard = React.memo(({
   return (
     <div
       id={`vehicle-driver-card-${rec.id}`}
-      className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs flex flex-col overflow-hidden relative"
+      data-ui={`vehicle-open-card-${rec.id}`}
+      onClick={() => onOpen(rec)}
+      className="bg-white border border-[#E5E7EB] rounded-2xl shadow-xs flex flex-col overflow-hidden relative cursor-pointer transition-colors hover:border-[#D1D5DB]"
     >
       {showVerificationIndicator && (
         <div className="absolute top-2 right-2 z-10 inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
@@ -147,6 +155,7 @@ const VehicleDriverCard = React.memo(({
         <span className="text-[11px] font-medium text-[#6B7280] shrink-0">Диспетчер</span>
         <select
           value={rec.dispatcher || ""}
+          onClick={(e) => e.stopPropagation()}
           onChange={(e) => onUpdateDispatcher(rec, e.target.value)}
           aria-label="Диспетчер"
           className="bg-white border border-[#E5E7EB] text-[#4B5563] hover:bg-[#F3F4F6] px-2 py-1 rounded-lg text-[11px] font-medium outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] cursor-pointer min-h-[44px] max-w-[68%]"
@@ -239,7 +248,7 @@ const VehicleDriverCard = React.memo(({
             <span className="text-[10px] font-semibold text-[#6B7280] tracking-wider uppercase select-none">Для буфера обмена</span>
             <button
               type="button"
-              onClick={() => copyToClipboard(rec)}
+              onClick={(e) => { e.stopPropagation(); copyToClipboard(rec); }}
               className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] text-[10px] font-medium transition-colors cursor-pointer min-h-[44px]"
               title="Скопировать весь блок"
             >
@@ -267,7 +276,7 @@ const VehicleDriverCard = React.memo(({
       <div className="px-3.5 py-2 border-t border-[#E5E7EB] flex items-center gap-2">
         <button
           type="button"
-          onClick={() => openEdit(rec)}
+          onClick={(e) => { e.stopPropagation(); openEdit(rec); }}
           className={`${UI.buttonGhost} flex-1`}
         >
           <Edit2 className="w-3 h-3" aria-hidden="true" />
@@ -275,7 +284,7 @@ const VehicleDriverCard = React.memo(({
         </button>
         <button
           type="button"
-          onClick={() => handleDelete(rec)}
+          onClick={(e) => { e.stopPropagation(); handleDelete(rec); }}
           aria-label="Удалить"
           title="Удалить"
           className="inline-flex items-center justify-center p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 border border-[#E5E7EB] hover:border-rose-200 transition-colors cursor-pointer min-h-[44px] min-w-[44px]"
@@ -304,7 +313,8 @@ const VehicleDriverRow = React.memo(({
   matchedTariff,
   dispatchersList,
   onUpdateDispatcher,
-  bazaCars
+  bazaCars,
+  onOpen
 }: {
   rec: VehicleDriverRecord;
   copiedId: string | null;
@@ -318,6 +328,7 @@ const VehicleDriverRow = React.memo(({
   dispatchersList: string[];
   onUpdateDispatcher: (rec: VehicleDriverRecord, dispatcher: string) => void;
   bazaCars: string[];
+  onOpen: (rec: VehicleDriverRecord) => void;
 }) => {
   const brandsText = brandModel ? `${brandModel}${trailerMake ? ' / ' + trailerMake : ''}` : (rec.brandsLat || '');
   const plate = normalizePlate(rec.carNumber || rec.vehicleNumbers || '');
@@ -331,7 +342,9 @@ const VehicleDriverRow = React.memo(({
   return (
     <div
       id={`vehicle-driver-row-${rec.id}`}
-      className="bg-white border border-[#E5E7EB] rounded-xl px-3 py-2.5 flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-4"
+      data-ui={`vehicle-open-row-${rec.id}`}
+      onClick={() => onOpen(rec)}
+      className="bg-white border border-[#E5E7EB] rounded-xl px-3 py-2.5 flex flex-col gap-2 lg:flex-row lg:items-center lg:gap-4 cursor-pointer transition-colors hover:border-[#D1D5DB]"
     >
       <div className="min-w-0 flex-1 flex flex-col gap-1">
         <div className="flex items-center gap-2 min-w-0">
@@ -364,6 +377,7 @@ const VehicleDriverRow = React.memo(({
       <div className="flex flex-wrap items-center gap-2 lg:gap-3 shrink-0">
         <select
           value={rec.dispatcher || ""}
+          onClick={(e) => e.stopPropagation()}
           onChange={(e) => onUpdateDispatcher(rec, e.target.value)}
           aria-label="Диспетчер"
           className="bg-white border border-[#E5E7EB] text-[#4B5563] hover:bg-[#F3F4F6] px-2 py-1 rounded-lg text-[11px] font-medium outline-none transition-colors focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-20)] cursor-pointer min-h-[44px] w-full sm:w-auto sm:max-w-[200px]"
@@ -389,7 +403,7 @@ const VehicleDriverRow = React.memo(({
         <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"
-            onClick={() => copyToClipboard(rec)}
+            onClick={(e) => { e.stopPropagation(); copyToClipboard(rec); }}
             title="Скопировать данные"
             aria-label="Скопировать данные"
             className="inline-flex items-center justify-center p-2 rounded-xl text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] border border-[#E5E7EB] transition-colors cursor-pointer min-h-[44px] min-w-[44px]"
@@ -400,7 +414,7 @@ const VehicleDriverRow = React.memo(({
           </button>
           <button
             type="button"
-            onClick={() => openEdit(rec)}
+            onClick={(e) => { e.stopPropagation(); openEdit(rec); }}
             title="Редактировать"
             className="inline-flex items-center justify-center gap-1.5 px-3 rounded-xl bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] hover:text-[#121316] text-xs font-medium transition-colors cursor-pointer min-h-[44px]"
           >
@@ -409,7 +423,7 @@ const VehicleDriverRow = React.memo(({
           </button>
           <button
             type="button"
-            onClick={() => handleDelete(rec)}
+            onClick={(e) => { e.stopPropagation(); handleDelete(rec); }}
             aria-label="Удалить"
             title="Удалить"
             className="inline-flex items-center justify-center p-2 rounded-xl text-[#9CA3AF] hover:text-rose-600 hover:bg-rose-50 border border-[#E5E7EB] hover:border-rose-200 transition-colors cursor-pointer min-h-[44px] min-w-[44px]"
@@ -1139,11 +1153,16 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
     .filter(u => u.role === 'dispatcher' || u.role === 'root_admin' || (u.role as string) === 'Диспетчер')
     .map(u => u.name)
     .filter((v, i, a) => a.indexOf(v) === i); // deduplicate
-
   // Никаких выдуманных имён-заглушек: если список диспетчеров пуст, он пуст
   // (старый fallback ['Юрий','Алексей','Татьяна','Сергей'] подмешивал в фильтры
   // и формы несуществующих диспетчеров).
   const defaultDispatchers = dispatchersList;
+
+  // Полные карточки — общий стек портала: автомобиль → водитель и обратно.
+  // Нажатие на карточку/строку списка открывает ПОЛНУЮ запись по vehicleId.
+  const {stack: cards, push: pushCard, pop: popCard} = useFleetCardStack();
+  const openVehicleCard = (rec: VehicleDriverRecord) =>
+    pushCard({ type: 'vehicle', carNumber: rec.carNumber || rec.vehicleNumbers || rec.id, vehicleId: rec.id });
 
   // Единый реестр водителей: подбор записи по driverId/имени и пометки проблем связи.
   const driverDir = useMemo(() => buildDriverDirectory((drivers || [])), [drivers]);
@@ -1240,6 +1259,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
         dispatchersList={defaultDispatchers}
         onUpdateDispatcher={handleUpdateDispatcherDirectly}
         bazaCars={bazaCars}
+        onOpen={openVehicleCard}
       />
     );
   };
@@ -1264,6 +1284,7 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
         dispatchersList={defaultDispatchers}
         onUpdateDispatcher={handleUpdateDispatcherDirectly}
         bazaCars={bazaCars}
+        onOpen={openVehicleCard}
       />
     );
   };
@@ -1605,6 +1626,44 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
           </div>
         </div>
       )}
+
+      {/* Полные карточки (общий стек портала): автомобиль → водитель.
+          Рендерятся ДО формы редактирования, чтобы открытая из карточки форма
+          была выше карточки, а закрытие формы возвращало к карточке с прежним
+          контекстом. Нижние карточки стека остаются смонтированными (hidden). */}
+      {cards.map((card, i) => {
+        const isTop = i === cards.length - 1;
+        return (
+          <div key={fleetCardRefKey(card)} className={isTop ? undefined : 'hidden'} aria-hidden={isTop ? undefined : true}>
+            {card.type === 'vehicle' ? (
+              <VehicleCard
+                carNumber={card.carNumber}
+                vehicleId={card.vehicleId}
+                canEdit
+                onEdit={(carNumber, vehicleId) => {
+                  const rec = records.find((r) => r.id === vehicleId)
+                    || records.find((r) => normalizePlate(r.carNumber || r.vehicleNumbers || '') === normalizePlate(carNumber));
+                  if (rec) openEdit(rec);
+                }}
+                onOpenDriver={(driverId, driverName) => pushCard({ type: 'driver', driverId, driverName })}
+                onClose={popCard}
+              />
+            ) : (
+              <DriverCard
+                driverId={card.driverId}
+                driverName={card.driverName}
+                canEdit
+                onEdit={(driverId) => {
+                  const rec = records.find((r) => String(r.driverId || '') === String(driverId));
+                  if (rec) openEdit(rec);
+                }}
+                onClose={popCard}
+                onOpenCoupling={(carNumber) => pushCard({ type: 'vehicle', carNumber })}
+              />
+            )}
+          </div>
+        );
+      })}
 
       {/* Форма добавления / редактирования */}
       {modalOpen && (

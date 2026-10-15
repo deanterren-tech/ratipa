@@ -1020,7 +1020,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
 
         {/* TAB CONTENT 2: DRIVERS BASE */}
         {activeTab === 'drivers' && (
-          <DriverDirectoryBlock user={user} />
+          <DriverDirectoryBlock user={user} isWritePermitted={isWritePermitted} />
         )}
 
         {/* TAB CONTENT: DISTANCES */}

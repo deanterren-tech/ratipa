@@ -1,53 +1,59 @@
-import {useState, useEffect} from 'react'
-import {dbService} from '../../api'
-import {getDriversFlat, getCouplingsFlat} from '../../services/fleetService'
-import {buildDriverDirectory, normalizeDriverName} from '../../utils/driverRegistry'
-import {User, Truck, Banknote, FileText, X, ArrowRight} from 'lucide-react'
-import {UI} from '../../ui/kit'
-import { BackButton } from '../../ui/components'
+/**
+ * ПОЛНАЯ КАРТОЧКА ВОДИТЕЛЯ — единственная реализация на весь портал.
+ *
+ * Открывается одинаково из базы водителей, из карточки автомобиля, из раздела
+ * «Данные по авто и водителям» и из базы сцепок: один компонент + один механизм
+ * загрузки (useDriverCard) — полная запись по driverId из `drivers`, телефоны из
+ * единого поля phones, назначения и диспетчер — по стабильным id из реестра.
+ * Пустые поля показываются как «Не указано»; исторические снимки (документы,
+ * завершённые операции) не изменяются — только чтение текущих значений.
+ */
+import {useEffect} from 'react';
+import {
+  User,
+  Truck,
+  Banknote,
+  RefreshCw,
+  X,
+  ArrowRight,
+  Pencil,
+  AlertTriangle,
+  Archive,
+} from 'lucide-react';
+import {UI} from '../../ui/kit';
+import {ModalShell, ErrorRow, EmptyState} from '../../ui/components';
+import {useDriverCard} from '../../hooks/useFleetCards';
+import {displayValue, type DriverCardModel} from '../../utils/fleetCardModel';
 
-interface DriverCardProps {
+export interface DriverCardProps {
   driverId: string;
-  driverName: string;
+  /** Имя для заголовка/подписи, пока запись грузится (связь всё равно по id). */
+  driverName?: string;
+  /** Право просмотра (по умолчанию — есть). */
+  canView?: boolean;
+  /** Право редактирования: кнопка формы появляется только при нём. */
+  canEdit?: boolean;
+  /** Открыть существующую форму редактирования водителя. */
+  onEdit?: (driverId: string) => void;
   onClose: () => void;
+  /** Переход к карточке машины водителя (номер/связка из назначений). */
   onOpenCoupling: (carNumber: string) => void;
   onPrev?: () => void;
   onNext?: () => void;
 }
 
-export default function DriverCard({ driverId, driverName, onClose, onOpenCoupling, onPrev, onNext }: DriverCardProps) {
-  const [driver, setDriver] = useState<any>(null);
-  const [coupling, setCoupling] = useState<any>(null);
-  const [salaries, setSalaries] = useState<any[]>([]);
-
-  useEffect(() => {
-    // driver passport data — только из единого реестра:
-    // сначала по стабильному id, затем по ТОЧНОМУ совпадению ФИО (никаких
-    // «похожих» совпадений по фамилии — легко открыть чужую карточку).
-    const u1 = getDriversFlat((list: any[]) => {
-      const dir = buildDriverDirectory(list || []);
-      let found = driverId ? dir.byId.get(String(driverId)) || null : null;
-      if (!found && driverName) {
-        found = dir.byName.get(normalizeDriverName(driverName)) || null;
-      }
-      setDriver(found || null);
-    });
-    // coupling (which car) - search center by driverId or name
-    const u2 = getCouplingsFlat((list: any[]) => {
-      const found = (list || []).find((c) =>
-        (c.driverId && c.driverId === driverId) ||
-        ((c.driverNameRu || c.driverName || c.driverShortNameRu || '') === driverName && driverName)
-      );
-      setCoupling(found || null);
-    });
-    // salary history
-    const u3 = dbService.getDriverSalaryLogs(driverId, (logs: any[]) => {
-      setSalaries((logs || []).slice(-5).reverse());
-    });
-    return () => { u1(); u2(); u3(); };
-  }, [driverId, driverName]);
-
-  const [copied, setCopied] = useState(false);
+export default function DriverCard({
+  driverId,
+  driverName,
+  canView = true,
+  canEdit = false,
+  onEdit,
+  onClose,
+  onOpenCoupling,
+  onPrev,
+  onNext,
+}: DriverCardProps) {
+  const {phase, model, salary, retry} = useDriverCard(driverId, driverName);
 
   // Keyboard control: Esc closes the card; ArrowLeft/ArrowRight navigate if handlers provided
   useEffect(() => {
@@ -64,107 +70,206 @@ export default function DriverCard({ driverId, driverName, onClose, onOpenCoupli
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose, onPrev, onNext]);
 
-  // Prefer coupling record (from vehicle_driver_data) as the source of passport data,
-  // since driverId here comes from that branch and may not match driversPool id.
-  const src = coupling || driver || {};
-  const driverNameLat = src.driverNameLat || src.nameLat || src.shortNameLat || '';
-  const driverNameRu = src.driverNameRu || src.name || driverName || '';
+  const title = model?.displayName || driverName || 'Карточка водителя';
+
+  if (!canView) {
+    return (
+      <ModalShell
+        isOpen
+        onClose={onClose}
+        title="Карточка водителя"
+        icon={<User className="w-4 h-4" aria-hidden="true" />}
+        ariaLabel="Карточка водителя"
+        maxWidth="max-w-lg"
+      >
+        <EmptyState
+          kind="error"
+          title="Нет доступа к карточке"
+          hint="Просмотр данных водителей закрыт в соответствии с правами доступа."
+          actionLabel="Закрыть"
+          onAction={onClose}
+        />
+      </ModalShell>
+    );
+  }
 
   return (
-    <div
-      data-scroll-lock="modal" data-mobile-fullscreen
-      className="fixed inset-0 z-[2000] bg-black/40 backdrop-blur-[2px] flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
-      onClick={onClose}
-    >
-      <div
-        className="relative z-10 w-full max-w-lg bg-white border border-[#E5E7EB] rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.12)] my-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3 px-6 py-4 border-b border-[#E5E7EB]">
-          <div className="flex items-center gap-1 min-w-0">
-            <BackButton onClose={onClose} className="mt-0.5" />
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="p-2 bg-[var(--accent-10)] text-[var(--accent-ink)] rounded-lg shrink-0">
-                <User className="w-4 h-4" aria-hidden="true" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-[#121316] truncate">{driverName}</div>
-                <div className="text-xs text-[#6B7280] mt-0.5">Карточка водителя</div>
-              </div>
-            </div>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Закрыть" className={UI.modalClose}>
-            <X className="w-4 h-4" aria-hidden="true" />
-          </button>
-        </div>
-
-        <div className="px-6 py-5 flex flex-col gap-5">
-          {/* Car (soft link) */}
-          {coupling && (
+    <ModalShell
+      isOpen
+      onClose={onClose}
+      title={title}
+      subtitle="Полная карточка водителя"
+      icon={<User className="w-4 h-4" aria-hidden="true" />}
+      ariaLabel={`Карточка водителя ${title}`}
+      maxWidth="max-w-2xl"
+      footer={
+        <>
+          {canEdit && onEdit && model ? (
             <button
               type="button"
-              onClick={() => onOpenCoupling(coupling.carNumber || coupling.vehicleNumbers || '')}
-              className="w-full flex items-center gap-3 p-3 rounded-xl bg-[#F9FAFB] border border-[#E5E7EB] hover:bg-[#F3F4F6] transition-colors text-left cursor-pointer"
+              data-ui="driver-card-edit"
+              onClick={() => onEdit(model.driverId)}
+              className={UI.buttonGhost}
             >
-              <Truck className="w-4 h-4 text-[var(--accent-ink)] shrink-0" aria-hidden="true" />
-              <div className="flex-1 min-w-0">
-                <div className={UI.fieldLabel}>Текущая машина (из базы)</div>
-                <div className="text-xs font-semibold text-[#121316] font-mono mt-0.5">
-                  {coupling.coupling || (coupling.carNumber || coupling.vehicleNumbers || '')}
-                </div>
-              </div>
-              <ArrowRight className="w-4 h-4 text-[#9CA3AF] shrink-0" aria-hidden="true" />
+              <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Редактировать</span>
             </button>
-          )}
-
-          {/* Passport (from Авто-водители) */}
-          <div>
-            <div className={`${UI.caption} flex items-center gap-1.5 mb-2`}>
-              <FileText className="w-3.5 h-3.5" aria-hidden="true" /> Паспортные данные
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="ФИО (рус)" value={driverNameRu} />
-              <Field label="ФИО (лат)" value={driverNameLat || '—'} />
-              <Field label="ИНН" value={src.personalId || src.inn || '—'} />
-              <Field label="Паспорт" value={src.passportNumber || '—'} />
-              <Field label="Телефон" value={(src.phones && src.phones[0]?.number) || src.phone || src.driverPhone || '—'} />
-              <Field label="Вод. удостоверение" value={src.licenseNumber || src.license || '—'} />
-              <Field label="Комментарий" value={src.comment || '—'} />
-            </div>
+          ) : null}
+          <button type="button" data-ui="driver-card-close" onClick={onClose} className={UI.buttonPrimary}>
+            <X className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>Закрыть</span>
+          </button>
+        </>
+      }
+    >
+      <div data-ui="driver-card" data-driver-id={driverId} className="flex flex-col gap-5">
+        {phase === 'loading' ? (
+          <div className={UI.loading} role="status" data-ui="driver-card-loading">
+            <RefreshCw className="w-4 h-4 animate-spin text-[#9CA3AF]" aria-hidden="true" />
+            <span>Загрузка полной карточки водителя…</span>
           </div>
-
-          {/* Salary (soft link to Зарплата) */}
-          <div>
-            <div className={`${UI.caption} flex items-center gap-1.5 mb-2`}>
-              <Banknote className="w-3.5 h-3.5" aria-hidden="true" /> Зарплата (последние 5 выплат)
-            </div>
-            {salaries.length === 0 ? (
-              <div className="text-xs text-[#6B7280] py-2">Нет выплат</div>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                {salaries.map((s, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs px-3 py-2 rounded-xl bg-[#F9FAFB] border border-[#E5E7EB]">
-                    <span className="text-[#6B7280]">{s.date || s.datetime || s.period || '—'}</span>
-                    <span className="font-semibold font-mono text-emerald-600">
-                      {s.amount != null ? `${s.amount} €` : (s.total != null ? `${s.total} €` : '—')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+        ) : phase === 'error' ? (
+          <div data-ui="driver-card-error">
+            <ErrorRow text="Не удалось загрузить полную карточку водителя." onRetry={retry} />
           </div>
-        </div>
+        ) : phase === 'not-found' ? (
+          <EmptyState
+            kind="no-results"
+            title="Водитель не найден"
+            hint={
+              driverName
+                ? `Запись «${driverName}» отсутствует в едином реестре водителей. Новый водитель не создаётся автоматически — проверьте связь.`
+                : 'Запись отсутствует в едином реестре водителей. Проверьте связь или добавьте водителя в базу.'
+            }
+            actionLabel="Повторить"
+            onAction={retry}
+          />
+        ) : model ? (
+          <DriverCardContent model={model} salary={salary} onOpenCoupling={onOpenCoupling} />
+        ) : null}
       </div>
-    </div>
+    </ModalShell>
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function DriverCardContent({
+  model,
+  salary,
+  onOpenCoupling,
+}: {
+  model: DriverCardModel;
+  salary: Array<{date: string; amount: string}>;
+  onOpenCoupling: (carNumber: string) => void;
+}) {
   return (
-    <div className="p-3 rounded-xl bg-[#F9FAFB] border border-[#E5E7EB]">
-      <div className={UI.fieldLabel}>{label}</div>
-      <div className="text-xs font-semibold text-[#121316] truncate mt-1">{value}</div>
-    </div>
+    <>
+      {(model.archived || model.service) && (
+        <div
+          className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-700"
+          role="status"
+          data-ui="driver-card-record-notice"
+        >
+          <Archive className="w-4 h-4 shrink-0" aria-hidden="true" />
+          <span>
+            {model.service
+              ? 'Служебная запись — не водитель. Из списков выбора скрывается.'
+              : 'Архивная запись — не предлагается в новых назначениях.'}
+          </span>
+        </div>
+      )}
+
+      {/* Группы сведений — все существующие пользовательские поля водителя */}
+      {model.sections.map((section) => (
+        <div key={section.key} data-ui={`driver-card-section-${section.key}`}>
+          <div className={`${UI.caption} mb-2`}>{section.title}</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {section.fields.map((field) => (
+              <div key={field.key} className="p-2.5 rounded-xl bg-[#F9FAFB] border border-[#E5E7EB] min-w-0">
+                <div className={UI.fieldLabel}>{field.label}</div>
+                <div
+                  data-ui={`driver-field-${field.key}`}
+                  data-empty={field.empty ? '1' : undefined}
+                  className={`text-xs mt-1 break-words ${field.mono ? 'font-mono' : ''} ${
+                    field.empty ? 'text-[#9CA3AF] italic' : 'font-semibold text-[#121316]'
+                  }`}
+                >
+                  {displayValue(field)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {/* Назначения: переход к машине — по номеру из связки (id уже разрешён реестром) */}
+      <div data-ui="driver-card-section-assignments">
+        <div className={`${UI.caption} mb-2`}>Назначения</div>
+        {model.assignments.length === 0 ? (
+          <div
+            data-ui="driver-card-no-assignment"
+            className="flex items-center gap-3 p-3 rounded-xl bg-[#F9FAFB] border border-[#E5E7EB] text-xs text-[#6B7280]"
+          >
+            <Truck className="w-4 h-4 shrink-0 text-[#9CA3AF]" aria-hidden="true" />
+            <span>Не назначен ни на одну машину</span>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {model.assignments.map((a) => (
+              <button
+                key={`${a.role}:${a.carNumber}`}
+                type="button"
+                data-ui="driver-card-assignment"
+                onClick={() => onOpenCoupling(a.carNumber)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl bg-[#F9FAFB] border border-[#E5E7EB] hover:bg-[#F3F4F6] transition-colors text-left cursor-pointer min-h-[44px]"
+              >
+                <Truck className="w-4 h-4 text-[var(--accent-ink)] shrink-0" aria-hidden="true" />
+                <div className="flex-1 min-w-0">
+                  <div className={UI.fieldLabel}>
+                    {a.role === 'main' ? 'Основной водитель' : 'Второй водитель'}
+                  </div>
+                  <div className="text-xs font-semibold text-[#121316] font-mono mt-0.5 truncate">
+                    {a.carNumber}
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-[#9CA3AF] shrink-0" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Зарплата — связанная ветка, только чтение последних выплат */}
+      <div data-ui="driver-card-section-salary">
+        <div className={`${UI.caption} flex items-center gap-1.5 mb-2`}>
+          <Banknote className="w-3.5 h-3.5" aria-hidden="true" />
+          Зарплата (последние 5 выплат)
+        </div>
+        {salary.length === 0 ? (
+          <div className="text-xs text-[#6B7280] py-2" data-ui="driver-card-salary-empty">Нет выплат</div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {salary.map((s, i) => (
+              <div
+                key={i}
+                data-ui="driver-card-salary-row"
+                className="flex items-center justify-between gap-2 text-xs px-3 py-2 rounded-xl bg-[#F9FAFB] border border-[#E5E7EB]"
+              >
+                <span className="text-[#6B7280] truncate">{s.date || '—'}</span>
+                <span className="font-semibold font-mono text-emerald-600 shrink-0">
+                  {s.amount || '—'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {model.service ? (
+        <div className="flex items-start gap-2 text-[11px] text-amber-600" role="status">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" aria-hidden="true" />
+          <span>Служебные записи не открываются как карточки водителей в списках выбора.</span>
+        </div>
+      ) : null}
+    </>
   );
 }

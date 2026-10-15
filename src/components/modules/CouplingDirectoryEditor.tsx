@@ -14,8 +14,9 @@ import {
   resolveDriverLink,
 } from '../../utils/driverRegistry'
 import DriverAutocomplete from '../common/DriverAutocomplete';
-import CouplingCard from './CouplingCard';
+import VehicleCard from './VehicleCard';
 import DriverCard from './DriverCard';
+import {useFleetCardStack, fleetCardRefKey} from '../../hooks/useFleetCards';
 import {UI} from '../../ui/kit'
 import {SectionHeader, SearchField, EmptyState, ModalShell} from '../../ui/components'
 
@@ -106,7 +107,9 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
   useLockBodyScroll(modalOpen);
   const [editing, setEditing] = useState<CouplingRow | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
-  const [viewCard, setViewCard] = useState<{ type: 'coupling' | 'driver'; carNumber?: string; driverId?: string; driverName?: string; record?: any } | null>(null);
+  // Полные карточки — общий стек: автомобиль → водитель; закрытие верхней
+  // возвращает к нижней без потери контекста (нижние остаются смонтированными).
+  const {stack: cards, push: pushCard, replaceTop: replaceTopCard, pop: popCard} = useFleetCardStack();
 
   // multi-select
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -546,7 +549,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
                   <tr
                     key={c.id}
                     data-nav-item
-                    onClick={() => setViewCard({ type: 'coupling', carNumber: c.carNumber })}
+                    onClick={() => pushCard({ type: 'vehicle', carNumber: c.carNumber, vehicleId: c.id })}
                     className={`${UI.tr} cursor-pointer ${isSel ? 'bg-[var(--accent-10)]' : ''} ${focusIdx === i ? 'ring-2 ring-[var(--accent-50)] ring-inset' : ''}`}
                     onMouseEnter={() => setFocusIdx(i)}
                   >
@@ -576,7 +579,7 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (link.status === 'ok' || link.status === 'archived' || link.status === 'service') {
-                                    setViewCard({ type: 'driver', driverId: link.id, driverName: name });
+                                    pushCard({ type: 'driver', driverId: link.id, driverName: name });
                                   }
                                 }}
                                 className={`inline-flex items-center gap-2 text-left max-w-[220px] ${empty ? 'cursor-default' : 'hover:underline cursor-pointer'}`}
@@ -633,6 +636,56 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
           </table>
         </div>
       )}
+
+      {/* Полные карточки — один стек (автомобиль → водитель). Нижние карточки
+          остаются смонтированными (hidden), поэтому возврат к автомобилю
+          сохраняет контекст и состояние; данные в них обновляются живьём.
+          Рендерятся ДО форм, чтобы открытая из карточки форма была выше. */}
+      {cards.map((card, i) => {
+        const isTop = i === cards.length - 1;
+        const node = card.type === 'vehicle' ? (
+          <VehicleCard
+            carNumber={card.carNumber}
+            vehicleId={card.vehicleId}
+            canEdit={isWritePermitted}
+            onEdit={(carNumber, vehicleId) => {
+              const row = couplings.find((c) => c.id === vehicleId)
+                || couplings.find((c) => normalizePlate(c.carNumber) === normalizePlate(carNumber));
+              if (row) openEdit(row);
+            }}
+            onOpenDriver={(driverId, driverName) => pushCard({ type: 'driver', driverId, driverName })}
+            onClose={popCard}
+          />
+        ) : (
+          <DriverCard
+            driverId={card.driverId}
+            driverName={card.driverName}
+            canEdit={false}
+            onClose={popCard}
+            onOpenCoupling={(carNumber) => pushCard({ type: 'vehicle', carNumber })}
+            onPrev={() => {
+              const list = drivers || [];
+              const idx = list.findIndex((d: any) => String(d.id) === String(card.driverId));
+              if (idx < 0 || list.length === 0) return;
+              const prev = list[(idx - 1 + list.length) % list.length];
+              if (prev) replaceTopCard({ type: 'driver', driverId: String(prev.id || ''), driverName: prev.name || prev.shortNameRu || '' });
+            }}
+            onNext={() => {
+              const list = drivers || [];
+              const idx = list.findIndex((d: any) => String(d.id) === String(card.driverId));
+              if (idx < 0 || list.length === 0) return;
+              const next = list[(idx + 1) % list.length];
+              if (next) replaceTopCard({ type: 'driver', driverId: String(next.id || ''), driverName: next.name || next.shortNameRu || '' });
+            }}
+          />
+        );
+        return createPortal(
+          <div key={fleetCardRefKey(card)} className={isTop ? undefined : 'hidden'} aria-hidden={isTop ? undefined : true}>
+            {node}
+          </div>,
+          document.body,
+        );
+      })}
 
       {/* MODAL add/edit */}
       {createPortal(
@@ -750,44 +803,6 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
               options={dispatchers.map((d) => ({ v: d.id || d.key, l: d.name }))} />
           )}
         </ModalShell>,
-        document.body
-      )}
-
-      {/* Soft-link cards */}
-      {viewCard?.type === 'coupling' && viewCard.carNumber && createPortal(
-        <CouplingCard
-          carNumber={viewCard.carNumber}
-          bazaRec={filtered.find((r: any) => r.carNumber === viewCard.carNumber || r.id === viewCard.carNumber)}
-          onClose={() => setViewCard(null)}
-          onOpenDriver={(driverId, driverName) => setViewCard({ type: 'driver', driverId, driverName })}
-        />,
-        document.body
-      )}
-      {viewCard?.type === 'driver' && createPortal(
-        <DriverCard
-          driverId={viewCard.driverId || ''}
-          driverName={viewCard.driverName || ''}
-          onClose={() => setViewCard(null)}
-          onOpenCoupling={(carNumber) => setViewCard({ type: 'coupling', carNumber })}
-          onPrev={() => {
-            const list = drivers || [];
-            const idx = list.findIndex((d: any) =>
-              (d.id && d.id === viewCard.driverId) ||
-              ((d.name || d.shortNameRu || '').trim() === (viewCard.driverName || '').trim() && viewCard.driverName)
-            );
-            const prev = list[(idx - 1 + list.length) % list.length];
-            if (prev) setViewCard({ type: 'driver', driverId: prev.id || '', driverName: prev.name || prev.shortNameRu || '' });
-          }}
-          onNext={() => {
-            const list = drivers || [];
-            const idx = list.findIndex((d: any) =>
-              (d.id && d.id === viewCard.driverId) ||
-              ((d.name || d.shortNameRu || '').trim() === (viewCard.driverName || '').trim() && viewCard.driverName)
-            );
-            const next = list[(idx + 1) % list.length];
-            if (next) setViewCard({ type: 'driver', driverId: next.id || '', driverName: next.name || next.shortNameRu || '' });
-          }}
-        />,
         document.body
       )}
     </div>
