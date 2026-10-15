@@ -20,6 +20,14 @@ import { getCouplingsFlat } from '../../../services/fleetService';
 import { buildDispatcherDirectory, type DispatcherDirectory } from '../../../utils/dispatcher';
 import type { TimelineStageType, TimelineTrip, TimelineVehicleEvent } from '../../../types';
 import { dayNum, normalizeStages, withFallbackStages } from './lib/timeline';
+import {
+  buildDispatcherFacts,
+  carPartOf,
+  fillRecordDispatchers,
+  pickDispatcher,
+  resolveDispatcherFor,
+  vehicleKeyVariants,
+} from './lib/vehicleDispatcher';
 import { effectiveStageTypes } from './lib/catalog';
 import { normalizeCircles } from './lib/circles';
 import { mergeDirections, type DirectionDef } from './lib/directions';
@@ -100,21 +108,24 @@ const plateKeys = (value: unknown): string[] => {
   return [...new Set([raw, [...raw].map((ch) => CYR2LAT[ch] || ch).join(''), [...raw].map((ch) => LAT2CYR[ch] || ch).join('')].map(plateKey).filter(Boolean))];
 };
 
-const buildPlanDispatcherIndex = (plans: Array<Record<string, unknown>>): Map<string, { id: string; name: string }> => {
-  const seen = new Map<string, Set<string>>();
-  const value = new Map<string, { id: string; name: string }>();
-  plans.forEach((p) => {
-    const key = plateKey(p?.carNumber);
-    const name = String(p?.dispatcherName || p?.dispatcher || '').trim();
-    if (!key || !name) return;
-    const id = String(p?.dispatcherId || '').trim();
-    if (!seen.has(key)) seen.set(key, new Set());
-    seen.get(key)!.add(name);
-    if (!value.has(key)) value.set(key, { id, name });
-  });
+/**
+ * Плановое назначение по машине (совместимость с прежним интерфейсом).
+ *
+ * Раньше здесь была оставлена только машина, у которой ВСЕ планы указывают
+ * одного диспетчера; из-за этого машина с историей назначений (8806: Юрий →
+ * Максим) оставалась без диспетчера вообще. Теперь назначение выбирается по
+ * дате (см. lib/vehicleDispatcher), а идентификатор выводится из имени.
+ */
+const buildPlanDispatcherIndex = (
+  plans: Array<Record<string, unknown>>,
+  dir: DispatcherDirectory,
+  cars: Array<Record<string, unknown>> = [],
+): Map<string, { id: string; name: string }> => {
+  const facts = buildDispatcherFacts({ plans, cars, dir });
   const result = new Map<string, { id: string; name: string }>();
-  seen.forEach((names, key) => {
-    if (names.size === 1) result.set(key, value.get(key)!);
+  facts.forEach((list, key) => {
+    const picked = pickDispatcher(list, null);
+    if (picked) result.set(key, { id: picked.id, name: picked.name });
   });
   return result;
 };
@@ -265,14 +276,48 @@ export function useTimelineData(): TimelineData {
 
   const carIndex = useMemo(() => buildCarIndex(couplings), [couplings]);
   const dir = useMemo(() => buildDispatcherDirectory(dispatchers.map((d) => ({ id: d.id, name: d.name }))), [dispatchers]);
-  const fleetCars = useMemo(() => uniqueFleetCars(carIndex), [carIndex]);
+  /** Факты назначения по всем источникам: карточки парка, справочник, планы. */
+  const dispatcherFacts = useMemo(
+    () => buildDispatcherFacts({ plans: planTrips, cars: couplings, dir }),
+    [planTrips, couplings, dir],
+  );
+
+  /**
+   * Индекс машин с ДОПОЛНЕННЫМ идентификатором диспетчера: в карточках парка
+   * назначение часто хранится только именем — без идентификатора строка
+   * таймлайна уходила в блок «Без диспетчера» (жалоба владельца по 8806).
+   * Пустое значение никогда не затирается.
+   */
+  const fleetIndex = useMemo(() => {
+    const resolved = new Map<string, CarRef>();
+    carIndex.forEach((car, key) => {
+      const next: CarRef = { ...car };
+      if (!String(next.dispatcherId || '').trim() && String(next.dispatcherName || '').trim()) {
+        const person = resolveDispatcherFor(
+          { facts: dispatcherFacts, dir },
+          { keys: vehicleKeyVariants(next.carNumber), day: null, ownName: next.dispatcherName },
+        );
+        if (person.id) next.dispatcherId = person.id;
+        if (person.name && !next.dispatcherName) next.dispatcherName = person.name;
+      }
+      resolved.set(key, next);
+    });
+    return resolved;
+  }, [carIndex, dispatcherFacts, dir]);
+
+  const fleetCars = useMemo(() => uniqueFleetCars(fleetIndex), [fleetIndex]);
 
   const tripsAll = useMemo(() => {
-    const planDispatcherIndex = buildPlanDispatcherIndex(planTrips);
-    const manual = manualTrips.map((t) => normalizeManualTrip(t, carIndex, dir, planDispatcherIndex));
-    const fromPlan = planTripsToWholeTrips(planTrips, carIndex, dir, stagesStore);
+    const planDispatcherIndex = buildPlanDispatcherIndex(planTrips, dir, couplings);
+    const manual = manualTrips.map((t) => normalizeManualTrip(t, fleetIndex, dir, planDispatcherIndex));
+    const fromPlan = planTripsToWholeTrips(planTrips, fleetIndex, dir, stagesStore);
+    // Единый досчёт диспетчера для рейсов: своё поле → карточка → план по дате.
+    fillRecordDispatchers([...manual, ...fromPlan], { facts: dispatcherFacts, dir }, {
+      keysOf: (t) => [...vehicleKeyVariants(String(t.carKey || '').replace(/^(car|plate):/, '')), ...vehicleKeyVariants(t.carNumber)],
+      dayOf: (t) => t.spanOverride?.pMin ?? t.spanOverride?.pMax ?? null,
+    });
     return [...manual, ...fromPlan];
-  }, [manualTrips, planTrips, carIndex, dir, stagesStore]);
+  }, [manualTrips, planTrips, fleetIndex, dir, stagesStore, dispatcherFacts, couplings]);
 
   // Скрытые дубли исключаются из таймлайна здесь — единственная точка входа
   // целых рейсов для всех экранов модуля; для прямого открытия карточки они
@@ -280,7 +325,16 @@ export function useTimelineData(): TimelineData {
   const trips = useMemo(() => tripsAll.filter((t) => t.hiddenFromTimeline !== true), [tripsAll]);
   const hiddenTrips = useMemo(() => tripsAll.filter((t) => t.hiddenFromTimeline === true), [tripsAll]);
 
-  const bases = useMemo(() => bazaToBasePeriods(baza, carIndex, dir), [baza, carIndex, dir]);
+  const bases = useMemo(() => {
+    const periods = bazaToBasePeriods(baza, fleetIndex, dir);
+    // Тот же единый механизм, что у рейсов: запись ремонта/базы получает
+    // диспетчера из карточки машины или из плана, ближайшего к дате записи.
+    fillRecordDispatchers(periods, { facts: dispatcherFacts, dir }, {
+      keysOf: (p) => [...vehicleKeyVariants(String(p.carKey || '').replace(/^(car|plate):/, '')), ...vehicleKeyVariants(p.carNumber)],
+      dayOf: (p) => p.arrivalDay ?? p.repairStartDay ?? p.repairEndDay ?? p.departureDay ?? null,
+    });
+    return periods;
+  }, [baza, fleetIndex, dir, dispatcherFacts]);
 
   const stageTypes = useMemo(() => effectiveStageTypes(dbStageTypes), [dbStageTypes]);
 
