@@ -18,9 +18,12 @@ import {
   directionLabelOf,
   directionOptionOf,
   directionOptionsFromDb,
+  directionStoreValue,
+  directionWriteValue,
   effectiveDirectionOptions,
   normalizeDirectionCode,
   normalizeTripDirection,
+  sameTripDirection,
 } from '../src/components/modules/tripTimeline/lib/directionCatalog';
 
 let passed = 0;
@@ -130,6 +133,36 @@ console.log('5. Нормализация кода и встроенная пар
   check('normalizeDirectionCode: регистр/пробелы/тире', normalizeDirectionCode(' by–lt ') === 'BY-LT');
   check('встроенная пара — Турция TR, Китай CN', BUILTIN_DIRECTIONS.map((d) => `${d.name}:${d.code}`).join(',') === 'Турция:TR,Китай:CN');
   check('встроенная пара активна', BUILTIN_DIRECTIONS.every((d) => d.active));
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Каноническое значение поля direction записи — НАЗВАНИЕ из справочника. Оба
+// модуля («План дохода» и «Таймлайн рейсов») пишут и читают его; коды «TR»/«CN»
+// остаются совместимым форматом. Здесь — защита от лишних записей (нет циклов).
+console.log('6. Каноническое значение записи и защита от повторных записей');
+{
+  const opts = directionOptionsFromDb(DB_ROWS);
+  check('код → название: «TR» → «Турция»', directionStoreValue(opts, 'TR') === 'Турция');
+  check('код → название: «CN» → «Китай»', directionStoreValue(opts, 'CN') === 'Китай');
+  check('название остаётся названием', directionStoreValue(opts, 'Китай') === 'Китай');
+  check('пусто → пусто (значение не выдумываем)', directionStoreValue(opts, '') === '' && directionStoreValue(opts, null) === '');
+  check('неизвестный текст сохраняется как есть', directionStoreValue(opts, 'Монголия') === 'Монголия');
+  check('без справочника код всё равно приводится (встроенный фолбэк)', directionStoreValue([], 'CN') === 'Китай');
+  check('«TR» и «Турция» — ОДНО направление', sameTripDirection('TR', 'Турция', opts));
+  check('«CN» и «Турция» — разные направления', !sameTripDirection('CN', 'Турция', opts));
+  check('регистр и пробелы не значимы: « Турция » == «tr»', sameTripDirection(' Турция ', 'tr', opts));
+  check('пусто и пусто — совпадают', sameTripDirection('', null, opts));
+  check('пусто и «Монголия» — расходятся', !sameTripDirection('', 'Монголия', opts));
+  const equal = directionWriteValue('TR', 'Турция', opts);
+  check('было «TR», выбрали «Турция» — записи НЕТ (цикл не запускается)', equal.write === false && equal.value === null);
+  const legacySame = directionWriteValue('CN', 'cn', opts);
+  check('регистр не создаёт ложного изменения — записи НЕТ', legacySame.write === false);
+  const changed = directionWriteValue('Турция', 'Китай', opts);
+  check('смена направления → точечное значение-название', changed.write === true && changed.value === 'Китай');
+  const cleared = directionWriteValue('Турция', '', opts);
+  check('очистка направления → null (поле записи очищается)', cleared.write === true && cleared.value === null);
+  const fromCode = directionWriteValue('türkiye-ish', 'TR', opts);
+  check('постороннее значение заменяется выбранным названием', fromCode.write === true && fromCode.value === 'Турция');
 }
 
 // ────────────────────────────────────────────────────────────────────────────

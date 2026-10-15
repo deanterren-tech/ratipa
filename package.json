@@ -39,6 +39,8 @@
     "migrate:directions": "tsx scripts/migrate-directions.ts",
     "test:tl-guards": "tsx scripts/test-tl-guards.ts",
     "test:directions": "tsx scripts/test-directions.ts",
+    "test:direction-sync": "tsx scripts/test-direction-sync.ts",
+    "audit:direction-mismatch": "tsx scripts/audit-direction-mismatch.ts",
     "test:stage-templates": "tsx scripts/test-stage-templates.ts",
     "seed:stage-templates": "tsx scripts/seed-stage-templates.ts",
     "test:stage-rights": "tsx scripts/test-stage-rights.ts",

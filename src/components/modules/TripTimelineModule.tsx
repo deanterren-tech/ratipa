@@ -34,7 +34,7 @@ import StatsBlock from './tripTimeline/StatsBlock';
 import StageTemplatesSettingsBlock from './StageTemplatesSettingsBlock';
 import CarOverviewModal from './tripTimeline/CarOverviewModal';
 import { useTimelineData } from './tripTimeline/useTimelineData';
-import { type DirectionOption } from './tripTimeline/lib/directionCatalog';
+import { type DirectionOption, directionStoreValue } from './tripTimeline/lib/directionCatalog';
 import DirectionAddModal from './tripTimeline/DirectionAddModal';
 import { sortMonthLabelsDesc, todayNum, zoomColW, zoomIndexOf } from './tripTimeline/lib/timeline';
 import { plateKeyOf } from './tripTimeline/lib/sources';
@@ -706,10 +706,17 @@ export default function TripTimelineModule({ user, settings }: Props) {
             (dispId ? dir.byId.get(dispId)?.name || '' : '') ||
             carRef?.dispatcherName ||
             '';
-          const payload = buildTimelinePlanPayload(draft, {
-            createdBy: user.name,
-            dispatcher: dispId ? { id: dispId, name: dispName || dispId } : null,
-          });
+          // Направление из формы (код переключателя) → КАНОНИЧЕСКОЕ значение
+          // записи: НАЗВАНИЕ из единого справочника направлений (то же
+          // значение читает и пишет «План дохода»); код без записи в
+          // справочнике сохраняется как есть (значение не выдумываем).
+          const payload = buildTimelinePlanPayload(
+            { ...draft, direction: directionStoreValue(directionOptions, draft.direction) },
+            {
+              createdBy: user.name,
+              dispatcher: dispId ? { id: dispId, name: dispName || dispId } : null,
+            },
+          );
           await pdService.createLinkedTimelineTrip(planId, `pd:${planId}`, payload, user.name, user.role);
           pendingPlanIdRef.current = '';
           toast('Рейс создан — связанная запись «Плана дохода» открыта', 'success');
@@ -730,7 +737,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
       });
       return run;
     },
-    [canWrite, canEditPlan, data.trips, data.fleetCars, dir, user.name, user.role, toast],
+    [canWrite, canEditPlan, data.trips, data.fleetCars, dir, directionOptions, user.name, user.role, toast],
   );
 
   // Переход к связанной записи «Плана дохода» — по прямой ссылке (переживает F5,
@@ -1265,7 +1272,6 @@ export default function TripTimelineModule({ user, settings }: Props) {
       {showAddDirection && canWrite ? (
         <DirectionAddModal
           existing={directionOptions}
-          existingColorNames={data.directions.map((d) => d.name)}
           user={{ name: user.name, role: user.role }}
           onClose={() => setShowAddDirection(false)}
           onSaved={(entry) => setDirectionExtras((prev) => [...prev, entry])}

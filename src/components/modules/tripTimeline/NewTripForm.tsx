@@ -48,8 +48,9 @@ export interface NewTripDraft {
   /** Количество кругов рейса — целое от 1 (по умолчанию 1). */
   circles: number;
   /**
-   * Направление рейса — ОДНО значение-КОД («TR»/«CN»; пусто — не указано).
-   * Ставок и пересчётов по направлению нет (упрощено по требованию владельца).
+   * Направление рейса — выбор в переключателе (КОД «TR»/«CN»); в запись
+   * уходит КАНОНИЧЕСКОЕ значение из единого справочника (название), см.
+   * directionStoreValue и buildTimelinePlanPayload.
    */
   direction?: string;
   /** Этапы из шаблона направления (опция, по умолчанию выключена). */
@@ -246,8 +247,8 @@ export default function NewTripForm({ dispatchers, defaultDispatcherId, canWrite
             <DirectionToggle options={directions} value={direction} onChange={setDirection} />
             <span className="text-[12px] text-[#6B7280]" data-ui="new-trip-direction-hint">
               {selectedOption
-                ? `В рейсе сохранится одно значение — ${selectedOption.code} (${selectedOption.name}). Повторный клик по активному варианту снимает выбор.`
-                : 'Необязательно: выберите Турцию или Китай — в рейсе сохранится одно значение (TR/CN).'}
+                ? `В рейсе сохранится направление «${selectedOption.name}» — то же значение, что видит «План дохода». Повторный клик по активному варианту снимает выбор.`
+                : 'Необязательно: выберите Турцию или Китай — в записи сохранится название из общего справочника направлений.'}
             </span>
           </div>
           {showTemplateOption ? (

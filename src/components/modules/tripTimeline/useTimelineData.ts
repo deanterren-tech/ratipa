@@ -239,10 +239,11 @@ export function useTimelineData(): TimelineData {
     const u8 = getCouplingsFlat((list) => setCouplings((list || []) as Array<Record<string, unknown>>));
     // Этапы рейсов, связанных с планом дохода
     const u9 = dbService.getTimelineTripStages((store) => setStagesStore(store || {}));
-    // Направления (Турция, Китай, добавленные пользователем) — справочник «Настройки»
+    // Единый справочник направлений «Плана дохода» (directories/directions) —
+    // варианты переключателя рейса; ветка tripDirections — только цвета.
     const u10 = directoryService.getTripDirections((list) => setDbDirections((list || []) as Array<Record<string, unknown>>));
-    // Справочник направлений (directories/directions) — варианты переключателя
-    // «Турция / Китай» в окнах рейса (ставок там больше нет).
+    // Справочник направлений (directories/directions) — ЕДИНЫЙ список: и
+    // варианты переключателя, и метки/фильтр на полотне (ставок там нет).
     const u11 = directoryService.getDirections((list) => setDbDirectionList((list || []) as Array<Record<string, unknown>>));
     // Шаблоны этапов (кнопка «Из шаблона»; управление — Настройки).
     const u12 = dbService.getStageTemplates((store) => setDbStageTemplates(store || {}));
@@ -283,7 +284,9 @@ export function useTimelineData(): TimelineData {
 
   const stageTypes = useMemo(() => effectiveStageTypes(dbStageTypes), [dbStageTypes]);
 
-  const directions = useMemo(() => mergeDirections(dbDirections), [dbDirections]);
+  /** Направления — ОДИН справочник «Плана дохода» (directories/directions):
+   *  метки/фильтр/раскраска на полотне; ветка tripDirections — только цвета. */
+  const directions = useMemo(() => mergeDirections(dbDirectionList, dbDirections), [dbDirectionList, dbDirections]);
   const directionOptions = useMemo(
     () => effectiveDirectionOptions(directionOptionsFromDb(dbDirectionList)),
     [dbDirectionList],

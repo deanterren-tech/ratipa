@@ -1,17 +1,14 @@
 /**
- * Направления рейсов на таймлайне (Турция, Китай и др.).
+ * Направления рейсов на таймлайне (метки-чипы, фильтр, раскраска).
  *
- * Источник — СУЩЕСТВУЮЩЕЕ поле записи «Плана дохода» `direction` (значения:
- * «Китай», «Турция», …). Если у рейса поля нет — направление выводится из уже
- * собранного текста маршрута (direction → tripNote → цепочка плеч) поиском
- * названия/кода направления; ничего не досочиняется.
- *
- * Справочник направлений: встроенные Турция и Китай (мягкие сине-фиолетовые и
- * бирюзовые цвета — отдельная приглушённая палитра, не конфликтующая со
- * статусными цветами) + записи ветки directories/tripDirections, которые
- * добавляет/меняет пользователь в «Настройках» (название, код, цвет, порядок).
- * Встроенные записи переопределяются справочником по id/названию, но не
- * пропадают: цвет и код остаются даже при пустом справочнике.
+ * ЕДИНЫЙ СПРАВОЧНИК — тот же, что у «Плана дохода»: ветка
+ * `directories/directions` (название/код/идентификатор записи; поле `direction`
+ * записи хранит НАЗВАНИЕ — см. lib/directionCatalog). Отдельного списка у
+ * таймлайна больше НЕТ: `DEFAULT_DIRECTIONS` — это та же встроенная пара
+ * (Турция TR, Китай CN) из directionCatalog.BUILTIN_DIRECTIONS, лишь с цветами;
+ * она нужна только пока справочник пуст/не загружен, чтобы чипы и фильтр
+ * работали. Ветка `directories/tripDirections` читается ТОЛЬКО как источник
+ * цвета по названию (историческая палитра) и список направлений не задаёт.
  *
  * КРУГИ в этом модуле БОЛЬШЕ НЕ СЧИТАЮТСЯ: старый расчёт «круги машины»
  * (рейс на внешнем направлении внутри периода учёта выезда) удалён. Круги
@@ -19,6 +16,7 @@
  * lib/circles (normalizeCircles, tripCircleMarksOf). Направления остаются
  * здесь: определение направления рейса (`directionOfTrip`) и метки-чипы.
  */
+import { BUILTIN_DIRECTIONS, normalizeDirectionCode } from './directionCatalog';
 import type { WholeTrip } from './sources';
 
 export interface DirectionDef {
@@ -46,10 +44,27 @@ export const DIRECTION_PALETTE = [
   '#5FA9B5', // морской
 ];
 
-export const DEFAULT_DIRECTIONS: DirectionDef[] = [
-  { id: 'china', name: 'Китай', code: 'CN', color: '#5E7BB6', order: 1, builtin: true },
-  { id: 'turkey', name: 'Турция', code: 'TR', color: '#4FA3A5', order: 2, builtin: true },
-];
+/** Цвета встроенной пары — историческая палитра направлений (сопоставление
+ *  «направление → цвет» не меняется); остальные — из DIRECTION_PALETTE. */
+const DEFAULT_COLORS: Record<string, string> = {
+  'турция': '#4FA3A5',
+  'китай': '#5E7BB6',
+};
+
+/**
+ * Встроенная пара — из ЕДИНОГО источника (directionCatalog.BUILTIN_DIRECTIONS):
+ * те же названия, коды и ids, что у переключателя рейса; справочник «Плана
+ * дохода» (`directories/directions`) несёт ровно эти названия/коды. Нужна
+ * только пока справочник пуст или ещё не загружен — чипы и фильтр работают.
+ */
+export const DEFAULT_DIRECTIONS: DirectionDef[] = BUILTIN_DIRECTIONS.map((b, i) => ({
+  id: b.id,
+  name: b.name,
+  code: b.code,
+  color: DEFAULT_COLORS[b.name.toLowerCase()] || DIRECTION_PALETTE[i % DIRECTION_PALETTE.length],
+  order: b.order,
+  builtin: true,
+}));
 
 const norm = (s: unknown): string => String(s ?? '').trim().toLowerCase();
 
@@ -63,31 +78,54 @@ const autoCode = (name: string): string =>
     .toUpperCase();
 
 /**
- * Слияние справочника из базы с встроенными направлениями: записи базы
- * переопределяют встроенные (по id или названию), новые добавляются; порядок —
- * по полю order, затем по названию. Цвет новых — из палитры по кругу.
+ * Список направлений таймлайна из ЕДИНОГО справочника «Плана дохода»
+ * (`directories/directions`). Идентификаторы/названия/коды — записи справочника
+ * (совпадают с тем, что видит план дохода); встроенная пара Турция/Китай
+ * добавляется, только если записи нет (пустой справочник), и не удаляется.
+ *
+ * Второй аргумент (`colorList`, ветка `directories/tripDirections`) — только
+ * историческое перекрытие ЦВЕТА по названию; список направлений он не задаёт.
+ *
+ * Порядок — по `order` записи (Турция 1, Китай 2, прочие — после), затем по
+ * названию; так же упорядочены переключатель рейса и список «Плана дохода».
  */
-export const mergeDirections = (dbList: Array<Record<string, unknown>> | null | undefined): DirectionDef[] => {
-  const db: DirectionDef[] = (dbList || [])
+export const mergeDirections = (
+  dirList: Array<Record<string, unknown>> | null | undefined,
+  colorList?: Array<Record<string, unknown>> | null | undefined,
+): DirectionDef[] => {
+  const colors = new Map<string, string>();
+  (colorList || []).forEach((c) => {
+    if (!c || typeof c !== 'object') return;
+    const name = norm(c.name || c.label);
+    if (name && isHex(c.color)) colors.set(name, String(c.color));
+  });
+  const canonicalPair = (name: string, code: string): DirectionDef | undefined =>
+    DEFAULT_DIRECTIONS.find(
+      (d) => norm(d.name) === norm(name) || (!!code && d.code === normalizeDirectionCode(code)),
+    );
+  const rows: DirectionDef[] = (dirList || [])
     .filter((d) => d && typeof d === 'object')
     .map((d, i) => {
       const name = String(d.name || d.label || d.id || '').trim() || `Направление ${i + 1}`;
+      const code = normalizeDirectionCode(d.code) || autoCode(name);
+      const base = canonicalPair(name, code);
       return {
-        id: String(d.id || d.key || `td_${i}`),
+        id: String(d.id || d.key || base?.id || `td_${i}`),
         name,
-        code: String(d.code || '').trim().toUpperCase() || autoCode(name),
-        color: isHex(d.color) ? String(d.color) : DIRECTION_PALETTE[i % DIRECTION_PALETTE.length],
-        order: Number.isFinite(Number(d.order)) ? Number(d.order) : 100 + i,
+        code: code || base?.code || '',
+        color: isHex(d.color)
+          ? String(d.color)
+          : colors.get(norm(name)) || DEFAULT_COLORS[norm(name)] || DIRECTION_PALETTE[i % DIRECTION_PALETTE.length],
+        order: Number.isFinite(Number(d.order)) && Number(d.order) > 0 ? Number(d.order) : base?.order ?? 100 + i,
+        ...(base ? { builtin: true } : {}),
       } satisfies DirectionDef;
     });
-  const out: DirectionDef[] = DEFAULT_DIRECTIONS.map((def) => {
-    const o = db.find((x) => x.id === def.id || norm(x.name) === norm(def.name));
-    return o ? { ...def, ...o, id: def.id, name: def.name, builtin: true } : { ...def };
+  DEFAULT_DIRECTIONS.forEach((def) => {
+    if (!rows.some((r) => norm(r.name) === norm(def.name) || (!!r.code && r.code === def.code))) {
+      rows.push({ ...def, ...(colors.has(norm(def.name)) ? { color: colors.get(norm(def.name))! } : {}) });
+    }
   });
-  db.forEach((x) => {
-    if (!out.some((o) => o.id === x.id || norm(o.name) === norm(x.name))) out.push(x);
-  });
-  return out.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'ru'));
+  return rows.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'ru'));
 };
 
 /** Направление по тексту: точное имя/код, затем вхождение имени в текст. */

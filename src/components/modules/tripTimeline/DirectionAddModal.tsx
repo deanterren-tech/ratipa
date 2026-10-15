@@ -1,12 +1,14 @@
 /**
- * Окно «+ Направление» — АДДИТИВНОЕ добавление варианта в справочник
- * `directories/directions` (существующие записи не переписываются).
+ * Окно «+ Направление» — АДДИТИВНОЕ добавление варианта в ЕДИНЫЙ справочник
+ * `directories/directions` (существующие записи не переписываются). Тот же
+ * справочник читает «План дохода» и таймлайн (метки/чипы).
  *
- * Упрощено по требованию владельца: НИКАКИХ ставок, средних дней и плановых
- * значений — только минимальный набор, работающий на переключатель рейса:
+ * Минимальный набор полей, работающий на переключатель рейса:
  *   { id, dbKey, code (короткий: TR/CN/…), name, label, active, order }.
- * Плюс запись цвета в `directories/tripDirections` (если такого названия там
- * ещё нет) — чтобы чипы направлений и раскраска на таймлайне работали сразу.
+ * Цвет чипа на таймлайне отдельной записью БОЛЬШЕ НЕ дублируется
+ * (ветка directories/tripDirections — только историческое перекрытие цвета):
+ * добавленному направлению цвет подставляется общей палитрой направлений
+ * (lib/directions, DIRECTION_PALETTE).
  *
  * Правила окна: сохранение после подтверждения; защита от дублей ПО КОДУ и
  * предупреждение о совпадении названия; ошибки — внутри окна, данные формы не
@@ -19,14 +21,11 @@ import { UI } from '../../../ui/kit';
 import { useDialog } from '../../DialogProvider';
 import { useToast } from '../../ToastProvider';
 import { directoryService } from '../../../api';
-import { DIRECTION_PALETTE } from './lib/directions';
 import { normalizeDirectionCode, type DirectionOption } from './lib/directionCatalog';
 
 interface Props {
   /** Все записи справочника — для проверки дублей. */
   existing: DirectionOption[];
-  /** Названия из directories/tripDirections — для цвета и без дублей. */
-  existingColorNames: string[];
   user: { name: string; role: string };
   onClose: () => void;
   onSaved: (entry: DirectionOption) => void;
@@ -38,7 +37,7 @@ const fieldCls =
 const footerBtnBase =
   'inline-flex items-center justify-center gap-2 px-5 min-h-[46px] rounded-xl text-[15px] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
 
-export default function DirectionAddModal({ existing, existingColorNames, user, onClose, onSaved }: Props) {
+export default function DirectionAddModal({ existing, user, onClose, onSaved }: Props) {
   const { showConfirm } = useDialog();
   const { toast } = useToast();
   const [name, setName] = useState('');
@@ -93,18 +92,6 @@ export default function DirectionAddModal({ existing, existingColorNames, user, 
         createdAt: new Date().toISOString(),
       };
       directoryService.saveDirItem('directions', record, user.name, user.role);
-      // Цвет на таймлайн — отдельный справочник (та же запись, что у встроенных
-      // Китая/Турции через DEFAULT_DIRECTIONS): только если названия там ещё нет.
-      const colorExists = existingColorNames.some((n) => n.trim().toLowerCase() === trimmedName.toLowerCase());
-      if (!colorExists) {
-        const color = DIRECTION_PALETTE[(existingColorNames.length + existing.length) % DIRECTION_PALETTE.length];
-        directoryService.saveDirItem(
-          'tripDirections',
-          { id: `td_${id}`, name: trimmedName, code: normCode, color, order: 100 + existingColorNames.length },
-          user.name,
-          user.role,
-        );
-      }
       toast(`Направление «${trimmedName}» (${normCode}) добавлено`, 'success');
       onSaved({ id, code: normCode, name: trimmedName, order: 1000 + existing.length, active });
       onClose();

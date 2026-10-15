@@ -69,6 +69,8 @@ import DateInput from './DateInput';
 import DirectionToggle from './DirectionToggle';
 import {
   directionLabelOf,
+  directionStoreValue,
+  directionWriteValue,
   normalizeTripDirection,
   type DirectionOption,
 } from './lib/directionCatalog';
@@ -2335,8 +2337,19 @@ export default function TripCard({
     const stagesTouched = changes.count > 0 || fieldPatches.length > 0;
     const datesChanged = draft.planStart !== baseline.draft.planStart || draft.planEnd !== baseline.draft.planEnd;
     const circlesChanged = draft.circles !== baseline.draft.circles;
-    /** Направление изменилось (одно поле-код — для updatedAt и сообщения). */
-    const dirChanged = draft.direction !== baseline.draft.direction;
+    /**
+     * Направление: решение о записи принимает ЧИСТАЯ функция (lib/directionCatalog)
+     * в пространстве ЗАПИСИ — сравнивается каноническое значение (название
+     * справочника): «TR» и «Турция» — одно направление, лишней записи нет;
+     * пишется РОВНО поле `direction` связанной записи (остальные поля не
+     * трогаются), пустое значение очищает поле. Никаких циклов: второй модуль
+     * читает ту же запись, значение уже совпало — писать нечего.
+     */
+    const dirWrite = directionWriteValue(
+      trip.direction || trip.plan?.direction || '',
+      draft.direction,
+      directionOptions,
+    );
     const metaChangedFields = (['comment', 'reason', 'measures'] as const).filter((k) => metaDraft[k] !== baseline.meta[k]);
     const detailsParts: string[] = [changes.count > 0 ? describePlanChanges(changes) : cardBlocks.join(', ')];
     if (metaChangedFields.length) detailsParts.push(`прежние тексты рейса: ${metaChangedFields.join(', ')}`);
@@ -2359,10 +2372,10 @@ export default function TripCard({
         updates[`${base}/bufferDays`] = Math.max(0, Number(String(draft.bufferDays).replace(',', '.')) || 0);
       }
       if (circlesChanged) updates[`${base}/circles`] = draft.circles;
-      // Направление — ОДНО поле: значение-код «TR»/«CN» (пусто — поле
-      // очищается, значение не выдумывается). Старые текстовые значения НЕ
-      // переписываются, пока пользователь сам не изменит переключатель.
-      if (dirChanged) updates[`${base}/direction`] = draft.direction || null;
+      // Направление — РОВНО одно поле записи; значение — каноническое (название
+      // из единого справочника), пусто — поле очищается. Не пишем, если уже
+      // совпадает (dirWrite.write); остальные поля записи не сбрасываются.
+      if (dirWrite.write) updates[`${base}/direction`] = dirWrite.value;
       // Диапазон записи (startDate/endDate): явные плановые границы окна имеют
       // приоритет; без их правок диапазон пересчитывается по этапам (та же
       // функция «дата → диапазон», что и раньше).
@@ -2404,10 +2417,12 @@ export default function TripCard({
         }
       }
       if (circlesChanged) updates[`${base}/circles`] = draft.circles;
-      // Направление — ОДНО поле-код в той же записи «Плана дохода» (пусто —
-      // поле очищается). Старые текстовые значения не переписываются молча.
-      if (dirChanged) updates[`${base}/direction`] = draft.direction || null;
-      if (datesChanged || circlesChanged || dirChanged) {
+      // Направление — РОВНО одно поле ТОЙ ЖЕ записи «Плана дохода» (стабильный
+      // id связанного рейса, не номер машины): значение — каноническое (название
+      // из общего справочника), пусто — очищается; запись не создаётся и другие
+      // записи машины не трогаются. Уже совпадает — записи нет (dirWrite.write).
+      if (dirWrite.write) updates[`${base}/direction`] = dirWrite.value;
+      if (datesChanged || circlesChanged || dirWrite.write) {
         updates[`${base}/updatedAt`] = new Date().toLocaleString('ru-RU');
         updates[`${base}/updatedBy`] = user.name;
       }
@@ -2613,7 +2628,7 @@ export default function TripCard({
         if (datesChanged && stagesTouched) message = 'Рейс сохранён. Плановые даты и этапы обновлены в плане дохода';
         else if (datesChanged) message = 'Рейс сохранён. Плановые даты обновлены в плане дохода';
         else if (stagesTouched) message = 'Рейс сохранён. Этапы обновлены в плане дохода';
-        else if (dirChanged) message = 'Рейс сохранён. Направление обновлено';
+        else if (dirWrite.write) message = 'Рейс сохранён. Направление обновлено в связанной записи «Плана дохода»';
         else message = 'Рейс сохранён';
       } else {
         message = stagesTouched ? 'Рейс сохранён. Этапы записаны' : 'Рейс сохранён';
@@ -3270,9 +3285,10 @@ export default function TripCard({
         </div>
 
         {/* Направление — ТОТ ЖЕ компактный переключатель Турция/Китай, что в
-            окне «Новый рейс». В записи хранится ОДНО значение-код («TR»/«CN»);
-            никаких ставок/средних дней и пересчётов (упрощено по требованию
-            владельца). Старые записи («Китай»/«Турция») читаются маппингом. */}
+            окне «Новый рейс». В записи хранится ОДНО значение — НАЗВАНИЕ из
+            общего справочника направлений («Турция»/«Китай»), то же, что
+            читает и пишет «План дохода»; старые коды «TR»/«CN» читаются
+            маппингом. Никаких ставок/средних дней и пересчётов. */}
         <div data-ui="trip-direction" className="border border-[#E5E7EB] rounded-xl px-3 py-2.5 flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px]">
             <span className="font-semibold text-[#121316]">Направление</span>
@@ -3286,8 +3302,8 @@ export default function TripCard({
             />
             <span className="text-[#6B7280]" data-ui="trip-direction-hint">
               {draft.direction
-                ? `в записи сохранится одно значение — ${draft.direction}`
-                : 'не указано — в записи это одно поле direction (TR/CN)'}
+                ? `в записи сохранится «${directionStoreValue(directionOptions, draft.direction)}» — то же значение, что видит «План дохода»`
+                : 'не указано — поле direction записи пустое (то же значение видит «План дохода»)'}
             </span>
             {!canEditPlanFields ? (
               <span className="text-[10px] text-[#9CA3AF]">{archived ? 'архив — просмотр' : 'нет права правки направления'}</span>
@@ -4246,7 +4262,7 @@ export default function TripCard({
                   Требует заполнения
                 </span>
               ) : null}
-              {plan.direction ? <span>направление: {plan.direction}</span> : null}
+              {plan.direction ? <span>направление: {directionLabelOf(directionOptions, plan.direction)}</span> : null}
               {plan.month ? <span>месяц в плане: {plan.month}</span> : null}
               {plan.days != null ? <span>дней: {plan.days}</span> : null}
               {plan.totalKm != null ? <span>км план: {plan.totalKm}</span> : null}

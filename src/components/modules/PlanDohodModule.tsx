@@ -19,6 +19,10 @@ import { buildDispatcherDirectory, dispatcherFieldsFor, resolvePersonName, Dispa
 // Круги рейса — единое правило хранения/нормализации (одно поле записи,
 // общее с модулем «Таймлайн рейсов»; отсутствие поля = 1, без пересчёта).
 import { normalizeCircles } from './tripTimeline/lib/circles'
+// Направление — единый справочник и каноническое значение записи (общие с
+// модулем «Таймлайн рейсов»): в поле direction хранится НАЗВАНИЕ направления;
+// старые записи с кодом «TR»/«CN» читаются маппингом (directionLabelOf).
+import { directionLabelOf, directionOptionsFromDb, type DirectionOption } from './tripTimeline/lib/directionCatalog'
 // Дополнительные расходы: статьи с валютами и расчётом в евро (одна точка
 // конвертации — utils/expenseRates; направление курса проверено тестами).
 import {useConverter} from '../../hooks/useConverter'
@@ -132,6 +136,9 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     }
   };
   const [directions, setDirections] = useState<Record<string, number>>({});
+  /** Записи единого справочника направлений (directories/directions) — для
+   *  приведения сохранённого значения к названию (старые коды «TR»/«CN»). */
+  const [directionRecords, setDirectionRecords] = useState<Array<Record<string, unknown>>>([]);
   const [distances, setDistances] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>({
     useDistanceLookup: false,
@@ -163,6 +170,10 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
     const unsubTrips = pdService.subscribeTrips(setActiveTrips, false);
     const unsubCars = directoryService.getCarsList(setSavedCars);
     const unsubDirs = directoryService.getDirectionsMap(setDirections);
+    // Тот же справочник направлений записями (id/code/name) — приведение
+    // сохранённых значений к названию: «TR» → «Турция» (единое значение с
+    // таймлайном; данные не переписываются молча).
+    const unsubDirList = directoryService.getDirections((list: any[]) => setDirectionRecords((list || []) as Array<Record<string, unknown>>));
     const unsubDist = pdService.subscribeKnownDistances(setDistances);
     const unsubCp = dbService.getCheckpoints ? dbService.getCheckpoints((list: any) => setAllCheckpoints(list || [])) : undefined;
     const unsubCurrencies = dbService.getCurrencies(setCurrencies);
@@ -194,6 +205,7 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
 
       unsubCars();
       unsubDirs();
+      unsubDirList();
       unsubDist();
       unsubCurrencies();
       unsubSet();
@@ -1329,6 +1341,20 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     return "bg-[var(--accent-solid)] text-[var(--accent-on)]";
   };
 
+  /**
+   * Единый справочник направлений «записями» — источник НАЗВАНИЯ для любых
+   * сохранённых значений поля direction: «TR» → «Турция», «Китай» → «Китай».
+   * Одна точка приведения на весь модуль (окно правки, список, вкладки, точка).
+   */
+  const directionOptionList: DirectionOption[] = useMemo(
+    () => directionOptionsFromDb(directionRecords),
+    [directionRecords],
+  );
+  const pickDirectionLabel = useCallback(
+    (raw: unknown) => directionLabelOf(directionOptionList, raw),
+    [directionOptionList],
+  );
+
   const handleDirChange = (val: string) => {
     setDirection(val);
     const c = directions[val] || 0;
@@ -1611,9 +1637,14 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
 
   const loadTripToForm = useCallback((trip: TripPlan) => {
+    // Направление: сохранённое значение приводится к НАЗВАНИЮ из единого
+    // справочника — старое «TR»/«CN» из записей таймлайна показывается как
+    // «Турция»/«Китай» и находится в списке и вкладках; сама запись не
+    // переписывается (миграции нет).
+    const dirName = pickDirectionLabel(trip.direction);
     setEditingTripId(trip.id);
     setCarNumber(trip.carNumber || "");
-    setDirection(trip.direction || "");
+    setDirection(dirName);
     setDateStart(trip.dateStart || "");
     setDateEnd(trip.dateEnd || "");
     // Круги — то же поле записи, что правит таймлайн (lib/circles):
@@ -1648,7 +1679,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
           rate: 0,
           referenceRate: "",
           ferry: 0,
-          coeff: directions[trip.direction] || 0,
+          coeff: directions[dirName] || 0,
         },
       ];
       setLegs(initialLegs);
@@ -1657,7 +1688,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     setPlEditingId(null);
     setPlName("");
     setIsModalOpen(true);
-  }, [directions]);
+  }, [directions, pickDirectionLabel]);
 
 
 
@@ -1802,7 +1833,10 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
         id: editingTripId || "",
         carNumber: trimmedCar,
         logist: user.name,
-        direction,
+        // Направление — КАНОНИЧЕСКОЕ значение единого справочника (название;
+        // то же значение хранит и читает таймлайн). Старые коды «TR»/«CN»
+        // приводятся к названию, посторонний текст сохраняется как есть.
+        direction: pickDirectionLabel(direction),
         dateStart,
         dateEnd,
         // Круги рейса — одно поле записи: правится здесь и в таймлайне.
@@ -3217,7 +3251,9 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
       }
     }
     if (activeDirectionTab !== "All") {
-      list = list.filter((t) => t.direction === activeDirectionTab);
+      // Сравнение по НАЗВАНИЮ из справочника: записи со старым кодом «TR»/«CN»
+      // попадают во вкладку «Турция»/«Китай» так же, как пересохранённые.
+      list = list.filter((t) => pickDirectionLabel(t.direction) === activeDirectionTab);
     }
     if (searchCarQuery.trim()) {
       const q = searchCarQuery.trim().toLowerCase();
@@ -3267,7 +3303,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
       });
     }
     return list;
-  }, [trips, activeDispatcherTab, filterDispatchers, activeDirectionTab, searchCarQuery, sortConfig, manualTripsOrder]);
+  }, [trips, activeDispatcherTab, filterDispatchers, activeDirectionTab, searchCarQuery, sortConfig, manualTripsOrder, pickDirectionLabel]);
 
   const archiveTripsMonths = useMemo(() => {
     return Array.from(
@@ -3605,8 +3641,11 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                   <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 min-w-0">
                     <span className="text-xl font-bold tracking-tight text-[#121316] break-words">{trip.carNumber}</span>
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E7EB] bg-[#F8F9FA] px-2.5 py-1 text-[11px] font-medium text-[#4B5563]">
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getDirectionDotClass(trip.direction || "")}`} aria-hidden="true" />
-                      {trip.direction || "—"}
+                      {/* Название направления — из единого справочника: записи
+                          со старым кодом «TR»/«CN» показываются как «Турция»/
+                          «Китай» (то же название видит таймлайн). */}
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getDirectionDotClass(pickDirectionLabel(trip.direction))}`} aria-hidden="true" />
+                      {pickDirectionLabel(trip.direction) || "—"}
                     </span>
                     {archived && trip.currentMonth && (
                       <span className="inline-flex items-center rounded-full border border-[#E5E7EB] bg-[#F3F4F6] px-2.5 py-1 text-[11px] font-medium text-[#4B5563]">

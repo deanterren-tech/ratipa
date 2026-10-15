@@ -1,19 +1,22 @@
 /**
- * Направление рейса — ОДНО поле `direction` записи со значением-КОДОМ:
- * «TR» (Турция) / «CN» (Китай) и коды добавленных вариантов.
+ * Направление рейса — ОДНО поле `direction` записи.
  *
- * Требование владельца (дословно): в окнах «Добавить рейс» и «Просмотр рейса» —
- * один компактный переключатель Турция/Китай; в рейсе хранится одно значение
- * `direction` («TR»|«CN»); НИКАКИХ ставок, средних дней, пересчётов и
- * синхронизации с планом дохода. Список вариантов — из справочника Настроек
- * `directories/directions` (там есть Турция и Китай; им аддитивно добавлен
- * короткий `code` TR/CN — coeff/id/dbKey/label не тронуты).
+ * «План дохода» и «Таймлайн рейсов» используют ОДИН справочник направлений
+ * (`directories/directions`: Турция TR, Китай CN и добавленные варианты) и
+ * ОДНО каноническое значение в поле `direction` записи — НАЗВАНИЕ варианта
+ * («Турция»/«Китай»/…): именно название читает и пишет «План дохода»
+ * (выпадающий список, табы, цвет точки). Короткий КОД («TR»/«CN») — единица
+ * переключателя в окнах рейса и старых записей; он читается маппингом с
+ * фолбэком, данные не мигрируются (normalizeTripDirection).
  *
- * Старые записи (текст «Китай»/«Турция») читаются маппингом с фолбэком —
- * данные не ломаются и не мигрируются: см. normalizeTripDirection.
+ * Синхронизация направления между модулями — по СТАБИЛЬНОМУ id записи
+ * (`pd:<planId>` ↔ `trips_dashboard/<planId>`), не по номеру машины: запись
+ * одна, поэтому «расходиться» стороны могут только представлением значения —
+ * от этого и защищают directionStoreValue / directionWriteValue
+ * (сравнение перед записью; «TR» и «Турция» — одно направление).
  *
  * Модуль ЧИСТЫЙ (без React и базы) — покрыт юнит-тестами
- * (scripts/test-directions.ts).
+ * (scripts/test-directions.ts, scripts/test-direction-sync.ts).
  */
 
 export interface DirectionOption {
@@ -151,4 +154,62 @@ export const directionLabelOf = (
   const code = normalizeTripDirection(value);
   if (CODE_TO_NAME[code]) return CODE_TO_NAME[code];
   return str(value);
+};
+
+/**
+ * Каноническое ЗНАЧЕНИЕ поля `direction` записи — то, что пишется в базу и
+ * читается обоими модулями: НАЗВАНИЕ варианта справочника («Турция»/«Китай»).
+ * Код («TR») приводится к названию; уже название — остаётся; неизвестное
+ * значение сохраняется как есть (не выдумываем), пустое — '' (поле не пишется
+ * / очищается вызывающим кодом).
+ */
+export const directionStoreValue = (
+  options: DirectionOption[] | null | undefined,
+  value: unknown,
+): string => {
+  const text = str(value);
+  if (!text) return '';
+  const opt = directionOptionOf(options, value);
+  return opt ? opt.name : text;
+};
+
+/** Ключ сравнения значений поля `direction` (регистр/пробелы не значимы). */
+const storeKey = (options: DirectionOption[] | null | undefined, value: unknown): string =>
+  directionStoreValue(options, value).trim().toLowerCase();
+
+/**
+ * «Одно и то же направление?» — сравнение В ПРОСТРАНСТВЕ ЗАПИСИ: «TR» и
+ * «Турция» равны (одно направление), пустое и пустое равны. Используется как
+ * защита от лишних записей и как условие выхода из двусторонней синхронизации
+ * (значение уже совпало — писать нечего, цикла нет).
+ */
+export const sameTripDirection = (
+  a: unknown,
+  b: unknown,
+  options?: DirectionOption[] | null,
+): boolean => storeKey(options, a) === storeKey(options, b);
+
+export interface DirectionWriteDecision {
+  /** false — значение уже совпадает (в т.ч. «TR» vs «Турция»): НЕ писать. */
+  write: boolean;
+  /** Значение для точечной записи; null — очистить поле (пустое направление). */
+  value: string | null;
+}
+
+/**
+ * Решение о записи направления в СВЯЗАННУЮ запись: сравниваем текущее
+ * сохранённое значение с желаемым в каноническом пространстве и пишем только
+ * при реальном расхождении (было «TR», выбрали «Турция» — это одно и то же
+ * направление, записи нет). Возвращает только поле `direction` — остальные
+ * поля записи (диспетчер, водитель, даты, машина) не затрагиваются.
+ */
+export const directionWriteValue = (
+  stored: unknown,
+  desired: unknown,
+  options?: DirectionOption[] | null,
+): DirectionWriteDecision => {
+  if (storeKey(options, stored) === storeKey(options, desired)) {
+    return { write: false, value: null };
+  }
+  return { write: true, value: directionStoreValue(options, desired) || null };
 };
