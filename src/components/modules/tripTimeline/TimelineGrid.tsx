@@ -187,6 +187,13 @@ interface CarRowModel {
   dispatcherName: string;
   /** ТЕКУЩЕЕ назначение машины (справочник сцепок): по нему группируется «Все». */
   groupDispatcherId: string;
+  /**
+   * Ключ ГРУППЫ по ЧЕЛОВЕКУ, а не по идентификатору: у одного диспетчера в
+   * базе бывает два разных id (личная учётная запись и запись справочника), и
+   * из-за этого машина попадала в отдельный блок с тем же заголовком. Группа
+   * сводится по нормализованному имени, а если имени нет — по id.
+   */
+  groupPersonKey: string;
   groupDispatcherName: string;
   tripsCount: number;
   basesCount: number;
@@ -749,6 +756,11 @@ const buildRows = (
       dispatcherId: current ? current.id : car.dispatcherId,
       dispatcherName: current ? current.name || car.dispatcherName : car.dispatcherName,
       groupDispatcherId: current ? current.id : car.dispatcherId,
+      groupPersonKey: (() => {
+        const name = String((current ? current.name || car.dispatcherName : car.dispatcherName) || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        const id = String((current ? current.id : car.dispatcherId) || '').trim();
+        return name || (id ? `id:${id}` : '');
+      })(),
       groupDispatcherName: current ? current.name || car.dispatcherName : car.dispatcherName,
       tripsCount: myTrips.length,
       basesCount: myBases.filter((p) => p.arrivalDay != null).length,
@@ -2950,9 +2962,20 @@ export default function TimelineGrid({
       const i = orderIdx.get(row.groupDispatcherId);
       return i == null ? Number.MAX_SAFE_INTEGER - 1 : i;
     };
+    // Позиция ЧЕЛОВЕКА в порядке вкладок: у него может быть несколько id, берём
+    // минимальную позицию среди его строк — тогда его машины идут подряд и дают
+    // ровно один блок (иначе строки одного диспетчера разрывались чужим блоком).
+    const personIdx = new Map<string, number>();
+    rows.forEach((row) => {
+      const key = row.groupPersonKey || row.groupDispatcherId || '';
+      const i = idxOf(row);
+      const prev = personIdx.get(key);
+      if (prev == null || i < prev) personIdx.set(key, i);
+    });
+    const posOf = (row: CarRowModel): number => personIdx.get(row.groupPersonKey || row.groupDispatcherId || '') ?? idxOf(row);
     const sorted = [...rows].sort((a, b) => {
-      const ai = idxOf(a);
-      const bi = idxOf(b);
+      const ai = posOf(a);
+      const bi = posOf(b);
       if (ai !== bi) return ai - bi;
       const an = (a.groupDispatcherName || '').toLocaleLowerCase('ru');
       const bn = (b.groupDispatcherName || '').toLocaleLowerCase('ru');
@@ -2961,7 +2984,8 @@ export default function TimelineGrid({
     });
     const out: Array<{ key: string; name: string; rows: CarRowModel[] }> = [];
     sorted.forEach((row) => {
-      const key = row.groupDispatcherId || '';
+      // Блок — по человеку: два разных id одного диспетчера дают один блок.
+      const key = row.groupPersonKey || row.groupDispatcherId || '';
       const last = out[out.length - 1];
       if (last && last.key === key) last.rows.push(row);
       else out.push({ key, name: row.groupDispatcherName || '', rows: [row] });
