@@ -25,6 +25,9 @@ import CalendarDaysCalculator from './CalendarDaysCalculator';
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
 import {normalizePlate, findCarByPlate, getDriverById, getDriverIdForCar, formatCoupling} from '../../utils/salaryAutofill'
+// Список направлений — ЕДИНЫЙ справочник «Плана дохода» (directories/directions):
+// жёсткая пара «Турция/Китай» в форме больше его не дублирует.
+import { directionOptionsFromDb, effectiveDirectionOptions } from './tripTimeline/lib/directionCatalog'
 import {formatDriverShortName} from '../../utils/driverSync'
 import {computeSalaryTotals, resolveCarRateFrom, deriveStoredRates, salaryNumber, compareByEntryTimeDesc, type RateSource, type ResolvedCarRate} from '../../utils/salaryCalc'
 import {CarConflictModal} from '../common/CarConflictModal'
@@ -71,6 +74,24 @@ export default function SalaryModule({ user }: SalaryModuleProps) {
   const [totalKm, setTotalKm] = useState<number | ''>('');
   const [tripMark, setTripMark] = useState('Турция');
   const [tripDirection, setTripDirection] = useState('Турция');
+  /** Записи единого справочника направлений — варианты списка (как в «Плане дохода»). */
+  const [directionRecords, setDirectionRecords] = useState<Array<Record<string, unknown>>>([]);
+  useEffect(() => {
+    const un = directoryService.getDirections((list: any[]) => setDirectionRecords((list || []) as Array<Record<string, unknown>>));
+    return () => { if (typeof un === 'function') un(); };
+  }, []);
+  /** Варианты направления: активные из справочника; пустой справочник — встроенная пара. */
+  const directionOptions = useMemo(
+    () => effectiveDirectionOptions(directionOptionsFromDb(directionRecords)),
+    [directionRecords],
+  );
+  // Значение формы всегда должно существовать среди вариантов: если направление
+  // из справочника переименовали или удалили — берём первый доступный вариант.
+  useEffect(() => {
+    if (!directionOptions.length) return;
+    if (!directionOptions.some((o) => o.name === tripDirection)) setTripDirection(directionOptions[0].name);
+  }, [directionOptions, tripDirection]);
+
   const [tripCircles, setTripCircles] = useState('');
   const [idleDays, setIdleDays] = useState(0);
   const [totalDays, setTotalDays] = useState(1);
@@ -816,8 +837,9 @@ ${conflicts
                   onChange={e => setTripDirection(e.target.value)}
                   className={UI.select}
                 >
-                  <option value="Турция">Турция</option>
-                  <option value="Китай">Китай</option>
+                  {directionOptions.map((d) => (
+                    <option key={d.id || d.name} value={d.name}>{d.name}</option>
+                  ))}
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
@@ -1489,8 +1511,13 @@ ${conflicts
                 <label className={UI.fieldLabel} htmlFor="salary-edit-direction">Направление</label>
                 <select id="salary-edit-direction" value={editDirection} onChange={e => setEditDirection(e.target.value)} className={UI.select}>
                     <option value="">—</option>
-                    <option value="Турция">Турция</option>
-                    <option value="Китай">Китай</option>
+                    {/* Направление из сохранённой записи не теряется, даже если его нет в справочнике */}
+                    {editDirection && !directionOptions.some((o) => o.name === editDirection) ? (
+                      <option value={editDirection}>{editDirection}</option>
+                    ) : null}
+                    {directionOptions.map((d) => (
+                      <option key={d.id || d.name} value={d.name}>{d.name}</option>
+                    ))}
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
