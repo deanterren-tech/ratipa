@@ -3389,7 +3389,17 @@ export const dbService = {
     }
   },
 
-  saveDriver: (d: Driver, user: string, role: string) => {
+  /**
+   * Сохранение водителя — ЕДИНСТВЕННЫЙ путь записи в ветку `drivers`.
+   * Принимает частичную запись (пишутся только переданные поля — окно «дата
+   * рождения» передаёт один `birthDate` и след правки) и возвращает промис
+   * записи, чтобы вызывающий мог показать ошибку вместо тихой неудачи.
+   */
+  saveDriver: (
+    d: Partial<Driver> & { id: string; updatedAt?: string; updatedBy?: string },
+    user: string,
+    role: string,
+  ): Promise<void> => {
     catalogCache.drivers = null;
     // Пишем только те поля, которые передал вызывающий (undefined не трогаем —
     // частичное сохранение не должно стирать остальные поля записи).
@@ -3427,6 +3437,10 @@ export const dbService = {
     put('comment', d.comment);
     // Архивная запись (поле вне базового типа Driver)
     put('archived', (d as { archived?: boolean }).archived);
+    // След правки — конвенция портала (types.ts: updatedAt/updatedBy): пишется
+    // только когда вызывающий его передал (окно «дата рождения»).
+    put('updatedAt', d.updatedAt);
+    put('updatedBy', d.updatedBy);
     // Телефон: явный d.phone, иначе зеркало основного номера из единого списка
     const primaryPhoneNumber = srcArr && srcArr.length > 0
       ? (srcArr.find((p) => p && p.isPrimary) || srcArr[0])?.number || ''
@@ -3434,14 +3448,19 @@ export const dbService = {
     put('phone', d.phone !== undefined ? d.phone : primaryPhoneNumber);
     if (payload.license !== undefined && payload.licenseNumber === undefined) payload.licenseNumber = payload.license;
     if (payload.licenseNumber !== undefined && payload.license === undefined) payload.license = payload.licenseNumber;
+    let write: Promise<void> = Promise.resolve();
     if (useFirebase) {
       // update() вместо set() — не затирает поля, которые могли быть
       // записаны в drivers другими модулями (защита от потери данных).
-      update(ref(database, `drivers/${d.id}`), payload);
+      write = update(ref(database, `drivers/${d.id}`), payload);
+      // Отказ записи не должен висеть необработанным (окно «дата рождения»
+      // ждёт этот промис и показывает ошибку пользователю).
+      write.catch(() => {});
     } else {
       const local = getLocalStorageData<Driver[]>("ratipa_drivers", []);
       const idx = local.findIndex((x) => x.id === d.id);
-      const merged = Object.assign({}, idx >= 0 ? local[idx] : {}, d, payload);
+      // Частичная запись: существующие поля записи остаются, переданные — сверху.
+      const merged = Object.assign({}, idx >= 0 ? local[idx] : {}, d, payload) as Driver;
       if (idx >= 0) local[idx] = merged;
       else local.push(merged);
       setLocalStorageData("ratipa_drivers", local);
@@ -3452,8 +3471,9 @@ export const dbService = {
       "Сохранение водителя",
       "Settings",
       d.id,
-      `Водитель ${d.name} сохранен`,
+      `Водитель ${d.name || d.id} сохранен`,
     );
+    return write;
   },
 
   deleteDriver: (id: string, user: string, role: string) => {

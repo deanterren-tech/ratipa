@@ -56,6 +56,7 @@
     "test:trip-history": "tsx scripts/test-trip-history.ts",
     "test:trip-close": "tsx scripts/test-trip-close.ts",
     "test:plan-dates": "tsx scripts/test-plan-dates.ts",
+    "test:birth-prompt": "tsx tests/test-driver-birth-prompt.ts",
     "audit:plan-dates": "tsx scripts/audit-plan-dates.ts"
   },
   "dependencies": {

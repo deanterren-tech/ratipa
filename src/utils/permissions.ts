@@ -1,5 +1,16 @@
 import { UserProfile } from "../types";
 
+/**
+ * Минимум профиля, достаточный для резолва прав: и полный UserProfile, и
+ * короткий профиль активного пользователя (uid/имя/права). Остальные поля
+ * (email, createdAt и пр.) резолву прав не нужны — не требуем их зря.
+ */
+export interface PermissionSubject {
+  role: string;
+  permissions?: UserProfile["permissions"] | Record<string, string> | null;
+  customPermissions?: Record<string, string> | null;
+}
+
 /** Базовые права по ролям (fallback, если нет кастомных/настроенных). */
 export const DEFAULT_ROLE_PERMS: Record<string, Record<string, string>> = {
   root_admin: {
@@ -50,7 +61,7 @@ export const DEFAULT_ROLE_PERMS: Record<string, Record<string, string>> = {
  * и наследование через роль (DEFAULT_ROLE_PERMS + settings.rolePermissions).
  * Возвращает "none" | "read" | "write".
  */
-export function resolvePermission(user: UserProfile, key: string, rolePermissions?: Record<string, Record<string, string>>): "none" | "read" | "write" {
+export function resolvePermission(user: PermissionSubject, key: string, rolePermissions?: Record<string, Record<string, string>>): "none" | "read" | "write" {
   if (user.role === "root_admin") {
     return "write";
   }

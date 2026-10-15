@@ -20,6 +20,7 @@ import type { NotificationItem } from '../hooks/useNotifications'
 import {useConverter} from '../hooks/useConverter'
 import UpdateTour from './UpdateTour'
 import PortalInstructionsModal from './PortalInstructionsModal'
+import DriverBirthPrompt from './common/DriverBirthPrompt'
 import {usePresence} from '../hooks/usePresence'
 import {useChat} from '../hooks/useChat'
 import TripCloseWizard from './modules/tripClose/TripCloseWizard';
@@ -1578,6 +1579,11 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         canSeeVehicles={user.role !== 'mechanic' && (user.role === 'root_admin' || resolvePermission(user, 'vehicleDriverData', settings?.rolePermissions) !== 'none')}
         onClose={closeTour}
       />
+
+      {/* Дата рождения водителя: диспетчер вносит дату своему водителю, если она
+          отсутствует или неправдоподобна. Один раз за вход, одно окно за раз,
+          запись — только в drivers/{id}.birthDate существующим путём. */}
+      <DriverBirthPrompt user={user} settings={settings} />
 
       {/* Converter Panel — окно раскрывается слева от своей кнопки в топ-баре:
           правый край панели на 8 px левее кнопки, верх — под топ-баром.
