@@ -2302,6 +2302,14 @@ export default function TripCard({
         updates[`${base}/updatedBy`] = user.name;
       }
     }
+    // Легаси-оверрайд дат (tripTimeline/tripMeta/<ключ>: planStart/planEnd) —
+    // ВТОРАЯ сторона из старых сборок. Правка дат окна очищает его ТОЙ ЖЕ
+    // операцией: в модели должна остаться ОДНА запись дат — запись-источник
+    // (см. lib/planBoundsWrite; перетаскивание полосы чистит так же).
+    if (datesChanged) {
+      updates[`tripTimeline/tripMeta/${trip.key}/planStart`] = null;
+      updates[`tripTimeline/tripMeta/${trip.key}/planEnd`] = null;
+    }
     // Этапы: добавленные (целиком), изменённые (точечно), удалённые (null) —
     // той же операцией, что и всё остальное окно.
     changes.adds.forEach((s) => {

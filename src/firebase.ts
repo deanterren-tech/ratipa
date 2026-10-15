@@ -16,6 +16,7 @@ import {
   runTransaction,
 } from "firebase/database";
 import { findTripPeriodConflict } from './components/modules/tripTimeline/lib/tripGuard';
+import { planBoundsWritePlan } from './components/modules/tripTimeline/lib/planBoundsWrite';
 import {
   UserProfile,
   Vehicle,
@@ -1896,7 +1897,7 @@ export const dbService = {
     carId?: unknown;
     dateStart?: unknown;
     dateEnd?: unknown;
-  }, selfKey: string): Promise<{ ok: boolean; message?: string }> => {
+  }, selfKey: string, opts?: { silent?: boolean }): Promise<{ ok: boolean; message?: string }> => {
     if (!useFirebase) return { ok: true };
     try {
       const [timelineSnap, planSnap] = await Promise.all([
@@ -1911,10 +1912,12 @@ export const dbService = {
         : [];
       const conflict = findTripPeriodConflict(candidate, [...timelineTrips, ...planTrips], { selfKey });
       if (conflict) {
-        try {
-          window.dispatchEvent(new CustomEvent('ratipa:trip-period-conflict', { detail: conflict }));
-        } catch {
-          /* событие нужно интерфейсу; сохранение всё равно блокировано */
+        if (!opts?.silent) {
+          try {
+            window.dispatchEvent(new CustomEvent('ratipa:trip-period-conflict', { detail: conflict }));
+          } catch {
+            /* событие нужно интерфейсу; сохранение всё равно блокировано */
+          }
         }
         return { ok: false, message: conflict.message };
       }
@@ -2463,28 +2466,57 @@ export const dbService = {
     return () => {};
   },
 
+  /**
+   * Общие тексты и служебные поля рейса (tripTimeline/tripMeta/<ключ>).
+   *
+   * ДАТЫ ПЛАНОВЫХ ГРАНИЦ В tripMeta БОЛЬШЕ НЕ ПИШУТСЯ. Если патч содержит
+   * planStart/planEnd (легаси-вызов) — они уходят в запись-ИСТОЧНИК тем же
+   * механизмом, что и сохранение окна (lib/planBoundsWrite + guardTimelinePeriod):
+   * у связанного рейса — в trips_dashboard/<planId> (dateStart/dateEnd), у
+   * ручного — в его запись (startDate/endDate). Второго независимого значения
+   * дат не остаётся (легаси-оверрайд очищается тем же update), проверка периодов
+   * обязательна. Остальные поля патча записываются в tripMeta ТОЙ ЖЕ операцией.
+   */
   saveTimelineTripMeta: async (tripKey: string, patch: Record<string, unknown>): Promise<boolean> => {
     if (!tripKey) return false;
     const clean = stripUndefinedDeep({ ...patch, updatedAt: new Date().toISOString() }) as Record<string, unknown>;
-    // Перетаскивание и изменение длины полосы меняют плановые границы — это тот же
-    // путь сохранения, что и правка рейса, поэтому проверка периодов обязательна и здесь.
-    const touchesSpan = ['planStart', 'planEnd', 'dateStart', 'dateEnd'].some((k) => k in clean);
-    if (useFirebase && touchesSpan) {
+    const dateKeys = ['planStart', 'planEnd', 'dateStart', 'dateEnd'];
+    const touchesDates = dateKeys.some((k) => k in clean);
+    if (touchesDates) {
+      // Даты — только в запись-источник (одна сторона). Ошибка/конфликт периодов
+      // → false: вызывающий не сообщает об успехе, данные не записаны.
       const bareId = tripKey.replace(/^(pd|tl):/, '');
       const isPlan = /^pd:/.test(tripKey);
-      const source = await dbService.readOnce(isPlan ? `trips_dashboard/${bareId}` : `tripTimeline/trips/${bareId}`);
-      const sourceRec = source.exists() ? (source.val() as Record<string, unknown>) : {};
-      const guard = await dbService.guardTimelinePeriod(
-        {
-          id: bareId,
-          carNumber: clean.carNumber ?? sourceRec.carNumber,
-          carId: sourceRec.carId ?? sourceRec.vehicleId,
-          dateStart: clean.planStart ?? clean.dateStart ?? sourceRec.dateStart,
-          dateEnd: clean.planEnd ?? clean.dateEnd ?? sourceRec.dateEnd,
-        },
-        bareId,
-      );
-      if (!guard.ok) return false;
+      const sourcePath = isPlan ? `trips_dashboard/${bareId}` : `tripTimeline/trips/${bareId}`;
+      if (!useFirebase) return false;
+      try {
+        const [source, metaSnap] = await Promise.all([
+          dbService.readOnce(sourcePath),
+          dbService.readOnce(`tripTimeline/tripMeta/${tripKey}`),
+        ]);
+        const sourceRec = source.exists() ? (source.val() as Record<string, unknown>) : {};
+        const metaRaw = metaSnap.exists() ? (metaSnap.val() as Record<string, unknown>) : null;
+        const plan = planBoundsWritePlan({
+          tripKey,
+          raw: sourceRec,
+          metaRaw,
+          startIso: (clean.planStart ?? clean.dateStart) as string | undefined,
+          endIso: (clean.planEnd ?? clean.dateEnd) as string | undefined,
+        });
+        if (!plan.ok) return false;
+        const guard = await dbService.guardTimelinePeriod(plan.guard, bareId);
+        if (!guard.ok) return false;
+        const updates: Record<string, unknown> = { ...plan.updates };
+        Object.entries(clean).forEach(([k, v]) => {
+          if (dateKeys.includes(k)) return; // даты уже ушли в запись-источник
+          updates[`tripTimeline/tripMeta/${tripKey}/${k}`] = v;
+        });
+        await update(ref(database), updates);
+        return true;
+      } catch (err) {
+        handleFailure('firebase', err, { path: sourcePath, userMessage: 'Не удалось сохранить плановые даты' });
+        return false;
+      }
     }
     if (useFirebase) {
       await update(ref(database, `tripTimeline/tripMeta/${tripKey}`), clean).catch((err) =>
@@ -2493,6 +2525,48 @@ export const dbService = {
       return true;
     }
     return false;
+  },
+
+  /**
+   * Правка ПЛАНОВЫХ границ рейса таймлайна (перетаскивание/растягивание полосы):
+   * ОДНА атомарная запись в запись-ИСТОЧНИК — trips_dashboard/<planId>
+   * (dateStart/dateEnd) у связанного рейса, tripTimeline/trips/<id>
+   * (startDate/endDate) у ручного — плюс единая проверка периодов
+   * (guardTimelinePeriod) ДО записи. Никакой второй стороны не создаётся
+   * (легаси-оверрайд tripMeta очищается тем же update).
+   *
+   * Возврат: { ok: true } — только по факту подтверждённой записи;
+   * конфликт периодов / порядок дат / ошибка записи — { ok: false, message }
+   * с понятной причиной (UI показывает её и НЕ сообщает об успехе).
+   */
+  saveTimelinePlanBounds: async (
+    tripKey: string,
+    next: { planStart?: string; planEnd?: string },
+    by?: string,
+  ): Promise<{ ok: boolean; message?: string }> => {
+    if (!tripKey) return { ok: false, message: 'Рейс не указан' };
+    const bareId = tripKey.replace(/^(pd|tl):/, '');
+    const isPlan = /^pd:/.test(tripKey);
+    const sourcePath = isPlan ? `trips_dashboard/${bareId}` : `tripTimeline/trips/${bareId}`;
+    if (!useFirebase) return { ok: false, message: 'База недоступна — плановые даты не сохранены' };
+    try {
+      const [source, metaSnap] = await Promise.all([
+        dbService.readOnce(sourcePath),
+        dbService.readOnce(`tripTimeline/tripMeta/${tripKey}`),
+      ]);
+      const sourceRec = source.exists() ? (source.val() as Record<string, unknown>) : {};
+      const metaRaw = metaSnap.exists() ? (metaSnap.val() as Record<string, unknown>) : null;
+      const plan = planBoundsWritePlan({ tripKey, raw: sourceRec, metaRaw, startIso: next?.planStart, endIso: next?.planEnd, by });
+      if (!plan.ok) return { ok: false, message: plan.error };
+      // Единая проверка периодов — до записи; сообщение показывает вызывающий
+      // слой (silent: без дубль-события).
+      const guard = await dbService.guardTimelinePeriod(plan.guard, bareId, { silent: true });
+      if (!guard.ok) return { ok: false, message: guard.message };
+      await update(ref(database), plan.updates);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, message: `Не удалось сохранить плановые даты: ${(err as Error)?.message || String(err)}` };
+    }
   },
 
   // PERMITS (Dozvola) — unified to dozvolsRegistryV4

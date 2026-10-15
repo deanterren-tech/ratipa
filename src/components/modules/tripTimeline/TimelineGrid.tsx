@@ -299,11 +299,25 @@ interface Props {
    * добавления записи справочника (нет обработчика — кнопки нет; режим чтения).
    */
   onAddDirection?: () => void;
+  /**
+   * Перетаскивание/растягивание ПЛАНОВОЙ полосы рейса: новые границы уходят в
+   * запись-ИСТОЧНИК через dbService.saveTimelinePlanBounds (единая проверка
+   * периодов — см. TripTimelineModule; конфликт → полоса возвращается на
+   * место и человек видит причину). Обработчика нет — полосы не перетаскиваются.
+   */
+  onPlanBoundsDrag?: (tripKey: string, startIso: string, endIso: string) => void;
+  /** Право править плановые даты связанного рейса («План дохода», write). */
+  canDragPlan?: boolean;
+  /** Право править даты ручного рейса (tripTimeline, write). */
+  canDragManual?: boolean;
 }
 
 /** Запас по краям окна: полосы, пересекающиеся с [vs−margin, ve+margin],
  *  участвуют в цепочке, но за пределами окна обрезаются. */
 const WINDOW_MARGIN = 60;
+
+/** Режим перетаскивания плановой полосы: перенос целиком или растягивание края. */
+type PlanDragMode = 'move' | 'start' | 'end';
 
 /** Минимальные высоты подстрок «План»/«Факт» — ОДИНАКОВЫЕ (единый ритм). */
 const PLAN_H = 22;
@@ -876,6 +890,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   /** Клик по метке события на базе: открыть окно периода и подсветить событие. */
   onOpenBaseEvent,
   onOpenCar,
+  /** Перетаскивание/растягивание плановой полосы — сохранение в запись-источник. */
+  onPlanBoundsDrag,
+  canDragPlan,
+  canDragManual,
 }: {
   row: CarRowModel;
   colW: number;
@@ -899,6 +917,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   /** Клик по метке события на базе: открыть окно периода и подсветить событие. */
   onOpenBaseEvent?: (key: string, eventId: string) => void;
   onOpenCar: (key: string) => void;
+  /** Перетаскивание/растягивание плановой полосы: новые границы (ISO) в запись-источник. */
+  onPlanBoundsDrag?: (tripKey: string, startIso: string, endIso: string) => void;
+  canDragPlan: boolean;
+  canDragManual: boolean;
 }) {
   const [hoverTrip, setHoverTrip] = useState<string | null>(null);
   const [rowHover, setRowHover] = useState(false);
@@ -997,6 +1019,74 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     if (!hoverTrip) return {};
     if (hoverTrip === tripKey) return {};
     return { boxShadow: 'var(--tl-hov-ring-soft)' };
+  };
+
+  // ── Перетаскивание/растягивание ПЛАНОВОЙ полосы рейса ───────────────────
+  // Здесь НИЧЕГО не записывается: по отпускании новые границы уходят в
+  // запись-источник через onPlanBoundsDrag (dbService.saveTimelinePlanBounds —
+  // единая проверка периодов, как у создания/правки рейса). Пока запись не
+  // подтверждена, данные не меняются — полоса остаётся на прежнем месте; при
+  // конфликте причина показывается человеку, а полоса «возвращается» сама
+  // (данные не тронуты). Ход перетаскивания показывает только призрак
+  // (dragPreview) — это указатель, а не новое значение дат.
+  const [dragPreview, setDragPreview] = useState<{ tripKey: string; a: number; b: number; mode: PlanDragMode } | null>(null);
+  const dragRef = useRef<{
+    tripKey: string;
+    a: number;
+    b: number;
+    a2: number;
+    b2: number;
+    mode: PlanDragMode;
+    startX: number;
+    moved: boolean;
+  } | null>(null);
+  /** Клик сразу после перетаскивания окно НЕ открывает (полоса не «прыгает»). */
+  const suppressClickRef = useRef<{ key: string; ts: number } | null>(null);
+  const planBarDragEnabled = (tripKey: string, archived: boolean): boolean =>
+    !!onPlanBoundsDrag && (tripKey.startsWith('pd:') ? canDragPlan : canDragManual && !archived);
+  const beginPlanDrag = (e: React.PointerEvent<HTMLDivElement>, tripKey: string, a: number, b: number, archived: boolean) => {
+    if (e.button !== 0 || !planBarDragEnabled(tripKey, archived)) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    // Края полосы (6 px) — растягивание старта/возвращения, середина — перенос.
+    const mode: PlanDragMode = e.clientX - rect.left <= 6 ? 'start' : rect.right - e.clientX <= 6 ? 'end' : 'move';
+    dragRef.current = { tripKey, a, b, a2: a, b2: b, mode, startX: e.clientX, moved: false };
+    const move = (ev: PointerEvent) => {
+      const st = dragRef.current;
+      if (!st) return;
+      const delta = Math.round((ev.clientX - st.startX) / colW);
+      let a2 = st.a;
+      let b2 = st.b;
+      if (st.mode === 'move') {
+        a2 = st.a + delta;
+        b2 = st.b + delta;
+      } else if (st.mode === 'start') {
+        a2 = Math.min(st.a + delta, st.b);
+      } else {
+        b2 = Math.max(st.b + delta, st.a);
+      }
+      if (a2 === st.a2 && b2 === st.b2) return;
+      st.a2 = a2;
+      st.b2 = b2;
+      if (a2 !== st.a || b2 !== st.b) st.moved = true;
+      setDragPreview({ tripKey: st.tripKey, a: a2, b: b2, mode: st.mode });
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      const st = dragRef.current;
+      dragRef.current = null;
+      setDragPreview(null);
+      if (!st || !st.moved) return;
+      suppressClickRef.current = { key: st.tripKey, ts: Date.now() };
+      onPlanBoundsDrag?.(st.tripKey, dayStr(st.a2), dayStr(st.b2));
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const planBarClick = (tripKey: string) => {
+    const s = suppressClickRef.current;
+    if (s && s.key === tripKey && Date.now() - s.ts < 400) return;
+    onOpenTrip(tripKey);
   };
 
   /** Правка полосы рейса из разрешения наложений (доли дня смены у краёв). */
@@ -1809,6 +1899,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     cursor?: boolean;
     onClick?: () => void;
     onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+    /** Перетаскивание полосы (план рейса): режим выбирается по позиции указателя. */
+    onPointerDown?: (e: React.PointerEvent<HTMLDivElement>) => void;
     onMouseEnter?: () => void;
     onMouseLeave?: () => void;
     style?: React.CSSProperties;
@@ -1918,6 +2010,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           tabIndex={o.tabIndex}
           onClick={o.onClick}
           onKeyDown={o.onKeyDown}
+          onPointerDown={o.onPointerDown}
           onMouseEnter={o.onMouseEnter}
           onMouseLeave={o.onMouseLeave}
           className={`absolute inset-0 whitespace-nowrap flex items-center ${o.cursor ? 'cursor-pointer' : ''}`}
@@ -2377,6 +2470,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               ...circleMarksObstacles(it.circleMarks, pr.left),
               ...(chipOn ? [{ left: pr.left + pr.width - 36, right: pr.left + pr.width }] : []),
             ];
+            // Перетаскивание/растягивание полосы (по правам): новые границы
+            // уходят в запись-источник ТОЛЬКО через onPlanBoundsDrag с проверкой
+            // периодов — здесь данные не пишутся.
+            const canDrag = planBarDragEnabled(it.tripKey, !!it.archived);
             return renderPeriodBar({
               key: `p${idx}`,
               attrKind: 'bar',
@@ -2388,23 +2485,27 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
               lanes: lanes.lanes,
               radius: 'var(--tl-bar-r)',
               z: TL_Z.tripBar,
-              title: it.title,
+              title: canDrag
+                ? `${it.title} · перетаскивание полосы/краёв — плановые даты (с проверкой периодов)`
+                : it.title,
               role: 'button',
               tabIndex: 0,
               cursor: true,
-              onClick: () => onOpenTrip(it.tripKey),
+              onClick: () => planBarClick(it.tripKey),
               onKeyDown: (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
                   onOpenTrip(it.tripKey);
                 }
               },
+              onPointerDown: canDrag ? (e) => beginPlanDrag(e, it.tripKey, it.a, it.b, !!it.archived) : undefined,
               onMouseEnter: () => setHoverTrip(it.tripKey),
               onMouseLeave: () => setHoverTrip((v) => (v === it.tripKey ? null : v)),
-              style: link(it.tripKey),
+              style: { ...link(it.tripKey), ...(canDrag ? { cursor: 'ew-resize' } : {}) },
               attrs: {
                 'data-trip': it.tripKey,
                 'data-dir': it.dir ? it.dir.name : undefined,
+                'data-plan-drag': canDrag ? '1' : undefined,
                 'data-bar-frac-a': adj && adj.fracA !== 0 ? `${adj.fracA}` : undefined,
                 'data-bar-frac-b': adj && adj.fracB !== 1 ? `${adj.fracB}` : undefined,
                 'data-overlap': adj?.overlap ? '1' : undefined,
@@ -2460,6 +2561,33 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
           }
           return null;
         })}
+        {/* Призрак перетаскивания плановой полосы: показывает будущие границы,
+            данные не меняются (запись — только по подтверждённому сохранению). */}
+        {dragPreview
+          ? (() => {
+              const dp = pos(dragPreview.a, dragPreview.b);
+              if (!dp) return null;
+              return (
+                <div
+                  key="plan-drag-ghost"
+                  data-ui="tl-plan-drag-ghost"
+                  aria-hidden="true"
+                  className="absolute pointer-events-none"
+                  style={{
+                    zIndex: TL_Z.mark,
+                    left: dp.left,
+                    width: Math.max(3, dp.width),
+                    top: 1,
+                    bottom: 1,
+                    borderRadius: 'var(--tl-bar-r)',
+                    border: '2px dashed var(--accent-solid)',
+                    background: 'var(--accent-20)',
+                  }}
+                  title={`Перетаскивание: ${fmtDM(dragPreview.a)} – ${fmtDM(dragPreview.b)}`}
+                />
+              );
+            })()
+          : null}
         {row.planOv.waitGaps.map((g) => renderWaitGap(g, 'pw'))}
         {row.planOv.warnings.map((w, wi) => renderConflict(w, 'pc', planH, wi))}
         {row.planOv.markers.map((m) => renderOvMarker(m, 'pm', planH))}
@@ -2834,6 +2962,9 @@ export default function TimelineGrid({
   onColumnHighlightChange,
   onPaintByDirectionChange,
   onAddDirection,
+  onPlanBoundsDrag,
+  canDragPlan = false,
+  canDragManual = false,
 }: Props) {
   const ve = vs + vn - 1;
   const colW = zoomColW(zoom);
@@ -3637,6 +3768,9 @@ export default function TimelineGrid({
                         onOpenBase={onOpenBase}
                         onOpenBaseEvent={onOpenBaseEvent}
                         onOpenCar={onOpenCar}
+                        onPlanBoundsDrag={onPlanBoundsDrag}
+                        canDragPlan={canDragPlan}
+                        canDragManual={canDragManual}
                       />
                     ))
                   : null}

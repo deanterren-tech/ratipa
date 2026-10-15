@@ -668,6 +668,40 @@ export default function TripTimelineModule({ user, settings }: Props) {
     return () => window.removeEventListener('ratipa:trip-period-conflict', onConflict as EventListener);
   }, [toast]);
 
+  /**
+   * Перетаскивание/растягивание плановой полосы: новые границы уходят в
+   * запись-ИСТОЧНИК через dbService.saveTimelinePlanBounds — тот же механизм,
+   * что у кнопки «Сохранить» окна (multi-path commit) и у «Плана дохода»:
+   * у связанного рейса — trips_dashboard/<planId>/dateStart|dateEnd, у ручного —
+   * его собственная запись. Второго значения дат не создаётся; проверка
+   * периодов выполняется ДО записи — при конфликте данные не записаны, полоса
+   * возвращается на место (данные не тронуты), человек видит причину. Успех
+   * сообщается ТОЛЬКО по факту подтверждённой записи.
+   */
+  const savePlanBoundsDrag = useCallback(
+    (tripKey: string, startIso: string, endIso: string) => {
+      const isPlan = tripKey.startsWith('pd:');
+      if (isPlan ? !canEditPlan : !canWrite) {
+        toast(isPlan ? 'Нет права редактирования «Плана дохода» — даты не сохранены.' : 'Нет права на изменение рейса — даты не сохранены.', 'error');
+        return;
+      }
+      void (async () => {
+        const res = await dbService.saveTimelinePlanBounds(tripKey, { planStart: startIso, planEnd: endIso }, user.name);
+        if (!res.ok) {
+          toast(res.message || 'Плановые даты не сохранены.', 'error');
+        } else {
+          toast(
+            isPlan
+              ? 'Плановые даты обновлены в записи «Плана дохода» — полоса и окно рейса покажут то же значение'
+              : 'Плановые даты ручного рейса обновлены',
+            'success',
+          );
+        }
+      })();
+    },
+    [canEditPlan, canWrite, toast, user.name],
+  );
+
   const createTrip = useCallback(
     (draft: NewTripDraft): Promise<NewTripResult> => {
       if (!canWrite || !canEditPlan) {
@@ -1160,6 +1194,9 @@ export default function TripTimelineModule({ user, settings }: Props) {
             onColumnHighlightChange={changeColumnHighlight}
             onPaintByDirectionChange={changePaintByDirection}
             onAddDirection={canWrite ? () => setShowAddDirection(true) : undefined}
+            onPlanBoundsDrag={savePlanBoundsDrag}
+            canDragPlan={canEditPlan}
+            canDragManual={canWrite}
           />
         </div>
       </div>
