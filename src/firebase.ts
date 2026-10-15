@@ -15,6 +15,7 @@ import {
   get as firebaseGet,
   runTransaction,
 } from "firebase/database";
+import { findTripPeriodConflict } from './components/modules/tripTimeline/lib/tripGuard';
 import {
   UserProfile,
   Vehicle,
@@ -1867,6 +1868,65 @@ export const dbService = {
   },
 
   // ---- ТАЙМЛАЙН РЕЙСОВ ПО МАШИНАМ (модуль tripTimeline) --------------------
+  /**
+   * Проверка периодов ПЕРЕД записью — не в интерфейсе, а на уровне сохранения:
+   * смотрим и рейсы таймлайна, и связанные записи «Плана дохода» (для машины это
+   * один набор периодов). При конфликте запись не выполняется, а интерфейс
+   * получает событие и показывает понятное сообщение (полоса возвращается на место,
+   * потому что данные перечитываются как были).
+   * Остаточная гонка двух вкладок остаётся — атомарной транзакции на пару записей
+   * в RTDB нет; повторное чтение перед самой записью сужает её до минимума.
+   */
+  /** Одноразовое чтение узла (через общий onceValue, с ожиданием авторизации). */
+  readOnce: (path: string): Promise<{ exists: () => boolean; val: () => unknown }> =>
+    new Promise((resolve) => {
+      let done = false;
+      try {
+        onceValue(ref(database, path), (snapshot: { exists: () => boolean; val: () => unknown }) => {
+          done = true;
+          resolve(snapshot);
+        });
+      } catch {
+        resolve({ exists: () => false, val: () => null });
+      }
+      window.setTimeout(() => {
+        if (!done) resolve({ exists: () => false, val: () => null });
+      }, 8000);
+    }),
+
+  guardTimelinePeriod: async (candidate: {
+    id?: string;
+    carNumber?: unknown;
+    carId?: unknown;
+    dateStart?: unknown;
+    dateEnd?: unknown;
+  }, selfKey: string): Promise<{ ok: boolean; message?: string }> => {
+    if (!useFirebase) return { ok: true };
+    try {
+      const [timelineSnap, planSnap] = await Promise.all([
+        dbService.readOnce('tripTimeline/trips'),
+        dbService.readOnce('trips_dashboard'),
+      ]);
+      const timelineTrips = timelineSnap.exists()
+        ? Object.entries(timelineSnap.val() as Record<string, Record<string, unknown>>).map(([k, v]) => ({ ...v, id: k }))
+        : [];
+      const planTrips = planSnap.exists()
+        ? Object.entries(planSnap.val() as Record<string, Record<string, unknown>>).map(([k, v]) => ({ ...v, id: k }))
+        : [];
+      const conflict = findTripPeriodConflict(candidate, [...timelineTrips, ...planTrips], { selfKey });
+      if (conflict) {
+        try {
+          window.dispatchEvent(new CustomEvent('ratipa:trip-period-conflict', { detail: conflict }));
+        } catch {
+          /* событие нужно интерфейсу; сохранение всё равно блокировано */
+        }
+        return { ok: false, message: conflict.message };
+      }
+    } catch {
+      // База недоступна: из-за самой проверки сохранение не ломаем.
+    }
+    return { ok: true };
+  },
   // Собственные ветки модуля: tripTimeline/trips (рейсы со этапами),
   // tripTimeline/vehicleEvents (события машин), tripTimeline/config/stageTypes
   // (расширяемый справочник типов). Существующие ветки портала (tripsdashboard
@@ -1895,8 +1955,20 @@ export const dbService = {
     return () => {};
   },
 
-  createTimelineTrip: (trip: TimelineTrip, user: string, role: string) => {
+  createTimelineTrip: async (trip: TimelineTrip, user: string, role: string): Promise<boolean> => {
     const payload = stripUndefinedDeep(trip);
+    const raw = trip as unknown as Record<string, unknown>;
+    const guard = await dbService.guardTimelinePeriod(
+      { id: trip.id, carNumber: raw.carNumber, dateStart: raw.planStart || raw.dateStart, dateEnd: raw.planEnd || raw.dateEnd },
+      String(trip.id),
+    );
+    if (!guard.ok) {
+      handleFailure('firebase', new Error(guard.message || 'Конфликт периодов'), {
+        path: `tripTimeline/trips/${trip.id}`,
+        userMessage: guard.message || 'Период пересекается с другим рейсом этой машины',
+      });
+      return false;
+    }
     if (useFirebase) {
       set(ref(database, `tripTimeline/trips/${trip.id}`), payload).catch((err) =>
         handleFailure('firebase', err, { path: `tripTimeline/trips/${trip.id}`, userMessage: 'Не удалось сохранить рейс — попробуйте ещё раз' }),
@@ -1907,16 +1979,36 @@ export const dbService = {
       setLocalStorageData("ratipa_timeline_trips", local);
     }
     dbService.logAction(user, role, "Создание рейса таймлайна", "TripTimeline", trip.id, `Рейс ${trip.carNumber}: ${trip.route || 'без маршрута'}`);
+    return true;
   },
 
   /** Правка полей рейса (маршрут, диспетчер, запас, даты диапазона) — merge, без перезаписи этапов. */
-  updateTimelineTrip: (id: string, patch: Partial<TimelineTrip>) => {
-    if (!id || !patch) return;
+  updateTimelineTrip: async (id: string, patch: Partial<TimelineTrip>): Promise<boolean> => {
+    if (!id || !patch) return false;
     const clean = stripUndefinedDeep(patch) as Record<string, unknown>;
+    const onlyArchiving = Object.keys(clean).every((k) => k === 'archived' || k === 'updatedAt');
+    const touchesPeriod = !onlyArchiving && ['planStart', 'planEnd', 'dateStart', 'dateEnd', 'carNumber', 'vehicleId', 'archived'].some((k) => k in clean);
+    if (useFirebase && touchesPeriod) {
+      const snap = await dbService.readOnce(`tripTimeline/trips/${id}`);
+      const current = snap.exists() ? (snap.val() as Record<string, unknown>) : {};
+      const merged = { ...current, ...clean, id } as Record<string, unknown>;
+      const guard = await dbService.guardTimelinePeriod(
+        { id, carNumber: merged.carNumber, carId: merged.vehicleId, dateStart: merged.planStart || merged.dateStart, dateEnd: merged.planEnd || merged.dateEnd },
+        String(id),
+      );
+      if (!guard.ok) {
+        handleFailure('firebase', new Error(guard.message || 'Конфликт периодов'), {
+          path: `tripTimeline/trips/${id}`,
+          userMessage: guard.message || 'Период пересекается с другим рейсом этой машины',
+        });
+        return false;
+      }
+    }
     if (useFirebase) {
-      update(ref(database, `tripTimeline/trips/${id}`), clean).catch((err) =>
+      await update(ref(database, `tripTimeline/trips/${id}`), clean).catch((err) =>
         handleFailure('firebase', err, { path: `tripTimeline/trips/${id}`, userMessage: 'Не удалось сохранить правку рейса' }),
       );
+      return true;
     } else {
       const local = getLocalStorageData<TimelineTrip[]>("ratipa_timeline_trips", []);
       const idx = local.findIndex((t) => t.id === id);
@@ -2932,14 +3024,36 @@ export const dbService = {
     return () => {};
   },
 
-  saveTimelineTripMeta: (tripKey: string, patch: Record<string, unknown>) => {
-    if (!tripKey) return;
-    const clean = stripUndefinedDeep({ ...patch, updatedAt: new Date().toISOString() });
+  saveTimelineTripMeta: async (tripKey: string, patch: Record<string, unknown>): Promise<boolean> => {
+    if (!tripKey) return false;
+    const clean = stripUndefinedDeep({ ...patch, updatedAt: new Date().toISOString() }) as Record<string, unknown>;
+    // Перетаскивание и изменение длины полосы меняют плановые границы — это тот же
+    // путь сохранения, что и правка рейса, поэтому проверка периодов обязательна и здесь.
+    const touchesSpan = ['planStart', 'planEnd', 'dateStart', 'dateEnd'].some((k) => k in clean);
+    if (useFirebase && touchesSpan) {
+      const bareId = tripKey.replace(/^(pd|tl):/, '');
+      const isPlan = /^pd:/.test(tripKey);
+      const source = await dbService.readOnce(isPlan ? `trips_dashboard/${bareId}` : `tripTimeline/trips/${bareId}`);
+      const sourceRec = source.exists() ? (source.val() as Record<string, unknown>) : {};
+      const guard = await dbService.guardTimelinePeriod(
+        {
+          id: bareId,
+          carNumber: clean.carNumber ?? sourceRec.carNumber,
+          carId: sourceRec.carId ?? sourceRec.vehicleId,
+          dateStart: clean.planStart ?? clean.dateStart ?? sourceRec.dateStart,
+          dateEnd: clean.planEnd ?? clean.dateEnd ?? sourceRec.dateEnd,
+        },
+        bareId,
+      );
+      if (!guard.ok) return false;
+    }
     if (useFirebase) {
-      update(ref(database, `tripTimeline/tripMeta/${tripKey}`), clean).catch((err) =>
+      await update(ref(database, `tripTimeline/tripMeta/${tripKey}`), clean).catch((err) =>
         handleFailure('firebase', err, { path: `tripTimeline/tripMeta/${tripKey}`, userMessage: 'Не удалось сохранить причину и меры' }),
       );
+      return true;
     }
+    return false;
   },
 
   // PERMITS (Dozvola) — unified to dozvolsRegistryV4

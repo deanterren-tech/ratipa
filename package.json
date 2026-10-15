@@ -48,7 +48,8 @@
     "fix:cities": "tsx scripts/fix-cities-cleanup.ts",
     "fix:city-chains": "tsx scripts/strip-city-chains.ts",
     "test:can-status": "tsx scripts/test-can-status.ts",
-    "test:expenses": "tsx scripts/test-expenses.ts"
+    "test:expenses": "tsx scripts/test-expenses.ts",
+    "test:trip-guard": "tsx scripts/test-trip-guard.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

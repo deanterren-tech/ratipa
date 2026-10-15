@@ -655,6 +655,17 @@ export default function TripTimelineModule({ user, settings }: Props) {
   const creatingRef = useRef<Promise<NewTripResult> | null>(null);
   const pendingPlanIdRef = useRef('');
 
+  // Конфликт периодов: слой сохранения не записал данные и сообщил причину —
+  // показываем её человеку (полоса сама возвращается на место: перечитываем базу).
+  useEffect(() => {
+    const onConflict = (e: Event) => {
+      const detail = (e as CustomEvent<{ message?: string }>).detail || {};
+      if (detail.message) toast(detail.message, 'error');
+    };
+    window.addEventListener('ratipa:trip-period-conflict', onConflict as EventListener);
+    return () => window.removeEventListener('ratipa:trip-period-conflict', onConflict as EventListener);
+  }, [toast]);
+
   const createTrip = useCallback(
     (draft: NewTripDraft): Promise<NewTripResult> => {
       if (!canWrite || !canEditPlan) {
