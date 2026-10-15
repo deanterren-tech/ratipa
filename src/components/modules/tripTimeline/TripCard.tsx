@@ -2282,17 +2282,12 @@ export default function TripCard({
       issue.focus();
       return;
     }
-    // Мягкий контроль порядка по ШАБЛОНУ выбранного направления (lib/stageTemplates):
-    // НЕ блокирует сохранение — спрашивает «Поменять местами» (seq пары
-    // пересчитывается 1..N, затем сохранение продолжается) или «Оставить как
-    // есть». Подпись набора предупреждений: после «Оставить как есть» та же
-    // пара больше не переспрашивается; пока панель открыта, повторный Save
-    // не записывает окно мимо выбора.
-    if (warnInfo) return;
-    if (stageWarnings.length > 0 && warnedSigRef.current !== stageWarningsSig) {
-      setWarnInfo({ w: stageWarnings[0], close: closeAfter, sig: stageWarningsSig });
-      return;
-    }
+    // ШАБЛОН БОЛЬШЕ НЕ ПРОВЕРЯЕТСЯ ПРИ СОХРАНЕНИИ: шаблон только подставляет
+    // значения при создании записи, дальше запись живёт своей жизнью. Сверку
+    // порядка можно запросить ЯВНО кнопкой «Сверить с шаблоном» (панель ниже).
+    // Обычные проверки (обязательные поля, даты, пересечения) остались.
+    // Закрываем панель сверки, если она открыта: она не удерживает сохранение.
+    if (warnInfo) setWarnInfo(null);
     const perm = planLock.permission;
     const nowIso = new Date().toISOString();
     // Изменение количества кругов и состава этапов — тоже изменение плана
@@ -3713,10 +3708,27 @@ export default function TripCard({
             не хардкод): тот же шаблон мягко контролирует порядок при
             сохранении; этапы одного дня расставляются по порядку строк. */}
         {orderTemplate && orderTemplate.stages.length > 0 ? (
-          <div data-ui="stage-order-hint" className="text-[11px] text-[#6B7280]">
-            Порядок направления «{orderTemplate.name}» (шаблон):{' '}
-            <b className="text-[#4B5563]">{orderTemplate.stages.join(' → ')}</b> — этапы одного дня
-            расставляются по порядку строк таблицы (вверх/вниз или перетаскиванием).
+          <div data-ui="stage-order-hint" className="text-[11px] text-[#6B7280] flex flex-wrap items-center gap-2">
+            <span>
+              Порядок направления «{orderTemplate.name}» (шаблон):{' '}
+              <b className="text-[#4B5563]">{orderTemplate.stages.join(' → ')}</b> — этапы одного дня
+              расставляются по порядку строк таблицы (вверх/вниз или перетаскиванием).
+            </span>
+            <button
+              type="button"
+              data-ui="stage-order-check"
+              className={UI.buttonLink}
+              onClick={() => {
+                // Явная сверка: сохранение она не перехватывает и ничего не меняет.
+                if (stageWarnings.length > 0) {
+                  setWarnInfo({ w: stageWarnings[0], close: false, sig: stageWarningsSig });
+                } else {
+                  toast('Порядок этапов соответствует шаблону направления', 'success');
+                }
+              }}
+            >
+              Сверить с шаблоном
+            </button>
           </div>
         ) : null}
         {/* Контроль хронологии (lib/stageSchedule.stageOrderConflicts): сообщение
