@@ -55,6 +55,7 @@ import {
   type TripCloseState,
 } from './core';
 import { tripCloseService } from '../../../firebase/tripCloseService';
+import { findActiveDuplicate } from '../baza/lib/bazaDedupe';
 import { ModalShell } from '../../../ui/components';
 import { UI } from '../../../ui/kit';
 import {
@@ -70,6 +71,20 @@ interface Props {
 }
 
 const toRu = (iso?: string): string => (iso ? String(iso).split('-').reverse().join('/') : '');
+/** Каноническая дата базы (YYYY-MM-DD): принимает и «ДД/ММ/ГГГГ» (ввод человека), и ISO.
+ *  Раньше поле, заполненное подсказкой из плана, уходило в базу как ISO, а правленное
+ *  руками — как «ДД/ММ/ГГГГ»: часть данных терялась при сохранении. */
+const toIsoAny = (value?: string): string => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  return toIso(raw);
+};
+/** Отметка для журнала «Учёта выезда» — тот же формат, что пишет сам модуль базы (ДД/ММ/ГГГГ ЧЧ:ММ). */
+const ruStamp = (): string => {
+  const now = new Date();
+  return `${now.toLocaleDateString('ru-RU').replace(/\./g, '/')} ${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
+};
 const toIso = (ru?: string): string => {
   const m = String(ru || '').trim().match(/^(\d{2})[./](\d{2})[./](\d{4})$/);
   return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
@@ -151,10 +166,27 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
       }, user.name, role);
       setState(st);
       const my = await tripCloseService.claimLock(tripId, user.name, user.uid || user.name);
-      if (!my) setForeignLock(st.lock?.by || 'другой сотрудник');
+      if (!my) {
+        const fresh = await tripCloseService.load(tripId).catch(() => null);
+        setForeignLock(fresh?.lock?.by || st.lock?.by || 'другой сотрудник');
+      } else {
+        setForeignLock('');
+      }
       setStep((st.currentStep as StepKey) || nextStep(st) || 'planDohod');
     })();
   }, [plan, tripId, user.name, user.uid, role]);
+
+  // Чужая живая блокировка: пробуем забрать сценарий, когда она истечёт (TTL 20 минут).
+  useEffect(() => {
+    if (!foreignLock) return;
+    const timer = window.setInterval(() => {
+      void tripCloseService
+        .claimLock(tripId, user.name, user.uid || user.name)
+        .then((mine) => { if (mine) setForeignLock(''); })
+        .catch(() => {});
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [foreignLock, tripId, user.name, user.uid]);
 
   // ── формы шагов из данных плана ──────────────────────────────────────────
   useEffect(() => {
@@ -179,14 +211,16 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
       perDiem: prev.perDiem || 0,
       bonus: prev.bonus || 0,
     }));
+    // Шаг «Учёт выезда»: подхватываем сохранённый черновик, затем данные плана.
+    const draft = state?.vyezd || {};
     setVyezdForm((prev) => ({
-      driverName: prev.driverName || String(plan.driverName || ''),
-      dateArrival: prev.dateArrival || (plan.dateEnd ? String(plan.dateEnd) : ''),
-      dateRepairStart: prev.dateRepairStart,
-      dateRepairEnd: prev.dateRepairEnd,
-      comment: prev.comment,
+      driverName: prev.driverName || String(draft.driverName || plan.driverName || ''),
+      dateArrival: prev.dateArrival || toIsoAny(String(draft.dateArrival || '')) || (plan.dateEnd ? String(plan.dateEnd) : ''),
+      dateRepairStart: prev.dateRepairStart || toIsoAny(String(draft.dateRepairStart || '')),
+      dateRepairEnd: prev.dateRepairEnd || toIsoAny(String(draft.dateRepairEnd || '')),
+      comment: prev.comment || String(draft.comment || ''),
     }));
-  }, [plan, salaries]);
+  }, [plan, salaries, state?.vyezd]);
 
   // уже существующая зарплата по этому рейсу и водителю
   useEffect(() => {
@@ -213,10 +247,18 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
   const progress = useMemo(() => (state ? deriveProgress(state) : null), [state]);
   const recheck = useMemo(
     () => salaryRecheckNeeded(plan ? { dateStart: String(plan.dateStart || ''), dateEnd: String(plan.dateEnd || ''), factKm: factKmNumber(plan) } : null,
-      plan ? { dateStart: planForm.dateStart, dateEnd: planForm.dateEnd, factKm: planForm.factKm } : null),
+      plan ? { dateStart: toIsoAny(planForm.dateStart), dateEnd: toIsoAny(planForm.dateEnd), factKm: planForm.factKm } : null),
     [plan, planForm],
   );
   const canDo = (key: StepKey): boolean => resolvePermission(user, stepDef(key).permissionKey, settings?.rolePermissions) !== 'none';
+  /** Чужая живая блокировка: просмотр доступен, изменения — нет (как обещает плашка в шапке). */
+  const foreignLocked = Boolean(foreignLock);
+  const writeDenied = (key: StepKey): boolean => foreignLocked || !canDo(key);
+  const assertCanWrite = (): boolean => {
+    if (!foreignLocked) return true;
+    toast(`Сценарий ведёт ${foreignLock || 'другой сотрудник'} — изменения доступны после окончания блокировки`, 'error');
+    return false;
+  };
 
   const goStep = useCallback(async (key: StepKey) => {
     setStep(key);
@@ -232,13 +274,16 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
   // ── шаг 1: план дохода — сохранить и архивировать ────────────────────────
   const runPlanStep = async () => {
     if (!plan) return;
-    const issues = planStepIssues({ factKm: planForm.factKm, dateStart: planForm.dateStart, dateEnd: planForm.dateEnd });
+    if (!assertCanWrite()) return;
+    const planStartIso = toIsoAny(planForm.dateStart);
+    const planEndIso = toIsoAny(planForm.dateEnd);
+    const issues = planStepIssues({ factKm: planForm.factKm, dateStart: planStartIso, dateEnd: planEndIso });
     if (issues.length) { toast(issues[0], 'error'); return; }
     const expenseProblems = validateExpenseRows(planForm.expenses);
     if (expenseProblems.length) { toast(expenseProblems[0].message, 'error'); return; }
     if (expensesMissing.length) { toast('Нет курса для части статей — обновите курсы: итог неполный.', 'error'); return; }
     const factKm = Number(planForm.factKm);
-    const fin = calculateTripFinances(plan.legs || [], planForm.dateStart, planForm.dateEnd, expensesSum, Number(plan.ferryCost || 0), factKm);
+    const fin = calculateTripFinances(plan.legs || [], planStartIso, planEndIso, expensesSum, Number(plan.ferryCost || 0), factKm);
     const done: string[] = [];
     setBusy('plan');
     try {
@@ -246,8 +291,8 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
       const firstSave = await tripCloseService.recordOperation(tripId, 'planSaved', { summary: `План ${plan.id}` }, user.name);
       if (firstSave) {
         pdService.updateTrip(plan.id, {
-          dateStart: planForm.dateStart,
-          dateEnd: planForm.dateEnd,
+          dateStart: planStartIso,
+          dateEnd: planEndIso,
           days: fin.days,
           factKm,
           expenses: serializeExpenseRows(planForm.expenses),
@@ -283,6 +328,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
   // ── шаг 2: зарплата ──────────────────────────────────────────────────────
   const runSalaryStep = async () => {
     if (!plan) return;
+    if (!assertCanWrite()) return;
     if (!salaryForm.driver.trim()) { toast('Укажите водителя', 'error'); return; }
     if (salaryForm.totalDays <= 0) { toast('Проверьте период рейса: дней должно быть больше нуля', 'error'); return; }
     if (salaryForm.km < 0) { toast('Пробег не может быть отрицательным', 'error'); return; }
@@ -310,11 +356,11 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
         daysMoney: salaryTotals.daysMoney,
         totalSalary: salaryTotals.totalSalary,
         salaryPerDay: salaryTotals.salaryPerDay,
-        datetime: new Date().toLocaleString('ru-RU'),
+        datetime: new Date().toLocaleDateString('ru-RU'),
         logist: user.name,
         comment: 'Начислено мастером закрытия рейса (факт выплаты оформляется отдельно)',
-        dateStart: planForm.dateStart,
-        dateEnd: planForm.dateEnd,
+        dateStart: toIsoAny(planForm.dateStart),
+        dateEnd: toIsoAny(planForm.dateEnd),
         planId: String(plan.id),
         planSource: 'planDohod',
         planSyncedAt: new Date().toISOString(),
@@ -322,8 +368,8 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
           planId: String(plan.id),
           carNumber: String(plan.carNumber || ''),
           source: 'planDohod',
-          dateStart: planForm.dateStart,
-          dateEnd: planForm.dateEnd,
+          dateStart: toIsoAny(planForm.dateStart),
+          dateEnd: toIsoAny(planForm.dateEnd),
           factKm: salaryForm.km,
           syncedAt: new Date().toISOString(),
           label: planSourceLabel(plan),
@@ -353,24 +399,39 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
   // ── шаг 3: учёт выезда ───────────────────────────────────────────────────
   const runVyezdStep = async () => {
     if (!plan) return;
+    if (!assertCanWrite()) return;
     if (!vyezdForm.dateArrival.trim()) { toast('Укажите дату приезда (подтвердите или исправьте предложенную)', 'error'); return; }
-    const isoArrival = toIso(vyezdForm.dateArrival);
-    const isoRepairStart = toIso(vyezdForm.dateRepairStart);
-    const isoRepairEnd = toIso(vyezdForm.dateRepairEnd);
+    const isoArrival = toIsoAny(vyezdForm.dateArrival);
+    const isoRepairStart = toIsoAny(vyezdForm.dateRepairStart);
+    const isoRepairEnd = toIsoAny(vyezdForm.dateRepairEnd);
     if (isoArrival && isoRepairStart && isoRepairStart < isoArrival) { toast('Срок готовности раньше даты приезда — проверьте хронологию', 'error'); return; }
     if (isoRepairStart && isoRepairEnd && isoRepairEnd < isoRepairStart) { toast('Окончание срока готовности раньше его начала', 'error'); return; }
     setBusy('vyezd');
     try {
+      // Черновик шага сохраняем до записи: закрытие окна/перезагрузка не должны
+      // терять введённые даты — их показывают шаги 4-6 и продолжение сценария.
+      await tripCloseService.patch(tripId, {
+        vyezd: {
+          driverName: vyezdForm.driverName.trim(),
+          dateArrival: isoArrival,
+          dateRepairStart: isoRepairStart,
+          dateRepairEnd: isoRepairEnd,
+          comment: vyezdForm.comment.trim(),
+          savedAt: new Date().toISOString(),
+        },
+      }, user.name).catch(() => {});
       const plate = String(plan.carNumber || '');
       const existing = await new Promise<any[]>((resolve) => {
         let stop: (() => void) | null = null;
         try { stop = dbService.getBazaRecords((rows) => resolve(Array.isArray(rows) ? rows : [])); } catch { resolve([]); }
         window.setTimeout(() => { if (stop) stop(); resolve([]); }, 2500);
       });
-      const dup = (existing || []).find((r) => String(r?.carNumber || '') === plate && String(r?.dateArrival || '') === isoArrival);
+      // Дубль ищем тем же правилом, что и модуль базы: номер (в обеих раскладках)
+      // + дата приезда; иначе мастер создал бы вторую запись рядом с существующей.
+      const dup = findActiveDuplicate(existing, plate, isoArrival);
       if (dup) {
         const useIt = await showConfirm(
-          `На ${toRu(isoArrival)} у ${plate} уже есть запись «Учёта выезда». Использовать её (шаг будет считаться оформленным)?`,
+          `На ${toRu(isoArrival)} у ${plate} уже есть запись «Учёта выезда» (${String(dup.id || '')}). Использовать её (шаг будет считаться оформленным)?`,
           'Запись уже существует',
         );
         if (useIt) {
@@ -381,16 +442,22 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
         }
         return;
       }
-      const already = await tripCloseService.recordOperation(tripId, 'vyezdSaved', { summary: `Приезд ${isoArrival}` }, user.name);
+      // Ключ новой записи готовим заранее и фиксируем в операции: повторный клик
+      // и второе окно не создадут вторую запись «Учёта выезда».
+      const newKey = push(ref(database, 'baza')).key as string;
+      const already = await tripCloseService.recordOperation(tripId, 'vyezdSaved', { id: newKey, summary: `Приезд ${isoArrival}` }, user.name);
       if (!already) {
         toast('Запись «Учёта выезда» уже создана этим сценарием — повтор не выполняем', 'info');
       } else {
-        const newKey = push(ref(database, 'baza')).key as string;
         await set(ref(database, `baza/${newKey}`), {
           id: newKey,
-          carId: null,
+          carId: newKey,
+          couplingId: null,
           carNumber: plate,
           driverName: vyezdForm.driverName.trim(),
+          driverRaw: vyezdForm.driverName.trim(),
+          driverId: null,
+          migrationStatus: 'unmatched',
           dateArrival: isoArrival,
           dateLoading: '',
           dateRepairStart: isoRepairStart,
@@ -400,13 +467,19 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
           status: 'base',
           closeTrip: { tripId: String(plan.id), by: user.name, at: new Date().toISOString() },
         });
+        // Журнал записи — в формате модуля базы (дата/кто/поле/было/стало),
+        // иначе отметки мастера не видны в журнале и не учитываются механизмом дублей.
         await push(ref(database, `baza/${newKey}/history`), {
-          field: 'closeTrip', was: '', became: `Оформлено из закрытия рейса ${String(plan.id)}`,
-          user: user.name, role, at: new Date().toISOString(), carNumber: plate,
+          date: ruStamp(),
+          user: `${user.name} (${role})`,
+          field: 'Запись создана',
+          old: '[Пусто]',
+          new: `Учёт выезда из закрытия рейса ${String(plan.id)}: приезд ${toRu(isoArrival)}`,
         }).catch(() => {});
         dbService.logAction(user.name, role, 'Учёт выезда из закрытия рейса', 'Baza', newKey, `${plate}: приезд ${isoArrival}`);
       }
-      await tripCloseService.setStep(tripId, 'vyezd', 'done', user.name, undefined, { bazaId: String(plan.id) });
+      const opBazaId = String((state?.operations as Record<string, { id?: string }> | undefined)?.vyezdSaved?.id || '');
+      await tripCloseService.setStep(tripId, 'vyezd', 'done', user.name, undefined, { bazaId: already ? newKey : opBazaId });
       toast('Учёт выезда оформлен', 'success');
       await goStep('zagruzka');
     } catch (e) {
@@ -418,11 +491,12 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
   // ── шаг 4: план загрузок (подготовка данных + подтверждение) ─────────────
   const zagruzkaText = useMemo(() => {
     if (!plan) return '';
+    const readyIso = toIsoAny(vyezdForm.dateRepairStart || String(state?.vyezd?.dateRepairStart || ''));
     const parts = [
       `Автомобиль: ${plan.carNumber || ''}`,
       `Диспетчер: ${plan.dispatcherName || plan.dispatcher || ''}`,
-      `Водитель: ${vyezdForm.driverName || plan.driverName || '—'}`,
-      `Срок готовности: ${vyezdForm.dateRepairStart ? toRu(toIso(vyezdForm.dateRepairStart)) : '—'}`,
+      `Водитель: ${vyezdForm.driverName || state?.vyezd?.driverName || plan.driverName || '—'}`,
+      `Срок готовности: ${readyIso ? toRu(readyIso) : '—'}`,
       `Место доступности: ${state?.zagruzka?.location || '—'}`,
     ];
     return parts.join('\n');
@@ -438,10 +512,11 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
   };
 
   const confirmZagruzka = async (mode: 'manual' | 'auto') => {
+    if (!assertCanWrite()) return;
     const ok = await showConfirm('Подтверждаете, что данные внесены в план загрузок?', 'План загрузок');
     if (!ok) return;
     await tripCloseService.recordOperation(tripId, 'zagruzkaConfirmed', { summary: mode === 'manual' ? 'внесено вручную' : 'внесено интеграцией' }, user.name);
-    await tripCloseService.patch(tripId, { zagruzka: { ...(state?.zagruzka || {}), mode, confirmedBy: user.name, confirmedAt: new Date().toISOString(), driver: vyezdForm.driverName, readyDate: toIso(vyezdForm.dateRepairStart) } }, user.name);
+    await tripCloseService.patch(tripId, { zagruzka: { ...(state?.zagruzka || {}), mode, confirmedBy: user.name, confirmedAt: new Date().toISOString(), driver: vyezdForm.driverName || state?.vyezd?.driverName || '', readyDate: toIsoAny(vyezdForm.dateRepairStart || String(state?.vyezd?.dateRepairStart || '')) } }, user.name);
     await tripCloseService.setStep(tripId, 'zagruzka', 'done', user.name, mode === 'manual' ? 'Внесено вручную и подтверждено' : 'Внесено интеграцией');
     toast('План загрузок: внесение подтверждено', 'success');
     await goStep('docs');
@@ -449,6 +524,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
 
   // ── шаг 5: книга выдачи ──────────────────────────────────────────────────
   const addDoc = () => {
+    if (!assertCanWrite()) return;
     if (!docDraft.type.trim()) { toast('Укажите тип или название документа', 'error'); return; }
     const doc: TripCloseDoc = {
       id: `doc_${Date.now().toString(36)}`, type: docDraft.type.trim(), number: docDraft.number.trim(),
@@ -457,14 +533,26 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
     void tripCloseService.patch(tripId, { docs: [...(state?.docs || []), doc] }, user.name);
     setDocDraft({ type: '', number: '', issuedAt: '', issuedTo: '' });
   };
+  // Снятие отметки — это НЕ undefined-поля: Firebase отвергает значение undefined
+  // во всём запросе, и «отметка снимается» на самом деле падала молча.
   const toggleDoc = async (id: string) => {
-    const docs = (state?.docs || []).map((d) => (d.id === id
-      ? { ...d, accepted: !d.accepted, acceptedAt: !d.accepted ? new Date().toISOString() : undefined, acceptedBy: !d.accepted ? user.name : undefined }
-      : d));
+    if (!assertCanWrite()) return;
+    const docs = (state?.docs || []).map((d) => {
+      if (d.id !== id) return d;
+      if (d.accepted) {
+        const { acceptedAt: _at, acceptedBy: _by, ...rest } = d;
+        return { ...rest, accepted: false };
+      }
+      return { ...d, accepted: true, acceptedAt: new Date().toISOString(), acceptedBy: user.name };
+    });
     await tripCloseService.patch(tripId, { docs }, user.name);
   };
-  const removeDoc = (id: string) => void tripCloseService.patch(tripId, { docs: (state?.docs || []).filter((d) => d.id !== id) }, user.name);
+  const removeDoc = (id: string) => {
+    if (!assertCanWrite()) return;
+    void tripCloseService.patch(tripId, { docs: (state?.docs || []).filter((d) => d.id !== id) }, user.name);
+  };
   const markAllDocs = async () => {
+    if (!assertCanWrite()) return;
     const ok = await showConfirm('Отметить все перечисленные документы принятыми? Проверьте список перед подтверждением.', 'Приём документов');
     if (!ok) return;
     const docs = (state?.docs || []).map((d) => ({ ...d, accepted: true, acceptedAt: d.acceptedAt || new Date().toISOString(), acceptedBy: user.name }));
@@ -472,6 +560,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
     toast('Все документы из списка отмечены принятыми', 'success');
   };
   const runDocsStep = async (skip: boolean) => {
+    if (!assertCanWrite()) return;
     if (!skip && !(state?.docs || []).length) { toast('Добавьте документы или подтвердите «Документы не выдавались»', 'error'); return; }
     if (skip) {
       const ok = await showConfirm('Подтверждаете, что по этому рейсу документы не выдавались?', 'Книга выдачи');
@@ -489,6 +578,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
 
   // ── шаг 6: журнал МДП ────────────────────────────────────────────────────
   const addMdp = () => {
+    if (!assertCanWrite()) return;
     if (!mdpDraft.number.trim()) { toast('Укажите номер книжки МДП', 'error'); return; }
     const existingDup = (state?.mdp || []).find((b) => b.number.trim() === mdpDraft.number.trim());
     if (existingDup) { toast('Такая книжка уже есть в списке — отметку дублировать не будем', 'info'); return; }
@@ -500,9 +590,15 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
     setMdpDraft({ number: '', issuedAt: '' });
   };
   const toggleMdp = async (id: string) => {
-    const mdp = (state?.mdp || []).map((b) => (b.id === id
-      ? { ...b, returned: !b.returned, returnedAt: !b.returned ? new Date().toISOString() : undefined, acceptedBy: !b.returned ? user.name : undefined }
-      : b));
+    if (!assertCanWrite()) return;
+    const mdp = (state?.mdp || []).map((b) => {
+      if (b.id !== id) return b;
+      if (b.returned) {
+        const { returnedAt: _at, acceptedBy: _by, ...rest } = b;
+        return { ...rest, returned: false };
+      }
+      return { ...b, returned: true, returnedAt: new Date().toISOString(), acceptedBy: user.name };
+    });
     await tripCloseService.patch(tripId, { mdp }, user.name);
     const book = mdp.find((b) => b.id === id);
     if (book?.returned && book.docId) {
@@ -512,16 +608,29 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
     }
   };
   const linkMdpToDoc = async (bookId: string, docId: string) => {
-    const mdp = (state?.mdp || []).map((b) => (b.id === bookId ? { ...b, docId: docId || undefined } : b));
+    if (!assertCanWrite()) return;
+    const mdp = (state?.mdp || []).map((b) => {
+      if (b.id !== bookId) return b;
+      if (!docId) {
+        const { docId: _d, ...rest } = b;
+        return rest;
+      }
+      return { ...b, docId };
+    });
     await tripCloseService.patch(tripId, { mdp }, user.name);
     toast(docId ? 'Связь книжки МДП с документом книги выдачи сохранена' : 'Связь снята', 'success');
   };
   const toggleComplete = async (id: string) => {
+    if (!assertCanWrite()) return;
     const mdp = (state?.mdp || []).map((b) => (b.id === id ? { ...b, complete: !b.complete } : b));
     await tripCloseService.patch(tripId, { mdp }, user.name);
   };
-  const removeMdp = (id: string) => void tripCloseService.patch(tripId, { mdp: (state?.mdp || []).filter((b) => b.id !== id) }, user.name);
+  const removeMdp = (id: string) => {
+    if (!assertCanWrite()) return;
+    void tripCloseService.patch(tripId, { mdp: (state?.mdp || []).filter((b) => b.id !== id) }, user.name);
+  };
   const runMdpStep = async (notUsed: boolean) => {
+    if (!assertCanWrite()) return;
     if (notUsed) {
       const ok = await showConfirm('Подтверждаете, что книжка МДП в этом рейсе не использовалась?', 'Журнал МДП');
       if (!ok) return;
@@ -540,12 +649,14 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
 
   // ── общие действия шагов ─────────────────────────────────────────────────
   const postpone = async (key: StepKey) => {
+    if (!assertCanWrite()) return;
     const reason = window.prompt('Причина откладывания шага (её увидят в сводке):') || '';
     await tripCloseService.setStep(tripId, key, 'postponed', user.name, reason.trim() || 'Без пояснения');
     await tripCloseService.pushError(tripId, key, 'Шаг отложен', user.name).catch(() => {});
     toast('Шаг отложен — общий статус остаётся «не завершён»', 'info');
   };
   const markNotNeeded = async (key: StepKey) => {
+    if (!assertCanWrite()) return;
     const reason = window.prompt('Обоснование, почему шаг не требуется (обязательно):') || '';
     if (!reason.trim()) { toast('«Не требуется» без обоснования не принимается', 'error'); return; }
     await tripCloseService.setStep(tripId, key, 'not_needed', user.name, reason.trim());
@@ -562,6 +673,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
 
   const finish = async () => {
     if (!state) return;
+    if (!assertCanWrite()) return;
     const ok = await showConfirm('Завершить сценарий закрытия рейса? Данные шагов уже сохранены — отмены не требуется.', 'Завершить сценарий');
     if (!ok) return;
     await tripCloseService.complete(tripId, user.name, role);
@@ -604,7 +716,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
           <button type="button" data-ui="tc-next" onClick={forward} disabled={STEP_ORDER.indexOf(step) === STEP_ORDER.length - 1} className={`${UI.buttonGhost} disabled:opacity-50`}>
             Вперёд <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
-          <button type="button" data-ui="tc-postpone" onClick={() => void postpone(step)} className={UI.buttonGhost}>
+          <button type="button" data-ui="tc-postpone" disabled={foreignLocked} onClick={() => void postpone(step)} className={`${UI.buttonGhost} disabled:opacity-50`}>
             <PauseCircle className="w-3.5 h-3.5" aria-hidden="true" /> Отложить шаг
           </button>
           <button type="button" data-ui="tc-close" onClick={() => { void close(); }} className={UI.buttonGhost}>
@@ -612,7 +724,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
           </button>
           <div className="flex items-center gap-2 ml-auto">
             {st.completedAt ? (
-              <button type="button" data-ui="tc-reopen" onClick={() => void tripCloseService.reopen(tripId, user.name, role)} className={UI.buttonGhost}>
+              <button type="button" data-ui="tc-reopen" disabled={foreignLocked} onClick={() => void tripCloseService.reopen(tripId, user.name, role)} className={`${UI.buttonGhost} disabled:opacity-50`}>
                 <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" /> Переоткрыть сценарий
               </button>
             ) : (
@@ -620,8 +732,8 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
                 type="button"
                 data-ui="tc-finish"
                 onClick={() => void finish()}
-                disabled={!progress?.canFinish}
-                title={progress?.canFinish ? 'Все шаги закрыты' : 'Доступно, когда все шаги выполнены или обоснованно не требуются'}
+                disabled={!progress?.canFinish || foreignLocked}
+                title={foreignLocked ? `Сценарий ведёт ${foreignLock}` : progress?.canFinish ? 'Все шаги закрыты' : 'Доступно, когда все шаги выполнены или обоснованно не требуются'}
                 className={`${UI.buttonPrimary} disabled:opacity-50`}
               >
                 <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" /> Завершить сценарий
@@ -665,7 +777,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
                   data-step={d.key}
                   data-status={s?.status || 'pending'}
                   onClick={() => void goStep(d.key)}
-                  className={`text-[11px] rounded-xl border px-2.5 py-1.5 min-h-[36px] transition-colors cursor-pointer ${color}`}
+                  className={`text-[11px] rounded-xl border px-2.5 py-1.5 min-h-[44px] md:min-h-[36px] transition-colors cursor-pointer ${color}`}
                   title={`${d.label}: ${STEP_STATUS_LABEL[(s?.status || 'pending') as keyof typeof STEP_STATUS_LABEL]}${s?.note ? ` — ${s.note}` : ''}`}
                 >
                   <span className="font-semibold">{i + 1}. {d.short}</span>
@@ -734,7 +846,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
                     <span className={`text-xs font-mono tabular-nums ${row.eur === null ? 'text-rose-600' : 'text-[#121316]'}`} data-ui="tc-expense-eur">
                       {row.eur === null ? 'нет курса' : `${Number(row.eur).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`}
                     </span>
-                    <button type="button" data-ui="tc-expense-remove" className={UI.buttonIcon} aria-label="Удалить статью"
+                    <button type="button" data-ui="tc-expense-remove" className={`${UI.buttonIcon} min-h-[44px] min-w-[44px]`} aria-label="Удалить статью"
                       onClick={() => setPlanForm((f) => ({ ...f, expenses: f.expenses.filter((r) => r.id !== row.id) }))}>
                       <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
@@ -751,7 +863,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" data-ui="tc-plan-save" disabled={!canDo('planDohod') || busy === 'plan'}
+                <button type="button" data-ui="tc-plan-save" disabled={writeDenied('planDohod') || busy === 'plan'}
                   onClick={() => void runPlanStep()} className={`${UI.buttonPrimary} disabled:opacity-50`}>
                   {busy === 'plan' ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Save className="w-3.5 h-3.5" aria-hidden="true" />}
                   Сохранить, архивировать и продолжить
@@ -798,7 +910,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
               </div>
               <div className="text-[11px] text-[#6B7280]">Сохранение записи не означает выплату: статус «Выплачено», дату выплаты и подтверждение перевода мастер не ставит.</div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" data-ui="tc-salary-save" disabled={!canDo('salary') || busy === 'salary'}
+                <button type="button" data-ui="tc-salary-save" disabled={writeDenied('salary') || busy === 'salary'}
                   onClick={() => void runSalaryStep()} className={`${UI.buttonPrimary} disabled:opacity-50`}>
                   {busy === 'salary' ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Save className="w-3.5 h-3.5" aria-hidden="true" />}
                   Сохранить расчёт и продолжить
@@ -826,12 +938,12 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
               </div>
               <div className="text-[11px] text-[#6B7280]">Дата окончания рейса подставлена как предполагаемая дата приезда — её нужно подтвердить или исправить. Фактический выезд заранее не ставится.</div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" data-ui="tc-vyezd-save" disabled={!canDo('vyezd') || busy === 'vyezd'}
+                <button type="button" data-ui="tc-vyezd-save" disabled={writeDenied('vyezd') || busy === 'vyezd'}
                   onClick={() => void runVyezdStep()} className={`${UI.buttonPrimary} disabled:opacity-50`}>
                   {busy === 'vyezd' ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Save className="w-3.5 h-3.5" aria-hidden="true" />}
                   Сохранить и продолжить
                 </button>
-                <button type="button" data-ui="tc-vyezd-not-needed" onClick={() => void markNotNeeded('vyezd')} className={UI.buttonGhost}>Не требуется</button>
+                <button type="button" data-ui="tc-vyezd-not-needed" disabled={foreignLocked} onClick={() => void markNotNeeded('vyezd')} className={`${UI.buttonGhost} disabled:opacity-50`}>Не требуется</button>
               </div>
             </div>
           )}
@@ -844,7 +956,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
               </div>
               <pre data-ui="tc-zagruzka-payload" className="text-[11px] leading-relaxed bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 whitespace-pre-wrap font-sans">{zagruzkaText}</pre>
               <label className="flex flex-col gap-1 max-w-sm"><span className={UI.caption}>Место доступности (если известно)</span>
-                <input data-ui="tc-zagruzka-location" className={UI.input} value={state?.zagruzka?.location || ''}
+                <input data-ui="tc-zagruzka-location" disabled={foreignLocked} className={`${UI.input} disabled:opacity-60`} value={state?.zagruzka?.location || ''}
                   onChange={(e) => void tripCloseService.patch(tripId, { zagruzka: { ...(state?.zagruzka || {}), location: e.target.value } }, user.name)} /></label>
               <div className="flex flex-wrap gap-2">
                 <button type="button" data-ui="tc-zagruzka-copy" onClick={() => void copyZagruzka()} className={UI.buttonGhost}>
@@ -855,7 +967,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
                     <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" /> Открыть план загрузок
                   </a>
                 )}
-                <button type="button" data-ui="tc-zagruzka-confirm" disabled={!canDo('zagruzka')} onClick={() => void confirmZagruzka('manual')} className={`${UI.buttonPrimary} disabled:opacity-50`}>
+                <button type="button" data-ui="tc-zagruzka-confirm" disabled={writeDenied('zagruzka')} onClick={() => void confirmZagruzka('manual')} className={`${UI.buttonPrimary} disabled:opacity-50`}>
                   <Check className="w-3.5 h-3.5" aria-hidden="true" /> Подтверждаю: внесено в план загрузок
                 </button>
               </div>
@@ -873,7 +985,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
                   <input data-ui="tc-doc-number" className={UI.input} value={docDraft.number} onChange={(e) => setDocDraft({ ...docDraft, number: e.target.value })} /></label>
                 <label className="flex flex-col gap-1"><span className={UI.caption}>Дата выдачи</span>
                   <input data-ui="tc-doc-issued" className={UI.input} value={docDraft.issuedAt} onChange={(e) => setDocDraft({ ...docDraft, issuedAt: dateInput(e, docDraft.issuedAt) })} /></label>
-                <button type="button" data-ui="tc-doc-add" onClick={addDoc} className={UI.buttonGhost}><Plus className="w-3.5 h-3.5" aria-hidden="true" /> Добавить</button>
+                <button type="button" data-ui="tc-doc-add" disabled={foreignLocked} onClick={addDoc} className={`${UI.buttonGhost} disabled:opacity-50`}><Plus className="w-3.5 h-3.5" aria-hidden="true" /> Добавить</button>
               </div>
               <div className="flex flex-col gap-2" data-ui="tc-docs-list">
                 {(state?.docs || []).length === 0 && (
@@ -885,10 +997,10 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
                     {d.number ? <span className="text-[11px] text-[#6B7280] font-mono">{d.number}</span> : null}
                     {d.issuedAt ? <span className="text-[11px] text-[#6B7280]">выдан {toRu(d.issuedAt)}</span> : null}
                     <label className="flex items-center gap-1.5 text-[11px] text-[#4B5563] ml-auto cursor-pointer">
-                      <input data-ui="tc-doc-accept" type="checkbox" checked={d.accepted} onChange={() => void toggleDoc(d.id)} className="w-4 h-4" />
+                      <input data-ui="tc-doc-accept" type="checkbox" disabled={foreignLocked} checked={d.accepted} onChange={() => void toggleDoc(d.id)} className="w-4 h-4" />
                       Принят{d.acceptedAt ? ` · ${new Date(d.acceptedAt).toLocaleString('ru-RU')}` : ''}{d.acceptedBy ? ` · ${d.acceptedBy}` : ''}
                     </label>
-                    <button type="button" data-ui="tc-doc-remove" className={UI.buttonIcon} aria-label="Удалить строку" onClick={() => removeDoc(d.id)}>
+                    <button type="button" data-ui="tc-doc-remove" disabled={foreignLocked} className={`${UI.buttonIcon} min-h-[44px] min-w-[44px] disabled:opacity-50`} aria-label="Удалить строку" onClick={() => removeDoc(d.id)}>
                       <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
                   </div>
@@ -900,11 +1012,11 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
-                <button type="button" data-ui="tc-docs-all" onClick={() => void markAllDocs()} className={UI.buttonGhost}>Отметить все</button>
-                <button type="button" data-ui="tc-docs-save" disabled={!canDo('docs')} onClick={() => void runDocsStep(false)} className={`${UI.buttonPrimary} disabled:opacity-50`}>
+                <button type="button" data-ui="tc-docs-all" disabled={foreignLocked} onClick={() => void markAllDocs()} className={`${UI.buttonGhost} disabled:opacity-50`}>Отметить все</button>
+                <button type="button" data-ui="tc-docs-save" disabled={writeDenied('docs')} onClick={() => void runDocsStep(false)} className={`${UI.buttonPrimary} disabled:opacity-50`}>
                   <Save className="w-3.5 h-3.5" aria-hidden="true" /> Сохранить приём и продолжить
                 </button>
-                <button type="button" data-ui="tc-docs-none" disabled={!canDo('docs')} onClick={() => void runDocsStep(true)} className={`${UI.buttonGhost} disabled:opacity-50`}>
+                <button type="button" data-ui="tc-docs-none" disabled={writeDenied('docs')} onClick={() => void runDocsStep(true)} className={`${UI.buttonGhost} disabled:opacity-50`}>
                   Документы не выдавались
                 </button>
               </div>
@@ -919,7 +1031,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
                   <input data-ui="tc-mdp-number" className={UI.input} value={mdpDraft.number} onChange={(e) => setMdpDraft({ ...mdpDraft, number: e.target.value })} /></label>
                 <label className="flex flex-col gap-1"><span className={UI.caption}>Дата выдачи</span>
                   <input data-ui="tc-mdp-issued" className={UI.input} value={mdpDraft.issuedAt} onChange={(e) => setMdpDraft({ ...mdpDraft, issuedAt: dateInput(e, mdpDraft.issuedAt) })} /></label>
-                <button type="button" data-ui="tc-mdp-add" onClick={addMdp} className={UI.buttonGhost}><Plus className="w-3.5 h-3.5" aria-hidden="true" /> Добавить книжку</button>
+                <button type="button" data-ui="tc-mdp-add" disabled={foreignLocked} onClick={addMdp} className={`${UI.buttonGhost} disabled:opacity-50`}><Plus className="w-3.5 h-3.5" aria-hidden="true" /> Добавить книжку</button>
               </div>
               <div className="flex flex-col gap-2" data-ui="tc-mdp-list">
                 {(state?.mdp || []).length === 0 && <div className="text-[11px] text-[#9CA3AF]">Книжек нет. Добавьте выданные книжки — или подтвердите, что книжка МДП не использовалась.</div>}
@@ -928,20 +1040,20 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
                     <span className="text-xs font-semibold text-[#121316] font-mono">{b.number}</span>
                     <span className="text-[11px] text-[#6B7280]">{b.carNumber || ''}{b.driverName ? ` · ${b.driverName}` : ''}{b.issuedAt ? ` · выдан ${toRu(b.issuedAt)}` : ''}</span>
                     <label className="flex items-center gap-1.5 text-[11px] text-[#4B5563] ml-auto cursor-pointer">
-                      <input data-ui="tc-mdp-returned" type="checkbox" checked={b.returned} onChange={() => void toggleMdp(b.id)} className="w-4 h-4" />
+                      <input data-ui="tc-mdp-returned" type="checkbox" disabled={foreignLocked} checked={b.returned} onChange={() => void toggleMdp(b.id)} className="w-4 h-4" />
                       Возвращена{b.returnedAt ? ` · ${new Date(b.returnedAt).toLocaleString('ru-RU')}` : ''}{b.acceptedBy ? ` · принял ${b.acceptedBy}` : ''}
                     </label>
                     <label className="flex items-center gap-1.5 text-[11px] text-[#4B5563] cursor-pointer">
-                      <input type="checkbox" checked={!!b.complete} onChange={() => void toggleComplete(b.id)} className="w-4 h-4" /> Комплектность
+                      <input type="checkbox" disabled={foreignLocked} checked={!!b.complete} onChange={() => void toggleComplete(b.id)} className="w-4 h-4" /> Комплектность
                     </label>
                     {(state?.docs || []).length > 0 && (
-                      <select data-ui="tc-mdp-link" value={b.docId || ''} onChange={(e) => void linkMdpToDoc(b.id, e.target.value)}
-                        className="px-2 min-h-[36px] bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg text-[11px] cursor-pointer" aria-label="Связь с документом книги выдачи">
+                      <select data-ui="tc-mdp-link" value={b.docId || ''} disabled={foreignLocked} onChange={(e) => void linkMdpToDoc(b.id, e.target.value)}
+                        className="px-2 min-h-[44px] bg-[#F3F4F6] border border-[#E5E7EB] rounded-lg text-[11px] cursor-pointer disabled:opacity-60" aria-label="Связь с документом книги выдачи">
                         <option value="">Связь с книгой выдачи: не указана</option>
                         {(state?.docs || []).map((d) => <option key={d.id} value={d.id}>{d.type}{d.number ? ` №${d.number}` : ''}</option>)}
                       </select>
                     )}
-                    <button type="button" data-ui="tc-mdp-remove" className={UI.buttonIcon} aria-label="Удалить книжку" onClick={() => removeMdp(b.id)}>
+                    <button type="button" data-ui="tc-mdp-remove" disabled={foreignLocked} className={`${UI.buttonIcon} min-h-[44px] min-w-[44px] disabled:opacity-50`} aria-label="Удалить книжку" onClick={() => removeMdp(b.id)}>
                       <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
                   </div>
@@ -949,10 +1061,10 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
               </div>
               <div className="text-[11px] text-[#6B7280]">Факт приезда машины не означает возврат книжки: возврат и комплектность отмечаются отдельно, связь с книгой выдачи указывается вручную.</div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" data-ui="tc-mdp-save" disabled={!canDo('mdp')} onClick={() => void runMdpStep(false)} className={`${UI.buttonPrimary} disabled:opacity-50`}>
+                <button type="button" data-ui="tc-mdp-save" disabled={writeDenied('mdp')} onClick={() => void runMdpStep(false)} className={`${UI.buttonPrimary} disabled:opacity-50`}>
                   <Save className="w-3.5 h-3.5" aria-hidden="true" /> Сохранить и продолжить
                 </button>
-                <button type="button" data-ui="tc-mdp-not-used" disabled={!canDo('mdp')} onClick={() => void runMdpStep(true)} className={`${UI.buttonGhost} disabled:opacity-50`}>
+                <button type="button" data-ui="tc-mdp-not-used" disabled={writeDenied('mdp')} onClick={() => void runMdpStep(true)} className={`${UI.buttonGhost} disabled:opacity-50`}>
                   Книжка МДП не использовалась
                 </button>
               </div>

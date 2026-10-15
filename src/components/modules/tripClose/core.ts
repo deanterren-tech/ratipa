@@ -80,6 +80,15 @@ export interface TripCloseState {
   docs?: TripCloseDoc[];
   mdp?: TripCloseMdpBook[];
   flags?: { docsNone?: boolean; mdpNotUsed?: boolean };
+  /** Данные шага «Учёт выезда», введённые сотрудником (даты в ISO, как в базе). */
+  vyezd?: {
+    driverName?: string;
+    dateArrival?: string;
+    dateRepairStart?: string;
+    dateRepairEnd?: string;
+    comment?: string;
+    savedAt?: string;
+  };
   zagruzka?: {
     dispatcher?: string;
     driver?: string;
@@ -122,6 +131,12 @@ export const STEP_STATUS_LABEL: Record<StepStatus, string> = {
   postponed: 'отложен',
   not_needed: 'не требуется',
 };
+
+/** Допустимые состояния шага: неизвестное значение из базы не считается состоянием. */
+export const STEP_STATUSES: StepStatus[] = ['pending', 'in_progress', 'done', 'postponed', 'not_needed'];
+
+export const isStepStatus = (value: unknown): value is StepStatus =>
+  typeof value === 'string' && (STEP_STATUSES as string[]).includes(value);
 
 export const emptySteps = (): Record<StepKey, StepState> =>
   STEP_ORDER.reduce((acc, key) => {
@@ -170,7 +185,9 @@ export const normalizeState = (raw: Partial<TripCloseState> | null | undefined, 
   const steps = { ...emptySteps() };
   STEP_ORDER.forEach((key) => {
     const s = raw?.steps?.[key];
-    if (s && s.status) steps[key] = { ...s };
+    // Статус вне известного набора (мусор/старая версия) не пропускаем как есть:
+    // иначе шаг выглядел бы закрытым по неизвестному состоянию.
+    if (s && isStepStatus(s.status)) steps[key] = { ...s };
   });
   return {
     ...seed,

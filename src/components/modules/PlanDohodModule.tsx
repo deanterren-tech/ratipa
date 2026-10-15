@@ -3687,6 +3687,19 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     >
                       <Pencil className="w-4 h-4" aria-hidden="true" />
                     </button>
+                    {/* Дополнительная точка входа: меню строки плана дохода — тот же
+                        единый сценарий закрытия рейса, что и кнопка в карточке записи
+                        (сценарий привязан к конкретной записи плана, а не к машине). */}
+                    <button
+                      type="button"
+                      data-ui="close-trip-row"
+                      onClick={(e) => { e.stopPropagation(); openTripClose(String(trip.id)); }}
+                      className={`${UI.buttonIcon} w-11 h-11 shrink-0`}
+                      title="Закрыть рейс"
+                      aria-label="Закрыть рейс"
+                    >
+                      <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
+                    </button>
                     {!archived ? (
                       <button
                         type="button"

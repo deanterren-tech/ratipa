@@ -53,7 +53,10 @@
     "test:expenses": "tsx scripts/test-expenses.ts",
     "test:trip-guard": "tsx scripts/test-trip-guard.ts",
     "test:trip-window": "tsx scripts/test-trip-window.ts",
-    "test:trip-history": "tsx scripts/test-trip-history.ts"
+    "test:trip-history": "tsx scripts/test-trip-history.ts",
+    "test:trip-close": "tsx scripts/test-trip-close.ts",
+    "test:plan-dates": "tsx scripts/test-plan-dates.ts",
+    "audit:plan-dates": "tsx scripts/audit-plan-dates.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
