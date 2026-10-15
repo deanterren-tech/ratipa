@@ -40,6 +40,26 @@
  *   npx tsx scripts/migrate-fleet-cards.ts --phase2 --apply --yes    # фаза 2: применить (снимки веток + бэкапы + проверка)
  *   npx tsx scripts/migrate-fleet-cards.ts --phase2 --verify         # фаза 2: проверка состояния
  *
+ *   npx tsx scripts/migrate-fleet-cards.ts --phase3                  # фаза 3: отчёт «приводим к общему» (опечатки vehicleFleet, AS54487→AC54487, дубль AO88077, год 0→2026)
+ *   npx tsx scripts/migrate-fleet-cards.ts --phase3 --apply --yes    # фаза 3: применить (полные бэкапы + сверка «до» + проверка чтением)
+ *   npx tsx scripts/migrate-fleet-cards.ts --phase3 --verify         # фаза 3: проверка состояния
+ *
+ * ФАЗА 3 (решения владельца «приводим к общему всему» + «по бархатову оставляем», 15.10.2026):
+ *   A. Четыре записи vehicleFleet с опечатками букв номера (AS02497→AC02497, AS33927→AC33927,
+ *      H229TE31→X229TE31, O271HE31→O271XE31): переносятся ТОЛЬКО отсутствующие в живой
+ *      карточке поля; при двух непустых конфликтующих значениях — в отчёт; затем записи удаляются.
+ *   B. lastPassportVerificationYear: «0» → 2026 (tractors/AO88067; AO88077 — объединённая карточка
+ *      дубля, там уже 2026). Иное непустое значение — не трогается, в отчёт.
+ *   C. Ключ AS54487 → канонический AC54487: карточка и сцепка переименовываются (копия + удаление
+ *      неканоничной), ссылки в baza/archive («Учёт выезда») переводятся.
+ *   D. Дубль AO 8807-7: tractors/1787136789859 → tractors/AO88077 (только отсутствующие поля,
+ *      НЕ затирая заполненные; телефон +375 29 131-04-14 НЕ переносится — чужой, остаётся в бэкапе),
+ *      затем старая карточка удаляется; ссылка baza/-P3uQ2TZzI611frNuD7X couplingId
+ *      «rec_1787136789859» → «AO88077» (как в остальных записях baza).
+ *   Ветка vehicleFleet НЕ удаляется и НЕ трогается сверх четырёх записей (A) (решение владельца).
+ *   Записи в других ветках, где найдены ссылки на удаляемые/переименовываемые ключи
+ *   (telemetry_*, vehicle_statuses, salaryHistory, auditLogs и т.п.), НЕ меняются — идут в отчёт.
+ *
  * ФАЗА 2 (чистка мёртвых веток): переносит lastPassportVerificationYear/status
  * из vehicleFleet в tractors (по вариантам ключа), затем удаляет ветки, где
  * чтений/записей в коде нет. Ветки с живыми потребителями ИЛИ с уникальными
@@ -750,7 +770,449 @@ async function phase2() {
   if (!QUIET) console.log('Повторный запуск идемпотентен: условия пересчитываются из текущих данных.');
 }
 
+// ================= ФАЗА 3: «приводим к общему виду» =================
+const PHASE3 = ARGS.includes('--phase3');
+
+/** (A) Четыре записи vehicleFleet с опечатками букв номера → настоящие карточки. */
+const P3_VF_TYPO_MOVES: Array<{ from: string; to: string; note: string }> = [
+  { from: 'AS02497', to: 'AC02497', note: 'опечатка S→C в букве номера' },
+  { from: 'AS33927', to: 'AC33927', note: 'опечатка S→C в букве номера' },
+  { from: 'H229TE31', to: 'X229TE31', note: 'опечатка H→X в букве номера' },
+  { from: 'O271HE31', to: 'O271XE31', note: 'опечатка H→X в букве номера' },
+];
+/** (C) Неканоничный ключ → канонический (как у портала). */
+const P3_RENAME = { from: 'AS54487', to: 'AC54487' };
+/** (D) Дубль карточки AO 8807-7. */
+const P3_DUP = {
+  from: '1787136789859',
+  to: 'AO88077',
+  /** поля источника, которые НЕ переносятся вовсе (кроме honest-отчёта). */
+  skip: new Set<string>(['id', 'phones']),
+  skipNotes: {
+    phones: 'телефон +375 29 131-04-14 НЕ переносится (принадлежит другому водителю; остаётся только в бэкапе)',
+  } as Record<string, string>,
+};
+/** Ссылки в «Учёте выезда»/архиве: переводятся (вид — как в соседних записях). */
+const P3_REF_MOVES: Array<{ record: string; field: string; from: string; to: string; note: string }> = [
+  { record: 'baza/-P2NYkr9cEGMX_OkGKR5', field: 'couplingId', from: 'AS54487', to: 'AC54487', note: 'инциденты «Учёта выезда»: ключ переименован' },
+  { record: 'archive/-P2NYkr9cEGMX_OkGKR5', field: 'couplingId', from: 'AS54487', to: 'AC54487', note: 'архивная строка «Учёта выезда»: ключ переименован (ссылка, не история ФИО/дат)' },
+  { record: 'baza/-P3uQ2TZzI611frNuD7X', field: 'couplingId', from: 'rec_1787136789859', to: 'AO88077', note: '(D) вид как в остальных записях baza — канонический ключ карточки' },
+];
+/** (B) «0» → 2026 (год последней сверки паспорта; в старой ветке 2026 — единственное информативное значение). */
+const P3_YEAR_CARDS = ['AO88067', 'AO88077'];
+/** Ветки для сканирования ссылок и загрузки (без auditLogs — 100+ МБ, только отчёт). */
+const P3_SCAN_BRANCHES = [
+  'tractors', 'couplings', 'vehicleFleet', 'baza', 'archive', 'baza_cars', 'trailers', 'documents',
+  'salaryHistory', 'trips_dashboard', 'ratipa_loading_plan', 'tripTimeline', 'driverTasks', 'ferryCouples',
+  'vehicle_statuses', 'telemetry_current', 'telemetry_mapping', 'telemetry_mapping_history',
+  'telemetry_can_coverage', 'telemetry_can_history', 'telemetry_history',
+  'ratipa_zagruzok_log', 'telemetry_navby_objects', 'user_widgets_order', 'dozvolsHistoryV4',
+];
+const P3_TOKENS = ['AS02497', 'AS33927', 'H229TE31', 'O271HE31', 'AS54487', '1787136789859', 'АС 5448'];
+/** Записи, где найдены ссылки на удаляемые/переименовываемые ключи, но которые НЕ меняются: только бэкап. */
+const P3_BACKUP_EXTRA: string[] = [
+  'vehicleFleet/AS54487', 'vehicleFleet/rec_1787136789859', 'vehicleFleet/AO88077', 'vehicleFleet/AC54487',
+  'salaryHistory/-P2bA3ieFlcdqpYpSDKJ',
+  'vehicle_statuses/AS54487', 'vehicle_statuses/rec_1787136789859',
+  'telemetry_current/AS54487', 'telemetry_current/rec_1787136789859',
+  'telemetry_mapping/AS54487', 'telemetry_mapping/rec_1787136789859',
+  'telemetry_mapping_history/AS54487', 'telemetry_mapping_history/rec_1787136789859',
+  'telemetry_can_coverage/AS54487', 'telemetry_can_coverage/rec_1787136789859',
+  'telemetry_can_history/AS54487',
+  'telemetry_history/AS54487', 'telemetry_history/rec_1787136789859',
+];
+
+type P3Op =
+  | { kind: 'set'; path: string; record: string; field: string; before: unknown; after: unknown; note: string }
+  | { kind: 'del'; path: string; record: string; note: string }
+  | { kind: 'put'; path: string; value: Obj; note: string };
+
+const arrOf = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+/** «Одно и то же» для переносов: точное равенство, регистр/пробелы, для номеров — раскладка. */
+function p3Sameish(a: unknown, b: unknown, field: string): boolean {
+  if (deepEqual(a, b)) return true;
+  if (typeof a === 'string' && typeof b === 'string') {
+    const na = a.trim().toUpperCase().replace(/\s+/g, ' ');
+    const nb = b.trim().toUpperCase().replace(/\s+/g, ' ');
+    if (na === nb && na !== '') return true;
+    if (['trailerNumber', 'carNumber', 'vehicleNumbers', 'trailerId'].includes(field)) {
+      const ca = canonPlate(a);
+      const cb = canonPlate(b);
+      if (ca && ca === cb) return true;
+    }
+  }
+  return false;
+}
+
+interface P3Move { field: string; before: unknown; after: unknown; note: string }
+
+/**
+ * Поля источника, которых НЕТ в приёмнике → перенос; оба непустые и разные → конфликт (в отчёт);
+ * пустые/неинформативные («0» у года) не переносятся. Мутирует dst только пометкой уже перенесённых
+ * для корректного расчёта нескольких источников.
+ */
+function p3CollectMoves(
+  src: Obj, dst: Obj, targetRec: string, srcLabel: string,
+  skip: Set<string>, skipNotes: Record<string, string>,
+): { moves: P3Move[]; conflicts: string[]; sameCount: number; skipped: string[] } {
+  const moves: P3Move[] = [];
+  const conflicts: string[] = [];
+  const skipped: string[] = [];
+  let sameCount = 0;
+  for (const [f, sv] of Object.entries(src)) {
+    if (['id', 'mergedFrom', 'mergedAt'].includes(f)) continue;
+    if (skip.has(f)) {
+      skipped.push(`${targetRec}/${f}: НЕ переносится из ${srcLabel} — ${skipNotes[f] || 'вне объёма переноса'}; значение: ${JSON.stringify(sv).slice(0, 160)}`);
+      continue;
+    }
+    if (f === 'lastPassportVerificationYear' && (sv === 0 || sv === '0')) {
+      skipped.push(`${targetRec}/${f}: у источника «0» (неинформативно) — не переносится`);
+      continue;
+    }
+    const svEmpty = sv === undefined || sv === null || sv === '';
+    if (svEmpty) continue;
+    const dv = dst[f];
+    const dvEmpty = dv === undefined || dv === null || dv === '';
+    if (dvEmpty) {
+      moves.push({ field: f, before: dv ?? null, after: sv, note: `из ${srcLabel}: поле отсутствовало в рабочей карточке` });
+      dst[f] = sv; // чтобы второй источник не «переносил» то же поле повторно
+    } else if (p3Sameish(dv, sv, f)) {
+      sameCount++;
+    } else {
+      conflicts.push(`${targetRec}/${f}: в рабочей «${JSON.stringify(dv)}», в ${srcLabel} «${JSON.stringify(sv)}» — НЕ изменено (оба непустые — в отчёт)`);
+    }
+  }
+  return { moves, conflicts, sameCount, skipped };
+}
+
+const p3Summary = (op: P3Op): string => {
+  switch (op.kind) {
+    case 'del': return `DELETE ${op.path} — ${op.note}`;
+    case 'put': return `PUT    ${op.path} (полная запись, ${Object.keys(op.value).length} полей) — ${op.note}`;
+    case 'set': return `SET    ${op.path}: ${JSON.stringify(op.before)} → ${JSON.stringify(op.after)} — ${op.note}`;
+  }
+};
+
+/** Классификация найденной ссылки: что с ней делает эта миграция. */
+function p3RefVerdict(branch: string, token: string): string {
+  if (branch === 'vehicleFleet') {
+    if (P3_VF_TYPO_MOVES.some((m) => m.from === token)) return 'удаляется в этой миграции (A): перенос + удаление записи';
+    return 'ОСТАЁТСЯ: ветка vehicleFleet не трогается сверх четырёх записей (A) — решение владельца; данные уже отражены в tractors';
+  }
+  if (token === P3_RENAME.from && ['tractors', 'couplings', 'baza', 'archive'].includes(branch)) return 'переводится/удаляется в этой миграции (C): переименование ключа AS54487→AC54487';
+  if ((token === '1787136789859' || token === 'rec_1787136789859') && branch === 'tractors') return 'удаляется в этой миграции (D): слияние дубля в AO88077';
+  if ((token === '1787136789859' || token === 'rec_1787136789859') && branch === 'baza') return 'переводится в этой миграции (D): ссылка в «Учёте выезда» rec_1787136789859→AO88077';
+  if (token === 'АС 5448') return 'текст номера (вариант раскладки/mergedFrom) — интерфейс нормализует, не трогается';
+  if (branch === 'salaryHistory') return 'ОСТАЁТСЯ: история зарплат (не переписывается) — в отчёт';
+  if (branch.startsWith('telemetry')) return 'ОСТАЁТСЯ: живое хранилище «Пробег и связь» (вне объёма, в отчёт; ключ = carKey)';
+  if (branch === 'vehicle_statuses') return 'ОСТАЁТСЯ: статусы машин (вне объёма, в отчёт)';
+  return 'ОСТАЁТСЯ (вне объёма, в отчёт)';
+}
+
+interface P3Report { conflicts: string[]; notes: string[]; refs: Array<{ branch: string; token: string; hits: number; verdict: string }> }
+
+function buildPhase3Plan(data: Record<string, Obj>, rep: P3Report): P3Op[] {
+  const ops: P3Op[] = [];
+  const vf = data.vehicleFleet || {};
+  const tr = data.tractors || {};
+  const cp = data.couplings || {};
+
+  // ---------- (A) четыре записи vehicleFleet с опечатками ----------
+  for (const m of P3_VF_TYPO_MOVES) {
+    const rec = asObj(vf[m.from]);
+    if (!Object.keys(rec).length) { rep.notes.push(`(A) vehicleFleet/${m.from}: уже отсутствует ✓`); continue; }
+    const card = asObj(tr[m.to]);
+    if (!Object.keys(card).length) { rep.conflicts.push(`(A) ПРОПУСК: нет карточки tractors/${m.to} — перенос vehicleFleet/${m.from} не выполнен`); continue; }
+    const r = p3CollectMoves(rec, card, `tractors/${m.to}`, `vehicleFleet/${m.from}`, new Set(), {});
+    rep.conflicts.push(...r.conflicts);
+    rep.notes.push(...r.skipped);
+    for (const mv of r.moves) {
+      ops.push({ kind: 'set', path: `tractors/${m.to}/${mv.field}`, record: `tractors/${m.to}`, field: mv.field, before: mv.before, after: mv.after, note: `(A) из vehicleFleet/${m.from}` });
+    }
+    rep.notes.push(`(A) vehicleFleet/${m.from} → tractors/${m.to}: перенесено ${r.moves.length}, уже совпадало ${r.sameCount} — запись убирается (${m.note})`);
+    ops.push({ kind: 'del', path: `vehicleFleet/${m.from}`, record: `vehicleFleet/${m.from}`, note: `(A) ${m.note}: данные в tractors/${m.to}; запись удаляется (решение владельца)` });
+  }
+
+  // ---------- (B) год 0 → 2026 ----------
+  for (const cardId of P3_YEAR_CARDS) {
+    const card = asObj(tr[cardId]);
+    if (!Object.keys(card).length) { rep.conflicts.push(`(B) нет карточки tractors/${cardId}`); continue; }
+    const cur = card.lastPassportVerificationYear;
+    if (cur === 0 || cur === '0' || cur === '' || cur === undefined || cur === null) {
+      ops.push({ kind: 'set', path: `tractors/${cardId}/lastPassportVerificationYear`, record: `tractors/${cardId}`, field: 'lastPassportVerificationYear', before: cur ?? null, after: 2026, note: '(B) «0» → 2026 (в старой ветке 2026 — единственное информативное значение)' });
+    } else if (String(cur) === '2026') {
+      rep.notes.push(`(B) tractors/${cardId}: уже 2026 ✓`);
+    } else {
+      rep.conflicts.push(`(B) tractors/${cardId}/lastPassportVerificationYear = «${String(cur)}» — непустое не-0 значение, НЕ изменено (в отчёт)`);
+    }
+  }
+
+  // ---------- (C) AS54487 → AC54487 ----------
+  const fromCard = asObj(tr[P3_RENAME.from]);
+  const toCard = asObj(tr[P3_RENAME.to]);
+  if (Object.keys(fromCard).length) {
+    if (Object.keys(toCard).length) {
+      rep.conflicts.push(`(C) tractors/${P3_RENAME.to} уже существует — автоматическое переименование не выполняется`);
+    } else {
+      const value: Obj = { ...fromCard, id: P3_RENAME.to, couplingId: P3_RENAME.to, tractorId: P3_RENAME.to };
+      const prevFrom = arrOf(fromCard.mergedFrom).map(s);
+      value.mergedFrom = [...new Set([...prevFrom, P3_RENAME.from])].sort();
+      value.mergedAt = STAMP;
+      ops.push({ kind: 'put', path: `tractors/${P3_RENAME.to}`, value, note: `(C) переименование ключа ${P3_RENAME.from}→${P3_RENAME.to} (id/couplingId/tractorId канонизированы, mergedFrom += ${P3_RENAME.from})` });
+      ops.push({ kind: 'del', path: `tractors/${P3_RENAME.from}`, record: `tractors/${P3_RENAME.from}`, note: '(C) неканоничный ключ удаляется (данные перенесены в AC54487)' });
+    }
+  } else if (Object.keys(toCard).length) {
+    rep.notes.push(`(C) tractors/${P3_RENAME.from}: уже переименована в ${P3_RENAME.to} ✓`);
+  } else {
+    rep.conflicts.push(`(C) нет ни tractors/${P3_RENAME.from}, ни tractors/${P3_RENAME.to} — нечего переименовывать`);
+  }
+  const fromCp = asObj(cp[P3_RENAME.from]);
+  const toCp = asObj(cp[P3_RENAME.to]);
+  if (Object.keys(fromCp).length) {
+    if (Object.keys(toCp).length) {
+      rep.conflicts.push(`(C) couplings/${P3_RENAME.to} уже существует — переименование сцепки не выполняется`);
+    } else {
+      const value: Obj = { ...fromCp, id: P3_RENAME.to, tractorId: P3_RENAME.to };
+      ops.push({ kind: 'put', path: `couplings/${P3_RENAME.to}`, value, note: `(C) переименование ключа сцепки ${P3_RENAME.from}→${P3_RENAME.to} (id/tractorId канонизированы)` });
+      ops.push({ kind: 'del', path: `couplings/${P3_RENAME.from}`, record: `couplings/${P3_RENAME.from}`, note: '(C) неканоничный ключ сцепки удаляется (пара ключ=карточка)' });
+    }
+  } else if (Object.keys(toCp).length) {
+    rep.notes.push(`(C) couplings/${P3_RENAME.from}: уже переименована в ${P3_RENAME.to} ✓`);
+  } else {
+    rep.conflicts.push(`(C) нет ни couplings/${P3_RENAME.from}, ни couplings/${P3_RENAME.to}`);
+  }
+
+  // ---------- (D) дубль AO88077 ← 1787136789859 ----------
+  const dupSrc = asObj(tr[P3_DUP.from]);
+  const dupDst = asObj(tr[P3_DUP.to]);
+  if (Object.keys(dupSrc).length) {
+    if (!Object.keys(dupDst).length) {
+      rep.conflicts.push(`(D) нет рабочей карточки tractors/${P3_DUP.to} — слияние дубля пропущено`);
+    } else {
+      const r = p3CollectMoves(dupSrc, dupDst, `tractors/${P3_DUP.to}`, `tractors/${P3_DUP.from}`, P3_DUP.skip, P3_DUP.skipNotes);
+      rep.conflicts.push(...r.conflicts);
+      rep.notes.push(...r.skipped);
+      for (const mv of r.moves) {
+        ops.push({ kind: 'set', path: `tractors/${P3_DUP.to}/${mv.field}`, record: `tractors/${P3_DUP.to}`, field: mv.field, before: mv.before, after: mv.after, note: `(D) из tractors/${P3_DUP.from}` });
+      }
+      const curFrom = arrOf(dupDst.mergedFrom).map(s);
+      const newFrom = [...new Set([...curFrom, P3_DUP.from])].sort();
+      ops.push({ kind: 'set', path: `tractors/${P3_DUP.to}/mergedFrom`, record: `tractors/${P3_DUP.to}`, field: 'mergedFrom', before: curFrom.length ? curFrom : null, after: newFrom, note: '(D) след слияния дубля' });
+      ops.push({ kind: 'set', path: `tractors/${P3_DUP.to}/mergedAt`, record: `tractors/${P3_DUP.to}`, field: 'mergedAt', before: dupDst.mergedAt ?? null, after: STAMP, note: '(D) штамп слияния' });
+      ops.push({ kind: 'del', path: `tractors/${P3_DUP.from}`, record: `tractors/${P3_DUP.from}`, note: '(D) старая карточка-двойник удаляется (данные перенесены, телефон чужого водителя — только в бэкапе)' });
+      rep.notes.push(`(D) tractors/${P3_DUP.from} → tractors/${P3_DUP.to}: перенесено ${r.moves.length}, уже совпадало ${r.sameCount}; телефон +375 29 131-04-14 не переносится`);
+    }
+  } else if (Object.keys(dupDst).length) {
+    rep.notes.push(`(D) tractors/${P3_DUP.from}: уже слита в ${P3_DUP.to} ✓`);
+  }
+
+  // ---------- ссылки baza/archive ----------
+  for (const r of P3_REF_MOVES) {
+    const [br, key] = r.record.split('/');
+    const rec = asObj(asObj(data[br])[key]);
+    if (!Object.keys(rec).length) { rep.notes.push(`${r.record}: запись отсутствует`); continue; }
+    const cur = rec[r.field];
+    if (s(cur) === r.to) { rep.notes.push(`${r.record}/${r.field}: уже «${r.to}» ✓`); continue; }
+    if (s(cur) !== r.from) { rep.notes.push(`${r.record}/${r.field}: текущее «${s(cur)}» ≠ ожидаемого «${r.from}» — пропущено (в отчёт)`); continue; }
+    ops.push({ kind: 'set', path: `${r.record}/${r.field}`, record: r.record, field: r.field, before: cur, after: r.to, note: r.note });
+  }
+
+  // ---------- сканирование ссылок ----------
+  for (const br of P3_SCAN_BRANCHES) {
+    const tree = data[br];
+    if (tree === undefined || tree === null) continue;
+    const str = JSON.stringify(tree);
+    for (const tk of P3_TOKENS) {
+      let n = 0; let i = 0;
+      while ((i = str.indexOf(tk, i)) !== -1) { n++; i += tk.length; }
+      if (n > 0) rep.refs.push({ branch: br, token: tk, hits: n, verdict: p3RefVerdict(br, tk) });
+    }
+  }
+  return ops;
+}
+
+async function p3Load(): Promise<Record<string, Obj>> {
+  const data: Record<string, Obj> = {};
+  for (const b of P3_SCAN_BRANCHES) data[b] = asObj(await fetchAll(b));
+  return data;
+}
+
+async function phase3() {
+  const mode = VERIFY ? 'ПРОВЕРКА СОСТОЯНИЯ' : APPLY ? (YES ? 'ПРИМЕНЕНИЕ ИЗМЕНЕНИЙ' : '--apply без --yes — запись запрещена') : 'предварительный отчёт (без записи)';
+  if (!QUIET) console.log(`migrate-fleet-cards · фаза 3 «приводим к общему»\nРежим: ${mode}\nБаза: ${DB}\n`);
+
+  const data = await p3Load();
+  const rep: P3Report = { conflicts: [], notes: [], refs: [] };
+  const ops = buildPhase3Plan(data, rep);
+
+  const printPlan = () => {
+    console.log('=== (A) ОПЕЧАТКИ vehicleFleet → НАСТОЯЩИЕ КАРТОЧКИ ===');
+    for (const m of P3_VF_TYPO_MOVES) console.log(`  ${m.from} → ${m.to}: ${data.vehicleFleet[m.from] ? 'запись есть — перенос + удаление' : 'уже отсутствует'}`);
+    console.log('\n=== (B) ГОД: «0» → 2026 ===');
+    for (const c of P3_YEAR_CARDS) { const v = asObj(data.tractors[c]).lastPassportVerificationYear; console.log(`  tractors/${c}: текущее «${JSON.stringify(v ?? null)}»`); }
+    console.log('\n=== (C) ПЕРЕИМЕНОВАНИЕ КЛЮЧА AS54487 → AC54487 ===');
+    console.log(`  tractors/${P3_RENAME.from}: ${Object.keys(asObj(data.tractors[P3_RENAME.from])).length ? 'есть — копируется в AC54487 и удаляется' : 'уже отсутствует'}`);
+    console.log(`  couplings/${P3_RENAME.from}: ${Object.keys(asObj(data.couplings[P3_RENAME.from])).length ? 'есть — копируется в AC54487 и удаляется' : 'уже отсутствует'}`);
+    console.log('\n=== (D) ДУБЛЬ КАРТОЧКИ AO 8807-7 ===');
+    console.log(`  tractors/1787136789859: ${Object.keys(asObj(data.tractors['1787136789859'])).length ? 'есть — перенос отсутствующих полей + удаление' : 'уже слита'}`);
+    console.log('\n=== ПЛАН ОПЕРАЦИЙ ===');
+    for (const op of ops) console.log(`  ${p3Summary(op)}`);
+    console.log(`\nИТОГО операций: ${ops.length}; удаляется записей: ${ops.filter((o) => o.kind === 'del').length}; новых записей: ${ops.filter((o) => o.kind === 'put').length}`);
+    console.log('\n=== ПРИМЕЧАНИЯ ===');
+    for (const n of rep.notes) console.log(`  · ${n}`);
+    if (rep.conflicts.length) { console.log('\n=== КОНФЛИКТЫ (не тронуто — в отчёт) ==='); for (const c of rep.conflicts) console.log(`  ! ${c}`); }
+    console.log('\n=== ССЫЛКИ НА КЛЮЧИ (все найденные места) ===');
+    for (const r of rep.refs) console.log(`  ${r.branch} · ${r.token} ×${r.hits}: ${r.verdict}`);
+    console.log('  (auditLogs — журнал 100+ МБ: исторические записи по этим ключам, не выгружался и не менялся)');
+  };
+
+  if (VERIFY) {
+    const problems: string[] = [];
+    const notesV: string[] = [];
+    const tr = data.tractors, cp = data.couplings, bz = data.baza, ar = data.archive, vf = data.vehicleFleet;
+    for (const m of P3_VF_TYPO_MOVES) if (Object.keys(asObj(vf[m.from])).length) problems.push(`осталась запись vehicleFleet/${m.from}`);
+    if (Object.keys(asObj(tr[P3_RENAME.from])).length) problems.push(`остался tractors/${P3_RENAME.from}`);
+    if (Object.keys(asObj(cp[P3_RENAME.from])).length) problems.push(`остался couplings/${P3_RENAME.from}`);
+    const tc = asObj(tr[P3_RENAME.to]);
+    if (!Object.keys(tc).length) problems.push(`нет карточки tractors/${P3_RENAME.to}`);
+    else for (const f of ['id', 'couplingId', 'tractorId'] as const) if (s(tc[f]) !== P3_RENAME.to) problems.push(`tractors/${P3_RENAME.to}/${f} = «${s(tc[f])}» ≠ «${P3_RENAME.to}»`);
+    const tcc = asObj(cp[P3_RENAME.to]);
+    if (!Object.keys(tcc).length) problems.push(`нет сцепки couplings/${P3_RENAME.to}`);
+    else for (const f of ['id', 'tractorId'] as const) if (s(tcc[f]) !== P3_RENAME.to) problems.push(`couplings/${P3_RENAME.to}/${f} = «${s(tcc[f])}» ≠ «${P3_RENAME.to}»`);
+    if (Object.keys(asObj(tr[P3_DUP.from])).length) problems.push(`осталась карточка tractors/${P3_DUP.from}`);
+    const dst = asObj(tr[P3_DUP.to]);
+    if (!arrOf(dst.mergedFrom).some((x) => String(x) === P3_DUP.from)) problems.push(`tractors/${P3_DUP.to}.mergedFrom не содержит «${P3_DUP.from}»`);
+    for (const cardId of P3_YEAR_CARDS) if (String(asObj(tr[cardId]).lastPassportVerificationYear) !== '2026') problems.push(`tractors/${cardId}.lastPassportVerificationYear ≠ 2026`);
+    for (const r of P3_REF_MOVES) {
+      const [br, key] = r.record.split('/');
+      const cur = s(asObj(asObj(data[br])[key])[r.field]);
+      if (cur !== r.to) problems.push(`${r.record}/${r.field} = «${cur}» ≠ «${r.to}»`);
+    }
+    // прицепы/карточки: нет сцепок, ссылающихся на отсутствующие карточки
+    const trKeys = new Set(Object.keys(tr));
+    for (const [cid, cv] of Object.entries(cp)) {
+      const tId = s(asObj(cv).tractorId) || cid;
+      if (!trKeys.has(tId)) problems.push(`висячая ссылка couplings/${cid}.tractorId=${tId}`);
+    }
+    // оставшиеся ссылки (кроме осознанно оставленных)
+    const left = rep.refs.filter((r) => !r.verdict.startsWith('переводится') && !r.verdict.startsWith('удаляется'));
+    notesV.push(`оставшиеся ссылки (в отчёт, не менялись): ${left.length}`);
+    for (const r of left) notesV.push(`  ${r.branch} · ${r.token} ×${r.hits}`);
+    if (Object.keys(asObj(vf[P3_RENAME.from])).length || Object.keys(asObj(vf['rec_1787136789859'])).length) {
+      notesV.push('vehicleFleet/AS54487 и/или vehicleFleet/rec_1787136789859 на месте — ОСОЗНАННО (ветка не трогается сверх (A))');
+    }
+    if (problems.length) {
+      console.log(`ФАЗА 3 ПРОВЕРКА: проблемы (${problems.length}):`);
+      for (const p of problems) console.log(`  ! ${p}`);
+      for (const n of notesV) console.log(`  · ${n}`);
+      process.exitCode = 1;
+    } else {
+      console.log('ФАЗА 3 ПРОВЕРКА: дубля карточки нет, ключ AC54487 каноничен, ссылки переведены, год 2026. ✓');
+      for (const n of notesV) console.log(`  · ${n}`);
+    }
+    return;
+  }
+
+  mkdirSync(FLEET_DIR, { recursive: true });
+  const planReport = {
+    when: new Date().toISOString(), db: DB, mode: APPLY && YES ? 'apply' : 'dry-run', phase: 'phase3',
+    totals: { ops: ops.length, deletes: ops.filter((o) => o.kind === 'del').length },
+    ops, notes: rep.notes, conflicts: rep.conflicts, refs: rep.refs,
+  };
+  const planPath = join(FLEET_DIR, `migration-fleet-phase3-${STAMP}.json`);
+  writeFileSync(planPath, JSON.stringify(planReport, null, 2), 'utf8');
+  writeFileSync(join(FLEET_DIR, 'migration-fleet-phase3.latest.json'), JSON.stringify(planReport, null, 2), 'utf8');
+  if (!QUIET) printPlan();
+  if (!QUIET) console.log(`\nОтчёт-план: ${planPath}`);
+  if (!APPLY) { if (!QUIET) console.log('Изменений не внесено. Для применения: npx tsx scripts/migrate-fleet-cards.ts --phase3 --apply --yes'); return; }
+  if (!YES) { console.error('\nОТКАЗ: для реальной записи нужен явный флаг --yes.'); process.exitCode = 2; return; }
+
+  // ---------- применение: свежий пересчёт ----------
+  const data2 = await p3Load();
+  const rep2: P3Report = { conflicts: [], notes: [], refs: [] };
+  const ops2 = buildPhase3Plan(data2, rep2);
+  if (!ops2.length) { if (!QUIET) console.log('\nПлан пуст (всё уже применено) — повторный запуск ничего не меняет. ✓'); return; }
+
+  const getNode = (p: string): unknown => getLeaf(data2, p.split('/'));
+  const updates: Record<string, unknown> = {};
+  const applied: P3Op[] = [];
+  const dropped: string[] = [];
+  for (const op of ops2) {
+    if (op.kind === 'del') {
+      if (!Object.keys(asObj(getNode(op.path))).length) { dropped.push(`${op.path}: уже отсутствует`); continue; }
+      updates[op.path] = null; applied.push(op); continue;
+    }
+    if (op.kind === 'put') {
+      if (Object.keys(asObj(getNode(op.path))).length) { dropped.push(`${op.path}: уже существует`); continue; }
+      updates[op.path] = op.value; applied.push(op); continue;
+    }
+    const rec = asObj(getNode(op.record));
+    const exists = op.field in rec;
+    const cur = exists ? rec[op.field] : null;
+    if (deepEqual(cur, op.after)) { dropped.push(`${op.path}: уже целевое значение`); continue; }
+    if (!deepEqual(cur, op.before)) { dropped.push(`${op.path}: значение изменилось после расчёта («${JSON.stringify(cur)}» ≠ «${JSON.stringify(op.before)}») — пропущено`); continue; }
+    updates[op.path] = op.after; applied.push(op);
+  }
+
+  // ---------- бэкап: полные копии всех затрагиваемых записей + записи со ссылками ----------
+  const backupDir = join(FLEET_DIR, 'backups', STAMP);
+  mkdirSync(backupDir, { recursive: true });
+  const recPaths = new Set<string>(P3_BACKUP_EXTRA);
+  for (const op of ops2) recPaths.add(op.kind === 'put' ? op.path : op.record);
+  const files: Record<string, string> = {};
+  for (const p of [...recPaths].sort()) {
+    const raw = await fetchAll(p);
+    const fname = p.replace(/\//g, '__') + '.json';
+    writeFileSync(join(backupDir, fname), JSON.stringify(raw, null, 2), 'utf8');
+    files[p] = fname;
+  }
+  const manifest = {
+    when: new Date().toISOString(), db: DB, phase: 'phase3', stamp: STAMP, planFile: planPath,
+    operations: ops2.length, applied: applied.length, dropped,
+    records: files,
+    deletions: applied.filter((o) => o.kind === 'del').map((o) => o.path),
+    notes: rep2.notes, conflicts: rep2.conflicts, refs: rep2.refs,
+    keptUntouched: P3_BACKUP_EXTRA,
+    auditLogsNote: 'auditLogs (журнал, 100+ МБ) содержит исторические записи по этим ключам — не выгружался и не менялся',
+  };
+  writeFileSync(join(backupDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
+  if (!QUIET) console.log(`\nБэкап: ${backupDir} (${Object.keys(files).length} записей, полные копии; манифест внутри)`);
+
+  if (Object.keys(updates).length === 0) { if (!QUIET) console.log('После сверки не осталось изменений — запись не требуется. ✓'); return; }
+
+  const ok = await patchRoot(updates);
+  if (!ok) { console.error('ОШИБКА записи PATCH (фаза 3)'); process.exitCode = 1; return; }
+  if (!QUIET) console.log(`Записано путей: ${Object.keys(updates).length} (одной multi-path записью)`);
+  if (dropped.length && !QUIET) { console.log('Пропущено при свежей сверке:'); for (const d of dropped) console.log(`  ~ ${d}`); }
+
+  // ---------- проверка чтением ----------
+  const fail: string[] = [];
+  const readRecs = [...new Set(applied.map((o) => (o.kind === 'put' ? o.path : o.record)))];
+  const fresh: Record<string, unknown> = {};
+  for (const r of readRecs) fresh[r] = await fetchAll(r);
+  for (const op of applied) {
+    if (op.kind === 'del') {
+      if (Object.keys(asObj(fresh[op.path])).length) fail.push(`${op.path}: запись не удалилась`);
+    } else if (op.kind === 'put') {
+      if (!deepEqual(asObj(fresh[op.path]), op.value)) fail.push(`${op.path}: новая запись не совпадает`);
+    } else {
+      const rec = asObj(fresh[op.record]);
+      if (!(op.field in rec) || !deepEqual(rec[op.field], op.after)) fail.push(`${op.path}: ожидали ${JSON.stringify(op.after)}, получили ${JSON.stringify(rec[op.field] ?? null)}`);
+    }
+  }
+  if (fail.length) {
+    console.error('ПРОВЕРКА ЧТЕНИЕМ НЕ ПРОШЛА:');
+    for (const f of fail) console.error(`  ! ${f}`);
+    process.exitCode = 1;
+  } else if (!QUIET) {
+    console.log(`Проверка чтением: все ${applied.length} операций подтверждены ✓`);
+    console.log('Повторный запуск идемпотентен: условия пересчитываются из текущих данных.');
+  }
+}
+
 async function main() {
+  if (PHASE3) { await phase3(); return; }
   if (PHASE2) { await phase2(); return; }
   if (!QUIET) {
     const mode = VERIFY ? 'ПРОВЕРКА СОСТОЯНИЯ' : APPLY ? (YES ? 'ПРИМЕНЕНИЕ ИЗМЕНЕНИЙ' : '--apply без --yes — запись запрещена') : 'предварительный отчёт (без записи)';
