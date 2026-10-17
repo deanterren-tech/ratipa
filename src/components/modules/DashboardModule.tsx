@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { motion, MotionConfig } from 'motion/react';
 import { UserProfile, AppSettings } from '../../types';
 import { dbService } from '../../api';
 import TypingText from '../TypingText';
 import AllLinksModal from '../AllLinksModal';
 import PageLoading from '../common/PageLoading';
 import { getUserFirstName } from '../../utils/userName';
+import { AnimatedCounter, KineticTitle, RollingText } from '../MotionComponents';
+import { overtakeAppearVariants, overtakeEase, overtakeRowVariants, overtakeArrowRotate } from '../../utils/motion';
 import { Activity, ExternalLink, X, Map, Wallet, Pencil, Bell, ArrowRight } from 'lucide-react';
 
 const getTimeOfDayGreeting = (): string => {
@@ -108,6 +111,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
 
   // Приветствие — крупное и с акцентом портала; цвета из палитры портала.
   return (
+    <MotionConfig reducedMotion="user">
     <div className="w-full relative h-full flex flex-col justify-between p-4 sm:p-6 lg:p-8 select-none overflow-hidden">
 
       {/* Едва заметное цветовое пятно: мягко разбавляет белый фон главной.
@@ -127,41 +131,65 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
         {/* Логотип портала над приветствием: тот же фирменный файл, что в ша��ке.
             Пропорции заданы исходником 1261×385 (≈3,28:1) — высота задаётся,
             ширина считается сама, поэтому логотип не растягивается. */}
-        <img
+        <motion.img
           src="/portal.svg"
           alt="Ratipa Portal"
           width={1261}
           height={385}
           draggable={false}
+          variants={overtakeAppearVariants}
+          custom={0}
+          initial="hidden"
+          animate="visible"
           className="h-7 sm:h-9 w-auto select-none mb-4 sm:mb-5"
         />
 
         {/* Приветствие: заметно крупнее и с акцентом портала */}
-        <h1
-          className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight leading-tight mb-3 select-text"
-          style={{ color: '#121316' }}
-        >
-          {getTimeOfDayGreeting()}, <span className="text-[var(--accent)]">{greetingName}</span>
-        </h1>
+        <KineticTitle
+          as="h1"
+          text={`${getTimeOfDayGreeting()}, ${greetingName}`}
+          accentIndex={`${getTimeOfDayGreeting()},`.split(' ').length}
+          delay={0.06}
+          className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight leading-tight mb-3 select-text justify-center text-[#121316]"
+        />
 
-        <p className="text-xs sm:text-sm text-[#6B7280] max-w-2xl mx-auto leading-relaxed mb-7">
+        <motion.p
+          variants={overtakeAppearVariants}
+          custom={2}
+          initial="hidden"
+          animate="visible"
+          className="text-xs sm:text-sm text-[#6B7280] max-w-2xl mx-auto leading-relaxed mb-7"
+        >
           Добро пожаловать в единую операционную среду Ratipa. Управляйте парком автомобилей, планируйте доходность и координируйте логистику в реальном времени.
-        </p>
+        </motion.p>
 
         {/* Бегущая строка портала — пользовательские фразы из настроек */}
         {phrasesAllowed && (
-          <div className="flex items-center justify-center gap-2 mb-8 min-w-0 max-w-2xl mx-auto" aria-label="Сообщения портала">
+          <motion.div
+            variants={overtakeAppearVariants}
+            custom={3}
+            initial="hidden"
+            animate="visible"
+            className="flex items-center justify-center gap-2 mb-8 min-w-0 max-w-2xl mx-auto"
+            aria-label="Сообщения портала"
+          >
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-60)] shrink-0" aria-hidden="true" />
             <TypingText
               phrases={phrases}
               className="text-[11px] font-mono text-[#6B7280] tracking-tight truncate"
             />
-          </div>
+          </motion.div>
         )}
 
         {/* Объявления администратора */}
         {settings?.announcements && settings.announcements.length > 0 && (
-          <div className="w-full max-w-2xl">
+          <motion.div
+            variants={overtakeAppearVariants}
+            custom={4}
+            initial="hidden"
+            animate="visible"
+            className="w-full max-w-2xl"
+          >
             <div className="flex items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
                 <Bell size={14} className="text-[#9CA3AF]" />
@@ -180,8 +208,11 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
             </div>
             <div className="space-y-2 text-left">
               {settings.announcements.slice(0, 5).map((ann) => (
-                <div
+                <motion.div
                   key={ann.id}
+                  variants={overtakeRowVariants}
+                  initial="hidden"
+                  animate="visible"
                   className={"flex items-start gap-3 px-3.5 py-3 rounded-xl text-xs leading-relaxed border " + (
                     ann.important
                       ? "bg-amber-50 border-amber-200 text-[#121316] font-medium"
@@ -195,10 +226,10 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                     <p className="leading-relaxed">{ann.text}</p>
                     <span className="text-[10px] text-[#9CA3AF] mt-1 block">{ann.author} • {ann.date}</span>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
-          </div>
+          </motion.div>
         )}
 
       </div>
@@ -211,10 +242,21 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
 
             <div className="flex flex-wrap items-end justify-between gap-3 mb-3 px-2">
               <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-[#121316]">Полезные ссылки</h2>
-                <p className="text-[11px] text-[#6B7280] mt-0.5">
-                  Часто используемые сервисы · {visibleLinks.length} из {links.length}
-                </p>
+                <KineticTitle
+                  as="h2"
+                  text="Полезные ссылки"
+                  once
+                  className="text-sm font-semibold text-[#121316]"
+                />
+                <motion.p
+                  variants={overtakeAppearVariants}
+                  custom={5}
+                  initial="hidden"
+                  animate="visible"
+                  className="text-[11px] text-[#6B7280] mt-0.5"
+                >
+                  Часто используемые сервисы · {visibleLinks.length} из <AnimatedCounter value={links.length} />
+                </motion.p>
               </div>
             </div>
 
@@ -222,7 +264,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
               ref={linksGridRef}
               className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 sm:gap-3"
             >
-              {visibleLinks.map((link) => {
+              {visibleLinks.map((link, idx) => {
                 const urlLower = String(link.url || '').toLowerCase();
                 let iconEl = <ExternalLink size={15} className="text-[#9CA3AF] shrink-0" />;
                 if (urlLower.includes('waze')) iconEl = <Map size={15} className="text-[var(--accent)] shrink-0" />;
@@ -233,12 +275,17 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                 else if (urlLower.includes('map') || urlLower.includes('route')) iconEl = <Map size={15} className="text-[var(--accent)] shrink-0" />;
                 const host = linkHost(link.url);
                 return (
-                  <a
+                  <motion.a
                     key={link.id || link.url}
                     href={link.url}
                     target="_blank"
                     rel="noopener noreferrer"
                     title={`${link.title} — ${host}`}
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, amount: 0.1 }}
+                    transition={{ duration: 0.35, ease: overtakeEase, delay: idx * 0.03 }}
+                    whileHover={{ y: -4, transition: { duration: 0.2 } }}
                     className="flex items-center gap-3 h-full min-h-[58px] bg-white hover:bg-[var(--accent-5)] border border-[#E5E7EB] hover:border-[var(--accent-30)] rounded-xl px-3.5 py-3 transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] focus-visible:ring-offset-1"
                   >
                     <span className="w-9 h-9 rounded-lg bg-[var(--accent-8)] border border-[var(--accent-20)] flex items-center justify-center shrink-0 transition-colors">
@@ -253,7 +300,7 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
                       </span>
                     </span>
                     <ExternalLink size={13} className="text-[#D1D5DB] group-hover:text-[var(--accent)] shrink-0 transition-colors" />
-                  </a>
+                  </motion.a>
                 );
               })}
             </div>
@@ -263,11 +310,11 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
               <button
                 type="button"
                 onClick={() => setAllLinksOpen(true)}
-                className="mt-3 w-full sm:w-auto sm:ml-auto flex items-center justify-center gap-2 min-h-[44px] sm:h-10 px-4 bg-white hover:bg-[var(--accent-5)] border border-[#E5E7EB] hover:border-[var(--accent-30)] rounded-xl text-sm font-semibold text-[#121316] hover:text-[var(--accent)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] focus-visible:ring-offset-1"
+                className="group mt-3 w-full sm:w-auto sm:ml-auto flex items-center justify-center gap-2 min-h-[44px] sm:h-10 px-4 bg-white hover:bg-[var(--accent-5)] border border-[#E5E7EB] hover:border-[var(--accent-30)] rounded-xl text-sm font-semibold text-[#121316] hover:text-[var(--accent)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] focus-visible:ring-offset-1"
                 data-tour="all-links"
               >
-                Все ссылки ({links.length})
-                <ArrowRight size={15} className="shrink-0" aria-hidden="true" />
+                <RollingText text={`Все ссылки (${links.length})`} />
+                <ArrowRight size={15} className={`shrink-0 ${overtakeArrowRotate}`} aria-hidden="true" />
               </button>
             )}
 
@@ -278,5 +325,6 @@ export default function DashboardModule({ user, onNavigate }: DashboardModulePro
       <AllLinksModal isOpen={allLinksOpen} links={links} onClose={() => setAllLinksOpen(false)} />
 
     </div>
+    </MotionConfig>
   );
 }
