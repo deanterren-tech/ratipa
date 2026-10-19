@@ -48,6 +48,56 @@ const REASON_LABEL: Record<string, string> = {
   similar: 'похожее написание',
 };
 
+/** Сортировщик названий — те же правила, что были у localeCompare(b, 'ru'). */
+const NAME_COLLATOR = new Intl.Collator('ru');
+
+/**
+ * Индекс подсказок: нормализованные записи справочника + множество известных
+ * форм (имена и алиасы). Строится ОДИН раз на набор данных и переиспользуется
+ * всеми полями города: в окне рейса их несколько, и нормализация тысяч названий
+ * на каждое поле — самая дорогая часть открытия. Ключ — сам массив справочника
+ * (он один на всех: подписка сервиса) и содержимое старого списка строк.
+ */
+interface DirectoryIndex {
+  entries: SuggestionEntry[];
+  knownForms: Set<string>;
+}
+
+let indexCache: { dir: CityRecord[]; extraKey: string; value: DirectoryIndex } | null = null;
+
+function directoryIndex(dirCities: CityRecord[], extra: string[]): DirectoryIndex {
+  const extraKey = (extra || []).join('\u0000');
+  if (indexCache && indexCache.dir === dirCities && indexCache.extraKey === extraKey) {
+    return indexCache.value;
+  }
+  const entries: SuggestionEntry[] = [];
+  const knownForms = new Set<string>();
+  const seen = new Set<string>();
+  dirCities.forEach((c) => {
+    const norm = normalizeCityName(c.name);
+    if (!norm || seen.has(norm)) return;
+    seen.add(norm);
+    entries.push({ name: c.name, aliases: c.aliases || [], city: c });
+    knownForms.add(norm);
+    (c.aliases || []).forEach((a) => {
+      const n = normalizeCityName(a);
+      if (n) knownForms.add(n);
+    });
+  });
+  (extra || []).forEach((s) => {
+    const norm = normalizeCityName(s);
+    if (!norm) return;
+    knownForms.add(norm);
+    if (seen.has(norm)) return;
+    seen.add(norm);
+    entries.push({ name: s, aliases: [] });
+  });
+  entries.sort((a, b) => NAME_COLLATOR.compare(a.name, b.name));
+  const value: DirectoryIndex = { entries, knownForms };
+  indexCache = { dir: dirCities, extraKey, value };
+  return value;
+}
+
 export default function CityAutocomplete({
   value,
   onChange,
@@ -102,53 +152,32 @@ export default function CityAutocomplete({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  /** Подсказки: справочник (города+алиасы) + старые строки `cities`. */
-  const entries = useMemo<SuggestionEntry[]>(() => {
-    const out: SuggestionEntry[] = [];
-    const seen = new Set<string>();
-    dirCities.forEach((c) => {
-      const norm = normalizeCityName(c.name);
-      if (!norm || seen.has(norm)) return;
-      seen.add(norm);
-      out.push({name: c.name, aliases: c.aliases || [], city: c});
-    });
-    (cities || []).forEach((s) => {
-      const norm = normalizeCityName(s);
-      if (!norm || seen.has(norm)) return;
-      seen.add(norm);
-      out.push({name: s, aliases: []});
-    });
-    return out.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-  }, [dirCities, cities]);
+  /** Подсказки: справочник (города+алиасы) + старые строки `cities`.
+   *  Расчёт общий для всех полей города — см. directoryIndex. */
+  const { entries, knownForms } = useMemo(
+    () => directoryIndex(dirCities, cities || []),
+    [dirCities, cities],
+  );
 
   const rankOf = (e: SuggestionEntry): number[] => [e.city?.usageCount || 0, e.city?.population || 0];
 
   const filtered = useMemo(() => {
+    // Подсказки нужны ТОЛЬКО когда список показан: до открытия поля живой поиск
+    // по справочнику не запускаем (самая дорогая часть окна рейса).
+    if (!open && !showAll) return [] as SuggestionEntry[];
     const q = query.trim();
     if (!q || showAll) {
       // полный список — тоже по рангу (чаще используемые и крупные выше)
       return [...entries]
         .sort((a, b) => {
           const ra = rankOf(a), rb = rankOf(b);
-          return rb[0] - ra[0] || rb[1] - ra[1] || a.name.localeCompare(b.name, 'ru');
+          return rb[0] - ra[0] || rb[1] - ra[1] || NAME_COLLATOR.compare(a.name, b.name);
         })
         .slice(0, 80);
     }
     return findSimilarCities(q, entries, 60, rankOf).map((s) => s.entry);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, query, showAll]);
-
-  /** Нормализованные формы всех подсказок (справочник + старые строки). */
-  const knownForms = useMemo(() => {
-    const set = new Set<string>();
-    entries.forEach((e) => {
-      [e.name, ...e.aliases].forEach((v) => {
-        const n = normalizeCityName(v);
-        if (n) set.add(n);
-      });
-    });
-    return set;
-  }, [entries]);
+  }, [entries, query, showAll, open]);
 
   /** Значение уже есть среди подсказок (справочник cities или старый список)? */
   const knownInDirectory = (v: string): boolean => {

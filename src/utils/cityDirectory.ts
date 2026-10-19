@@ -90,10 +90,20 @@ const LEADING_PREFIXES = [
 /**
  * Ключ сравнения городов: trim, регистр, ё→е, пунктуация и пробелы.
  * Применяется ТОЛЬКО для сравнения/поиска — сами данные не переписываются.
+ *
+ * Функция чистая, поэтому результат кэшируется по исходной строке: в интерфейсе
+ * она вызывается десятки тысяч раз на одних и тех же названиях (справочник,
+ * алиасы, подсказки), а внутри — больше десятка проходов регулярками.
  */
+const NORM_CACHE = new Map<string, string>();
+const NORM_CACHE_MAX = 50000;
+
 export function normalizeCityName(raw: string): string {
   if (!raw) return '';
-  let s = String(raw).normalize('NFC');
+  const key = String(raw);
+  const cached = NORM_CACHE.get(key);
+  if (cached !== undefined) return cached;
+  let s = key.normalize('NFC');
   // мягкий перенос и неразрывные пробелы
   s = s.replace(/[\u00AD\u200B-\u200D\uFEFF]/g, '');
   s = s.replace(/\u00A0/g, ' ').replace(/\u202F/g, ' ');
@@ -124,6 +134,8 @@ export function normalizeCityName(raw: string): string {
   s = s.toLowerCase().replace(/ё/g, 'е');
   // финальная схлопка пробелов (после замен)
   s = s.replace(/\s+/g, ' ').trim();
+  if (NORM_CACHE.size >= NORM_CACHE_MAX) NORM_CACHE.clear();
+  NORM_CACHE.set(key, s);
   return s;
 }
 
@@ -191,10 +203,22 @@ const expand = (s: string, map: Record<string, string[]>): string[] => {
   return Array.from(new Set(variants.map((v) => v.replace(/[^a-z0-9]+/g, '')))).filter(Boolean);
 };
 
-/** Дополнительные прочтения латинской записи (kh→h и т.п.). */
+/**
+ * Дополнительные прочтения латинской записи (kh→h и т.п.).
+ * Результат кэшируется по исходной строке — не изменять возвращаемый массив.
+ */
+const FOLDS_CACHE = new Map<string, string[]>();
+const FOLDS_CACHE_MAX = 50000;
+
 export const latinFolds = (raw: string): string[] => {
-  const base = String(raw || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-  if (!base) return [];
+  const fkey = String(raw || '');
+  const fhit = FOLDS_CACHE.get(fkey);
+  if (fhit) return fhit;
+  const base = fkey.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  if (!base) {
+    FOLDS_CACHE.set(fkey, []);
+    return [];
+  }
   const out = new Set<string>([base]);
   const rules: Array<[RegExp, string]> = [
     [/kh/g, 'h'],
@@ -208,20 +232,37 @@ export const latinFolds = (raw: string): string[] => {
   let all = base;
   rules.forEach(([re, to]) => { all = all.replace(re, to); });
   out.add(all);
-  return Array.from(out);
+  const res = Array.from(out);
+  if (FOLDS_CACHE.size >= FOLDS_CACHE_MAX) FOLDS_CACHE.clear();
+  FOLDS_CACHE.set(fkey, res);
+  return res;
 };
 
-/** Набор сравнимых латинских форм строки (кириллица → транслит-варианты). */
+/**
+ * Набор сравнимых латинских форм строки (кириллица → транслит-варианты).
+ * Результат кэшируется по исходной строке — не изменять возвращаемый массив.
+ * Кэш особенно важен при поиске: варианты одного и того же запроса иначе
+ * пересчитываются для каждой записи справочника.
+ */
+const TRANSLIT_CACHE = new Map<string, string[]>();
+const TRANSLIT_CACHE_MAX = 50000;
+
 export function translitVariants(raw: string): string[] {
-  const s = String(raw || '').trim().toLowerCase();
-  if (!s) return [];
-  if (hasCyrillic(s)) {
+  const tkey = String(raw || '');
+  const thit = TRANSLIT_CACHE.get(tkey);
+  if (thit) return thit;
+  const s = tkey.trim().toLowerCase();
+  let res: string[];
+  if (!s) res = [];
+  else if (hasCyrillic(s)) {
     const cyr = s.normalize('NFC');
     const map: Record<string, string[]> = {};
     for (const ch of cyr) map[ch] = ALT[ch] ?? (RU_LAT[ch] ? [RU_LAT[ch]] : [ch]);
-    return expand(cyr, map);
-  }
-  return latinFolds(s);
+    res = expand(cyr, map);
+  } else res = latinFolds(s);
+  if (TRANSLIT_CACHE.size >= TRANSLIT_CACHE_MAX) TRANSLIT_CACHE.clear();
+  TRANSLIT_CACHE.set(tkey, res);
+  return res;
 }
 
 /** Стабильный id города: латинский слаг (кросс-раскладочная идемпотентность). */
@@ -375,8 +416,10 @@ export function isShortPlaceText(raw: string): boolean {
 // Каноническое имя и группировка
 // ---------------------------------------------------------------------------
 
-const ruCompare = (a: string, b: string): number =>
-  a.localeCompare(b, 'ru', { sensitivity: 'base' });
+/** Единый сортировщик: Collator вместо localeCompare на каждое сравнение
+ *  (localeCompare в разы медленнее). Опции — те же, что были. */
+const RU_COLLATOR = new Intl.Collator('ru', { sensitivity: 'base' });
+const ruCompare = (a: string, b: string): number => RU_COLLATOR.compare(a, b);
 
 /** Каноническое отображаемое имя из самого частого варианта (регистр бережно). */
 export function canonicalCityDisplay(variant: string): string {
