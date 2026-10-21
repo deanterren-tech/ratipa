@@ -33,12 +33,15 @@ export function ModuleLoadOverlay({
       // Фиксированное позиционирование: композиция стоит по центру видимой области
       // и не смещается прокруткой страницы. z-20 — ниже шапки и нижней навигации
       // (у них z-50), поэтому они остаются видимыми и доступными.
-      className="fixed inset-0 z-20 flex items-center justify-center bg-[#F9FAFB] px-6"
+      className={`fixed inset-0 z-20 flex items-center justify-center bg-[#F9FAFB] px-6 ${isLoading ? '' : 'cursor-pointer'}`}
       role={isLoading ? 'status' : 'alert'}
       aria-live="polite"
       aria-busy={isLoading}
       data-module-loading={isLoading ? '1' : undefined}
       data-module-error={isLoading ? undefined : '1'}
+      // При ошибке повтор запускается кликом по всей области: рабочая область
+      // не должна молча не принимать нажатия — любое нажатие здесь = «Повторить».
+      onClick={isLoading ? undefined : onRetry}
     >
       {isLoading ? (
         <div className="flex flex-col items-center gap-5 px-6 text-center select-none">
@@ -77,12 +80,13 @@ export function ModuleLoadOverlay({
           <p className="text-xs text-[#6B7280] leading-relaxed">{state.message}</p>
           <button
             type="button"
-            onClick={onRetry}
+            onClick={(e) => { e.stopPropagation(); onRetry(); }}
             className="inline-flex items-center gap-1.5 h-9 px-4 mt-1 rounded-lg text-xs font-medium text-[var(--accent-on)] bg-[var(--accent-solid)] hover:bg-[var(--accent-hover)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-50)] focus-visible:ring-offset-2"
           >
             <RotateCw className="h-3.5 w-3.5" aria-hidden="true" />
             Повторить
           </button>
+          <span className="text-[11px] text-[#9CA3AF]">…или нажмите в любом месте этой области</span>
         </div>
       )}
     </div>
@@ -119,6 +123,18 @@ export default function ModuleDataContainer({
   children: React.ReactNode;
 }) {
   const { state, attempt, retry } = useModuleLoad(moduleKey);
+  const wasActive = React.useRef(isActive);
+
+  // Возврат в раздел после сбоя запускает загрузку заново. Разделы остаются
+  // смонтированными (возврат сохраняет прокрутку и состояние), поэтому эффекты
+  // контейнера при переключении не перезапускаются: без этого шага экран ошибки
+  // оставался бы навсегда — рабочая область не принимает нажатия, хотя данные
+  // уже можно получить.
+  React.useEffect(() => {
+    const cameBack = isActive && !wasActive.current;
+    wasActive.current = isActive;
+    if (cameBack && state.phase === 'error') retry();
+  }, [isActive, state.phase, retry]);
 
   return (
     <div className={`h-full relative ${isActive ? '' : 'hidden'}`}>

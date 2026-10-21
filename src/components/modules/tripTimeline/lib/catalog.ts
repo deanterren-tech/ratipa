@@ -13,12 +13,17 @@ import type { TimelineStage, TimelineStageType } from '../../../../types';
  *  без уточнений («(экспорт)»/«(импорт)»/«/ согласование перехода»). */
 export const DEFAULT_STAGE_TYPES: TimelineStageType[] = [
   { key: 'load', name: 'Загрузка', order: 1 },
-  { key: 'cust_out', name: 'Затаможка', order: 2 },
-  { key: 'border', name: 'Граница', order: 3 },
-  { key: 'cust_in', name: 'Растаможка', order: 4 },
-  { key: 'reserve', name: 'Бронь', order: 5 },
-  { key: 'unl', name: 'Выгрузка', order: 6 },
-  { key: 'other', name: 'Другое', order: 7 },
+  // Совмещённые этапы: в одной точке выполняются две операции — сначала загрузка,
+  // затем затаможка (и наоборот: растаможка вместе с выгрузкой). Взаимный порядок
+  // остальных этапов не меняется.
+  { key: 'load_cust_out', name: 'Загрузка/затаможка', order: 2 },
+  { key: 'cust_out', name: 'Затаможка', order: 3 },
+  { key: 'border', name: 'Граница', order: 4 },
+  { key: 'cust_in', name: 'Растаможка', order: 5 },
+  { key: 'cust_in_unl', name: 'Растаможка/выгрузка', order: 6 },
+  { key: 'reserve', name: 'Бронь', order: 7 },
+  { key: 'unl', name: 'Выгрузка', order: 8 },
+  { key: 'other', name: 'Другое', order: 9 },
 ];
 
 export interface EventTypeMeta {
