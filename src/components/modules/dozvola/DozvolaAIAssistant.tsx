@@ -23,6 +23,66 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
         "уз2": "UZ 2", "уз3": "UZ 3", "уз4": "UZ 4"
     };
 
+    /**
+     * Парсит строку с номерами и диапазонами в массив отдельных номеров.
+     * Поддерживаемые форматы:
+     *   - 1234                (один номер)
+     *   - 1234,1250,1260      (через запятую)
+     *   - 1234;1250           (через точку с запятой)
+     *   - 1234-1240           (дефис: диапазон включительно)
+     *   - 1234..1240          (две точки: диапазон включительно)
+     *   - 1234-1240,1250      (диапазон + отдельный номер)
+     *   - 1234..1240;1250     (диапазон + отдельный через точку с запятой)
+     * Пробелы игнорируются. Границы диапазона сортируются (min→max).
+     * Дубликаты удаляются. Порядок сохраняется: сначала в порядке появления в тексте.
+     */
+    const parseNumberRanges = (text: string): string[] => {
+        if (!text) return [];
+        // Нормализуем разделители: заменяем .. на - для единообразия диапазонов
+        const normalized = text.replace(/\.\./g, '-').replace(/\s+/g, '');
+        if (!normalized) return [];
+        
+        // Разбиваем по запятым и точкам с запятой
+        const parts = normalized.split(/[,;]/).filter(Boolean);
+        const result: string[] = [];
+        const seen = new Set<string>();
+        
+        for (const part of parts) {
+            if (!part) continue;
+            if (part.includes('-')) {
+                // Диапазон: start-end
+                const [startStr, endStr] = part.split('-', 2);
+                const start = parseInt(startStr, 10);
+                const end = parseInt(endStr, 10);
+                if (isNaN(start) || isNaN(end)) {
+                    // Невалидный диапазон — пробуем как отдельный номер
+                    const num = parseInt(part, 10);
+                    if (!isNaN(num)) {
+                        const s = String(num);
+                        if (!seen.has(s)) { seen.add(s); result.push(s); }
+                    }
+                    continue;
+                }
+                const min = Math.min(start, end);
+                const max = Math.max(start, end);
+                // Ограничиваем размер диапазона (макс 1000 номеров за раз)
+                const limit = Math.min(max - min + 1, 1000);
+                for (let n = min; n < min + limit; n++) {
+                    const s = String(n);
+                    if (!seen.has(s)) { seen.add(s); result.push(s); }
+                }
+            } else {
+                // Одиночный номер
+                const num = parseInt(part, 10);
+                if (!isNaN(num)) {
+                    const s = String(num);
+                    if (!seen.has(s)) { seen.add(s); result.push(s); }
+                }
+            }
+        }
+        return result;
+    };
+
     const normalizeAIText = (text: string) => {
         return String(text || '').toLowerCase().replace(/ё/g, 'е').replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim();
     };
@@ -89,12 +149,23 @@ export default function DozvolaAIAssistant({ user, dozvolsData, customTypesOrder
             let numberCandidates: string[] = [];
             const commaPartMatch = lineForParsing.match(/(?:^|[,;\s])(?:rus|tr\s*a|tr\s*b|uz\s*\d|uz|ge|am\d|kz\d|chn\s*\d|китай\s*\d|россия|турция|узбекистан)[^:]*?[,:\s]+(.+)/i);
             const numbersText = commaPartMatch ? commaPartMatch[1] : lineForParsing;
-            numberCandidates = (numbersText.match(/\b\d{3,8}\b/g) || [])
-                .filter(n => !/^20\d{2}$/.test(n))
-                .filter(n => !Object.keys(knownFleetCars).some(car => car.replace(/\D/g, '').includes(n) && n.length === 4));
+            // Сначала пробуем парсить как диапазоны (поддерживает 1234-1240, 1234..1240, 1234,1250 и т.д.)
+            const rangeNumbers = parseNumberRanges(numbersText);
+            if (rangeNumbers.length > 0) {
+                numberCandidates = rangeNumbers.filter(n => !/^20\d{2}$/.test(n));
+            } else {
+                // Фоллбек: старый способ — отдельные числа
+                numberCandidates = (numbersText.match(/\b\d{3,8}\b/g) || [])
+                    .filter(n => !/^20\d{2}$/.test(n))
+                    .filter(n => !Object.keys(knownFleetCars).some(car => car.replace(/\D/g, '').includes(n) && n.length === 4));
+            }
 
             const directMatch = lineForParsing.match(/(?:rus|tr a|tr b|uz \d|uz|ge|am\d|kz\d|chn \d)\s*(\d{3,8})/i);
-            if (directMatch && directMatch[1] && !numberCandidates.includes(directMatch[1])) numberCandidates.unshift(directMatch[1]);
+            if (directMatch && directMatch[1]) {
+                // directMatch может быть также диапазоном (например "RUS 1234-1240")
+                const directRanges = parseNumberRanges(directMatch[1]);
+                for (const n of directRanges) if (!numberCandidates.includes(n)) numberCandidates.unshift(n);
+            }
             numberCandidates = [...new Set(numberCandidates)];
 
             // Smart car mapping (detect source vs target)
