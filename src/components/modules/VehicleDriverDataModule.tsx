@@ -1045,7 +1045,8 @@ export default function VehicleDriverDataModule({ user }: VehicleDriverDataModul
       trailerNumber: trailerNumber.trim() || undefined,
       driverPhone: driverPhone.trim() || undefined,
       rate: rate.trim() ? Number(rate.trim()) : undefined,
-      lastPassportVerificationYear: existingRec?.lastPassportVerificationYear || 0
+      // Не проверялось — пусто, а не 0 (0 раньше записывался в базу как «год»)
+      lastPassportVerificationYear: existingRec?.lastPassportVerificationYear
     };
 
     setIsSaving(true);

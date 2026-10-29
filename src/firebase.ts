@@ -17,6 +17,7 @@ import {
 } from "firebase/database";
 import { findTripPeriodConflict } from './components/modules/tripTimeline/lib/tripGuard';
 import { planBoundsWritePlan } from './components/modules/tripTimeline/lib/planBoundsWrite';
+import { canonicalBrand, directoryKeyOf, sanitizeVehicleRecord } from './utils/vehicleRecordNormalize';
 import {
   UserProfile,
   Vehicle,
@@ -935,7 +936,9 @@ export const dbService = {
     return sharedGetTractors(callback);
   },
 
-  saveVehicle: (vehicle: Vehicle, user: string, role: string) => {
+  saveVehicle: (rawVehicle: Vehicle, user: string, role: string) => {
+    // Единый вид марок, габаритов и номеров документов перед записью (utils/vehicleRecordNormalize).
+    const vehicle = sanitizeVehicleRecord(rawVehicle);
     const carNum = (vehicle.carNumber || vehicle.vehicleNumbers || "").trim().toUpperCase();
     const brand = vehicle.brandModel || vehicle.brands || "";
     const disp = vehicle.dispatcherName || vehicle.dispatcher || "";
@@ -1564,7 +1567,13 @@ export const dbService = {
     }
   },
 
-  saveVehicleDriverRecord: (rec: any, user: string, role: string): Promise<void> => {
+  saveVehicleDriverRecord: (rawRec: any, user: string, role: string): Promise<void> => {
+    // Единый вид марок, габаритов и номеров документов перед записью (utils/vehicleRecordNormalize):
+    // раньше «Mercedes» и «MERCEDES-BENZ», «Kogel» и «KOEGEL», «х» и «x» попадали в базу как разные значения.
+    const rec = sanitizeVehicleRecord(rawRec);
+    // Для справочника марок — введённый текст (название сохраняет регистр), ключ — единый.
+    const brandInfo = canonicalBrand('vehicle', rawRec.brandModel || rawRec.brands || rawRec.brand);
+    const trailerInfo = canonicalBrand('trailer', rawRec.trailerMake || rawRec.trailerBrand);
     const carNum = (rec.vehicleNumbers || rec.carNumber || "").trim().toUpperCase();
     const brand = rec.brandModel || rec.brands || "";
     const trailer = rec.trailerMake || "";
@@ -1736,19 +1745,19 @@ export const dbService = {
           const couplingRecWithDriver = { ...couplingRec, driverId };
           await update(ref(database, `couplings/${normSafeId || safeId}`), couplingRecWithDriver)
             .catch((e) => handleFailure('firebase', e, { path: 'couplings', userMessage: 'Не удалось сохранить сцепку' }));
-          // Save brand to master-nodes under directories/vehicleBrands / trailerBrands
-          if (brand) {
-            const brandKey = brand.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_');
-            if (brandKey && !/^_+$/.test(brandKey)) {
-              set(ref(database, `directories/vehicleBrands/${brandKey}`), { name: brand.trim(), key: brandKey }).catch(() => {});
-            }
-          }
-          if (trailer) {
-            const trailerKey = trailer.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '_');
-            if (trailerKey && !/^_+$/.test(trailerKey)) {
-              set(ref(database, `directories/trailerBrands/${trailerKey}`), { name: trailer.trim(), key: trailerKey }).catch(() => {});
-            }
-          }
+          // Марка попадает в справочник, только если такой записи ещё нет. Раньше запись
+          // перезаписывалась при каждом сохранении, а «Kogel» и «KOEGEL» становились
+          // разными пунктами списка. Известные марки пишутся с общим названием.
+          const ensureBrand = async (folder: 'vehicleBrands' | 'trailerBrands', info: ReturnType<typeof canonicalBrand>) => {
+            if (!info) return;
+            const key = directoryKeyOf(info);
+            if (!key || /^_+$/.test(key)) return;
+            const path = `directories/${folder}/${key}`;
+            const snap = await firebaseGet(ref(database, path)).catch(() => null);
+            if (snap && !snap.exists()) await set(ref(database, path), { name: info.name, key }).catch(() => {});
+          };
+          void ensureBrand('vehicleBrands', brandInfo);
+          void ensureBrand('trailerBrands', trailerInfo);
         });
     } else {
       const local = getLocalStorageData<any[]>("ratipa_vehicle_fleet", []);
