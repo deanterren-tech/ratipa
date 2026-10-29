@@ -7,7 +7,7 @@
 
 import openRouterChat, { type ChatMessage, auditAIRequest } from "./openrouter.ts";
 import { getAgent, checkAgentRights, initAgents, getAllAgents } from "./agents/base-agent.ts";
-import type { AgentUser } from "../../permissions.ts";
+import type { AgentUser } from "../permissions.ts";
 
 interface IntentResult {
   domain: string;

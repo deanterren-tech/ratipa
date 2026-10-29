@@ -1,144 +1,17 @@
 import "./server/navby/env.ts"; // ПЕРВЫМ: .env.local/.env до инициализации firebase-admin и поллера
 import express from "express";
 import path from "path";
-import multer from "multer";
-import { GoogleGenAI, Type } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 import fs from "fs";
-import { agentRouter } from "./agentApi.ts";
-import { agentAuthMiddleware } from "./agentAuth.ts";
+import { agentRouter } from "./server/agentApi.ts";
+import { agentAuthMiddleware } from "./server/agentAuth.ts";
 import { handleUserRequest } from "./server/ai/orchestrator.ts";
 import { loadDriveFolder, extractFolderId } from "./server/driveList";
 import { startNavbyPoller } from "./server/navby/poller.ts";
 import { backfillCanRange } from "./server/navby/collector.ts";
 import { TelemetryStore } from "./server/navby/store.ts";
-import { adminAuth, adminDb } from "./firebaseAdmin.ts";
+import { adminAuth, adminDb } from "./server/firebaseAdmin.ts";
 import { navbyClientFromEnv } from "./server/navby/client.ts";
-
-// Initialize Gemini safely
-let ai: GoogleGenAI | null = null;
-try {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (apiKey) {
-    ai = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        }
-      }
-    });
-  }
-} catch (e) {
-  console.warn(
-    "Failed to initialize GoogleGenAI. Will fail gracefully on use.",
-  );
-}
-
-function handleGeminiError(e: any, res: any, defaultMsg: string) {
-  console.error(`${defaultMsg}:`, e);
-  let errMsg = e?.message || String(e || "Ошибка при обращении к ИИ");
-  
-  // Check for common connection errors or geoblocks when running locally in Russia/Belarus
-  const lowerMsg = errMsg.toLowerCase();
-  if (
-    lowerMsg.includes("fetch failed") || 
-    lowerMsg.includes("econnrefused") || 
-    lowerMsg.includes("econnreset") || 
-    lowerMsg.includes("timeout") ||
-    lowerMsg.includes("unreachable") ||
-    lowerMsg.includes("user location is not supported") ||
-    lowerMsg.includes("location not supported") ||
-    lowerMsg.includes("geoblock") ||
-    lowerMsg.includes("blocked")
-  ) {
-    errMsg += " (ИИ заблокирован в вашем регионе. Если сервер запущен локально без ВПН, настройте GOOGLE_GEMINI_BASE_URL в .env или включите ВПН на сервере)";
-  }
-  
-  res.status(500).json({ error: errMsg });
-}
-
-// Robust fallback Gemini API Caller with alternate base URLs and model rotation
-async function generateGeminiContentWithFallback(
-  contents: any,
-  systemInstruction?: string,
-  modelName: string = "gemini-2.5-flash"
-): Promise<string> {
-  const modelsToTry = [modelName, "gemini-3.5-flash", "gemini-3.1-flash-lite"];
-  const uniqueModels = Array.from(new Set(modelsToTry));
-
-  const apiKeys = [
-    process.env.GEMINI_API_KEY,
-    process.env.GEMINI_BACKUP_API_KEY || process.env.GEMINI_API_KEY,
-  ].filter(Boolean);
-
-  // Common alternate base URLs / reverse proxies for Gemini to bypass Belarus geoblock
-  const baseUrls = [
-    process.env.GOOGLE_GEMINI_BASE_URL || "",
-    process.env.GEMINI_BACKUP_BASE_URL || "",
-    "https://gateway.ai.cloudflare.com/v1", // placeholder/example for users to configure
-  ].filter((v, i, self) => v && self.indexOf(v) === i);
-
-  // Attempt 1: Try the primary standard initialized `ai` client
-  if (ai) {
-    for (const m of uniqueModels) {
-      try {
-        console.log(`[AI Fallback System] Attempting primary standard client with model: ${m}`);
-        const response = await ai.models.generateContent({
-          model: m,
-          contents,
-          config: systemInstruction ? { systemInstruction } : undefined,
-        });
-        if (response && response.text) {
-          console.log(`[AI Fallback System] Success using primary client with model ${m}`);
-          return response.text;
-        }
-      } catch (err: any) {
-        console.warn(`[AI Fallback System] Primary client failed with model ${m}: ${err.message || err}`);
-      }
-    }
-  }
-
-  // Attempt 2: Try alternate configurations (Keys & Base URLs) sequentially
-  for (const apiKey of apiKeys) {
-    for (const baseUrl of baseUrls) {
-      if (!baseUrl) continue;
-      try {
-        console.log(`[AI Fallback System] Attempting fallback client with baseUrl: ${baseUrl}`);
-        const backupAi = new GoogleGenAI({
-          apiKey: apiKey || "",
-          httpOptions: {
-            baseUrl: baseUrl,
-            headers: {
-              'User-Agent': 'aistudio-build',
-            }
-          }
-        });
-
-        for (const m of uniqueModels) {
-          try {
-            console.log(`[AI Fallback System] Attempting fallback client with model ${m} on baseUrl ${baseUrl}`);
-            const response = await backupAi.models.generateContent({
-              model: m,
-              contents,
-              config: systemInstruction ? { systemInstruction } : undefined,
-            });
-            if (response && response.text) {
-              console.log(`[AI Fallback System] Success using fallback client (${baseUrl}) with model ${m}`);
-              return response.text;
-            }
-          } catch (modelErr: any) {
-            console.warn(`[AI Fallback System] Fallback model ${m} on ${baseUrl} failed: ${modelErr.message || modelErr}`);
-          }
-        }
-      } catch (clientErr: any) {
-        console.warn(`[AI Fallback System] Failed to initialize backup client for ${baseUrl}: ${clientErr.message || clientErr}`);
-      }
-    }
-  }
-
-  throw new Error("Все доступные онлайн-подключения к Gemini API заблокированы или недоступны.");
-}
 
 // ---------------------------------------------------------
 // OFFLINE HEURISTIC PARSERS (ROBUST FALLBACKS FOR BELARUS)
@@ -393,45 +266,6 @@ function offlineParsePlanDohodText(text: string): any {
   }
 
   return { legs, _isOfflineFallback: true };
-}
-
-function offlineParseAnalysisText(text: string): any[] {
-  console.log("[Offline Fallback Parser] Parsing analysis text");
-  const lines = text.split(/[\n;]+/);
-  const results: any[] = [];
-
-  for (let line of lines) {
-    line = line.trim();
-    if (!line) continue;
-
-    const routeMatch = line.match(/([a-zA-Zа-яА-ЯёЁ]+)\s*[\-—–]\s*([a-zA-Zа-яА-ЯёЁ]+)/);
-    const route = routeMatch ? `${routeMatch[1]} - ${routeMatch[2]}` : line.split(/\s+/).slice(0, 2).join(" - ") || "Минск - Москва";
-
-    const rateMatch = line.match(/(\d+\s*(?:к|тыс|k)?\s*(?:без ндс|с ндс|руб|евро|eur|rub|usd|\$|€)?)/i);
-    const rate = rateMatch ? rateMatch[1].trim() : "120к";
-
-    let contact = line;
-    if (routeMatch) contact = contact.replace(routeMatch[0], "");
-    if (rateMatch) contact = contact.replace(rateMatch[0], "");
-    contact = contact.replace(/[,;.\s-]+/g, " ").trim();
-
-    results.push({
-      route,
-      rate,
-      contact: contact || "Офлайн-контакт (Резерв)",
-      _isOfflineFallback: true
-    });
-  }
-
-  if (results.length === 0) {
-    results.push({
-      route: "Минск - Москва",
-      rate: "1200 EUR",
-      contact: "Резерв",
-      _isOfflineFallback: true
-    });
-  }
-  return results;
 }
 
 function normalizePlate(plate: string): string {
@@ -797,7 +631,7 @@ function extractDispatcher(text: string): string {
   return "";
 }
 
-// STUCTURED PARSER EXPORTS AS REQUESTED IN TASK REQUIREMENTS
+// Разбор текста о тягаче и прицепе (для /api/parse-couple-data)
 function parseVehicleText(inputText: string): {
   tractorPlate: string;
   trailerPlate: string;
@@ -945,13 +779,6 @@ function offlineParseCoupleData(text: string): any {
   };
 }
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-  },
-});
-
 const CITY_COORDS: { [key: string]: { lat: number; lng: number } } = {
   москва: { lat: 55.7558, lng: 37.6173 },
   moscow: { lat: 55.7558, lng: 37.6173 },
@@ -1080,7 +907,7 @@ async function startServer() {
       try {
         const response = await fetch("https://www.nbrb.by/api/exrates/rates?periodicity=0", {
           headers: {
-            "User-Agent": "CargoSchedulerApplet/1.0",
+            "User-Agent": "RatipaPortal/2.0",
             Accept: "application/json",
           },
           signal: AbortSignal.timeout(2500)
@@ -1280,7 +1107,7 @@ async function startServer() {
             const url = `${server}/route/v1/driving/${coordinates}?overview=full&geometries=geojson${steps}${alternatives}`;
             const routeRes = await fetch(url, {
               headers: {
-                "User-Agent": "CargoSchedulerApplet/1.0 (contact: deanterren@gmail.com)",
+                "User-Agent": "RatipaPortal/2.0 (contact: deanterren@gmail.com)",
                 Accept: "application/json",
               },
               signal: AbortSignal.timeout(4000) // 4 seconds timeout for each request
@@ -1407,7 +1234,7 @@ async function startServer() {
         const nRes = await fetch(url, {
           headers: {
             "User-Agent":
-              "CargoSchedulerApplet/1.0 (contact: deanterren@gmail.com)",
+              "RatipaPortal/2.0 (contact: deanterren@gmail.com)",
             Accept: "application/json",
           },
           signal: AbortSignal.timeout(4000)
@@ -1459,7 +1286,7 @@ async function startServer() {
         const nRes = await fetch(url, {
           headers: {
             "User-Agent":
-              "CargoSchedulerApplet/1.0 (contact: deanterren@gmail.com)",
+              "RatipaPortal/2.0 (contact: deanterren@gmail.com)",
             Accept: "application/json",
           },
           signal: AbortSignal.timeout(4000)
@@ -1694,83 +1521,6 @@ async function startServer() {
     }
   });
 
-  // API Route for parsing Dozvola scans
-  app.post(
-    "/api/parse-dozvola",
-    upload.array("images", 10),
-    async (req, res) => {
-      try {
-        if (!ai) {
-          return res
-            .status(500)
-            .json({ error: "Gemini API key not configured on the server." });
-        }
-
-        const files = req.files as Express.Multer.File[];
-        if (!files || files.length === 0) {
-          return res.status(400).json({ error: "No image files provided." });
-        }
-
-        const parts = files.map((file) => {
-          const base64Data = file.buffer.toString("base64");
-          return {
-            inlineData: {
-              data: base64Data,
-              mimeType: file.mimetype,
-            },
-          };
-        });
-
-        const typesContext = req.body.types || "";
-
-        // We ask Gemini to parse all permits from the images and return JSON array
-        const promptText = `
-You are an expert logistics data extractor.
-Analyze the provided images of transport permits (dozvol/дозвол). 
-Extract the following information from EACH permit found:
-1. "type": The abbreviation of the permit country/type. Examples: RUS, TR A, TR B, UZ 4, KZ3, GE, CHN 2. Often found as stamps or text. 
-   Supported types: ${typesContext || "RUS, TR A, TR B, UZ 2, UZ 3, UZ 4, GE, AM3, KZ3, CHN 2, CHN 3"}
-2. "number": The serial number of the permit (usually 3 to 8 digits long, colored red or prominently printed).
-3. "car": If there is a handwritten or printed car license plate number (e.g. AB1234-5), extract it here.
-
-Return a JSON array of objects, where each object represents one scanned permit:
-[
-  {
-    "type": "RUS",
-    "number": "123456",
-    "car": "AB1234-5"
-  }
-]
-If you cannot find some data, leave it as an empty string. Only return valid JSON. Do not return markdown blocks.`;
-
-        const partsWithText: any[] = [{ text: promptText }, ...parts];
-
-        const textResult = await generateGeminiContentWithFallback(
-          { parts: partsWithText },
-          "You are a helpful logistics data extractor. Return only a JSON array.",
-          "gemini-2.5-flash"
-        );
-
-        let jsonStr = textResult || "";
-
-        const jsonMatch =
-          jsonStr.match(/```json\s*([\s\S]*?)\s*```/) ||
-          jsonStr.match(/([\{\[][\s\S]*[\}\]])/);
-        let parsed = [];
-        if (jsonMatch) {
-          parsed = JSON.parse(jsonMatch[1]);
-        } else {
-          parsed = JSON.parse(jsonStr);
-        }
-
-        res.json({ results: parsed });
-      } catch (e: any) {
-        handleGeminiError(e, res, "Failed to process images");
-      }
-    },
-  );
-
-  // API Route for parsing driver and vehicle data text (Strictly Offline)
   app.post("/api/parse-driver-data", async (req, res) => {
     const { text } = req.body;
     if (!text || text.trim().length === 0) {
@@ -1833,62 +1583,6 @@ If you cannot find some data, leave it as an empty string. Only return valid JSO
     } catch (e: any) {
       console.error("Offline parsing failed in parse-plandohod-text:", e);
       res.status(500).json({ error: e.message || "Failed to parse plandohod text" });
-    }
-  });
-
-  app.post("/api/parse-analysis-text", async (req, res) => {
-    const { text } = req.body;
-    if (!text) {
-      return res.status(400).json({ error: "No text provided" });
-    }
-
-    try {
-      const promptText = `
-You are an intelligent logistics data extraction assistant.
-Extract structured data from the following text to add to a route table.
-Text: "${text}"
-
-Fields to extract:
-1. route (Маршрут): string (e.g., "Подольск - Екат")
-2. rate (Ставка): string (e.g., "130 к без НДС")
-3. contact (Контора и контакт): string (e.g., "Детроит - супер заявка")
-
-Return a JSON array of objects with these fields.
-[
-   { "route": "...", "rate": "...", "contact": "..." }
-]
-Do not return Markdown. Return raw JSON array only.
-`;
-
-      const textResult = await generateGeminiContentWithFallback(
-        promptText,
-        "You are a helpful logistics data extractor. Return only a JSON array.",
-        "gemini-2.5-flash"
-      );
-
-      let jsonStr = textResult || "[]";
-      const jsonMatch =
-        jsonStr.match(/```json\s*([\s\S]*?)\s*```/) ||
-        jsonStr.match(/([\{\[][\s\S]*[\}\]])/);
-      let parsed = [];
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[1]);
-      } else {
-        parsed = JSON.parse(jsonStr);
-      }
-      // If object returned by mistake, wrap it
-      if (!Array.isArray(parsed)) {
-        parsed = [parsed];
-      }
-      res.json({ results: parsed });
-    } catch (e: any) {
-      console.warn("Gemini parsing failed, using offline fallback parser in analysis:", e.message || e);
-      try {
-        const parsed = offlineParseAnalysisText(text);
-        res.json({ results: parsed });
-      } catch (fallbackError: any) {
-        handleGeminiError(e, res, "Failed to process text in analysis");
-      }
     }
   });
 

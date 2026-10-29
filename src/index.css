@@ -520,7 +520,23 @@ input:focus, select:focus, textarea:focus, button:focus {
   --tl-text: #4B5563;            /* вторичный текст */
   --tl-text-dim: #646D79;        /* приглушённые подписи (AA на светлых фонах) */
   --tl-head-h: 48px;             /* высота липкой шапки (синхронизирует TS) */
-  --tl-bar-r: 6px;               /* скругление полос рейсов */
+  --tl-bar-r: 8px;               /* скругление полос рейсов */
+}
+
+/* Компактный вид таймлайна: подстрока «Факт» — тонкая линия статуса под
+   полосой плана. Цвет сегментов (в срок / опоздание / просрочка) остаётся,
+   подписи, значки и маркеры прячутся — они есть на плане и в подсказках. */
+.tl-compact-fact [data-bar-label],
+.tl-compact-fact [data-bz-label],
+.tl-compact-fact [data-tl-labelseg],
+.tl-compact-fact [data-tl-marker],
+.tl-compact-fact [data-tl-conflict-icon],
+.tl-compact-fact svg {
+  display: none;
+}
+.tl-compact-fact [data-bar],
+.tl-compact-fact [data-bz-stripe] {
+  border-radius: 3px !important;
 }
 
 /* ─── Единые токены состояний полос и перекрёстной подсветки ────────────────

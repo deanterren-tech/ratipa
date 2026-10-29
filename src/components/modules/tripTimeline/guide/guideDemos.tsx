@@ -17,8 +17,7 @@ import { dayNum, dayStr, barRectInWindow, dayToX, fmtDM } from '../lib/timeline'
 import { factSegmentsOf, FACT_SEGMENT_COLORS, type FactSegment } from '../lib/factSegments';
 import { layoutBzFills, bzStripeColor, bzKindColor, type BzMark, type BzStripe } from '../lib/bzFills';
 import type { BasePeriod } from '../lib/sources';
-import { stageColorOf } from '../lib/stageFills';
-import { PLAN_ACCENT, MARKER_TONE, TL_Z, TRIP_CIRCLE_BADGE_CLS, TRIP_CIRCLE_TICK_LINE, TRIP_CIRCLE_TICK_TEXT, tripCircleBadgeStyle } from '../lib/visuals';
+import { PLAN_ACCENT, MARKER_TONE, TL_Z, TRIP_CIRCLE_BADGE_CLS, TRIP_CIRCLE_TICK_LINE, TRIP_CIRCLE_TICK_TEXT, stageIconOf, tripCircleBadgeStyle } from '../lib/visuals';
 import { directionChipColors, DEFAULT_DIRECTIONS } from '../lib/directions';
 import { vyezdStatusIcon } from '../lib/vyezd';
 import type { TimelineStage } from '../../../../types';
@@ -277,16 +276,18 @@ const FactBar = ({ a, b, days, segments }: { a: number; b: number; days: number;
   );
 };
 
-/** Заливка дня этапа — цвет по типу (stageColorOf), как в подстроке «План». */
+/** День этапа — значок типа прямо на полосе, как на полотне таймлайна. */
 const StageDay = ({ day, days, type, name }: { day: number; days: number; type: string; name: string }) => {
-  const c = stageColorOf(type);
+  const Icon = stageIconOf(type);
   const x = xOf(day);
   return (
     <span
       className="absolute top-0 bottom-0 flex items-center justify-center overflow-hidden"
-      title={`Этап «${name}» — заливка дня (цвет по типу этапа; всегда поверх полосы)`}
-      style={{ zIndex: TL_Z.stage, left: x, width: COL_W, background: c.bg, borderLeft: `1px solid ${c.border}`, borderRight: `1px solid ${c.border}`, borderRadius: 3 }}
-    />
+      title={`Этап «${name}» — значок типа этапа на полосе`}
+      style={{ zIndex: TL_Z.stage, left: x, width: COL_W }}
+    >
+      <Icon className="w-3 h-3" style={{ color: '#4B5563' }} aria-hidden="true" />
+    </span>
   );
 };
 

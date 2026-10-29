@@ -61,7 +61,7 @@
 
 Чтобы права проверялись на уровне базы без перелома приложения:
 
-1. Вход по **custom token**: сервер (`server.ts`, ключ `firebaseAdmin.ts`) выдаёт
+1. Вход по **custom token**: сервер (`server.ts`, ключ `server/firebaseAdmin.ts`) выдаёт
    токен с `uid` пользователя; клиент делает `signInWithCustomToken`.
 2. Правила RTDB строятся на `auth.uid` и `users_list/{uid}/role|permissions`:
    чтение — по модулям и правам, запись `users_list` — только root (и своя запись

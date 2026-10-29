@@ -14,7 +14,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { adminDb, DATABASE_URL } from '../firebaseAdmin.ts';
+import { adminDb, DATABASE_URL } from '../server/firebaseAdmin.ts';
 import { looksLikePlaceName, normalizeCityName } from '../src/utils/cityDirectory.ts';
 
 const ARGS = process.argv.slice(2);

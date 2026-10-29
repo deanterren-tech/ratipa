@@ -22,7 +22,7 @@
  */
 
 import type { Database } from 'firebase-admin/database';
-import { adminDb } from '../../firebaseAdmin.ts';
+import { adminDb } from '../firebaseAdmin.ts';
 import { NavbyClient, navbyClientFromEnv } from './client.ts';
 import { TelemetryStore, type CanCollectState, type TelemetryConfig } from './store.ts';
 import {

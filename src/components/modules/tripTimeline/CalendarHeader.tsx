@@ -31,6 +31,8 @@ const CLR = {
   text: '#6B7280',
   strong: '#121316',
   dim: '#646D79',
+  /** Числа выходных — приглушённые: будни читаются сразу. */
+  weekendNum: '#9CA3AF',
 };
 
 interface Props {
@@ -56,7 +58,7 @@ export default function CalendarHeader({ vs, vn, colW, today, pinLeft, dense = f
   /** Точные высоты уровней: сумма = высота липкой шапки (--tl-head-h). */
   const monthsH = dense ? 16 : 22;
   const daysH = dense ? (tier === 'full' ? 20 : tier === 'medium' ? 18 : 16) : tier === 'full' ? 26 : tier === 'medium' ? 24 : 20;
-  const monthTextCls = dense ? 'text-[8px] leading-[14px]' : 'text-[10px] leading-[16px]';
+  const monthTextCls = dense ? 'text-[8px] leading-[14px]' : 'text-[11px] leading-[16px]';
   const dayTextCls = dense ? 'text-[8px] leading-[10px]' : 'text-[9px] leading-tight';
   const dayNumCls = tier === 'full' ? (dense ? 'text-[9px]' : 'text-[10px]') : dense ? 'text-[8px]' : 'text-[9px]';
 
@@ -80,7 +82,7 @@ export default function CalendarHeader({ vs, vn, colW, today, pinLeft, dense = f
           >
             {seg.days * colW >= (dense ? 56 : 64) ? (
               <span
-                className={`sticky inline-block whitespace-nowrap font-semibold text-[#4B5563] ${monthTextCls}`}
+                className={`sticky inline-block whitespace-nowrap font-semibold text-[#121316] ${monthTextCls}`}
                 style={{ left: pinLeft, paddingLeft: 6, paddingRight: 6 }}
               >
                 {seg.label}
@@ -125,7 +127,7 @@ export default function CalendarHeader({ vs, vn, colW, today, pinLeft, dense = f
                         {dayHeaderLabel(d)}
                       </b>
                     ) : (
-                      <b className={`block font-semibold ${dayNumCls}`} style={{ color: CLR.strong }}>
+                      <b className={`block font-medium ${dayNumCls}`} style={{ color: isWeekend ? CLR.weekendNum : CLR.strong }}>
                         {dayHeaderLabel(d)}
                       </b>
                     )}
@@ -137,8 +139,8 @@ export default function CalendarHeader({ vs, vn, colW, today, pinLeft, dense = f
               ) : tier === 'medium' ? (
                 <>
                   <b
-                    className={`${isToday ? 'inline-flex items-center justify-center min-w-[14px] h-[13px] px-1 rounded-full text-white font-bold text-[8px]' : 'block font-semibold text-[9px]'}`}
-                    style={isToday ? { background: CLR.todayPill } : { color: CLR.strong }}
+                    className={`${isToday ? 'inline-flex items-center justify-center min-w-[14px] h-[13px] px-1 rounded-full text-white font-bold text-[8px]' : 'block font-medium text-[9px]'}`}
+                    style={isToday ? { background: CLR.todayPill } : { color: isWeekend ? CLR.weekendNum : CLR.strong }}
                   >
                     {dayHeaderLabel(d)}
                   </b>

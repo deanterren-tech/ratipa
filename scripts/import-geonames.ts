@@ -33,7 +33,7 @@ import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeF
 import { execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { join } from 'node:path';
-import { adminDb } from '../firebaseAdmin.ts';
+import { adminDb } from '../server/firebaseAdmin.ts';
 import { normalizeCityName } from '../src/utils/cityDirectory.ts';
 import {
   GEONAMES_DEFAULT_COUNTRIES,

@@ -25,6 +25,7 @@ import {usePresence} from '../hooks/usePresence'
 import {useChat} from '../hooks/useChat'
 import TripCloseWizard from './modules/tripClose/TripCloseWizard';
 import {OPEN_TRIP_CLOSE_EVENT} from './modules/tripClose/openTripClose';
+import { UI } from '../ui/kit';
 import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Truck, FileText, Files, Clock, Map, Settings, Settings2, ShieldAlert, LogOut, Menu, X, Radio, MessageSquare, Send, Trash2, Sparkles, ChevronDown, ArrowUp, Pencil, Calendar, CalendarRange, Bell, BellRing, Check, CheckCheck, AlertTriangle, Info, LineChart, ExternalLink, Wifi, WifiOff, RefreshCw, LoaderCircle, Home, Sliders, BookOpen, ClipboardList, CircleDollarSign, Coins, BookCheck, BookMarked, Grid3x3, MoreHorizontal } from 'lucide-react';
 
 // Import newly created business modules
@@ -404,8 +405,10 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
     }
   }, [activeModule]);
 
-  // Scroll to top
+  // Кнопка «Наверх»: относится к тому блоку, который сейчас прокручивают
+  // (основная область, таблица или сетка таймлайна со своей прокруткой).
   const mainScrollRef = useRef<HTMLDivElement>(null);
+  const scrollTopTargetRef = useRef<HTMLElement | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   /**
@@ -448,12 +451,26 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   }, []);
 
   useEffect(() => {
-    const el = mainScrollRef.current;
-    if (!el) return;
-    const onScroll = () => setShowScrollTop(el.scrollTop > 300);
-    onScroll();
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
+    // Событие scroll не всплывает — слушаем в фазе перехвата, чтобы видеть
+    // прокрутку любого контейнера раздела, а не только основной области.
+    const onScroll = (e: Event) => {
+      const el = e.target === document ? (document.scrollingElement as HTMLElement | null) : (e.target as HTMLElement);
+      if (!(el instanceof HTMLElement)) return;
+      // Мелкие списки, шапка и окна поверх раздела кнопкой не управляют.
+      if (el.clientHeight < 320 || el.closest('header, [data-scroll-lock="modal"], [role="dialog"]')) return;
+      const far = el.scrollTop > 300;
+      // Горизонтальная прокрутка другого блока не должна сбивать текущую цель.
+      if (scrollTopTargetRef.current !== el && !far) return;
+      scrollTopTargetRef.current = el;
+      setShowScrollTop(far);
+    };
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    return () => document.removeEventListener('scroll', onScroll, { capture: true });
+  }, []);
+
+  useEffect(() => {
+    scrollTopTargetRef.current = null;
+    setShowScrollTop(false);
   }, [activeModule]);
 
   /**
@@ -1825,7 +1842,7 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
                       activeModule === 'dashboard' 
                         ? 'p-0 bg-[#F9FAFB] overflow-hidden' 
                         : activeModule === 'tripTimeline'
-                        ? 'p-0 bg-[#F9FAFB] overflow-hidden min-h-0'
+                        ? 'p-0 bg-[#F9FAFB] overflow-y-auto overflow-x-hidden md:overflow-hidden min-h-0'
                         : activeModule === 'admin'
                         ? 'p-3 sm:p-4 lg:p-6 bg-[#F9FAFB] overflow-y-auto overflow-x-hidden'
                         : 'p-3 sm:p-4 lg:p-6 overflow-y-auto overflow-x-hidden bg-[#F9FAFB]'
@@ -1871,17 +1888,19 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
 
       </div>
 
-      {/* Scroll to Top Button */}
+      {/* Кнопка «Наверх»: появляется, когда раздел или его таблица прокручены вниз */}
       {showScrollTop && (
         <button
+          type="button"
           onClick={() => {
-            mainScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            const target = scrollTopTargetRef.current ?? mainScrollRef.current;
+            target?.scrollTo({ top: 0, behavior: 'smooth' });
           }}
-          className="fixed right-4 bottom-28 md:bottom-6 z-[1000] flex items-center justify-center w-11 h-11 bg-[#121316] text-[var(--accent)] hover:bg-[#121316] transition-colors select-none cursor-pointer rounded-full shadow-lg active:scale-95"
+          className={`${UI.buttonScrollTop} fixed right-4 bottom-28 md:bottom-6 z-[1000]`}
           title="Наверх"
+          aria-label="Наверх"
         >
-          <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
+          <ArrowUp className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
         </button>
       )}
 

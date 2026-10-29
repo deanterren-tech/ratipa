@@ -290,7 +290,7 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
       // 1) сохранение (однократное: повторный запуск не переписывает план)
       const firstSave = await tripCloseService.recordOperation(tripId, 'planSaved', { summary: `План ${plan.id}` }, user.name);
       if (firstSave) {
-        pdService.updateTrip(plan.id, {
+        await pdService.updateTrip(plan.id, {
           dateStart: planStartIso,
           dateEnd: planEndIso,
           days: fin.days,

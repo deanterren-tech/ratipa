@@ -108,8 +108,20 @@ export const pickActiveSegment = (segs: BarLabelSegment[], viewLeft: number, vie
   return bestVisIdx !== -1 ? bestVisIdx : widestIdx;
 };
 
-/** Ступень сокращения подписи по ширине свободного сегмента. */
-export type LabelVariant = 'full' | 'short' | 'icon' | 'none';
+/** Ступень сокращения подписи по ширине свободного сегмента:
+ *  полный текст → короткий → «откуда → куда» (длинный маршрут) → первое слово. */
+export type LabelVariant = 'full' | 'short' | 'ends' | 'icon' | 'none';
+
+/** Маршрут из 3+ точек «А → Б → … → Я» сокращается до «А → Я»; кольцевой
+ *  («Минск → … → Минск») — до «Минск ↔ точка в середине маршрута»; иначе ''. */
+export const routeEndsOf = (route: string): string => {
+  const pts = String(route || '').split('→').map((p) => p.trim()).filter(Boolean);
+  if (pts.length < 3) return '';
+  const first = pts[0];
+  const last = pts[pts.length - 1];
+  if (first.toLowerCase() === last.toLowerCase()) return `${first} ↔ ${pts[Math.floor(pts.length / 2)]}`;
+  return `${first} → ${last}`;
+};
 
 export const labelVariantFor = (
   segWidth: number,
@@ -121,6 +133,8 @@ export const labelVariantFor = (
   if (segWidth >= estimateLabelWidth(fullText, hasIcon)) return 'full';
   const short = shortText && shortText !== fullText ? shortText : fullText;
   if (segWidth >= estimateLabelWidth(short, hasIcon)) return 'short';
+  const ends = routeEndsOf(short);
+  if (ends && segWidth >= estimateLabelWidth(ends, hasIcon)) return 'ends';
   // «иконка/первое слово с многоточием»
   const firstWord = (short.split(/[\s·/]+/).filter(Boolean)[0] || short || '').slice(0, 12) + '…';
   if (segWidth >= estimateLabelWidth(firstWord, hasIcon)) return 'icon';
@@ -133,6 +147,7 @@ export const labelTextFor = (variant: LabelVariant, fullText: string, shortText:
   if (variant === 'full') return fullText;
   const short = shortText && shortText !== fullText ? shortText : fullText;
   if (variant === 'short') return short;
+  if (variant === 'ends') return routeEndsOf(short) || short;
   if (variant === 'icon') return (short.split(/[\s·/]+/).filter(Boolean)[0] || short || '').slice(0, 12) + '…';
   return '';
 };

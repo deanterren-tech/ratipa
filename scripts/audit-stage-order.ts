@@ -37,7 +37,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { adminDb } from '../firebaseAdmin.ts';
+import { adminDb } from '../server/firebaseAdmin.ts';
 import { normalizeStages } from '../src/components/modules/tripTimeline/lib/timeline';
 import {
   isServiceStageId,

@@ -3,7 +3,7 @@
  */
 
 import type { Agent, AgentResult, AgentSpec } from "./base-agent.ts";
-import { adminDb } from "../../../firebaseAdmin.ts";
+import { adminDb } from "../../firebaseAdmin.ts";
 import { publishEvent } from "../event-bus.ts";
 
 const SPEC: AgentSpec = {

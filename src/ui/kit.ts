@@ -108,6 +108,9 @@ export const UI = {
     'inline-flex items-center gap-1 text-[11px] text-[var(--accent-ink)] hover:bg-[var(--accent-10)] rounded-md px-1.5 py-1 transition-colors cursor-pointer',
   buttonIcon:
     'inline-flex items-center justify-center p-1.5 rounded-lg text-[#9CA3AF] hover:text-[#121316] hover:bg-[#F3F4F6] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]',
+  /** Плавающая кнопка «Наверх» — в стиле второстепенной кнопки, с мягкой тенью. */
+  buttonScrollTop:
+    'inline-flex items-center justify-center w-11 h-11 rounded-xl bg-white border border-[#E5E7EB] hover:bg-[#F3F4F6] text-[#4B5563] hover:text-[#121316] shadow-[0_4px_16px_rgba(18,19,22,0.08)] transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)]',
   /** Опасное действие. */
   buttonDanger:
     'inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs font-medium transition-colors cursor-pointer min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200',

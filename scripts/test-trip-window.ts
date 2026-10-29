@@ -114,9 +114,13 @@ console.log('1. Сокращённые названия этапов — спр�
     allNames,
   );
   // Внутренние ключи НЕ изменились (записи этапов хранят ключ, не имя).
+  // Новые типы (например, совмещённые этапы) добавляются, старые ключи и их
+  // взаимный порядок остаются прежними.
+  const keys = DEFAULT_STAGE_TYPES.map((t) => t.key);
+  const baseKeys = ['load', 'cust_out', 'border', 'cust_in', 'reserve', 'unl', 'other'];
   check(
     'ключи типов не менялись',
-    DEFAULT_STAGE_TYPES.map((t) => t.key).join(',') === 'load,cust_out,border,cust_in,reserve,unl,other',
+    keys.filter((k) => baseKeys.includes(k)).join(',') === baseKeys.join(','),
   );
   // Старые записи: этап хранит type='cust_out' — имя берётся из справочника.
   const oldStage = st({ id: 'old1', type: 'cust_out' });

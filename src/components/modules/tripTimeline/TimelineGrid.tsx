@@ -55,7 +55,6 @@ import {
 import { eventMarkOf, groupEventMarks, type EventMark } from './lib/eventMarks';
 import {
   layoutStageFills,
-  stageColorOf,
   stageFillTitle,
   stageNeighborLabel,
   stageRiskTitle,
@@ -98,6 +97,7 @@ import {
   type FactSegment,
   type FactSegColor,
 } from './lib/factSegments';
+import { STATUS_LINE_COLORS, statusLineOfTrip, type StatusLineSegment } from './lib/statusLine';
 import {
   baseBarRange,
   baseDeviation,
@@ -109,7 +109,7 @@ import {
 } from './lib/sources';
 import DateInput from './DateInput';
 import CalendarHeader from './CalendarHeader';
-import { AlertTriangle, ArrowRightLeft, CalendarClock, CarFront, ChevronDown, ChevronLeft, ChevronRight, CircleDashed, LogIn, LogOut, Maximize2, Minimize2, Palette, Plus, TriangleAlert, Wrench } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, CalendarClock, CarFront, ChevronDown, ChevronLeft, ChevronRight, CircleDashed, LogIn, LogOut, Maximize2, Minimize2, Palette, Plus, SlidersHorizontal, TriangleAlert, Wrench } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Палитра полос / штриховок / маркеров / статусных значков — в lib/visuals:
@@ -175,7 +175,7 @@ type PlanItem =
 type DeadlineStatusKind = 'none' | 'ok' | 'risk' | 'violated' | 'missed';
 
 type FactItem =
-  | { kind: 'fact'; a: number; b: number; open: boolean; tripKey: string; title: string; segments: FactSegment[]; noPlan: boolean; missedCount: number; parts: PlanBarParts; circleMarks?: TripCircleMarks | null }
+  | { kind: 'fact'; a: number; b: number; open: boolean; tripKey: string; title: string; segments: FactSegment[]; status: StatusLineSegment[]; noPlan: boolean; missedCount: number; parts: PlanBarParts; circleMarks?: TripCircleMarks | null }
   | { kind: 'factNone'; a: number; b: number; tripKey: string; title: string }
   | { kind: 'event'; day: number; lastDay: number; count: number; color: string; title: string; tripKey?: string; eventId?: string }
   | { kind: 'handover'; point: number; from: string; to: string; note: string; title: string; chip: boolean };
@@ -337,6 +337,8 @@ const TRACK_GAP = 2;
  * образцу ширины колонки «Автомобили» (CARCOL_* ниже).
  */
 const ROWH_STORAGE_KEY = 'ratipa_tl_rowh';
+/** Режим «Подробно» (план и факт отдельно) — localStorage, как высота строк. */
+const DETAILED_STORAGE_KEY = 'ratipa_tl_detailed';
 /** По умолчанию — прежний «единый ритм» (PLAN_H = FACT_H = 22), вид не меняется. */
 const ROWH_DEFAULT = 22;
 /** Пределы настройки: базовая дорожка 14…44 px (строка машины — 28…88 px).
@@ -348,12 +350,27 @@ const ROWH_MAX = 44;
 const PLAN_BAR_H = 16;
 const FACT_BAR_H = 8;
 const FACT_NONE_H = 14;
+/** Компактный вид (одна строка на машину): факт — тонкая линия под планом. */
+const FACT_COMPACT_BAND = 6;
+/** Доля высоты дорожки под отступы: остальное занимает полоса (растёт со строкой). */
+const LANE_PAD_RATIO = 0.18;
+/** Размер подписей и значков на полосах — от высоты ленты содержимого. */
+const laneTypeVars = (bandH: number): React.CSSProperties =>
+  ({
+    '--tl-fs': `${Math.max(8, Math.min(12, Math.round(bandH * 0.38)))}px`,
+    '--tl-ic': `${Math.max(12, Math.min(18, Math.round(bandH * 0.55)))}px`,
+  }) as React.CSSProperties;
+/** Цвет значка этапа по сроку: серый — в срок, янтарный — в пределах запаса, красный — просрочка. */
+const STAGE_ICON_NEUTRAL = '#4B5563';
+const stageToneOf = (code: string | null | undefined): string | null =>
+  code === 'within' ? '#B45309' : code === 'beyond' || code === 'planned-overdue' ? '#BE123C' : null;
 
 const navBtn =
-  'inline-flex items-center justify-center h-7 px-2.5 rounded-lg text-[11px] font-medium bg-white border border-[var(--tl-hairline)] text-[var(--tl-text)] hover:text-[var(--tl-text-strong)] hover:bg-[#F3F4F6] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default';
+  'inline-flex items-center justify-center shrink-0 whitespace-nowrap h-7 px-2.5 rounded-lg text-[11px] font-medium bg-white border border-[var(--tl-hairline)] text-[var(--tl-text)] hover:text-[var(--tl-text-strong)] hover:bg-[#F3F4F6] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-default';
 const navBtnIcon = `${navBtn} w-7 px-0`;
-/** Спокойная вторичная «сегментная» оболочка панели управления. */
-const barSegment = 'inline-flex items-center gap-1.5 rounded-xl border border-[var(--tl-hairline)] bg-white px-2 py-1';
+/** Спокойная вторичная «сегментная» оболочка панели управления. На узком
+ *  экране содержимое сегмента переносится, а не вылезает за край. */
+const barSegment = 'inline-flex flex-wrap max-w-full items-center gap-1.5 rounded-xl border border-[var(--tl-hairline)] bg-white px-2 py-1';
 
 const intersects = (a: number | null, b: number | null, from: number, to: number): boolean =>
   a != null && b != null && b >= from && a <= to;
@@ -569,6 +586,8 @@ const buildRows = (
             open: ongoing,
             tripKey: t.key,
             segments: segRes.segments,
+            // Статус-линия компактного вида: по плану / срок подходит / просрочка.
+            status: statusLineOfTrip(t, span.fMin, fEnd, today),
             noPlan: segRes.noPlan,
             missedCount: segRes.missed.length,
             parts,
@@ -913,6 +932,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   canDragPlan,
   canDragManual,
   rowH,
+  detailed,
 }: {
   row: CarRowModel;
   colW: number;
@@ -942,6 +962,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   canDragManual: boolean;
   /** Общая высота ОДНОЙ дорожки строки (одна настройка на все машины; дефолт — PLAN_H). */
   rowH: number;
+  /** «Подробно»: план и факт отдельными подстроками; иначе факт — тонкая линия под планом. */
+  detailed: boolean;
 }) {
   const [hoverTrip, setHoverTrip] = useState<string | null>(null);
   const [rowHover, setRowHover] = useState(false);
@@ -1341,7 +1363,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
    * planOffset: увеличенная дорожка держит содержимое по центру, а не прижимает
    * его кверху; при дефолте (22 = PLAN_H) сдвиг равен нулю и вид прежний.
    */
-  const planBandH = Math.max(PLAN_H, planTrack.layout.laneH);
+  // Полоса растёт вместе с высотой строки: лента содержимого занимает дорожку
+  // почти целиком (LANE_PAD_RATIO — на отступы), при дефолте вид прежний.
+  const planBandH = Math.max(PLAN_H, planTrack.layout.laneH, rowH - Math.round(rowH * LANE_PAD_RATIO));
   const planH = Math.max(rowH, planBandH);
   const planOffset = Math.round((planH - planBandH) / 2);
   /**
@@ -1380,8 +1404,11 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
    *  factOffset — сдвиг центрирования содержимого в увеличенной дорожке,
    *  factBandContentH — высота полосы содержимого (естественная минус 1 px
    *  нижней границы; при дефолте вид прежний — см. «План»). */
-  const factBandH = Math.max(FACT_H, factTrack.layout.laneH);
-  const factH = Math.max(rowH, factBandH);
+  // Компактный вид: факт — тонкая линия статуса под полосой плана.
+  const factBandH = detailed
+    ? Math.max(FACT_H, factTrack.layout.laneH, rowH - Math.round(rowH * LANE_PAD_RATIO))
+    : FACT_COMPACT_BAND;
+  const factH = detailed ? Math.max(rowH, factBandH) : FACT_COMPACT_BAND + 2;
   const factOffset = Math.round((factH - factBandH) / 2);
   const factBandContentH = factBandH - 1;
   /** Дорожка «факта рейса» (группа 0) — над ней стоят маркеры событий. */
@@ -1418,12 +1445,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     idxs.forEach((ii, k) => m.set(ii, info[k]));
     return m;
   }, [row.factItems]);
-  /** Тонкая штриховка проблемных сегментов (оранжевый/красный) — вторичный
-   *  признак для дальтоников (вместе со значком в начале сегмента). */
-  const segHatch = (color: FactSegColor): string =>
-    color === 'red'
-      ? 'repeating-linear-gradient(45deg, rgba(159,18,57,0.16), rgba(159,18,57,0.16) 2px, transparent 2px, transparent 7px)'
-      : 'repeating-linear-gradient(45deg, rgba(138,58,10,0.16), rgba(138,58,10,0.16) 2px, transparent 2px, transparent 7px)';
+  /** Тонкая штриховка просрочки (красный сегмент) — вторичный признак для
+   *  дальтоников; остальные сегменты различаются только цветом. */
+  const RED_SEG_HATCH =
+    'repeating-linear-gradient(45deg, rgba(159,18,57,0.16), rgba(159,18,57,0.16) 2px, transparent 2px, transparent 7px)';
   /** Подсказка сегмента: этап, план, факт, отставание в днях, причина цвета. */
   const segTitleOf = (s: FactSegment): string => {
     const st = FACT_SEGMENT_COLORS[s.color];
@@ -1444,7 +1469,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       const width = Math.max(1, right - left);
       const first = i === 0;
       const last = i === segs.length - 1;
-      const problem = s.color === 'orange' || s.color === 'red';
+      // Опоздание читается цветом сегмента; значок на каждом сегменте убран —
+      // он давал рябь. Штриховка — только у просрочки. Подробности — в подсказке.
       return (
         <span
           key={`seg-${s.a}-${s.b}-${s.color}-${i}`}
@@ -1455,22 +1481,30 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             left,
             width,
             background: st.bg,
-            ...(problem ? { backgroundImage: segHatch(s.color) } : {}),
+            ...(s.color === 'red' ? { backgroundImage: RED_SEG_HATCH } : {}),
             borderTop: `1px solid ${st.border}`,
             borderBottom: `1px solid ${st.border}`,
             ...(first ? { borderLeft: `1px solid ${st.border}` } : {}),
             ...(last ? { borderRight: `1px solid ${st.border}` } : {}),
           }}
           title={segTitleOf(s)}
-        >
-          {problem && width >= 18 ? (
-            <TriangleAlert
-              className="absolute left-0.5 top-1/2 -translate-y-1/2 w-2.5 h-2.5"
-              style={{ color: st.text }}
-              aria-hidden="true"
-            />
-          ) : null}
-        </span>
+        />
+      );
+    });
+  /** Статус-линия компактного вида (lib/statusLine): сплошные участки
+   *  «по плану / срок подходит / просрочка», подсказка — причина цвета. */
+  const statusEls = (segs: StatusLineSegment[], barLeft: number, barWidth: number): React.ReactNode[] =>
+    segs.map((s, i) => {
+      const left = Math.max(0, Math.round(dayToX(s.a, vs, colW) - barLeft));
+      const right = Math.min(barWidth, Math.round(dayToX(s.b, vs, colW) + colW - barLeft));
+      return (
+        <span
+          key={`st-${s.a}-${s.b}-${s.state}-${i}`}
+          data-status-seg={s.state}
+          className="absolute top-0 bottom-0"
+          style={{ left, width: Math.max(1, right - left), background: STATUS_LINE_COLORS[s.state].color }}
+          title={s.state === 'ok' ? `По плану · ${s.reason}` : s.reason}
+        />
       );
     });
   /**
@@ -1803,7 +1837,6 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
    *  (единое скругление, заливка, hover/focus). Этапы — ВСЕГДА поверх полос
    *  (слой TL_Z.stage); доля дня — из единого правила половин ячейки. */
   const renderStageFill = (f: StageFillSection, keyPrefix: string, sec: RowDaySections, lane: 'plan' | 'fact' = 'fact') => {
-    const color = stageColorOf(f.stage.type);
     const left = dayToX(f.day, vs, colW) + Math.round((f.section * colW) / f.sections);
     const right = dayToX(f.day, vs, colW) + Math.round(((f.section + 1) * colW) / f.sections);
     const width = Math.max(1, right - left);
@@ -1827,6 +1860,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     // «в пределах запаса» — жёлтая полоска снизу, «за пределами» — красная.
     const stateCode = lane === 'fact' && state ? state.code : null;
     const stateTone = stateCode === 'within' ? '#D97706' : stateCode === 'beyond' || stateCode === 'planned-overdue' ? '#E11D48' : null;
+    // Значок этапа лежит прямо на полосе: без цветной клетки, серый, пока всё
+    // в срок; янтарный/красный — только при опоздании (тот же статус запаса).
+    const iconColor = stageToneOf(state ? state.code : null) ?? STAGE_ICON_NEUTRAL;
+    const iconStyle: React.CSSProperties = { color: iconColor, width: 'var(--tl-ic, 12px)', height: 'var(--tl-ic, 12px)' };
     // Иконка типа события — в своей доле; мелкий масштаб — только иконка.
     const StageIcon = stageIconOf(f.stage.type);
     // Подпись этапа — СТРОГО в границах своей доли: не шире клетки этапа и не
@@ -1858,30 +1895,27 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             open();
           }
         }}
-        className={`absolute top-0 bottom-0 cursor-pointer overflow-hidden whitespace-nowrap flex items-center justify-center ${width >= 20 ? 'px-0.5' : ''}`}
+        className={`absolute top-0 bottom-0 cursor-pointer overflow-hidden whitespace-nowrap flex items-center justify-center hover:bg-white/70 transition-colors ${width >= 20 ? 'px-0.5' : ''}`}
         style={{
           zIndex: TL_Z.stage,
           left,
           width,
-          background: color.bg,
-          borderLeft: `1px solid ${color.border}`,
-          borderRight: f.section === f.sections - 1 ? `1px solid ${color.border}` : undefined,
           borderRadius: radius,
-          color: color.text,
+          color: STAGE_ICON_NEUTRAL,
           ...(f.stage.isCritical ? { outline: '1px dashed #DC2626', outlineOffset: '-1px' } : {}),
           ...(f.archived ? { opacity: 0.72 } : {}),
         }}
         title={title}
       >
-        {avail >= 44 ? (
-          <span className="inline-flex items-center gap-0.5 min-w-0" style={{ maxWidth: Math.max(0, avail - 4) }}>
-            <StageIcon className={BAR_ICON_CLS} style={{ color: color.text }} aria-hidden="true" />
-            <span className="min-w-0 text-[8px] leading-[10px] truncate" style={{ maxWidth: Math.max(0, avail - 20) }}>
+        {avail >= 56 ? (
+          <span className="inline-flex items-center gap-1 min-w-0" style={{ maxWidth: Math.max(0, avail - 4) }}>
+            <StageIcon className="shrink-0" style={iconStyle} aria-hidden="true" />
+            <span className="min-w-0 text-[length:var(--tl-fs,8px)] leading-[1.25] font-medium truncate" style={{ maxWidth: Math.max(0, avail - 22) }}>
               {stageShortName(stageTypes, f.stage)}
             </span>
           </span>
         ) : width >= 12 ? (
-          <StageIcon className={BAR_ICON_CLS} style={{ color: color.text }} aria-hidden="true" />
+          <StageIcon className="shrink-0" style={iconStyle} aria-hidden="true" />
         ) : null}
         {stateTone ? (
           <span
@@ -1994,7 +2028,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 {text ? (
                   <span
                     data-bar-label="1"
-                    className="sticky inline-flex items-center gap-0.5 min-w-0 px-1 text-[8px] leading-[10px] font-semibold truncate"
+                    className="sticky inline-flex items-center gap-0.5 min-w-0 px-1 text-[length:var(--tl-fs,8px)] leading-[1.25] font-semibold truncate"
                     style={{
                       left: carColW + 8,
                       marginLeft: 6,
@@ -2019,7 +2053,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
       ) : !labelNoRoom && o.width >= MIN_LABEL_BOX && (o.labelText || o.labelIcon) ? (
         <span
           data-bar-label="1"
-          className="inline-flex items-center gap-0.5 min-w-0 px-1 text-[8px] leading-[10px] font-semibold truncate max-w-full"
+          className="inline-flex items-center gap-0.5 min-w-0 px-1 text-[length:var(--tl-fs,8px)] leading-[1.25] font-semibold truncate max-w-full"
           style={{
             background: o.color.bg,
             color: o.color.text,
@@ -2441,6 +2475,67 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   const ovNote = ovAlertTitles.length ? `Стыки с расхождением учёта (${ovAlertTitles.length}):\n${ovAlertTitles.join('\n')}` : '';
   const dirsTitle = row.directions.length ? `\nНаправления: ${row.directions.map((d) => `${d.name} (${d.code})`).join(', ')}` : '';
   const cellTitle = `${formatPlate(row.carNumber)} · ${row.dispatcherName || 'без диспетчера'}${countsText ? ` · ${countsText}` : ''}${dirsTitle}${warnTitle ? `\n${warnTitle}` : ''}${ovNote ? `\n${ovNote}` : ''}`;
+  /** Статус машины и мини-чипы направлений (полное имя — в подсказке). Счётчики рейсов — только в подсказке ячейки. */
+  /** Точка статуса перед номером (компактный вид): цвет статуса, подпись — в подсказке. */
+  const statusDot = badge ? (
+    <span
+      data-tl-status-dot={badge.label}
+      className="w-2 h-2 rounded-full shrink-0"
+      style={{ background: badge.dot }}
+      title={`${badge.label} · ${badge.title}`}
+      aria-label={badge.label}
+    />
+  ) : (
+    <span className="w-2 h-2 shrink-0" aria-hidden="true" />
+  );
+  const statusChips = (withBadge: boolean) => (
+    <>
+      {withBadge && badge ? (
+        <span
+          className="inline-flex items-center gap-1 h-[14px] rounded-full px-1.5 py-0 text-[9px] leading-[14px] font-semibold whitespace-nowrap shrink-0"
+          style={{ background: badge.bg, color: badge.fg }}
+          title={badge.title}
+        >
+          <span className="w-1 h-1 rounded-full" style={{ background: badge.dot }} aria-hidden="true" />
+          {badge.label}
+        </span>
+      ) : null}
+      {row.directions.slice(0, 2).map((d) => {
+        const dc = directionChipColors(d.color);
+        return (
+          <span
+            key={d.id}
+            data-tl-dir-chip={d.name}
+            className="inline-flex items-center h-[14px] rounded-full px-1.5 text-[9px] leading-[14px] font-semibold shrink-0 select-none"
+            style={{ background: dc.bg, border: `1px solid ${dc.border}`, color: dc.text }}
+            title={`Направление: ${d.name}${d.code ? ` (${d.code})` : ''}`}
+          >
+            {d.code}
+          </span>
+        );
+      })}
+      {row.directions.length > 2 ? (
+        <span className="text-[9px] leading-[12px] text-[var(--tl-text-dim)] shrink-0 tabular-nums" title={row.directions.map((d) => d.name).join(', ')}>
+          +{row.directions.length - 2}
+        </span>
+      ) : null}
+    </>
+  );
+  /** Тревоги машины: расхождения учёта выезда и предупреждения данных (текст — в подсказке). */
+  const alertIcons = (
+    <>
+      {ovAlertTitles.length ? (
+        <span data-tl-overlap-indicator="1" data-tl-car={row.carKey} className="inline-flex items-center" title={ovNote} aria-label={ovNote}>
+          <CalendarClock className="w-3 h-3" style={{ color: '#B45309' }} aria-hidden="true" />
+        </span>
+      ) : null}
+      {row.warnings.length ? (
+        <span title={warnTitle} className="inline-flex" aria-label={warnTitle}>
+          <AlertTriangle className="w-3 h-3" style={{ color: CLR.warn }} aria-hidden="true" />
+        </span>
+      ) : null}
+    </>
+  );
 
   return (
     <>
@@ -2457,17 +2552,26 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         title={cellTitle}
       >
         <div className="flex items-center justify-between gap-1.5 h-full">
-          <button
-            type="button"
-            onClick={() => onOpenCar(row.carKey)}
-            title={`${cellTitle}\n\nОбзор рейсов и периодов машины`}
-            className={`text-[11px] leading-[13px] font-semibold truncate text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] rounded-sm ${rowHover ? 'text-[var(--accent-ink)]' : 'text-[var(--tl-text-strong)] hover:text-[var(--accent-ink)]'}`}
-          >
-            {formatPlate(row.carNumber)}
-          </button>
-          <span className="text-[8px] leading-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--tl-text-dim)] shrink-0 select-none">
-            план
+          <span className="flex items-center gap-1.5 min-w-0">
+            {detailed ? null : statusDot}
+            <button
+              type="button"
+              onClick={() => onOpenCar(row.carKey)}
+              title={`${cellTitle}\n\nОбзор рейсов и периодов машины`}
+              className={`text-[11px] leading-[13px] font-semibold truncate text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] rounded-sm ${rowHover ? 'text-[var(--accent-ink)]' : 'text-[var(--tl-text-strong)] hover:text-[var(--accent-ink)]'}`}
+            >
+              {formatPlate(row.carNumber)}
+            </button>
+            {/* Компактный вид: точка статуса перед номером, код направления после. */}
+            {detailed ? null : statusChips(false)}
           </span>
+          {detailed ? (
+            <span className="text-[8px] leading-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--tl-text-dim)] shrink-0 select-none">
+              план
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 shrink-0">{alertIcons}</span>
+          )}
         </div>
       </div>
       <div
@@ -2475,8 +2579,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         data-tl-car={row.carKey}
         onMouseEnter={onRowEnter}
         onMouseLeave={onRowLeave}
-        className="relative border-b border-[var(--tl-hairline-faint)]"
-        style={{ width: W, height: planH, backgroundColor: laneRowBg, ...laneBg }}
+        className={`relative ${detailed ? 'border-b border-[var(--tl-hairline-faint)]' : ''}`}
+        style={{ width: W, height: planH, backgroundColor: laneRowBg, ...laneBg, ...laneTypeVars(planBandH) }}
       >
         {bgPlane('bg', 0.75)}
         {/* Полоса содержимого дорожки «План»: своя (естественная) высота
@@ -2664,73 +2768,28 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         style={{ zIndex: TL_Z.colCell, height: factH, width: carColW, minWidth: carColW, background: cellBg, borderRightColor: 'var(--tl-col-edge)', borderBottomColor: 'var(--tl-hairline)' }}
         title={cellTitle}
       >
-        <div className="flex items-center justify-between gap-1.5 h-full">
-          <span className="flex items-center gap-1.5 min-w-0">
-            {badge ? (
-              <span
-                className="inline-flex items-center gap-1 h-[14px] rounded-full px-1.5 py-0 text-[9px] leading-[14px] font-semibold whitespace-nowrap shrink-0"
-                style={{ background: badge.bg, color: badge.fg }}
-                title={badge.title}
-              >
-                <span className="w-1 h-1 rounded-full" style={{ background: badge.dot }} aria-hidden="true" />
-                {badge.label}
-              </span>
-            ) : null}
-            {/* Мини-чипы направлений машины (приглушённая палитра; полное имя — в подсказке) */}
-            {row.directions.slice(0, 2).map((d) => {
-              const dc = directionChipColors(d.color);
-              return (
-                <span
-                  key={d.id}
-                  data-tl-dir-chip={d.name}
-                  className="inline-flex items-center gap-0.5 h-[14px] rounded-full px-1.5 text-[9px] leading-[14px] font-semibold shrink-0 select-none"
-                  style={{ background: dc.bg, border: `1px solid ${dc.border}`, color: dc.text }}
-                  title={`Направление: ${d.name}${d.code ? ` (${d.code})` : ''}`}
-                >
-                  <span className="w-1 h-1 rounded-full" style={{ background: dc.solid }} aria-hidden="true" />
-                  {d.code}
-                </span>
-              );
-            })}
-            {row.directions.length > 2 ? (
-              <span className="text-[9px] leading-[12px] text-[var(--tl-text-dim)] shrink-0 tabular-nums" title={row.directions.map((d) => d.name).join(', ')}>
-                +{row.directions.length - 2}
-              </span>
-            ) : null}
-            {row.empty ? (
-              <span className="text-[9px] leading-[11px] text-[var(--tl-text-dim)] truncate">Нет рейсов в выбранном периоде</span>
-            ) : countsText ? (
-              <span className="text-[9px] leading-[11px] text-[var(--tl-text-dim)] truncate tabular-nums">{countsText}</span>
-            ) : null}
-          </span>
-          <span className="flex items-center gap-1 shrink-0">
-            {ovAlertTitles.length ? (
-              <span
-                data-tl-overlap-indicator="1"
-                data-tl-car={row.carKey}
-                className="inline-flex items-center"
-                title={ovNote}
-                aria-label={ovNote}
-              >
-                <CalendarClock className="w-3 h-3" style={{ color: '#B45309' }} aria-hidden="true" />
-              </span>
-            ) : null}
-            {row.warnings.length ? (
-              <span title={warnTitle} className="inline-flex" aria-label={warnTitle}>
-                <AlertTriangle className="w-3 h-3" style={{ color: CLR.warn }} aria-hidden="true" />
-              </span>
-            ) : null}
-            <span className="text-[8px] leading-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--tl-text-dim)] select-none">факт</span>
-          </span>
-        </div>
+        {detailed ? (
+          <div className="flex items-center justify-between gap-1.5 h-full">
+            <span className="flex items-center gap-1.5 min-w-0">
+              {statusChips(true)}
+              {row.empty ? (
+                <span className="text-[9px] leading-[11px] text-[var(--tl-text-dim)] truncate">Нет рейсов в выбранном периоде</span>
+              ) : null}
+            </span>
+            <span className="flex items-center gap-1 shrink-0">
+              {alertIcons}
+              <span className="text-[8px] leading-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--tl-text-dim)] select-none">факт</span>
+            </span>
+          </div>
+        ) : null}
       </div>
       <div
         data-lane="fact"
         data-tl-car={row.carKey}
         onMouseEnter={onRowEnter}
         onMouseLeave={onRowLeave}
-        className="relative border-b border-[var(--tl-hairline)]"
-        style={{ width: W, height: factH, backgroundColor: laneRowBg, ...laneBg }}
+        className={`relative border-b border-[var(--tl-hairline)] ${detailed ? '' : 'tl-compact-fact'}`}
+        style={{ width: W, height: factH, backgroundColor: laneRowBg, ...laneBg, ...laneTypeVars(factBandH) }}
       >
         {bgPlane('fbg', 0.6)}
         {/* То же для подстроки «Факт»: содержимое — в полосе factBandH,
@@ -2749,7 +2808,9 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 ),
           )}
           {factBz.marks.map((m) => renderBzMark(m, 'fbm', factSec))}
-          {factFills.map((f) => renderStageFill(f, 'ff', factSec, 'fact'))}
+          {/* Значки этапов в факте — только в «Подробно»: в компактном виде они
+              уже стоят на полосе плана и окрашены по сроку. */}
+          {detailed ? factFills.map((f) => renderStageFill(f, 'ff', factSec, 'fact')) : null}
           {row.factItems.map((it, idx) => {
             if (it.kind === 'handover') return renderHandover(it, `fh${idx}`);
             const p = it.kind === 'event' ? pos(it.day, it.day) : pos(it.a, it.b);
@@ -2769,7 +2830,10 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   key: `f${idx}`,
                   attrKind: 'bar',
                   kind: 'fact',
-                  color: { bg: firstColor.bg, border: firstColor.border, text: firstColor.text },
+                  // Компактный вид: линия без обводки — цвет дают участки статуса.
+                  color: detailed
+                    ? { bg: firstColor.bg, border: firstColor.border, text: firstColor.text }
+                    : { bg: STATUS_LINE_COLORS.none.color, border: 'transparent', text: firstColor.text },
                   left: prF.left,
                   width: prF.width,
                   lane: lanes.lane,
@@ -2802,7 +2866,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                   },
                   pre: (
                     <>
-                      {factSegEls(it.segments, prF.left, prF.width)}
+                      {detailed ? factSegEls(it.segments, prF.left, prF.width) : statusEls(it.status, prF.left, prF.width)}
                       {adjF?.overlap ? (
                         <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
                       ) : null}
@@ -2859,9 +2923,30 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                     'data-bar-frac-b': adjN && adjN.fracB !== 1 ? `${adjN.fracB}` : undefined,
                     'data-overlap': adjN?.overlap ? '1' : undefined,
                   },
-                  pre: adjN?.overlap ? (
-                    <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
-                  ) : null,
+                  pre: (
+                    <>
+                      {/* Компактный вид: плановое начало прошло, а факта нет — это
+                          просрочка, красная со дня после планового начала до
+                          сегодня; будущая часть остаётся серым пунктиром. */}
+                      {!detailed && Math.min(today, it.b) > it.a
+                        ? statusEls(
+                            [
+                              {
+                                a: it.a + 1,
+                                b: Math.min(today, it.b),
+                                state: 'late',
+                                reason: `Просрочка ${Math.min(today, it.b) - it.a} дн. · плановое начало ${fmtDM(it.a)} прошло, фактических данных нет`,
+                              },
+                            ],
+                            prN.left,
+                            prN.width,
+                          )
+                        : null}
+                      {adjN?.overlap ? (
+                        <span aria-hidden="true" data-overlap-hatch="1" className="absolute inset-0 pointer-events-none" style={{ background: conflictHatch }} />
+                      ) : null}
+                    </>
+                  ),
                   labelText: prN.width > 90 ? 'Факт не указан' : undefined,
                   obstacles: factLabelObstacles,
                 });
@@ -3065,6 +3150,23 @@ export default function TimelineGrid({
    * колонки «Автомобили» выше). Ниже естественной высоты содержимого дорожка не
    * сжимается — это считает TimelineCarRow (band/offset).
    */
+  /** «Подробно»: план и факт отдельными подстроками. По умолчанию — компактный
+   *  вид (одна строка на машину, факт — тонкая линия статуса под планом). */
+  const [detailed, setDetailed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(DETAILED_STORAGE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const changeDetailed = useCallback((v: boolean) => {
+    setDetailed(v);
+    try {
+      localStorage.setItem(DETAILED_STORAGE_KEY, v ? '1' : '0');
+    } catch {
+      /* недоступное хранилище — выбор действует до перезагрузки */
+    }
+  }, []);
   const [rowHPref, setRowHPref] = useState<number>(() => {
     try {
       const v = Number(localStorage.getItem(ROWH_STORAGE_KEY));
@@ -3511,6 +3613,7 @@ export default function TimelineGrid({
 
   /** Попап «Обозначения» (компактная легенда): только состояние отображения. */
   const [legendOpen, setLegendOpen] = useState(false);
+  const [legendAlignLeft, setLegendAlignLeft] = useState(false);
   const legendRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!legendOpen) return;
@@ -3534,6 +3637,30 @@ export default function TimelineGrid({
     };
   }, [legendOpen]);
 
+  /** Меню «Вид»: редкие настройки отображения (высота строк, архив, подсветка…). */
+  const [viewOpen, setViewOpen] = useState(false);
+  const viewRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!viewOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (viewRef.current?.contains(e.target as Node)) return;
+      setViewOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setViewOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [viewOpen]);
+
   /** Точная высота липкой шапки (месяцы + дни) — столько же держат шапки групп. */
   const headH = colW >= 12 ? 48 : 42;
 
@@ -3542,13 +3669,14 @@ export default function TimelineGrid({
    *  названия, цвета и значки не расходятся с дизайном полос. */
   const legendItems = buildLegendItems(directions);
 
-  const legendSwatchCls = 'inline-flex items-center justify-center w-[26px] shrink-0';
+  const legendSwatchCls = 'inline-flex items-center gap-0.5 w-[76px] shrink-0';
   const legendRowCls = 'flex items-center gap-2 min-w-0';
 
   return (
     <div className={`tl-scope flex flex-col flex-1 min-h-0`}>
-      {/* Панель управления: спокойные сегменты — навигация, масштаб, вид и легенда */}
-      <div className="flex flex-wrap items-center gap-2 pb-3">
+      {/* Панель управления: спокойные сегменты — навигация, масштаб, вид и легенда.
+          Боковые отступы — как у шапки раздела; от края до края идёт только сетка. */}
+      <div className="flex flex-wrap items-center gap-2 px-6 sm:px-8 pb-3">
         <div className={barSegment}>
           <button type="button" data-nav="month-prev" className={navBtnIcon} title="Предыдущий месяц" aria-label="Предыдущий месяц" onClick={() => shiftMonth(-1)}>
             <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
@@ -3567,7 +3695,7 @@ export default function TimelineGrid({
             <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
           <span className="w-px h-4 bg-[var(--tl-hairline)] mx-0.5" aria-hidden="true" />
-          <label className="flex items-center gap-1.5 text-[11px] text-[var(--tl-text)] pl-0.5 pr-0.5">
+          <label className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-[var(--tl-text)] pl-0.5 pr-0.5">
             Перейти к
             <DateInput
               className="w-[120px]"
@@ -3620,86 +3748,8 @@ export default function TimelineGrid({
           </button>
         </div>
 
-        {/* Высота строк машин: та же ОДНА настройка, что у ручки-разделителя под
-            шапкой календаря (все машины сразу), — компактный ползунок рядом с
-            масштабом. Значение = базовая высота одной дорожки (14…44 px). */}
-        <div className={barSegment} role="group" aria-label="Высота строк машин" data-ui="rowh-control">
-          <span className="text-[10px] text-[var(--tl-text-dim)] whitespace-nowrap">Строки:</span>
-          <input
-            type="range"
-            min={ROWH_MIN}
-            max={ROWH_MAX}
-            step={1}
-            value={rowHPref}
-            data-ui="rowh-slider"
-            aria-label="Высота строк машин"
-            title={`Высота строк машин: ${rowHPref}px (все строки сразу; пределы ${ROWH_MIN}–${ROWH_MAX}, двойной клик по разделителю под шапкой — ${ROWH_DEFAULT}px). Ниже ${ROWH_DEFAULT}px дорожка не сжимается: полосы и подписи не обрезаются`}
-            onChange={(e) => onRowHSliderChange(Number(e.target.value))}
-            className="w-20 md:w-24 accent-[var(--accent)] cursor-pointer"
-          />
-          <span className="text-[10px] tabular-nums text-[var(--tl-text-dim)] w-5 text-right select-none">{rowHPref}</span>
-        </div>
-
-        <span className="flex items-center gap-1.5 text-[11px] text-[var(--tl-text-dim)] px-1" data-ui="visible-range-wrap">
-          Видимый диапазон:
-          <VisibleRangeLabel scrollRef={scrollRef} vs={vs} vn={vn} colW={colW} carColW={carColW} />
-        </span>
-
-        <div className="flex flex-wrap items-center gap-2 ml-auto">
-          <div className="relative" ref={legendRef}>
-            <button
-              type="button"
-              data-ui="legend-toggle"
-              aria-expanded={legendOpen}
-              aria-haspopup="dialog"
-              onClick={() => setLegendOpen((v) => !v)}
-              title="Обозначения полос, заливок и значков"
-              className={navBtn}
-            >
-              <Palette className="w-3.5 h-3.5" aria-hidden="true" />
-              <span className="ml-1.5">Обозначения</span>
-            </button>
-            {legendOpen ? (
-              <div
-                data-ui="legend-popup"
-                role="dialog"
-                aria-label="Обозначения"
-                className="absolute right-0 top-full mt-2 w-[min(620px,92vw)] max-h-[70vh] overflow-y-auto rounded-2xl border border-[var(--tl-hairline)] bg-white shadow-[0_16px_40px_rgba(18,19,22,0.14)] p-4"
-                style={{ zIndex: TL_Z.popup }}
-              >
-                <div className="text-[11px] font-semibold text-[var(--tl-text-strong)] mb-2.5">Обозначения таймлайна</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
-                  {legendItems.map((it, i) => (
-                    <div key={i} className={legendRowCls}>
-                      <span className={legendSwatchCls}>{it.swatch}</span>
-                      <span className="text-[10px] leading-[13px] text-[var(--tl-text)] min-w-0">{it.label}</span>
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-3 pt-2.5 border-t border-[var(--tl-hairline)] text-[10px] leading-[14px] text-[var(--tl-text-dim)]">
-                  Клик по плановой или фактической полосе открывает модальное окно всего рейса; клик по названию машины — обзор её рейсов
-                  и периодов. План рейса — один акцентный цвет; факт рейса — сегменты по отставанию (зелёный — в срок, жёлтый — 1–2 дня,
-                  оранжевый — больше 2 дней, красный — критический срок нарушен или этап просрочен; штриховка и значок — вторичный признак).
-                  База и ремонт — непрерывные полосы от первого до последнего дня периода (без делений на дни): плановый простой на базе и
-                  плановое окончание базы (срок готовности) — в строке «План», фактический простой на базе (открытый — «Готовится к выезду»),
-                  ремонт и окончание ремонта — в «Факт»; окончание базы и дата ремонта заливают всю ячейку дня, при пересечении с этапами день
-                  делится на кликабельные секции — всё видно и открывается. Круги рейса: «×2»/«×3» в начале полосы (число
-                  кругов у рейса; задаётся полем «Круги» в окне рейса и в «Плане дохода»), засечки с номерами — границы кругов,
-                  если этапы распределены по кругам; подсказка — число кругов и даты каждого.
-                  Прокрутка — тачпад, Shift+колесо, полоса; масштаб — «−/+/ползунок» или Ctrl+колесо над календарём (дата под курсором
-                  остаётся на месте). Прокрутка догружает даты влево и вправо; выходные подсвечены фоном. Границу колонки «Автомобили»
-                  можно перетаскивать (двойной клик — вернуть ширину по умолчанию).
-                  Высота ВСЕХ строк машин сразу — разделитель под шапкой календаря или ползунок «Строки» в панели
-                  (двойной клик по разделителю — вернуть по умолчанию); содержимое дорожек остаётся по центру.
-                </p>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Направления: мультивыбор чипами (только скрывает/подсвечивает —
-              данные рейсов не меняются) + режим «Раскрасить по направлению». */}
-          <div className={barSegment} data-ui="dir-filter">
-            <span className="text-[10px] text-[var(--tl-text-dim)]">Направления:</span>
+        {/* Направления: мультивыбор чипами (только скрывает рейсы — данные не меняются). */}
+        <div className={barSegment} data-ui="dir-filter" role="group" aria-label="Фильтр по направлениям">
             {directions.map((d) => {
               const on = !dirFilter || dirFilter.includes(d.name);
               const pressed = !!dirFilter && dirFilter.includes(d.name);
@@ -3733,97 +3783,202 @@ export default function TimelineGrid({
                 </button>
               );
             })}
-            <span className="w-px h-4 bg-[var(--tl-hairline)] mx-0.5" aria-hidden="true" />
-            {onAddDirection ? (
-              <button
-                type="button"
-                data-ui="add-direction"
-                onClick={onAddDirection}
-                title="Добавить вариант направления (название + короткий код, например LT) — появится в переключателе рейсов"
-                className="inline-flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-medium border border-[var(--tl-hairline)] bg-white text-[var(--tl-text)] hover:text-[var(--tl-text-strong)] hover:bg-[#F3F4F6] transition-colors cursor-pointer"
-              >
-                <Plus className="w-3 h-3" aria-hidden="true" />
-                Направление
-              </button>
-            ) : null}
-            <label
-              className="flex items-center gap-1.5 text-[11px] text-[var(--tl-text)] cursor-pointer select-none"
-              title="Подсветка: полосы рейсов окрашиваются в приглушённый цвет направления (данные не меняются)"
+        </div>
+
+        {/* Справа: вид строк, меню «Вид», обозначения и полный экран — одна строка. */}
+        <div className="flex items-center gap-2 ml-auto">
+          <label
+            className={`${navBtn} gap-1.5 select-none`}
+            title="План и факт отдельными подстроками, со значками этапов в факте. Без галочки — одна строка на машину: полоса плана и линия статуса под ней"
+          >
+            <input
+              type="checkbox"
+              data-ui="detailed-view"
+              checked={detailed}
+              onChange={(e) => changeDetailed(e.target.checked)}
+              className="w-3.5 h-3.5 rounded border-[#D1D5DB] accent-[var(--accent)] cursor-pointer"
+            />
+            Подробно
+          </label>
+
+          {/* Меню «Вид»: редкие настройки отображения — панель остаётся одной строкой. */}
+          <div className="relative" ref={viewRef}>
+            <button
+              type="button"
+              data-ui="view-menu-toggle"
+              aria-expanded={viewOpen}
+              aria-haspopup="dialog"
+              onClick={() => setViewOpen((v) => !v)}
+              title="Высота строк, раскраска, архив, подсветка столбца"
+              className={navBtn}
             >
-              <input
-                type="checkbox"
-                data-ui="paint-by-direction"
-                checked={paintByDirection}
-                onChange={(e) => onPaintByDirectionChange(e.target.checked)}
-                className="w-3.5 h-3.5 rounded border-[#D1D5DB] accent-[var(--accent)] cursor-pointer"
-              />
-              Раскрасить по направлению
-            </label>
+              <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+              <span className="ml-1.5">Вид</span>
+              <ChevronDown className="w-3 h-3 ml-1" aria-hidden="true" />
+            </button>
+            {viewOpen ? (
+              <div
+                data-ui="view-menu"
+                role="dialog"
+                aria-label="Настройки вида"
+                className="absolute right-0 top-full mt-2 w-72 rounded-2xl border border-[var(--tl-hairline)] bg-white shadow-[0_16px_40px_rgba(18,19,22,0.14)] p-3.5 flex flex-col gap-3"
+                style={{ zIndex: TL_Z.popup }}
+              >
+                {/* Высота строк машин: та же ОДНА настройка, что у ручки-разделителя
+                    под шапкой календаря (все машины сразу). */}
+                <div className="flex flex-col gap-1.5" role="group" aria-label="Высота строк машин" data-ui="rowh-control">
+                  <div className="flex items-center justify-between text-[12px] text-[var(--tl-text-strong)]">
+                    Высота строк
+                    <span className="text-[11px] tabular-nums text-[var(--tl-text-dim)]">{rowHPref} px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={ROWH_MIN}
+                    max={ROWH_MAX}
+                    step={1}
+                    value={rowHPref}
+                    data-ui="rowh-slider"
+                    aria-label="Высота строк машин"
+                    title={`Высота строк машин: ${rowHPref}px (все строки сразу; двойной клик по разделителю под шапкой — ${ROWH_DEFAULT}px)`}
+                    onChange={(e) => onRowHSliderChange(Number(e.target.value))}
+                    className="w-full accent-[var(--accent)] cursor-pointer"
+                  />
+                </div>
+                <div className="h-px bg-[var(--tl-hairline)]" aria-hidden="true" />
+                <label className="flex items-center gap-2 text-[12px] text-[var(--tl-text-strong)] cursor-pointer select-none" title="Полосы рейсов окрашиваются в приглушённый цвет направления (данные не меняются)">
+                  <input
+                    type="checkbox"
+                    data-ui="paint-by-direction"
+                    checked={paintByDirection}
+                    onChange={(e) => onPaintByDirectionChange(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-[#D1D5DB] accent-[var(--accent)] cursor-pointer"
+                  />
+                  Раскрасить по направлению
+                </label>
+                <label className="flex items-center gap-2 text-[12px] text-[var(--tl-text-strong)] cursor-pointer select-none" title="Архивные рейсы плана дохода и архивные записи учёта выезда (база, ремонт)">
+                  <input
+                    type="checkbox"
+                    data-ui="show-archived"
+                    checked={showArchived}
+                    onChange={(e) => onShowArchivedChange(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-[#D1D5DB] accent-[var(--accent)] cursor-pointer"
+                  />
+                  Показывать архивные данные
+                </label>
+                <label className="flex items-center gap-2 text-[12px] text-[var(--tl-text-strong)] cursor-pointer select-none" title="При наведении подсвечиваются строка машины и столбец дня. Настройка сохраняется в вашем профиле">
+                  <input
+                    type="checkbox"
+                    data-ui="column-highlight"
+                    checked={columnHighlight}
+                    onChange={(e) => onColumnHighlightChange(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-[#D1D5DB] accent-[var(--accent)] cursor-pointer"
+                  />
+                  Подсветка столбца
+                </label>
+                {onAddDirection ? (
+                  <button
+                    type="button"
+                    data-ui="add-direction"
+                    onClick={() => {
+                      setViewOpen(false);
+                      onAddDirection();
+                    }}
+                    title="Добавить вариант направления (название + короткий код, например LT)"
+                    className="inline-flex items-center gap-1.5 self-start text-[12px] text-[var(--accent-ink)] hover:underline cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                    Добавить направление
+                  </button>
+                ) : null}
+                <div className="h-px bg-[var(--tl-hairline)]" aria-hidden="true" />
+                <span className="flex flex-wrap items-center gap-1 text-[11px] text-[var(--tl-text-dim)]" data-ui="visible-range-wrap">
+                  На экране:
+                  <VisibleRangeLabel scrollRef={scrollRef} vs={vs} vn={vn} colW={colW} carColW={carColW} />
+                </span>
+              </div>
+            ) : null}
           </div>
 
-          <div className={barSegment}>
-            <label className="flex items-center gap-1.5 text-[11px] text-[var(--tl-text)] cursor-pointer select-none" title="Единый переключатель: архивные рейсы плана дохода и архивные записи учёта выезда (база, ремонт)">
-              <input
-                type="checkbox"
-                data-ui="show-archived"
-                checked={showArchived}
-                onChange={(e) => onShowArchivedChange(e.target.checked)}
-                className="w-3.5 h-3.5 rounded border-[#D1D5DB] accent-[var(--accent)] cursor-pointer"
-              />
-              Показывать архивные данные
-            </label>
-            <span className="w-px h-4 bg-[var(--tl-hairline)] mx-0.5" aria-hidden="true" />
-            {/* Перекрёстная подсветка клетки дня: строка + столбец дня, день в
-                шапке и метка даты у курсора. Настройка пользователя (users_list). */}
-            <label
-              className="flex items-center gap-1.5 text-[11px] text-[var(--tl-text)] cursor-pointer select-none"
-              title="При наведении подсвечиваются строка машины и столбец дня (с датой в шапке и меткой у курсора). Настройка сохраняется в вашем профиле"
+          <div className="relative" ref={legendRef}>
+            <button
+              type="button"
+              data-ui="legend-toggle"
+              aria-expanded={legendOpen}
+              aria-haspopup="dialog"
+              onClick={() => {
+                // Попап открывается в ту сторону, где хватает места: панель
+                // переносится, и кнопка бывает и у левого, и у правого края.
+                const r = legendRef.current?.getBoundingClientRect();
+                setLegendAlignLeft(!!r && r.left + 620 <= window.innerWidth - 8);
+                setLegendOpen((v) => !v);
+              }}
+              title="Обозначения полос, заливок и значков"
+              className={navBtn}
             >
-              <input
-                type="checkbox"
-                data-ui="column-highlight"
-                checked={columnHighlight}
-                onChange={(e) => onColumnHighlightChange(e.target.checked)}
-                className="w-3.5 h-3.5 rounded border-[#D1D5DB] accent-[var(--accent)] cursor-pointer"
-              />
-              Подсветка столбца
-            </label>
-            <span className="w-px h-4 bg-[var(--tl-hairline)] mx-0.5" aria-hidden="true" />
-            {/* Полный экран: рабочая область раскрывается на всё окно (тот же таймлайн,
-                без копии). Выход — эта же кнопка или Escape. */}
-            {fullscreen ? (
-              <button
-                type="button"
-                data-ui="fullscreen-exit"
-                onClick={onToggleFullscreen}
-                title="Выйти из полноэкранного режима (Escape)"
-                aria-label="Выйти из полноэкранного режима"
-                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-[#121316] text-white hover:bg-black transition-colors cursor-pointer"
+              <Palette className="w-3.5 h-3.5" aria-hidden="true" />
+              <span className="ml-1.5">Обозначения</span>
+            </button>
+            {legendOpen ? (
+              <div
+                data-ui="legend-popup"
+                role="dialog"
+                aria-label="Обозначения"
+                className={`absolute ${legendAlignLeft ? 'left-0' : 'right-0'} top-full mt-2 w-[min(620px,92vw)] max-h-[70vh] overflow-y-auto rounded-2xl border border-[var(--tl-hairline)] bg-white shadow-[0_16px_40px_rgba(18,19,22,0.14)] p-4`}
+                style={{ zIndex: TL_Z.popup }}
               >
-                <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
-                Выйти из полноэкранного режима
-              </button>
-            ) : (
-              <button
-                type="button"
-                data-ui="fullscreen-enter"
-                onClick={onToggleFullscreen}
-                title="На весь экран"
-                aria-label="На весь экран"
-                className={navBtn}
-              >
-                <Maximize2 className="w-3.5 h-3.5" aria-hidden="true" />
-                <span className="ml-1.5 hidden sm:inline">На весь экран</span>
-              </button>
-            )}
+                <div className="text-[11px] font-semibold text-[var(--tl-text-strong)] mb-2.5">Обозначения таймлайна</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
+                  {legendItems.map((it, i) => (
+                    <div key={i} className={legendRowCls}>
+                      <span className={legendSwatchCls}>{it.swatch}</span>
+                      <span className="text-[10px] leading-[13px] text-[var(--tl-text)] min-w-0">{it.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <ul className="mt-3 pt-2.5 border-t border-[var(--tl-hairline)] space-y-1 text-[10px] leading-[14px] text-[var(--tl-text-dim)]">
+                  <li>Клик по полосе — окно рейса, по значку этапа — этап в окне рейса, по номеру машины — обзор её рейсов.</li>
+                  <li>Без «Подробно» факт — тонкая линия под планом: зелёная — по плану, оранжевая — срок подходит, красная — период просрочки. С «Подробно» — отдельная строка.</li>
+                  <li>Масштаб — ползунок или Ctrl+колесо; высота строк — ползунок «Строки» или разделитель под шапкой (двойной клик — сброс).</li>
+                </ul>
+              </div>
+            ) : null}
           </div>
+
+          {/* Полный экран: рабочая область раскрывается на всё окно (тот же таймлайн,
+              без копии). Выход — эта же кнопка или Escape. */}
+          {fullscreen ? (
+            <button
+              type="button"
+              data-ui="fullscreen-exit"
+              onClick={onToggleFullscreen}
+              title="Выйти из полноэкранного режима (Escape)"
+              aria-label="Выйти из полноэкранного режима"
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[11px] font-semibold bg-[#121316] text-white hover:bg-black transition-colors cursor-pointer"
+            >
+              <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
+              Выйти
+            </button>
+          ) : (
+            <button
+              type="button"
+              data-ui="fullscreen-enter"
+              onClick={onToggleFullscreen}
+              title="На весь экран"
+              aria-label="На весь экран"
+              className={navBtnIcon}
+            >
+              <Maximize2 className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Обёртка области календаря: сетка — ОДИН контейнер прокрутки, поверх —
           регулируемая граница колонки «Автомобили» (resize-handle). Сетка
-          тянется по высоте (flex-1): внешней прокрутки страницы нет. */}
-      <div className="relative flex-1 min-h-0 flex flex-col">
+          тянется по высоте (flex-1): внешней прокрутки страницы нет. На телефоне
+          панели над сеткой занимают почти весь экран, поэтому сетка получает
+          собственную высоту, а страница прокручивается до неё. */}
+      <div className="relative flex-1 min-h-0 flex flex-col max-md:flex-none max-md:h-[75vh]">
       <div
         ref={scrollRef}
         onScroll={handleScroll}
@@ -3922,7 +4077,8 @@ export default function TimelineGrid({
                         vn={vn}
                         bg={bg}
                         today={today}
-                        zebra={idx % 2 === 1}
+                        // Без «зебры»: строки разделены тонкой линией, наведение подсвечивает строку.
+                        zebra={false}
                         stageTypes={stageTypes}
                         selectedTripKey={selectedTripKey}
                         paintByDirection={paintByDirection}
@@ -3936,6 +4092,7 @@ export default function TimelineGrid({
                         canDragPlan={canDragPlan}
                         canDragManual={canDragManual}
                         rowH={rowHPref}
+                        detailed={detailed}
                       />
                     ))
                   : null}

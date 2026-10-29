@@ -107,7 +107,9 @@ export const pdService = {
       dbService.logAction(user, role, 'Создание плана рейса', 'PlanDohod', newRef.key!, `Создан план рейса для ТС ${trip.carNumber}`);
     } catch (e) {
       console.error("Error creating trip in Firebase:", e);
-      alert("Ошибка при сохранении в БД: " + (e as Error).message);
+      // Ошибку показывает вызывающий экран (тостом): без проброса форма
+      // сообщала бы об успешном сохранении.
+      throw e;
     }
   },
 
@@ -209,7 +211,7 @@ export const pdService = {
       dbService.logAction(user, role, 'Обновление плана рейса', 'PlanDohod', id, `Обновлен план рейса для ТС ${tripInfo.carNumber || id}`);
     } catch (e) {
       console.error("Error updating trip in Firebase:", e);
-      alert("Ошибка при обновлении в БД: " + (e as Error).message);
+      throw e;
     }
   },
 

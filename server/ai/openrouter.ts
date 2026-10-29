@@ -4,7 +4,7 @@
  * Поддерживает retry, fallback-модели, кэширование, аудит.
  */
 
-import { adminDb } from "../../firebaseAdmin.ts";
+import { adminDb } from "../firebaseAdmin.ts";
 
 const OPENROUTER_API = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_MODEL = "deepseek/deepseek-v4-flash";

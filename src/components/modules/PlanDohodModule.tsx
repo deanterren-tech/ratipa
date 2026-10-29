@@ -1,5 +1,6 @@
 import React, {useState, useEffect, useRef, useMemo, useCallback} from 'react'
 import {useToast} from '../ToastProvider'
+import { useDialog } from '../DialogProvider';
 import { formatToTitleCase } from '../../utils/format'
 import NotebookStatusPills from './NotebookStatusPills'
 import {Virtuoso} from 'react-virtuoso'
@@ -72,6 +73,7 @@ interface PlanDohodModuleProps {
 export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const { toast: addToast } = useToast();
+  const { showConfirm } = useDialog();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tableScale, setTableScale] = useState<number>(() => {
     const scaleKey = `pd_table_scale_${user.uid || user.name || 'default'}`;
@@ -1756,8 +1758,8 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     setPlReferenceCurrency(pl.referenceCurrency || "EUR");
   };
 
-  const deletePotentialLoad = (id: string) => {
-    if (confirm("Удалить просчет?")) {
+  const deletePotentialLoad = async (id: string) => {
+    if (await showConfirm("Просчёт будет удалён из списка.", "Удалить просчёт?", { variant: "danger" })) {
       setPotentialLoads(potentialLoads.filter((p) => p.id !== id));
       if (plEditingId === id) {
         // Stop editing if deleted
@@ -1778,10 +1780,11 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
     }
   };
 
-  const applyPlToMain = (pl: PotentialLoad) => {
+  const applyPlToMain = async (pl: PotentialLoad) => {
     if (
-      confirm(
-        "Осторожно: Это заменит текущие плечи в основной форме. Продолжить?",
+      await showConfirm(
+        "Текущие плечи в основной форме будут заменены плечами из просчёта.",
+        "Перенести просчёт в форму?",
       )
     ) {
       setLegs(pl.legs);
@@ -3507,7 +3510,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
         {archived && renderKpiSummary(false)}
 
         {/* Table Headers */}
-        <div className="hidden xl:flex pl-4 pr-[112px] pb-3 border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider self-start w-full cursor-pointer select-none">
+        <div className="hidden xl:flex pl-4 pr-[152px] pb-3 border-b border-[#E5E7EB] text-[11px] font-semibold text-[#6B7280] tracking-wider self-start w-full cursor-pointer select-none">
           <div
             className="min-w-[200px] hover:text-[#121316] transition-colors flex items-center gap-1"
             onClick={() => handleSort("carNumber")}
@@ -3521,7 +3524,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
             Даты {renderSortIndicator("dateStart")}
           </div>
           <div className="flex-1 min-w-[220px]">Маршрут</div>
-          <div className="w-[540px] shrink-0 flex flex-col gap-1">
+          <div className="w-[380px] 2xl:w-[540px] shrink-0 flex flex-col gap-1">
             <div className="grid grid-cols-3 gap-x-4 text-right">
               <span
                 className="hover:text-[#121316] transition-colors flex items-center gap-1 justify-end whitespace-nowrap"
@@ -3622,7 +3625,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 key={trip.id}
                 data-trip-id={trip.id}
                 onClick={() => loadTripToForm(trip)}
-                className={`car-strip-item bg-white rounded-2xl p-4 border transition-colors duration-150 group relative hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:shadow-sm lg:bg-transparent lg:rounded-none lg:border-x-0 lg:border-b-0 lg:border-t-[#E5E7EB] lg:px-4 lg:py-4 lg:hover:shadow-none flex flex-col gap-3.5 xl:flex-row xl:items-start xl:gap-x-5 xl:gap-y-0 xl:py-4 xl:pr-[112px] cursor-pointer w-full ${isHighlighted ? "border-amber-400 ring-2 ring-amber-400/20" : "border-[#E5E7EB]"}`}
+                className={`car-strip-item bg-white rounded-2xl p-4 border transition-colors duration-150 group relative hover:border-[#D1D5DB] hover:bg-[#F9FAFB] hover:shadow-sm lg:bg-transparent lg:rounded-none lg:border-x-0 lg:border-b-0 lg:border-t-[#E5E7EB] lg:px-4 lg:py-4 lg:hover:shadow-none flex flex-col gap-3.5 xl:flex-row xl:items-start xl:gap-x-5 xl:gap-y-0 xl:py-4 xl:pr-[152px] cursor-pointer w-full ${isHighlighted ? "border-amber-400 ring-2 ring-amber-400/20" : "border-[#E5E7EB]"}`}
                 draggable={true}
                 onDragStart={(e) => {
                   e.dataTransfer.setData("tripId", trip.id);
@@ -3637,7 +3640,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 }}
               >
                 {/* Блок 1: автомобиль и направление — сверху и крупно */}
-                <div className="flex items-start justify-between gap-3 xl:block xl:min-w-[190px] xl:max-w-[240px] xl:shrink-0">
+                <div className="flex items-start justify-between gap-3 xl:block xl:min-w-[190px] xl:max-w-[200px] 2xl:max-w-[240px] xl:shrink-0">
                   <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 min-w-0">
                     <span className="text-xl font-bold tracking-tight text-[#121316] break-words">{trip.carNumber}</span>
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E7EB] bg-[#F8F9FA] px-2.5 py-1 text-[11px] font-medium text-[#4B5563]">
@@ -3786,7 +3789,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                     Прибыль, дни и прибыль в день — крупными моно-числами (образец «Зарплаты водителей»),
                     ниже — спокойная строка второстепенных показателей. Красные пороги сохранены:
                     прибыль < 3000 и прибыль в день < 100. */}
-                <div className="w-full flex flex-col gap-3 border-t border-[#E5E7EB] pt-3 xl:ml-auto xl:w-[540px] xl:shrink-0 xl:border-t-0 xl:pt-1">
+                <div className="w-full flex flex-col gap-3 border-t border-[#E5E7EB] pt-3 xl:ml-auto xl:w-[380px] 2xl:w-[540px] xl:shrink-0 xl:border-t-0 xl:pt-1">
                   <div className="grid grid-cols-3 gap-x-4 gap-y-2 xl:justify-items-end">
                     <div className="flex flex-col min-w-0">
                       <span className={`${UI.caption} leading-tight`}>Прибыль</span>
@@ -4091,12 +4094,9 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                       e.preventDefault();
                       const tripId = e.dataTransfer.getData("tripId");
                       if (tripId) {
-                        pdService.updateTrip(
-                          tripId,
-                          { currentMonth: month },
-                          user.name,
-                          user.role,
-                        );
+                        pdService
+                          .updateTrip(tripId, { currentMonth: month }, user.name, user.role)
+                          .catch((err: Error) => addToast("Не удалось перенести рейс: " + err.message, "error"));
                       }
                     }}
                     aria-pressed={archiveMonth === month}

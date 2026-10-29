@@ -594,7 +594,7 @@ export function GuideReferenceTable({ items }: { items: Array<{ swatch: React.Re
     <div className="flex flex-col gap-1.5" data-guide-reference="1">
       {items.map((it, i) => (
         <div key={i} className="flex items-center gap-2" data-guide-ref-row={i}>
-          <span className="inline-flex w-[26px] shrink-0 items-center justify-center">{it.swatch}</span>
+          <span className="inline-flex w-[76px] shrink-0 items-center gap-0.5">{it.swatch}</span>
           <span className="min-w-0 text-[10px] leading-[13px] text-[#4B5563]">{it.label}</span>
         </div>
       ))}

@@ -12,7 +12,7 @@
  */
 
 import '../server/navby/env.ts';
-import { adminDb } from '../firebaseAdmin.ts';
+import { adminDb } from '../server/firebaseAdmin.ts';
 import { TelemetryStore } from '../server/navby/store.ts';
 import { backfillCanRange, resolveCarTargets } from '../server/navby/collector.ts';
 

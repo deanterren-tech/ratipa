@@ -3,7 +3,7 @@
  * Агенты публикуют события в agent_events/, подписчики реагируют.
  */
 
-import { adminDb } from "../../firebaseAdmin.ts";
+import { adminDb } from "../firebaseAdmin.ts";
 
 export interface AgentEvent {
   type: string;

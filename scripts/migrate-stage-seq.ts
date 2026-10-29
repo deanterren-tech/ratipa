@@ -30,7 +30,7 @@
  *   npx tsx scripts/migrate-stage-seq.ts --json                # только машинный отчёт
  *   npx tsx scripts/migrate-stage-seq.ts --apply --match=probe # только пробные записи
  */
-import { adminDb } from '../firebaseAdmin.ts';
+import { adminDb } from '../server/firebaseAdmin.ts';
 import { normalizeStages } from '../src/components/modules/tripTimeline/lib/timeline';
 import { stageSeqOf, hasStageSeq } from '../src/components/modules/tripTimeline/lib/stageSchedule';
 import type { TimelineStage } from '../src/types';
