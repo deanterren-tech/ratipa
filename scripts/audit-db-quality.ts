@@ -36,7 +36,7 @@ let adminDb: any = null;
 let DATABASE_URL = '';
 
 async function loadAdmin(): Promise<void> {
-  const mod: any = await import('../firebaseAdmin.ts');
+  const mod: any = await import('../server/firebaseAdmin.ts');
   adminApp = mod.adminApp;
   adminDb = mod.adminDb;
   DATABASE_URL = mod.DATABASE_URL;
@@ -222,8 +222,8 @@ const BRANCH_NOTES: Record<string, { note: string; verdict: StructureRow['verdic
 
 function scanRefs(): { get: (name: string) => number } {
   const text = (() => {
-    const dirs = ['src', 'api', 'telegram_bot'];
-    const files = ['server.ts', 'firebaseAdmin.ts'];
+    const dirs = ['src', 'api', 'server'];
+    const files = ['server.ts'];
     const walk = (d: string): string[] => {
       const out: string[] = [];
       try {

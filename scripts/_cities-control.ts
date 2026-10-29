@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { adminDb } from '../firebaseAdmin.ts';
+import { adminDb } from '../server/firebaseAdmin.ts';
 
 const OUT = '/Users/sergei/.hermes/cache/scratch/cities2';
 const BRANCHES = [

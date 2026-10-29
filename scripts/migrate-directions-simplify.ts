@@ -15,7 +15,7 @@
  *
  * Запуск: npx tsx scripts/migrate-directions-simplify.ts
  */
-import { adminDb } from '../firebaseAdmin.ts';
+import { adminDb } from '../server/firebaseAdmin.ts';
 
 const BUILTIN_CODE_BY_NAME: Record<string, string> = { 'китай': 'CN', 'турция': 'TR' };
 const REMOVE_FIELDS = ['plannedRate', 'plannedCosts', 'plannedDays', 'bufferDays', 'fromCountry', 'toCountry'] as const;

@@ -20,7 +20,7 @@
 | `NAVBY_POLLER_ENABLED=1` | нет | запускать цикл сбора внутри `server.ts` (иначе только через скрипт/крон) |
 
 Серверные файлы `.env.local` и `.env` подхватываются автоматически
-(`server/navby/env.ts`, а также `firebaseAdmin.ts`).
+(`server/navby/env.ts`, а также `server/firebaseAdmin.ts`).
 
 ## Запуск сбора
 

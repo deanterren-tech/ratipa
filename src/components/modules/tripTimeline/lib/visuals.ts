@@ -8,7 +8,7 @@
  * в обучении и в справочнике не расходились с реальным дизайном при его правке.
  */
 import type React from 'react';
-import { CalendarClock, CircleDashed, FileInput, FileOutput, Flag, Hourglass, OctagonX, Package, PackageOpen, TriangleAlert } from 'lucide-react';
+import { CalendarClock, CircleDashed, Flag, Hourglass, OctagonX, PackageCheck, PackagePlus, Stamp, TriangleAlert } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Палитра полос (визуальная логика прототипа; цвета — единая семья заливок
@@ -124,18 +124,21 @@ export const STATUS_ICON = {
 } as const;
 
 /**
- * Иконки ТИПОВ ЭТАПОВ — одна иконка на тип, один размер (как у статусов).
- * Нужны клеткам этапов: иконка события центрируется в своей доле дня и
- * остаётся узнаваемой, когда текст не помещается (мелкий масштаб).
- * Цвет иконки — цвет текста клетки (палитра типов в lib/stageFills), значения
- * типов не меняются: незнакомые типы получают нейтральную иконку (CircleDashed).
+ * Иконки ТИПОВ ЭТАПОВ — четыре простых образа, один размер:
+ * загрузка (коробка с плюсом), граница (флажок), таможня (штамп — затаможка и
+ * растаможка одним значком, «туда/обратно» видно из порядка этапов), выгрузка
+ * (коробка с галочкой). Совмещённые этапы берут значок первой операции.
+ * Иконка центрируется в своей доле дня и остаётся узнаваемой, когда текст не
+ * помещается; незнакомые типы получают нейтральную иконку (CircleDashed).
  */
 export const STAGE_ICON: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties; 'aria-hidden'?: boolean | 'true' | 'false' }>> = {
-  load: Package,
-  cust_out: FileOutput,
+  load: PackagePlus,
+  load_cust_out: PackagePlus,
+  cust_out: Stamp,
   border: Flag,
-  cust_in: FileInput,
-  unl: PackageOpen,
+  cust_in: Stamp,
+  cust_in_unl: Stamp,
+  unl: PackageCheck,
   reserve: CalendarClock,
 };
 

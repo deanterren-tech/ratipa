@@ -1,6 +1,6 @@
 // Seed-скрипт: вносит данные по авто и водителям в RTDB.
 // Запуск (локально, с Firebase service-account в .env):
-//   FIREBASE_SERVICE_ACCOUNT="$(cat path/to/key.json)" npx tsx seedVehicles.ts
+//   FIREBASE_SERVICE_ACCOUNT="$(cat path/to/key.json)" npx tsx scripts/seed-vehicles.ts
 //
 // Что делает:
 //  - читает vehicles.seed.json (43 записи)
@@ -14,7 +14,7 @@
 // (vehicles.seed.json в .gitignore). Скрипт только пишет в облако.
 
 import { readFileSync } from "fs";
-import { adminDb } from "./firebaseAdmin.ts";
+import { adminDb } from "../server/firebaseAdmin.ts";
 
 interface SeedRow {
   tractor: string;
@@ -45,7 +45,7 @@ async function main() {
     process.exit(1);
   }
 
-  const seedPath = new URL("./vehicles.seed.json", import.meta.url);
+  const seedPath = new URL("../vehicles.seed.json", import.meta.url);
   const rows: SeedRow[] = JSON.parse(readFileSync(seedPath, "utf-8"));
 
   // Читаем существующие данные один раз (для idempotency)

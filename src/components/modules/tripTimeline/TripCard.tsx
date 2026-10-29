@@ -112,7 +112,6 @@ import {
 } from './lib/dayCellSections';
 import {
   layoutStageFills,
-  stageColorOf,
   stageFillTitle,
   stageNeighborLabel,
   stageShortName,
@@ -859,7 +858,8 @@ export function CarMiniTimeline({
     [miniFillInputs, renderVs, ve, miniFactSec],
   );
   const renderMiniFill = (f: StageFillSection, keyPrefix: string, sec: RowDaySections) => {
-    const color = stageColorOf(f.stage.type);
+    // Как на основном полотне: значок этапа прямо на полосе, без цветной клетки.
+    const iconColor = '#4B5563';
     const left = dayToX(f.day, renderVs, colW) + Math.round((f.section * colW) / f.sections);
     const right = dayToX(f.day, renderVs, colW) + Math.round(((f.section + 1) * colW) / f.sections);
     const width = Math.max(1, right - left);
@@ -889,16 +889,13 @@ export function CarMiniTimeline({
               }
             : undefined
         }
-        className={`absolute top-0 bottom-0 overflow-hidden whitespace-nowrap flex items-center justify-center ${width >= 18 ? 'px-0.5' : ''} ${clickable ? 'cursor-pointer' : ''}`}
+        className={`absolute top-0 bottom-0 overflow-hidden whitespace-nowrap flex items-center justify-center ${width >= 18 ? 'px-0.5' : ''} ${clickable ? 'cursor-pointer hover:bg-white/70 transition-colors' : ''}`}
         style={{
           zIndex: TL_Z.stage,
           left,
           width,
-          background: color.bg,
-          borderLeft: `1px solid ${color.border}`,
-          borderRight: f.section === f.sections - 1 ? `1px solid ${color.border}` : undefined,
           borderRadius: radius,
-          color: color.text,
+          color: iconColor,
           ...(f.stage.isCritical ? { outline: '1px dashed #DC2626', outlineOffset: '-1px' } : {}),
           ...(f.archived ? { opacity: 0.72 } : {}),
         }}
@@ -906,11 +903,11 @@ export function CarMiniTimeline({
       >
         {width >= 40 ? (
           <span className="inline-flex items-center gap-0.5 min-w-0 max-w-full">
-            <MiniStageIcon className={BAR_ICON_CLS} style={{ color: color.text }} aria-hidden="true" />
-            <span className="text-[8px] leading-[10px] truncate">{stageShortName(stageTypes, f.stage)}</span>
+            <MiniStageIcon className={BAR_ICON_CLS} style={{ color: iconColor }} aria-hidden="true" />
+            <span className="text-[8px] leading-[10px] font-medium truncate">{stageShortName(stageTypes, f.stage)}</span>
           </span>
         ) : width >= 10 ? (
-          <MiniStageIcon className={BAR_ICON_CLS} style={{ color: color.text }} aria-hidden="true" />
+          <MiniStageIcon className={BAR_ICON_CLS} style={{ color: iconColor }} aria-hidden="true" />
         ) : null}
       </div>
     );

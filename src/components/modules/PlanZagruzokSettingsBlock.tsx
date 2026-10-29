@@ -113,7 +113,7 @@ export default function PlanZagruzokSettingsBlock({ user }: Props) {
             </div>
             <div className="text-[10px] font-bold text-[#9CA3AF] flex items-center gap-1.5">
               <span>ID доступа:</span>
-              <code className="bg-[#F3F4F6] text-[#4B5563] px-1.5 py-0.5 rounded border border-[#E5E7EB] font-mono text-[9px] font-black">
+              <code className="bg-[#F3F4F6] text-[#4B5563] px-1.5 py-0.5 rounded border border-[#E5E7EB] font-mono text-[9px] font-semibold">
                 {`planZagruzok_${tab.id}`}
               </code>
             </div>

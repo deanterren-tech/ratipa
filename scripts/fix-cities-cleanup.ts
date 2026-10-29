@@ -45,7 +45,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { join } from 'node:path';
-import { adminDb } from '../firebaseAdmin.ts';
+import { adminDb } from '../server/firebaseAdmin.ts';
 import {
   citySlug,
   cityMatchKind,

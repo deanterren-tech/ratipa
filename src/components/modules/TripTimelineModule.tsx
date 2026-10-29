@@ -1017,13 +1017,22 @@ export default function TripTimelineModule({ user, settings }: Props) {
     ? data.events.filter((e) => plateKeyOf(e.carNumber) === plateKeyOf(openTripObj.carNumber))
     : [];
 
+  const barPad = activeTab === 'timeline' || fullscreen ? 'px-6 sm:px-8' : '';
   return (
     <ModuleShell
       title="Таймлайн рейсов"
       tabs={tabs}
       activeTab={activeTab}
-      fillHeight={activeTab === 'timeline' && !fullscreen}
-      contentClassName={activeTab === 'timeline' && !fullscreen ? 'flex-1 min-h-0 flex flex-col pt-2' : undefined}
+      fillHeight={!fullscreen}
+      // Таймлайн прокручивает свою сетку; «Статистика» и «Шаблоны» — свою
+      // область под шапкой (страница раздела на десктопе не прокручивается).
+      contentClassName={
+        fullscreen
+          ? undefined
+          : activeTab === 'timeline'
+            ? 'flex-1 min-h-0 flex flex-col pt-2'
+            : `${UI.content} flex-1 min-h-0 md:overflow-y-auto`
+      }
       onTabChange={(key) => navigate(TAB_SLUGS[key as TabId] || DEFAULT_TAB)}
       actions={
         <div className="flex items-center gap-2">
@@ -1078,15 +1087,18 @@ export default function TripTimelineModule({ user, settings }: Props) {
                 background: '#F6F7FA',
                 display: 'flex',
                 flexDirection: 'column',
-                // Полный экран — таймлайн от края до края (без пустых полей).
-                padding: 0,
+                // Полный экран — таймлайн от края до края (без пустых полей);
+                // отступ сверху только у панелей над сеткой.
+                padding: '12px 0 0',
                 overflow: 'hidden',
               }
             : undefined
         }
       >
-        {/* Вкладки диспетчеров — тот же источник и стиль, что у «Плана дохода» */}
-        <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-[#E5E7EB] mb-4">
+        {/* Вкладки диспетчеров — тот же источник и стиль, что у «Плана дохода».
+            Шаблонам фильтр не нужен; свой боковой отступ — только у таймлайна
+            (у остальных вкладок он уже есть у области содержимого). */}
+        <div className={`${activeTab === 'templates' ? 'hidden' : 'flex'} flex-wrap items-center gap-2 ${barPad} pb-3 border-b border-[#E5E7EB] mb-4`}>
           <span className={UI.caption}>Диспетчеры:</span>
           <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-0.5" role="tablist" aria-label="Вкладки диспетчеров">
             <button
@@ -1128,7 +1140,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
         {/* Месяцы архива — те же записи и правило группировки, что в «Плане дохода»
             (месяц завершения, currentMonth записи плана дохода) */}
         {showArchived && archiveMonths.length ? (
-          <div className="flex flex-wrap items-center gap-2 pb-3 mb-4 border-b border-[#E5E7EB]">
+          <div className={`flex flex-wrap items-center gap-2 ${barPad} pb-3 mb-4 border-b border-[#E5E7EB]`}>
             <span className={UI.caption} title="Рейсы сгруппированы по месяцу завершения, как в архиве «Плана дохода»">
               Архив по месяцам:
             </span>

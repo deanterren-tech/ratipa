@@ -18,3 +18,4 @@ vehicles.seed.json
 
 # бэкапы аудит-скриптов (локально)
 scripts/out/
+__pycache__/

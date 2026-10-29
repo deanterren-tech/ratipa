@@ -37,7 +37,7 @@
  */
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { adminDb } from '../firebaseAdmin.ts';
+import { adminDb } from '../server/firebaseAdmin.ts';
 import { normalizeCityName, citySlug } from '../src/utils/cityDirectory.ts';
 
 const ARGS = process.argv.slice(2);

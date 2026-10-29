@@ -22,7 +22,7 @@
 import { createReadStream, existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
-import { adminDb } from '../firebaseAdmin.ts';
+import { adminDb } from '../server/firebaseAdmin.ts';
 import { normalizeCityName } from '../src/utils/cityDirectory.ts';
 import { parseAlternateNameRow } from '../src/utils/geonames.ts';
 import { collectSources } from './cities-walk.ts';

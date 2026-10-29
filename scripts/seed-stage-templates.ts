@@ -16,7 +16,7 @@
  *
  * Запуск: npx tsx scripts/seed-stage-templates.ts  (идемпотентно)
  */
-import { adminDb } from '../firebaseAdmin.ts';
+import { adminDb } from '../server/firebaseAdmin.ts';
 
 const STARTERS: Array<{ id: string; name: string; stages: string[] }> = [
   {

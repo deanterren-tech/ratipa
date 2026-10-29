@@ -10,6 +10,7 @@ import {
   estimateLabelWidth,
   labelTextFor,
   labelVariantFor,
+  routeEndsOf,
   obstaclesFromFills,
   parseLabelSegsAttr,
   pickActiveSegment,
@@ -105,6 +106,15 @@ console.log('== 4. Ступени сокращения подписи ==');
   eq('рейс: маршрут с днями помещается — полный', labelVariantFor(400, rfull, rshort, false), 'full');
   eq('рейс: тесно — маршрут', labelVariantFor(estimateLabelWidth(rshort, false) + 2, rfull, rshort, false), 'short');
   eq('ремонт: короткая ступень не дублирует полную', labelVariantFor(80, 'Ремонт', 'Ремонт', false), 'full');
+  // длинный маршрут: тесно для всей цепочки — «откуда → куда», а не первое слово
+  const lfull = 'Гродно → Екатеринбург → Чита → Рязань → Минск / План · 31 день';
+  const lshort = 'Гродно → Екатеринбург → Чита → Рязань → Минск';
+  const needEnds = estimateLabelWidth('Гродно → Минск', false);
+  eq('длинный маршрут: тесно — «откуда → куда»', labelVariantFor(needEnds, lfull, lshort, false), 'ends');
+  eq('текст ступени «ends» — первая и последняя точки', labelTextFor('ends', lfull, lshort), 'Гродно → Минск');
+  eq('уже и для «откуда → куда» — первое слово', labelVariantFor(needEnds - 1, lfull, lshort, false), 'icon');
+  eq('кольцевой маршрут — «Минск ↔ середина»', routeEndsOf('Минск → Брест → Стамбул → Ереван → Минск'), 'Минск ↔ Стамбул');
+  eq('маршрут из двух точек не сокращается до «ends»', labelVariantFor(estimateLabelWidth('Минск → Ст', false), rfull, rshort, false), 'icon');
 }
 console.log(`\nИтог: ${passed} проверок пройдено, ${failed} провалено.`);
 if (failed > 0) process.exit(1);

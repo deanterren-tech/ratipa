@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 
 /**
- * Global Keyboard Navigation and Shortcut Handler for Ratipa CRM & ERP.
+ * Global Keyboard Navigation and Shortcut Handler for Ratipa Portal.
  * Integrates deep contextual understanding of forms, lists, tables, and modals.
  */
 export function useKeyboardShortcuts() {

@@ -2,8 +2,8 @@
  * Base Agent — реестр и базовый интерфейс агентов.
  */
 
-import { can } from "../../../permissions.ts";
-import type { AgentUser } from "../../../permissions.ts";
+import { can } from "../../permissions.ts";
+import type { AgentUser } from "../../permissions.ts";
 import { BazaAgent } from "./baza-agent.ts";
 import { FleetAgent } from "./fleet-agent.ts";
 
