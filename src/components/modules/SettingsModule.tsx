@@ -455,10 +455,10 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     }
     
     updatedDirections[formattedName] = dirCoeff;
-    // Persist into unified directories/directions (each entry = {id, name, coeff})
-    Object.entries(updatedDirections).forEach(([name, coeff]) => {
-      directoryService.saveDirItem('directions', { id: name, name, coeff: Number(coeff) || 0 }, user.name, user.role);
-    });
+    // Меняем только эту запись справочника (остальные не трогаем).
+    void directoryService
+      .saveDirectionCoeff(formattedName, Number(dirCoeff) || 0, editingDirKey, user.name, user.role)
+      .catch((err) => console.error('[Settings] saveDirectionCoeff failed:', err));
     dbService.logAction(user.name, user.role, editingDirKey ? 'Edit Direction' : 'Add Direction', 'Settings', formattedName, `${editingDirKey ? 'Обновлено' : 'Добавлено'} направление: ${formattedName} с коэф: ${dirCoeff}`);
     
     setDirName('');
@@ -471,7 +471,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
     const updatedDirections = { ...directions };
     delete updatedDirections[nameToDel];
     setDirections(updatedDirections);
-    directoryService.deleteDirItem('directions', nameToDel, user.name, user.role);
+    void directoryService.deleteDirectionByLabel(nameToDel, user.name, user.role).catch((err) => console.error('[Settings] deleteDirection failed:', err));
     dbService.logAction(user.name, user.role, 'Delete Direction', 'Settings', nameToDel, `Удалено направление: ${nameToDel}`);
     if (editingDirKey === nameToDel) {
       setDirName('');

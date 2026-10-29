@@ -1,3 +1,4 @@
+import { brandCompareKey } from '../../utils/vehicleRecordNormalize';
 import {useState, useEffect, useMemo, useRef} from 'react'
 import {useDialog} from '../DialogProvider'
 import {useToast} from '../ToastProvider'
@@ -170,6 +171,15 @@ export default function DirectoriesModule({ user, embedded = false }: Directorie
         toast('Запись с таким названием уже существует', 'error');
         return;
       }
+      // Марка — одна и та же при другом написании («Kogel» и «KOEGEL», «Mercedes» и «Mercedes-Benz»).
+      if (tab.key === 'vehicleBrands' || tab.key === 'trailerBrands') {
+        const kind = tab.key === 'vehicleBrands' ? 'vehicle' : 'trailer';
+        const same = items.find((it) => brandCompareKey(kind, String(it.key || it.name || '')) === brandCompareKey(kind, nameVal));
+        if (same) {
+          toast(`Такая марка уже есть: «${same.name || same.key}»`, 'error');
+          return;
+        }
+      }
     }
     setIsSubmitting(true);
     const rec: any = { ...draft };
@@ -197,6 +207,17 @@ export default function DirectoriesModule({ user, embedded = false }: Directorie
     if (rec.id) rec.id = normId(rec.id);
     if (rec.key) rec.key = normId(rec.key);
     if (rec[tab.idField]) rec[tab.idField] = normId(rec[tab.idField]);
+    // Правка существующей записи пишет ровно в её прежний ключ: нормализация
+    // (убирает кириллицу и знаки) раньше меняла ключ и создавала вторую запись.
+    if (editing && !editing.__new) {
+      const origKey = editing.dbKey || editing.id || editing[tab.idField] || editing.key;
+      if (origKey) {
+        const k = String(origKey);
+        rec[tab.idField] = k;
+        if (rec.id !== undefined || editing.id !== undefined) rec.id = k;
+        if (rec.key !== undefined || editing.key !== undefined) rec.key = k;
+      }
+    }
 
     try {
       directoryService.saveDirItem(tab.key, rec, user.name, user.role);
@@ -212,6 +233,14 @@ export default function DirectoriesModule({ user, embedded = false }: Directorie
 
   const handleDelete = async (it: any) => {
     const idv = it.dbKey || it.id || it[tab.idField] || it.key;
+    const usageCollection = (['vehicleBrands', 'trailerBrands', 'rateGroups', 'directions'] as const).find((c) => c === tab.key);
+    if (usageCollection) {
+      const used = await directoryService.countDirUsage(usageCollection, it);
+      if (used > 0) {
+        toast(`Нельзя удалить «${it[tab.nameField] || idv}»: используется в записях (${used}). Сначала замените значение в них.`, 'error');
+        return;
+      }
+    }
     if (await showConfirm(`Удалить «${it[tab.nameField] || idv}» из справочника?`)) {
       directoryService.deleteDirItem(tab.key, idv, user.name, user.role);
       toast('Удалено', 'success');

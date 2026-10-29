@@ -18,6 +18,7 @@ import {
 import { findTripPeriodConflict } from './components/modules/tripTimeline/lib/tripGuard';
 import { planBoundsWritePlan } from './components/modules/tripTimeline/lib/planBoundsWrite';
 import { canonicalBrand, directoryKeyOf, sanitizeVehicleRecord } from './utils/vehicleRecordNormalize';
+import { directoryUsageCount, type UsageCollection, type UsageData, type UsageItem } from './utils/directoryUsage';
 import {
   UserProfile,
   Vehicle,
@@ -466,6 +467,71 @@ export const directoryService = {
       setLocalStorageData(`ratipa_dir_${collection}`, local.filter((x) => (x.id || x.key) !== id));
     }
     dbService.logAction(user, role, "Удаление из справочника", "Directories", id, `Справочник ${collection}: ${id}`);
+  },
+
+  /** Сколько записей ссылается на элемент справочника (0 — безопасно удалять). */
+  countDirUsage: async (collection: UsageCollection, item: UsageItem): Promise<number> => {
+    if (!useFirebase) return 0;
+    const read = async (path: string): Promise<unknown> => {
+      try {
+        const snap = await firebaseGet(ref(database, path));
+        return snap.exists() ? snap.val() : null;
+      } catch {
+        return null;
+      }
+    };
+    const data: UsageData = {};
+    if (collection === 'rateGroups') {
+      [data.tractors, data.couplings, data.drivers] = await Promise.all([read('tractors'), read('couplings'), read('drivers')]);
+    } else if (collection === 'directions') {
+      data.trips = await read('trips_dashboard');
+    } else {
+      [data.tractors, data.couplings, data.trailers] = await Promise.all([read('tractors'), read('couplings'), read('trailers')]);
+    }
+    return directoryUsageCount(collection, item, data);
+  },
+
+  /**
+   * Коэффициент направления по названию (редактор в «Настройках»). Меняется ТОЛЬКО
+   * найденная запись (label, name, coeff) — код, цвет, порядок и ключ остаются;
+   * записи нет — создаётся новая с ключом dir_<время>. Раньше каждая запись
+   * переписывалась целиком как {id: название, name, coeff}: терялись поля и
+   * плодились дубли.
+   */
+  saveDirectionCoeff: async (label: string, coeff: number, previousLabel: string | null, user = "system", role = "admin") => {
+    const name = label.trim();
+    if (!name) return;
+    if (!useFirebase) {
+      directoryService.saveDirItem("directions", { id: name, name, label: name, coeff }, user, role);
+      return;
+    }
+    const snap = await firebaseGet(ref(database, "directories/directions"));
+    const list: Array<Record<string, any>> = snap.exists()
+      ? Object.entries(snap.val() as Record<string, any>).map(([k, v]) => ({ ...v, __key: k }))
+      : [];
+    const sameName = (d: Record<string, any>, n: string) => String(d.label || d.name || "").trim().toLowerCase() === n.trim().toLowerCase();
+    const found = list.find((d) => sameName(d, previousLabel || name));
+    if (found) {
+      await update(ref(database, `directories/directions/${found.__key}`), { label: name, name, coeff });
+    } else {
+      const id = `dir_${Date.now()}`;
+      await set(ref(database, `directories/directions/${id}`), { id, dbKey: id, label: name, name, coeff, active: true, order: 1000 + list.length });
+    }
+    dbService.logAction(user, role, "Сохранение справочника", "Directories", name, `Справочник directions: ${name}`);
+  },
+
+  /** Удаление направления по названию — по НАСТОЯЩЕМУ ключу записи (он может не совпадать с названием). */
+  deleteDirectionByLabel: async (label: string, user = "system", role = "admin") => {
+    const name = label.trim().toLowerCase();
+    if (!useFirebase) {
+      directoryService.deleteDirItem("directions", label, user, role);
+      return;
+    }
+    const snap = await firebaseGet(ref(database, "directories/directions"));
+    if (!snap.exists()) return;
+    const hits = Object.entries(snap.val() as Record<string, any>).filter(([, v]) => String(v?.label || v?.name || "").trim().toLowerCase() === name);
+    await Promise.all(hits.map(([k]) => remove(ref(database, `directories/directions/${k}`))));
+    dbService.logAction(user, role, "Удаление из справочника", "Directories", label, `Справочник directions: ${label}`);
   },
 
   // Переупорядочивание всего справочника (сохраняет переданный массив как новый порядок)
