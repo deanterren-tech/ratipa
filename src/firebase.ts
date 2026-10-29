@@ -18,6 +18,7 @@ import {
 import { findTripPeriodConflict } from './components/modules/tripTimeline/lib/tripGuard';
 import { planBoundsWritePlan } from './components/modules/tripTimeline/lib/planBoundsWrite';
 import { canonicalBrand, directoryKeyOf, sanitizeVehicleRecord } from './utils/vehicleRecordNormalize';
+import { sanitizeFirebaseObject } from './utils/firebaseClean';
 import { directoryUsageCount, type UsageCollection, type UsageData, type UsageItem } from './utils/directoryUsage';
 import {
   UserProfile,
@@ -400,25 +401,6 @@ const setLocalStorageData = <T>(key: string, data: T) => {
   }
 };
 
-const sanitizeFirebaseObject = (obj: any): any => {
-  if (obj === undefined) {
-    return null;
-  }
-  if (obj === null || typeof obj !== "object") {
-    return obj;
-  }
-  if (Array.isArray(obj)) {
-    return obj.map(sanitizeFirebaseObject);
-  }
-  const clean: any = {};
-  for (const key of Object.keys(obj)) {
-    if (obj[key] !== undefined) {
-      clean[key] = sanitizeFirebaseObject(obj[key]);
-    }
-  }
-  return clean;
-};
-
 const userKey = (name: string) =>
   String(name || "")
     .trim()
@@ -449,7 +431,8 @@ export const directoryService = {
   saveDirItem: (collection: string, item: any, user = "system", role = "admin") => {
     if (useFirebase) {
       const id = item.id || item.key || Date.now().toString();
-      set(ref(database, `directories/${collection}/${id}`), { ...item, id });
+      set(ref(database, `directories/${collection}/${id}`), sanitizeFirebaseObject({ ...item, id })).catch((err) =>
+        handleFailure("firebase", err, { path: `directories/${collection}`, userMessage: "Не удалось сохранить запись справочника" }));
     } else {
       const local = getLocalStorageData<any[]>(`ratipa_dir_${collection}`, []);
       const idx = local.findIndex((x) => (x.id || x.key) === (item.id || item.key));
@@ -3135,7 +3118,8 @@ export const dbService = {
 
   saveFerryTemplate: (t: FerryTemplate, user: string, role: string) => {
     if (useFirebase) {
-      set(ref(database, `ferryTemplates/${t.id}`), t);
+      set(ref(database, `ferryTemplates/${t.id}`), sanitizeFirebaseObject(t)).catch((err) =>
+        handleFailure("firebase", err, { path: "ferryTemplates", userMessage: "Не удалось сохранить шаблон парома" }));
     } else {
       const local = getLocalStorageData<FerryTemplate[]>(
         "ratipa_ferry_templates",
@@ -3190,7 +3174,8 @@ export const dbService = {
 
   saveCheckpoint: (c: any, user: string, role: string) => {
     if (useFirebase) {
-      set(ref(database, `checkpoints/${c.id}`), c);
+      set(ref(database, `checkpoints/${c.id}`), sanitizeFirebaseObject(c)).catch((err) =>
+        handleFailure("firebase", err, { path: "checkpoints", userMessage: "Не удалось сохранить погранпереход" }));
     } else {
       const local = getLocalStorageData<any[]>("ratipa_checkpoints", []);
       const idx = local.findIndex((x) => x.id === c.id);
@@ -3219,7 +3204,9 @@ export const dbService = {
 
   saveDistance: (d: DistancePreset, user: string, role: string) => {
     if (useFirebase) {
-      set(ref(database, `knownDistancesList/${d.id}`), d);
+      // Пустые (undefined) поля база не принимает — запись падала целиком.
+      set(ref(database, `knownDistancesList/${d.id}`), sanitizeFirebaseObject(d)).catch((err) =>
+        handleFailure("firebase", err, { path: "knownDistancesList", userMessage: "Не удалось сохранить расстояние" }));
     } else {
       const local = getLocalStorageData<DistancePreset[]>(
         "ratipa_distances",
@@ -3268,7 +3255,8 @@ export const dbService = {
 
   saveCurrency: (c: CurrencyPreset, user: string, role: string) => {
     if (useFirebase) {
-      set(ref(database, `currenciesList/${c.id}`), c);
+      set(ref(database, `currenciesList/${c.id}`), sanitizeFirebaseObject(c)).catch((err) =>
+        handleFailure("firebase", err, { path: "currenciesList", userMessage: "Не удалось сохранить валюту" }));
     }
     dbService.logAction(
       user,

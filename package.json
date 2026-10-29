@@ -12,6 +12,7 @@
     "lint": "tsc --noEmit",
     "test:segments": "tsx scripts/test-fact-segments.ts",
     "test:status-line": "tsx scripts/test-status-line.ts",
+    "test:firebase-clean": "tsx scripts/test-firebase-clean.ts",
     "test:directory-usage": "tsx scripts/test-directory-usage.ts",
     "test:plan-no-writes": "tsx scripts/test-plan-no-writes.ts",
     "test:vehicle-normalize": "tsx scripts/test-vehicle-normalize.ts",
