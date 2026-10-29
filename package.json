@@ -12,6 +12,7 @@
     "lint": "tsc --noEmit",
     "test:segments": "tsx scripts/test-fact-segments.ts",
     "test:status-line": "tsx scripts/test-status-line.ts",
+    "test:event-marks": "tsx scripts/test-event-marks.ts",
     "test:overlap": "tsx scripts/test-overlap.ts",
     "test:day-sections": "tsx scripts/test-day-sections.ts",
     "typecheck": "tsc --noEmit && node scripts/check-any.mjs",

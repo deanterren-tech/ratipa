@@ -11,7 +11,13 @@ import { dayNum, fmtDM } from './timeline';
 export interface EventMark {
   /** Реальная дата события (номер дня). */
   day: number;
+  /** Последний день события, если оно длится несколько дней. */
+  dayTo?: number;
   color: string;
+  /** Название вида события (Ремонт, На базе, Другое…). */
+  typeName: string;
+  /** Полный текст заметки диспетчера — для карточки события. */
+  note: string;
   /** Готовая подсказка одиночного маркера. */
   title: string;
   /** Связь с рейсом (если есть) — маркер кликабелен. */
@@ -41,10 +47,21 @@ export const eventMarkOf = (
 ): EventMark | null => {
   const day = dayNum(e.dateFrom);
   if (day == null) return null;
-  const short = String(e.note || '').replace(/\s+/g, ' ').trim();
+  const full = String(e.note || '').trim();
+  const dayTo = dayNum(e.dateTo);
+  const short = full.replace(/\s+/g, ' ');
   const shortText = short.length > 140 ? `${short.slice(0, 139)}…` : short;
   const title = `${typeName}${shortText ? `: ${shortText}` : ''} · ${fmtDM(day)}${hint ? ` · ${hint}` : ''}`;
-  return { day, color: typeColor, title, tripKey: e.tripKey, eventId: e.id };
+  return {
+    day,
+    ...(dayTo != null && dayTo > day ? { dayTo } : {}),
+    color: typeColor,
+    typeName,
+    note: full,
+    title,
+    tripKey: e.tripKey,
+    eventId: e.id,
+  };
 };
 
 /**

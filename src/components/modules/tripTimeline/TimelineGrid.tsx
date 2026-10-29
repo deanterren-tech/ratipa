@@ -53,6 +53,7 @@ import {
   type BarLabelSegment,
 } from './lib/barLabels';
 import { eventMarkOf, groupEventMarks, type EventMark } from './lib/eventMarks';
+import EventCard, { type EventCardAnchor } from './EventCard';
 import {
   layoutStageFills,
   stageFillTitle,
@@ -177,7 +178,7 @@ type DeadlineStatusKind = 'none' | 'ok' | 'risk' | 'violated' | 'missed';
 type FactItem =
   | { kind: 'fact'; a: number; b: number; open: boolean; tripKey: string; title: string; segments: FactSegment[]; status: StatusLineSegment[]; noPlan: boolean; missedCount: number; parts: PlanBarParts; circleMarks?: TripCircleMarks | null }
   | { kind: 'factNone'; a: number; b: number; tripKey: string; title: string }
-  | { kind: 'event'; day: number; lastDay: number; count: number; color: string; title: string; tripKey?: string; eventId?: string }
+  | { kind: 'event'; day: number; lastDay: number; count: number; color: string; title: string; items: EventMark[]; tripKey?: string; eventId?: string }
   | { kind: 'handover'; point: number; from: string; to: string; note: string; title: string; chip: boolean };
 
 interface CarRowModel {
@@ -339,6 +340,8 @@ const TRACK_GAP = 2;
 const ROWH_STORAGE_KEY = 'ratipa_tl_rowh';
 /** Режим «Подробно» (план и факт отдельно) — localStorage, как высота строк. */
 const DETAILED_STORAGE_KEY = 'ratipa_tl_detailed';
+/** Карточка событий при наведении (по умолчанию включена) — localStorage. */
+const EVENT_HOVER_STORAGE_KEY = 'ratipa_tl_evhover';
 /** По умолчанию — прежний «единый ритм» (PLAN_H = FACT_H = 22), вид не меняется. */
 const ROWH_DEFAULT = 22;
 /** Пределы настройки: базовая дорожка 14…44 px (строка машины — 28…88 px).
@@ -676,7 +679,7 @@ const buildRows = (
       const linkedTrip = e.tripKey ? trips.find((t) => t.key === e.tripKey) : undefined;
       if (e.tripKey && !showArchived && linkedTrip?.archived) return;
       const meta = eventTypeOf(e.kind);
-      const mark = eventMarkOf(e, meta.name, meta.color, e.tripKey ? 'клик — открыть рейс и показать запись' : undefined);
+      const mark = eventMarkOf(e, meta.name, meta.color, 'клик — закрепить карточку');
       if (mark && visible(mark.day, mark.day)) evMarks.push(mark);
     });
     groupEventMarks(evMarks).forEach((g) => {
@@ -687,6 +690,7 @@ const buildRows = (
         count: g.count,
         color: g.items[0].color,
         title: g.title,
+        items: g.items,
         tripKey: g.tripKey,
         eventId: g.eventId,
       });
@@ -933,6 +937,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   canDragManual,
   rowH,
   detailed,
+  eventHover,
 }: {
   row: CarRowModel;
   colW: number;
@@ -964,6 +969,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
   rowH: number;
   /** «Подробно»: план и факт отдельными подстроками; иначе факт — тонкая линия под планом. */
   detailed: boolean;
+  /** Карточка событий при наведении (клик по точке закрепляет её в любом случае). */
+  eventHover: boolean;
 }) {
   const [hoverTrip, setHoverTrip] = useState<string | null>(null);
   const [rowHover, setRowHover] = useState(false);
@@ -977,6 +984,83 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
     },
     [rowSel],
   );
+  // ── Карточка событий: заметки диспетчеров прямо на таймлайне ───────────────
+  // Наведение на точку (или на номер машины / свободное место строки) показывает
+  // карточку, клик по точке закрепляет её; окно рейса — кнопкой в карточке.
+  const [evCard, setEvCard] = useState<{ pinned: boolean; anchor: EventCardAnchor; events: EventMark[]; heading: string } | null>(null);
+  const evShowTimer = useRef<number | null>(null);
+  const evHideTimer = useRef<number | null>(null);
+  const cancelEvShow = useCallback(() => {
+    if (evShowTimer.current != null) window.clearTimeout(evShowTimer.current);
+    evShowTimer.current = null;
+  }, []);
+  const cancelEvHide = useCallback(() => {
+    if (evHideTimer.current != null) window.clearTimeout(evHideTimer.current);
+    evHideTimer.current = null;
+  }, []);
+  const scheduleEvHide = useCallback(() => {
+    cancelEvHide();
+    evHideTimer.current = window.setTimeout(() => setEvCard((c) => (c && !c.pinned ? null : c)), 220);
+  }, [cancelEvHide]);
+  const closeEvCard = useCallback(() => {
+    cancelEvShow();
+    cancelEvHide();
+    setEvCard(null);
+  }, [cancelEvShow, cancelEvHide]);
+  useEffect(
+    () => () => {
+      if (evShowTimer.current != null) window.clearTimeout(evShowTimer.current);
+      if (evHideTimer.current != null) window.clearTimeout(evHideTimer.current);
+    },
+    [],
+  );
+  /** Все события строки за видимый период — по датам. */
+  const rowEvents = useMemo<EventMark[]>(
+    () =>
+      row.factItems
+        .flatMap((it) => (it.kind === 'event' ? it.items : []))
+        .sort((a, b) => a.day - b.day),
+    [row.factItems],
+  );
+  /** Показать карточку через delay мс; закреплённую не подменяет. */
+  const showEvCard = (next: { anchor: EventCardAnchor; events: EventMark[]; heading: string }, delay: number) => {
+    cancelEvHide();
+    cancelEvShow();
+    evShowTimer.current = window.setTimeout(() => setEvCard((cur) => (cur && cur.pinned ? cur : { pinned: false, ...next })), delay);
+  };
+  const rowEventsHeading = `${formatPlate(row.carNumber)} · события за период (${rowEvents.length})`;
+  const rectAnchor = (r: DOMRect): EventCardAnchor => ({ left: r.left, top: r.top, bottom: r.bottom });
+  /** Номер машины: карточка со всеми событиями строки — справа от ячейки. */
+  const onCarCellEnter = (e: React.MouseEvent<HTMLDivElement>) => {
+    onRowEnter();
+    if (!eventHover || !rowEvents.length) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    showEvCard({ anchor: { left: r.right + 4, top: r.top, bottom: r.top }, events: rowEvents, heading: rowEventsHeading }, 450);
+  };
+  const onCarCellLeave = (e: React.MouseEvent<HTMLDivElement>) => {
+    onRowLeave(e);
+    cancelEvShow();
+    scheduleEvHide();
+  };
+  /** Курсор остановился на свободном месте строки (не на полосе и не на метке). */
+  const onLaneMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!eventHover || !rowEvents.length || evCard) return;
+    const target = e.target as HTMLElement;
+    // Точку события ведёт её собственный обработчик: не сбиваем его таймер.
+    if (target.closest('[data-bar="event"]')) return;
+    if (target.closest('[title],[role="button"],button')) {
+      cancelEvShow();
+      return;
+    }
+    const x = e.clientX;
+    const y = e.clientY;
+    showEvCard({ anchor: { left: x + 10, top: y, bottom: y }, events: rowEvents, heading: rowEventsHeading }, 650);
+  };
+  const onLaneLeave = (e: React.MouseEvent<HTMLDivElement>) => {
+    onRowLeave(e);
+    cancelEvShow();
+    scheduleEvHide();
+  };
   const cellBg = rowHover ? 'var(--tl-hover)' : zebra ? 'var(--tl-zebra)' : 'var(--tl-col-bg)';
   const laneRowBg = rowHover ? 'var(--tl-hover)' : zebra ? 'var(--tl-zebra)' : 'transparent';
   const W = vn * colW;
@@ -2545,11 +2629,11 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         data-tl-car={row.carKey}
         data-tl-cell="plan"
         data-tl-colcell="1"
-        onMouseEnter={onRowEnter}
-        onMouseLeave={onRowLeave}
+        onMouseEnter={onCarCellEnter}
+        onMouseLeave={onCarCellLeave}
         className="sticky left-0 border-r border-b px-2 overflow-hidden"
         style={{ zIndex: TL_Z.colCell, height: planH, width: carColW, minWidth: carColW, background: cellBg, borderRightColor: 'var(--tl-col-edge)', borderBottomColor: 'var(--tl-hairline-faint)' }}
-        title={cellTitle}
+        title={rowEvents.length ? undefined : cellTitle}
       >
         <div className="flex items-center justify-between gap-1.5 h-full">
           <span className="flex items-center gap-1.5 min-w-0">
@@ -2557,7 +2641,7 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
             <button
               type="button"
               onClick={() => onOpenCar(row.carKey)}
-              title={`${cellTitle}\n\nОбзор рейсов и периодов машины`}
+              title={rowEvents.length ? 'Обзор рейсов и периодов машины' : `${cellTitle}\n\nОбзор рейсов и периодов машины`}
               className={`text-[11px] leading-[13px] font-semibold truncate text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-30)] rounded-sm ${rowHover ? 'text-[var(--accent-ink)]' : 'text-[var(--tl-text-strong)] hover:text-[var(--accent-ink)]'}`}
             >
               {formatPlate(row.carNumber)}
@@ -2578,7 +2662,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         data-lane="plan"
         data-tl-car={row.carKey}
         onMouseEnter={onRowEnter}
-        onMouseLeave={onRowLeave}
+        onMouseMove={onLaneMove}
+        onMouseLeave={onLaneLeave}
         className={`relative ${detailed ? 'border-b border-[var(--tl-hairline-faint)]' : ''}`}
         style={{ width: W, height: planH, backgroundColor: laneRowBg, ...laneBg, ...laneTypeVars(planBandH) }}
       >
@@ -2762,11 +2847,11 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         data-tl-car={row.carKey}
         data-tl-cell="fact"
         data-tl-colcell="1"
-        onMouseEnter={onRowEnter}
-        onMouseLeave={onRowLeave}
+        onMouseEnter={onCarCellEnter}
+        onMouseLeave={onCarCellLeave}
         className="sticky left-0 border-r border-b px-2 overflow-hidden"
         style={{ zIndex: TL_Z.colCell, height: factH, width: carColW, minWidth: carColW, background: cellBg, borderRightColor: 'var(--tl-col-edge)', borderBottomColor: 'var(--tl-hairline)' }}
-        title={cellTitle}
+        title={rowEvents.length ? undefined : cellTitle}
       >
         {detailed ? (
           <div className="flex items-center justify-between gap-1.5 h-full">
@@ -2787,7 +2872,8 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         data-lane="fact"
         data-tl-car={row.carKey}
         onMouseEnter={onRowEnter}
-        onMouseLeave={onRowLeave}
+        onMouseMove={onLaneMove}
+        onMouseLeave={onLaneLeave}
         className={`relative border-b border-[var(--tl-hairline)] ${detailed ? '' : 'tl-compact-fact'}`}
         style={{ width: W, height: factH, backgroundColor: laneRowBg, ...laneBg, ...laneTypeVars(factBandH) }}
       >
@@ -2955,9 +3041,6 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 // Компактный маркер события на РЕАЛЬНОЙ дате (не полоса): ромб —
                 // одиночное событие, плашка со счётчиком — группа близких событий.
                 // Стоит над дорожкой «факта рейса» — полосы не перекрывает текстом.
-                const evTripKey = it.tripKey;
-                const evId = it.eventId;
-                const linked = !!(evTripKey && evId);
                 const grouped = it.count > 1;
                 const left = grouped
                   ? dayToX(it.day, vs, colW) + Math.round(colW * 0.45)
@@ -2969,32 +3052,48 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
                 const zoneH = factZone0 ? factZone0.h : FACT_NONE_H;
                 const markerH = grouped ? 12 : 9;
                 const top = Math.max(1, zoneTop + Math.max(0, Math.round((zoneH - markerH) / 2)));
+                const evHeading = `${formatPlate(row.carNumber)} · ${grouped ? `события (${it.count})` : 'событие'}`;
+                const evOpen = evCard && evCard.events.some((m) => it.items.some((x) => x.eventId === m.eventId));
+                // Карточка с текстом заметок: наведение показывает, клик закрепляет.
+                // Окно рейса открывается кнопкой в карточке, а не кликом по точке.
+                const pinCard = (target: HTMLElement) => {
+                  cancelEvShow();
+                  cancelEvHide();
+                  setEvCard({ pinned: true, anchor: rectAnchor(target.getBoundingClientRect()), events: it.items, heading: evHeading });
+                };
                 return (
                   <div
                     key={`e${idx}`}
-                    role={linked ? 'button' : undefined}
-                    tabIndex={linked ? 0 : undefined}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={it.title}
                     data-bar="event"
-                    data-event={evId}
-                    data-trip={evTripKey}
-                    onClick={evTripKey && evId ? () => onOpenTripEvent(evTripKey, evId) : undefined}
-                    onKeyDown={
-                      evTripKey && evId
-                        ? (e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              onOpenTripEvent(evTripKey, evId);
-                            }
-                          }
-                        : undefined
-                    }
-                    className={`absolute ${linked ? 'cursor-pointer' : ''}`}
+                    data-event={it.eventId}
+                    data-trip={it.tripKey}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      pinCard(e.currentTarget);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        pinCard(e.currentTarget);
+                      }
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!eventHover) return;
+                      showEvCard({ anchor: rectAnchor(e.currentTarget.getBoundingClientRect()), events: it.items, heading: evHeading }, 120);
+                    }}
+                    onMouseLeave={() => {
+                      cancelEvShow();
+                      scheduleEvHide();
+                    }}
+                    className="absolute cursor-pointer"
                     style={
                       grouped
-                        ? { zIndex: TL_Z.mark, left, top, height: 12, minWidth: 16, padding: '0 3px', background: '#7C3AED', borderRadius: 6, textAlign: 'center', opacity: 0.95 }
-                        : { zIndex: TL_Z.mark, left, top, width: 9, height: 9, background: it.color, borderRadius: 2, transform: 'rotate(45deg)', opacity: 0.95 }
+                        ? { zIndex: TL_Z.mark, left, top, height: 12, minWidth: 16, padding: '0 3px', background: '#7C3AED', borderRadius: 6, textAlign: 'center', opacity: 0.95, ...(evOpen ? { boxShadow: '0 0 0 3px rgba(124,58,237,0.28)' } : {}) }
+                        : { zIndex: TL_Z.mark, left, top, width: 9, height: 9, background: it.color, borderRadius: 2, transform: 'rotate(45deg)', opacity: 0.95, ...(evOpen ? { boxShadow: '0 0 0 3px rgba(124,58,237,0.28)' } : {}) }
                     }
-                    title={it.title}
                   >
                     {grouped ? <span className="text-[8px] leading-[12px] text-white font-semibold">{it.count}</span> : null}
                   </div>
@@ -3011,6 +3110,21 @@ const TimelineCarRow = React.memo(function TimelineCarRow({
         {row.factOv.warnings.map((w, wi) => renderConflict(w, 'fc', factH, wi))}
         {row.factOv.markers.map((m) => renderOvMarker(m, 'fm', factH))}
       </div>
+      {evCard ? (
+        <EventCard
+          heading={evCard.heading}
+          events={evCard.events}
+          anchor={evCard.anchor}
+          pinned={evCard.pinned}
+          onClose={closeEvCard}
+          onOpenEvent={(tripKey, eventId) => {
+            closeEvCard();
+            onOpenTripEvent(tripKey, eventId);
+          }}
+          onPointerEnter={cancelEvHide}
+          onPointerLeave={scheduleEvHide}
+        />
+      ) : null}
     </>
   );
 });
@@ -3159,6 +3273,21 @@ export default function TimelineGrid({
       return false;
     }
   });
+  const [eventHover, setEventHover] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(EVENT_HOVER_STORAGE_KEY) !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const changeEventHover = useCallback((v: boolean) => {
+    setEventHover(v);
+    try {
+      localStorage.setItem(EVENT_HOVER_STORAGE_KEY, v ? '1' : '0');
+    } catch {
+      /* недоступное хранилище — выбор действует до перезагрузки */
+    }
+  }, []);
   const changeDetailed = useCallback((v: boolean) => {
     setDetailed(v);
     try {
@@ -3875,6 +4004,16 @@ export default function TimelineGrid({
                   />
                   Подсветка столбца
                 </label>
+                <label className="flex items-center gap-2 text-[12px] text-[var(--tl-text-strong)] cursor-pointer select-none" title="Карточка с текстом заметок появляется при наведении на точку события или на номер машины. Клик по точке закрепляет карточку в любом случае">
+                  <input
+                    type="checkbox"
+                    data-ui="event-hover"
+                    checked={eventHover}
+                    onChange={(e) => changeEventHover(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-[#D1D5DB] accent-[var(--accent)] cursor-pointer"
+                  />
+                  Заметки при наведении
+                </label>
                 {onAddDirection ? (
                   <button
                     type="button"
@@ -4093,6 +4232,7 @@ export default function TimelineGrid({
                         canDragManual={canDragManual}
                         rowH={rowHPref}
                         detailed={detailed}
+                        eventHover={eventHover}
                       />
                     ))
                   : null}

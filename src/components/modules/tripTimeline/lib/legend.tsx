@@ -83,7 +83,7 @@ export const buildLegendItems = (directions: DirectionDef[]): LegendItem[] => [
   { swatch: <i className="inline-block w-[18px] h-[14px]" style={{ background: '#FFFFFF', borderRadius: 3, outline: '1px dashed #DC2626', outlineOffset: -1 }} />, label: 'критический срок этапа' },
   { swatch: <i className="inline-flex items-center justify-center w-[18px] h-[14px]" style={{ background: conflictHatch, border: '1px solid #EFA3B1', borderRadius: 4 }}><TriangleAlert className="w-2.5 h-2.5" style={{ color: '#BE123C' }} aria-hidden="true" /></i>, label: 'конфликт данных — клик открывает источник' },
   { swatch: <i className={TRIP_CIRCLE_BADGE_CLS} style={tripCircleBadgeStyle()}>×2</i>, label: 'количество кругов рейса' },
-  { swatch: <i className="inline-block w-[9px] h-[9px] rotate-45" style={{ background: '#7C3AED', opacity: 0.95, borderRadius: 2 }} />, label: 'событие рейса' },
+  { swatch: <i className="inline-block w-[9px] h-[9px] rotate-45" style={{ background: '#7C3AED', opacity: 0.95, borderRadius: 2 }} />, label: 'заметка диспетчера: наведите — текст, клик — закрепить карточку' },
   { swatch: <i className="inline-block w-[18px] h-[10px]" style={{ background: CLR.planArchBg, border: `1px solid ${CLR.planArchBorder}`, borderRadius: 4 }} />, label: 'архивный рейс' },
 ];
 
