@@ -1,48 +1,15 @@
 import { Vehicle, Driver } from '../types';
 
-// — existing normalizePlate stays unchanged —
+import { formatPlate as formatPlateUnified, plateKeyFull } from './plate';
 
+/** Номер для сравнения: единое правило из utils/plate (латиница, без знаков). */
 export function normalizePlate(value: string): string {
-  return (value || '').toUpperCase().trim().replace(/[^A-ZА-Я0-9]/gi, '');
+  return plateKeyFull(value);
 }
 
-/** Белорусский транслит кириллица → латиница для госномеров. */
-const CYR_TO_LAT: Record<string, string> = {
-  'А': 'A', 'В': 'B', 'Е': 'E', 'І': 'I', 'К': 'K', 'М': 'M',
-  'Н': 'H', 'О': 'O', 'Р': 'P', 'С': 'C', 'Т': 'T', 'Х': 'X',
-  'а': 'a', 'в': 'b', 'е': 'e', 'і': 'i', 'к': 'k', 'м': 'm',
-  'н': 'h', 'о': 'o', 'р': 'p', 'с': 'c', 'т': 't', 'х': 'x',
-};
-
-function translitPlate(s: string): string {
-  return s.split('').map(c => CYR_TO_LAT[c] || c).join('');
-}
-
-/**
- * Formats a license plate for display.
- * 
- * Belarusian tractor plate (2 letters + 5 digits): AB92717 → AB 9271-7
- * Belarusian trailer plate (1 letter + 4 digits + 1 letter + 1 digit): A2416E7 → A2416E-7
- * Otherwise returns the normalized value.
- */
+/** Единый вид номера (utils/plate): «AO 8807-7», «A 1086 B-7», «A042HY67». */
 export function formatPlate(value: string): string {
-  if (!value) return '';
-  const norm = normalizePlate(value);
-  if (!norm) return value;
-
-  // Convert Cyrillic to Latin for pattern matching (belarusian plates)
-  const lat = translitPlate(norm);
-
-  // Tractor: 2 letters + 5 digits → "AB 9271-7"
-  if (/^[A-Z]{2}\d{5}$/.test(lat)) {
-    return norm.slice(0, 2) + ' ' + norm.slice(2, 6) + '-' + norm.slice(6);
-  }
-  // Trailer: 1 letter + 4 digits + 1 letter + 1 digit → "A2416E-7"
-  if (/^[A-Z]\d{4}[A-Z]\d$/.test(lat)) {
-    return norm.slice(0, 6) + '-' + norm.slice(6);
-  }
-  // Other known short formats — keep normalized
-  return norm;
+  return formatPlateUnified(value);
 }
 
 /**

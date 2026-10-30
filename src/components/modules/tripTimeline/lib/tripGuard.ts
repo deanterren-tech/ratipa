@@ -22,6 +22,7 @@
  * Архивные и отменённые записи не участвуют: они история.
  */
 
+import { plateKeyFull } from '../../../../utils/plate';
 export interface TripPeriodInput {
   id?: string | null;
   carNumber?: unknown;
@@ -45,11 +46,7 @@ export interface TripConflict {
   message: string;
 }
 
-const normPlate = (v: unknown): string =>
-  String(v ?? '')
-    .toUpperCase()
-    .replace(/[^A-ZА-ЯЁ0-9]/g, '')
-    .replace(/[АВЕКМНОРСТУХІЁ]/g, (ch) => ({ А: 'A', В: 'B', Е: 'E', К: 'K', М: 'M', Н: 'H', О: 'O', Р: 'P', С: 'C', Т: 'T', У: 'Y', Х: 'X', І: 'I', Ё: 'E' } as Record<string, string>)[ch] || ch);
+const normPlate = (v: unknown): string => plateKeyFull(v);
 
 /** Дата (YYYY-MM-DD или ДД.ММ.ГГГГ / ДД/ММ/ГГГГ) → номер дня, иначе null. */
 export const tripDayNum = (value: unknown): number | null => {

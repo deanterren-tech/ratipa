@@ -44,6 +44,7 @@ import {
   type CarRef,
   type WholeTrip,
 } from './lib/sources';
+import { plateKeyFull } from '../../../utils/plate';
 
 export interface DispatcherOption {
   id: string;
@@ -86,7 +87,7 @@ export interface TimelineData {
   stageTemplates: StageTemplate[];
 }
 
-const plateKey = (value: unknown): string => String(value || '').toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '');
+const plateKey = (value: unknown): string => plateKeyFull(value);
 
 /**
  * Диспетчер из связанной записи «Плана дохода».

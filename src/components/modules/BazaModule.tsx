@@ -50,6 +50,7 @@ import VyezdPeriodWindow from './tripTimeline/VyezdPeriodWindow';
 import { parseVyezdHash, type ParsedVyezdRoute } from './tripTimeline/lib/vyezd';
 import { todayNum } from './tripTimeline/lib/timeline';
 import { findActiveDuplicate } from './baza/lib/bazaDedupe';
+import { plateKeyFull } from '../../utils/plate';
 
 interface BazaModuleProps {
   user: UserProfile;
@@ -661,8 +662,8 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
     const newRef = push(ref(db, 'baza'));
     // carNumber may be a full coupling "TRACTOR / TRAILER" — use only tractor part for center match
     const tractorPlate = cNum.split(' / ')[0].trim();
-    const normPlate = tractorPlate.replace(/[^А-ЯA-Z0-9]/g, '');
-    const masterCar = fleetVehicles.find(c => (c.carNumber || c.vehicleNumbers || '').replace(/[^А-ЯA-Z0-9]/g, '') === normPlate);
+    const normPlate = plateKeyFull(tractorPlate);
+    const masterCar = fleetVehicles.find(c => plateKeyFull(c.carNumber || c.vehicleNumbers || '') === normPlate);
     const couplingId = masterCar ? masterCar.id : null;
 
     // Пишем только разрешённые поля: если право на поле отозвано в открытой сессии,

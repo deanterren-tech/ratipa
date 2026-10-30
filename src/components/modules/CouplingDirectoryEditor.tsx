@@ -6,7 +6,7 @@ import {dbService, directoryService} from '../../api'
 import {getCouplingsFlat, getDriversFlat, getDispatchersFlat, getTrailersFlat} from '../../services/fleetService'
 import {Truck, Plus, Trash2, Pencil, Link2, Check, Layers, Tag, Users, AlertTriangle} from 'lucide-react'
 import {UserProfile} from '../../types'
-import {normalizePlate, formatPlate} from '../../utils/salaryAutofill'
+import {normalizePlate} from '../../utils/salaryAutofill'
 import {
   buildDriverDirectory,
   driverFullName,
@@ -19,6 +19,7 @@ import DriverCard from './DriverCard';
 import {useFleetCardStack, fleetCardRefKey} from '../../hooks/useFleetCards';
 import {UI} from '../../ui/kit'
 import {SectionHeader, SearchField, EmptyState, ModalShell} from '../../ui/components'
+import { formatPlate, plateKey } from '../../utils/plate';
 
 // Дефолтные характеристики ТС (присваиваются каждому авто, пользователь может менять)
 const DEFAULT_VEHICLE = {
@@ -259,7 +260,12 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
       toast('Укажите госномер тягача', 'error');
       return;
     }
-    const normPlate = carNumber.toUpperCase().replace(/[^A-ZА-Я0-9-]/g, '');
+    // Ключ новой машины — единый ключ номера (латиница, без знаков), как у остальных записей.
+    const normPlate = plateKey(carNumber);
+    if (!editing && couplings.some((c) => plateKey(c.carNumber) === normPlate)) {
+      toast('Машина с таким номером уже есть в справочнике', 'error');
+      return;
+    }
     const id = editing ? editing.id : normPlate;
     const dispId = (form.dispatcher || '').toString();
     const dispEntry = dispId ? dispatchers.find((d) => (d.id || d.key) === dispId) : null;
@@ -279,13 +285,13 @@ export default function CouplingDirectoryEditor({ user, isWritePermitted }: Coup
     const driverRec = form.driverId ? driverDir.byId.get(String(form.driverId)) : null;
     const driver2Rec = form.driver2Id ? driverDir.byId.get(String(form.driver2Id)) : null;
     // Прицеп: связываем с единым реестром прицепов (trailers) по нормализованному номеру.
-    const trailerNumber = safe(form.trailerNumber).toUpperCase();
+    const trailerNumber = formatPlate(safe(form.trailerNumber));
     const trailerRec = trailerNumber
       ? (trailers || []).find((t: any) => normalizePlate(t.trailerNumber || t.id || '') === normalizePlate(trailerNumber))
       : null;
     const rec: any = {
       id,
-      carNumber: carNumber.toUpperCase(),
+      carNumber: formatPlate(carNumber),
       trailerNumber,
       trailerId: trailerRec ? (trailerRec.id || null) : (form.trailerId || null),
       brand: brandVal,

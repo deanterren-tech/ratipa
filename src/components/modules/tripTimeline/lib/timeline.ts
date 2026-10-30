@@ -14,6 +14,7 @@ import type {
   TimelineVehicleEvent,
 } from '../../../../types';
 import { buildStageSchedule, sortStagesRoute } from './stageSchedule';
+import { plateKeyFull } from '../../../../utils/plate';
 
 export const DAY_MS = 86400000;
 
@@ -60,8 +61,7 @@ export const fmtFull = (iso?: string | null): string => {
 };
 
 /** Нормализация номера машины для сопоставления строк/записей. */
-export const normPlate = (s?: string | null): string =>
-  String(s || '').toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '');
+export const normPlate = (s?: string | null): string => plateKeyFull(s);
 
 export const MONTHS_RU = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 export const MONTHS_RU_FULL = [

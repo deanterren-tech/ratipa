@@ -30,6 +30,7 @@ import {
   type DriverLinkStatus,
 } from './driverRegistry';
 import { displayDate } from './dateText';
+import { plateKeyFull } from './plate';
 
 /** Подпись пустого пользовательского поля — одна на все карточки портала. */
 export const NOT_SPECIFIED = 'Не указано';
@@ -143,12 +144,7 @@ const CYR_TO_LAT: Record<string, string> = {
  * кириллица → латиница (как у ключей БД: «АК 3186-7» → AK31867).
  */
 export function normalizeCardKey(value: unknown): string {
-  return String(value ?? '')
-    .toUpperCase()
-    .split('')
-    .map((ch) => CYR_TO_LAT[ch] ?? ch)
-    .join('')
-    .replace(/[^A-Z0-9]/g, '');
+  return plateKeyFull(value);
 }
 
 /** Первая часть составного номера «тягач / прицеп» (без внешних пробелов). */

@@ -96,6 +96,7 @@ import {
   updateRepairEvent,
   type PeriodHistoryEntry,
 } from './lib/periodEdit';
+import { plateKeyFull } from '../../../utils/plate';
 
 interface Props {
   /** Разобранный маршрут окна (#baza/vyezd/...). */
@@ -256,8 +257,8 @@ export default function VyezdPeriodWindow({
   );
   const carEvents = useMemo(() => {
     if (!period) return [];
-    const plate = String(period.carNumber || '').toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '');
-    return data.events.filter((e) => String(e.carNumber || '').toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '') === plate);
+    const plate = plateKeyFull(period.carNumber);
+    return data.events.filter((e) => plateKeyFull(e.carNumber) === plate);
   }, [data.events, period]);
   const tripRanges = useMemo(
     () => carTrips.map((t) => tripRangeOf(t)).filter((r): r is NonNullable<typeof r> => !!r),

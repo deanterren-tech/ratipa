@@ -28,6 +28,7 @@ import { dayNum, normalizeStages, todayNum, tripPlanBounds, type SpanOverride } 
 import { normalizeCircles } from './circles';
 import { parseRepairEvents, type RepairEvent } from './repairEvents';
 import { dedupeBazaRecords } from '../../baza/lib/bazaDedupe';
+import { plateKeyFull } from '../../../../utils/plate';
 
 const normKey = (s: unknown): string => String(s ?? '').toUpperCase().replace(/[^A-ZА-ЯЁ0-9]/g, '');
 const firstPart = (s: unknown): string => String(s ?? '').split('/')[0] || '';
@@ -76,8 +77,7 @@ export const plateKeyOf = (s: unknown): string => {
   // Канонический вариант номера: латиница (в данных встречаются «АО 8806-7»,
   // «AO 8806-7» и «АО8806-7» — без сведения раскладок одна машина давала две
   // строки таймлайна и попадала в две группы диспетчеров).
-  const variants = keyVariants(s);
-  return variants[1] || variants[0] || '';
+  return plateKeyFull(s);
 };
 
 /** Индекс автомобилей по вариантам номера и id (для резервного поиска). */

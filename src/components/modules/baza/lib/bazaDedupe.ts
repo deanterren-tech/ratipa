@@ -18,6 +18,7 @@
  *  - записи без даты приезда не группируются: период неизвестен.
  */
 
+import { plateKey, plateKeyFull } from '../../../../utils/plate';
 export interface BazaDedupeRecord {
   id: string;
   [key: string]: unknown;
@@ -36,14 +37,10 @@ const norm = (s: unknown): string => String(s ?? '').toUpperCase().replace(/[^A-
 export const plateVariants = (s: unknown): string[] => {
   const raw = String(s ?? '');
   const out = new Set<string>();
-  [raw, [...raw].map((ch) => CYR_TO_LAT[ch] || ch).join(''), [...raw].map((ch) => LAT_TO_CYR[ch] || ch).join('')].forEach(
-    (v) => {
-      const k = norm(v);
-      if (k) out.add(k);
-    },
-  );
-  const first = norm(raw.split('/')[0]);
-  if (first) out.add(first);
+  // Первым идёт ключ всей строки в латинице: по нему группируются дубли.
+  [plateKeyFull(raw), plateKey(raw)].forEach((k) => {
+    if (k) out.add(k);
+  });
   return [...out];
 };
 

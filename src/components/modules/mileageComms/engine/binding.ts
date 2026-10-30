@@ -13,6 +13,7 @@
 
 import type { BoundsOverride, BoundarySource, TripWindow } from './types';
 import { fmtDMY, TZ_OFFSET_MIN } from './format';
+import { plateKeyFull } from '../../../../utils/plate';
 
 export const DAY_MS = 86_400_000;
 
@@ -49,7 +50,7 @@ const translit = (s: string, map: Record<string, string>): string => s.split('')
 /** Варианты нормализованного номера (как есть + латиница + кириллица). */
 export function plateVariants(s: unknown): string[] {
   const raw = String(s ?? '');
-  const set = new Set<string>();
+  const set = new Set<string>([plateKeyFull(raw)].filter(Boolean));
   for (const v of [raw, translit(raw, CYR_TO_LAT), translit(raw, LAT_TO_CYR)]) {
     const k = normKey(v);
     if (k) set.add(k);

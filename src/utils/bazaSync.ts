@@ -1,5 +1,6 @@
 import {  ref, get, update, push, set } from 'firebase/database';
 import { database } from '../api';
+import { plateKeyFull } from './plate';
 
 /**
  * Хелперы журнала «Учёт выезда» + ЛЕГАСИ-ПЕРЕНОС старых записей.
@@ -12,8 +13,7 @@ import { database } from '../api';
  */
 
 export function normalizePlate(value: string): string {
-  if (!value) return '';
-  return value.toUpperCase().replace(/[^А-ЯA-Z0-9]/g, '');
+  return plateKeyFull(value);
 }
 
 export function resolveDriverForCar(carId: string, cars: any[], drivers: any[]): any {
