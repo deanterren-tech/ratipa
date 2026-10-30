@@ -98,6 +98,7 @@ import {
   type FactSegColor,
 } from './lib/factSegments';
 import { STATUS_LINE_COLORS, statusLineOfTrip, type StatusLineSegment } from './lib/statusLine';
+import { countQuickFlags, passesQuickFilter, quickFlagsOfItems, type QuickFilterKey, type QuickFlags } from './lib/quickFilters';
 import {
   baseBarRange,
   baseDeviation,
@@ -258,6 +259,10 @@ interface Props {
   extR: number;
   /** Начало базового диапазона для кнопочной навигации (без догрузки прокруткой). */
   navVs: number;
+  /** Активные быстрые фильтры (только видимость машин). */
+  quickFilter?: QuickFilterKey[];
+  /** Счётчики быстрых фильтров по машинам вкладки (до применения фильтра). */
+  onQuickCounts?: (counts: Record<QuickFilterKey, number>) => void;
   /** Индекс уровня масштаба (см. ZOOM_LEVELS) — единый параметр ширины дня. */
   zoom: number;
   onZoomChange: (index: number) => void;
@@ -3070,6 +3075,61 @@ function VisibleRangeLabel({
   );
 }
 
+/**
+ * Поле «Перейти к»: показывает дату, с которой реально начинается видимая
+ * область (левый край календаря), а не начало загруженного диапазона. Меняется
+ * при прокрутке; ввод даты перемещает календарь к ней.
+ */
+function GotoDate({
+  scrollRef,
+  vs,
+  vn,
+  colW,
+  carColW,
+  onNavigate,
+}: {
+  scrollRef: React.RefObject<HTMLDivElement | null>;
+  vs: number;
+  vn: number;
+  colW: number;
+  carColW: number;
+  onNavigate: (n: number) => void;
+}) {
+  const [day, setDay] = useState(vs);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let raf = 0;
+    const compute = () => {
+      raf = 0;
+      const ve = vs + vn - 1;
+      setDay(Math.max(vs, Math.min(vs + Math.floor(el.scrollLeft / colW), ve)));
+    };
+    const schedule = () => {
+      if (!raf) raf = window.requestAnimationFrame(compute);
+    };
+    compute();
+    el.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    return () => {
+      if (raf) window.cancelAnimationFrame(raf);
+      el.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+    };
+  }, [scrollRef, vs, vn, colW, carColW]);
+  return (
+    <DateInput
+      className="w-[120px]"
+      value={dayStr(day)}
+      ariaLabel="Перейти к дате"
+      onChange={(v) => {
+        const n = dayNum(v);
+        if (n != null) onNavigate(n);
+      }}
+    />
+  );
+}
+
 /** Ширина колонки «Автомобили»: дефолт и лимиты (регулируемая граница). */
 const CARCOL_STORAGE_KEY = 'ratipa_tl_carcolw';
 const CARCOL_DEFAULT = 288;
@@ -3090,6 +3150,8 @@ export default function TimelineGrid({
   extL,
   extR,
   navVs,
+  quickFilter,
+  onQuickCounts,
   zoom,
   onZoomChange,
   onNavigate,
@@ -3300,11 +3362,20 @@ export default function TimelineGrid({
   /** Дата-якорь для пересчёта прокрутки при смене масштаба (центр или указатель). */
   const pendingAnchor = useRef<{ day: number; frac: number } | null>(null);
 
-  const rows = useMemo(
+  const allRows = useMemo(
     () =>
       buildRows(trips, bases, events, fleetCars, stageTypes, showArchived, vs, ve, today, carCurrentDispatcher, directions, dirFilter),
     [trips, bases, events, fleetCars, stageTypes, showArchived, vs, ve, today, carCurrentDispatcher, directions, dirFilter],
   );
+  const rowFlags = useMemo(() => allRows.map((r): QuickFlags => quickFlagsOfItems(r.factItems, today)), [allRows, today]);
+  const quickKey = (quickFilter || []).join(',');
+  const rows = useMemo(() => {
+    const active = quickKey ? (quickKey.split(',') as QuickFilterKey[]) : [];
+    return active.length ? allRows.filter((_, i) => passesQuickFilter(rowFlags[i], active)) : allRows;
+  }, [allRows, rowFlags, quickKey]);
+  useEffect(() => {
+    onQuickCounts?.(countQuickFlags(rowFlags));
+  }, [rowFlags, onQuickCounts]);
 
   /**
    * Подписи полос: движок «переезда» по свободным сегментам (lib/barLabels) —
@@ -3639,6 +3710,8 @@ export default function TimelineGrid({
 
   /** Меню «Вид»: редкие настройки отображения (высота строк, архив, подсветка…). */
   const [viewOpen, setViewOpen] = useState(false);
+  /** Телефон: масштаб, направления и меню вида свёрнуты под кнопку «Фильтры». */
+  const [controlsOpen, setControlsOpen] = useState(false);
   const viewRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!viewOpen) return;
@@ -3678,7 +3751,7 @@ export default function TimelineGrid({
           Боковые отступы — как у шапки раздела; от края до края идёт только сетка. */}
       <div className="flex flex-wrap items-center gap-2 px-6 sm:px-8 pb-3">
         <div className={barSegment}>
-          <button type="button" data-nav="month-prev" className={navBtnIcon} title="Предыдущий месяц" aria-label="Предыдущий месяц" onClick={() => shiftMonth(-1)}>
+          <button type="button" data-nav="month-prev" className={`${navBtnIcon} max-sm:hidden`} title="Предыдущий месяц" aria-label="Предыдущий месяц" onClick={() => shiftMonth(-1)}>
             <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
           <button type="button" data-nav="week-prev" className={navBtn} onClick={() => onNavigate(navVs - 7)}>‹ неделя</button>
@@ -3691,24 +3764,31 @@ export default function TimelineGrid({
             Сегодня
           </button>
           <button type="button" data-nav="week-next" className={navBtn} onClick={() => onNavigate(navVs + 7)}>неделя ›</button>
-          <button type="button" data-nav="month-next" className={navBtnIcon} title="Следующий месяц" aria-label="Следующий месяц" onClick={() => shiftMonth(1)}>
+          <button type="button" data-nav="month-next" className={`${navBtnIcon} max-sm:hidden`} title="Следующий месяц" aria-label="Следующий месяц" onClick={() => shiftMonth(1)}>
             <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
-          <span className="w-px h-4 bg-[var(--tl-hairline)] mx-0.5" aria-hidden="true" />
-          <label className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-[var(--tl-text)] pl-0.5 pr-0.5">
+          <span className="hidden sm:block w-px h-4 bg-[var(--tl-hairline)] mx-0.5" aria-hidden="true" />
+          <label className={`${controlsOpen ? 'flex' : 'hidden'} sm:flex items-center gap-1.5 whitespace-nowrap text-[11px] text-[var(--tl-text)] pl-0.5 pr-0.5`}>
             Перейти к
-            <DateInput
-              className="w-[120px]"
-              value={dayStr(navVs)}
-              ariaLabel="Перейти к дате"
-              onChange={(v) => {
-                const n = dayNum(v);
-                if (n != null) onNavigate(n);
-              }}
-            />
+            <GotoDate scrollRef={scrollRef} vs={vs} vn={vn} colW={colW} carColW={carColW} onNavigate={onNavigate} />
           </label>
         </div>
 
+        <button
+          type="button"
+          data-ui="tl-controls-toggle"
+          aria-expanded={controlsOpen}
+          onClick={() => setControlsOpen((v) => !v)}
+          className={`${navBtn} sm:hidden gap-1.5`}
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+          Фильтры{dirFilter ? ' •' : ''}
+          <ChevronDown className={`w-3 h-3 transition-transform ${controlsOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+        </button>
+
+        {/* Телефон: масштаб, фильтры направлений и меню вида прячутся под кнопку «Фильтры»,
+            чтобы рейсы были видны сразу под шапкой. На широком экране — как раньше. */}
+        <div className={`${controlsOpen ? 'contents' : 'hidden'} sm:contents`} data-ui="tl-controls">
         {/* Масштаб календаря: «−» / ползунок / «+». Ширина дня — единый параметр
             для сетки, полос и шапки; интерфейс вне календаря не масштабируется. */}
         <div className={barSegment} role="group" aria-label="Масштаб календаря" data-ui="zoom-control">
@@ -3971,6 +4051,7 @@ export default function TimelineGrid({
             </button>
           )}
         </div>
+        </div>
       </div>
 
       {/* Обёртка области календаря: сетка — ОДИН контейнер прокрутки, поверх —
@@ -4101,7 +4182,9 @@ export default function TimelineGrid({
           })}
           {rows.length === 0 ? (
             <div className="col-span-2 py-10 text-center text-xs text-[var(--tl-text)]">
-              В выбранной вкладке нет машин. Проверьте вкладку диспетчера или добавьте рейс кнопкой «Новый рейс».
+              {allRows.length > 0
+                ? 'Нет машин под выбранный быстрый фильтр. Снимите фильтр над таймлайном.'
+                : 'В выбранной вкладке нет машин. Проверьте вкладку диспетчера или добавьте рейс кнопкой «Новый рейс».'}
             </div>
           ) : null}
           {/* Host перекрёстной подсветки: оверлей-столбец дня и полоса строки

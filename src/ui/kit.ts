@@ -26,6 +26,10 @@ export const UI = {
   shell: 'w-full flex flex-col min-h-full',
   /** Шапка: заголовок и вкладки. */
   shellHeader: 'px-6 sm:px-8 pt-6 pb-2',
+  /** Компактная шапка (рабочие экраны с таблицей/полотном). */
+  shellHeaderCompact: 'px-6 sm:px-8 pt-4 pb-1',
+  titleCompact: 'text-[22px] leading-8 font-bold tracking-tight text-[#121316]',
+  tabsBarCompact: 'overflow-x-auto scrollbar-none',
   /** Заголовок раздела. */
   title: 'text-2xl sm:text-3xl font-bold tracking-tight text-[#121316]',
   /** Полоса подчёркнутых вкладок. */

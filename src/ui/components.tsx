@@ -31,6 +31,7 @@ export function ModuleShell({
   contentClassName,
   tabsAriaLabel,
   fillHeight = false,
+  compact = false,
 }: {
   title: string;
   tabs?: TabItem[];
@@ -44,56 +45,61 @@ export function ModuleShell({
    *  по высоте родителя — контент тянется (flex), внешней прокрутки страницы
    *  нет. На телефоне страница прокручивается обычным образом. */
   fillHeight?: boolean;
+  /** Компактная шапка: заголовок, вкладки и действия в одной строке (рабочие экраны). */
+  compact?: boolean;
 }) {
+  const tabList = tabs ?? [];
+  const renderTabs = (barCls: string) => (
+    <div className={barCls}>
+      <nav className={UI.tabsNav} role="tablist" aria-label={tabsAriaLabel || title}>
+        {tabList.map((t) => {
+          const isActive = activeTab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => onTabChange?.(t.key)}
+              onKeyDown={(e) => {
+                // Стрелки / Home / End — как в стандартном списке вкладок,
+                // чтобы разделом можно было пользоваться без мыши.
+                const keys = tabList.map((x) => x.key);
+                const at = keys.indexOf(t.key);
+                let next = -1;
+                if (e.key === 'ArrowRight') next = (at + 1) % keys.length;
+                else if (e.key === 'ArrowLeft') next = (at - 1 + keys.length) % keys.length;
+                else if (e.key === 'Home') next = 0;
+                else if (e.key === 'End') next = keys.length - 1;
+                if (next < 0) return;
+                e.preventDefault();
+                onTabChange?.(keys[next]);
+                const nav = e.currentTarget.parentElement;
+                const buttons = nav ? nav.querySelectorAll<HTMLButtonElement>('[role="tab"]') : null;
+                buttons?.[next]?.focus();
+              }}
+              className={`${UI.tab} ${isActive ? UI.tabActive : UI.tabIdle}`}
+            >
+              {t.label}
+              {typeof t.count === 'number' ? (
+                <span className={`${UI.tabBadge} ${isActive ? UI.tabBadgeActive : UI.tabBadgeIdle}`}>{t.count}</span>
+              ) : null}
+              {isActive ? <span className={UI.tabUnderline} aria-hidden="true" /> : null}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
   return (
     <div className={`${UI.shell}${fillHeight ? ' md:h-full md:min-h-0 md:overflow-hidden' : ''}`}>
-      <div className={UI.shellHeader}>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <h1 className={UI.title}>{title}</h1>
-          {actions ? <div className="flex items-center gap-2 flex-wrap">{actions}</div> : null}
+      <div className={compact ? UI.shellHeaderCompact : UI.shellHeader}>
+        <div className={compact ? 'flex flex-wrap items-center gap-x-6 gap-y-1' : 'flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3'}>
+          <h1 className={compact ? UI.titleCompact : UI.title}>{title}</h1>
+          {compact && tabs && tabs.length > 0 ? renderTabs(UI.tabsBarCompact) : null}
+          {actions ? <div className={`flex items-center gap-2 flex-wrap${compact ? ' ml-auto' : ''}`}>{actions}</div> : null}
         </div>
-        {tabs && tabs.length > 0 ? (
-          <div className={UI.tabsBar}>
-            <nav className={UI.tabsNav} role="tablist" aria-label={tabsAriaLabel || title}>
-              {tabs.map((t) => {
-                const isActive = activeTab === t.key;
-                return (
-                  <button
-                    key={t.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    onClick={() => onTabChange?.(t.key)}
-                    onKeyDown={(e) => {
-                      // Стрелки / Home / End — как в стандартном списке вкладок,
-                      // чтобы разделом можно было пользоваться без мыши.
-                      const keys = tabs.map((x) => x.key);
-                      const at = keys.indexOf(t.key);
-                      let next = -1;
-                      if (e.key === 'ArrowRight') next = (at + 1) % keys.length;
-                      else if (e.key === 'ArrowLeft') next = (at - 1 + keys.length) % keys.length;
-                      else if (e.key === 'Home') next = 0;
-                      else if (e.key === 'End') next = keys.length - 1;
-                      if (next < 0) return;
-                      e.preventDefault();
-                      onTabChange?.(keys[next]);
-                      const nav = e.currentTarget.parentElement;
-                      const buttons = nav ? nav.querySelectorAll<HTMLButtonElement>('[role="tab"]') : null;
-                      buttons?.[next]?.focus();
-                    }}
-                    className={`${UI.tab} ${isActive ? UI.tabActive : UI.tabIdle}`}
-                  >
-                    {t.label}
-                    {typeof t.count === 'number' ? (
-                      <span className={`${UI.tabBadge} ${isActive ? UI.tabBadgeActive : UI.tabBadgeIdle}`}>{t.count}</span>
-                    ) : null}
-                    {isActive ? <span className={UI.tabUnderline} aria-hidden="true" /> : null}
-                  </button>
-                );
-              })}
-            </nav>
-          </div>
-        ) : null}
+        {!compact && tabs && tabs.length > 0 ? renderTabs(UI.tabsBar) : null}
       </div>
       <div className={contentClassName ?? `${UI.content} flex-1`}>{children}</div>
     </div>

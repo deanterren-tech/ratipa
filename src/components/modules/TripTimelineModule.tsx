@@ -25,10 +25,12 @@ import { resolvePermission } from '../../utils/permissions';
 import { buildDispatcherDirectory } from '../../utils/dispatcher';
 import { UI } from '../../ui/kit';
 import { ModuleShell } from '../../ui/components';
+import { QUICK_FILTER_KEYS, QUICK_FILTER_LABELS, type QuickFilterKey } from './tripTimeline/lib/quickFilters';
+import { STATUS_LINE_COLORS } from './tripTimeline/lib/statusLine';
 import { useToast } from '../ToastProvider';
+import { useDialog } from '../DialogProvider';
 import { useHashRoute } from '../../hooks/useHashRoute';
 import TimelineGrid from './tripTimeline/TimelineGrid';
-import { useDialog } from '../DialogProvider';
 import TripCard from './tripTimeline/TripCard';
 import NewTripForm, { type NewTripDraft, type NewTripResult } from './tripTimeline/NewTripForm';
 import StatsBlock from './tripTimeline/StatsBlock';
@@ -78,9 +80,9 @@ interface Props {
 
 export default function TripTimelineModule({ user, settings }: Props) {
   const { toast } = useToast();
+  const { showPrompt } = useDialog();
   const { route, navigate } = useHashRoute({ module: 'tripTimeline' });
   const data = useTimelineData();
-  const { showPrompt } = useDialog();
 
   const requestedTab = route.tab ? SLUG_TO_TAB[route.tab] : DEFAULT_TAB;
   const activeTab: TabId = requestedTab || DEFAULT_TAB;
@@ -1019,6 +1021,10 @@ export default function TripTimelineModule({ user, settings }: Props) {
     ? data.events.filter((e) => plateKeyOf(e.carNumber) === plateKeyOf(openTripObj.carNumber))
     : [];
 
+  const [quickFilter, setQuickFilter] = useState<QuickFilterKey[]>([]);
+  const [quickCounts, setQuickCounts] = useState<Record<QuickFilterKey, number>>({ late: 0, soon: 0, noFact: 0 });
+  const toggleQuick = (k: QuickFilterKey) =>
+    setQuickFilter((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
   const barPad = activeTab === 'timeline' || fullscreen ? 'px-6 sm:px-8' : '';
   return (
     <ModuleShell
@@ -1026,6 +1032,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
       tabs={tabs}
       activeTab={activeTab}
       fillHeight={!fullscreen}
+      compact
       // Таймлайн прокручивает свою сетку; «Статистика» и «Шаблоны» — свою
       // область под шапкой (страница раздела на десктопе не прокручивается).
       contentClassName={
@@ -1100,8 +1107,8 @@ export default function TripTimelineModule({ user, settings }: Props) {
         {/* Вкладки диспетчеров — тот же источник и стиль, что у «Плана дохода».
             Шаблонам фильтр не нужен; свой боковой отступ — только у таймлайна
             (у остальных вкладок он уже есть у области содержимого). */}
-        <div className={`${activeTab === 'templates' ? 'hidden' : 'flex'} flex-wrap items-center gap-2 ${barPad} pb-3 border-b border-[#E5E7EB] mb-4`}>
-          <span className={UI.caption}>Диспетчеры:</span>
+        <div className={`${activeTab === 'templates' ? 'hidden' : 'flex'} flex-wrap items-center gap-x-2 gap-y-1.5 ${barPad} pt-1 pb-2 border-b border-[#E5E7EB] mb-2`}>
+          <span className={`${UI.caption} hidden sm:inline`}>Диспетчеры:</span>
           <div className="flex items-center gap-1.5 overflow-x-auto max-w-full pb-0.5" role="tablist" aria-label="Вкладки диспетчеров">
             <button
               type="button"
@@ -1137,6 +1144,36 @@ export default function TripTimelineModule({ user, settings }: Props) {
               </button>
             ) : null}
           </div>
+          {activeTab === 'timeline' ? (
+            <div className="flex items-center gap-1.5 sm:ml-auto overflow-x-auto max-w-full pb-0.5" role="group" aria-label="Быстрые фильтры" data-ui="quick-filters">
+              {QUICK_FILTER_KEYS.map((k) => {
+                const on = quickFilter.includes(k);
+                const n = quickCounts[k];
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    data-quick={k}
+                    aria-pressed={on}
+                    disabled={!on && n === 0}
+                    onClick={() => toggleQuick(k)}
+                    title={on ? 'Снять фильтр' : 'Показать только машины с таким состоянием рейса'}
+                    className={`${UI.filterPill} shrink-0 disabled:opacity-40 disabled:cursor-default ${on ? activeTabCls : UI.filterPillIdle}`}
+                  >
+                    {k !== 'noFact' ? (
+                      <i
+                        className="inline-block w-1.5 h-1.5 rounded-full mr-1.5"
+                        style={{ background: STATUS_LINE_COLORS[k].color }}
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                    {QUICK_FILTER_LABELS[k]}
+                    <span className="ml-1.5 font-mono text-[10px] opacity-70">{n}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
 
         {/* Месяцы архива — те же записи и правило группировки, что в «Плане дохода»
@@ -1186,6 +1223,8 @@ export default function TripTimelineModule({ user, settings }: Props) {
             extL={extL}
             extR={extR}
             navVs={vs}
+            quickFilter={quickFilter}
+            onQuickCounts={setQuickCounts}
             zoom={zoom}
             onZoomChange={changeZoom}
             onNavigate={navigateRange}

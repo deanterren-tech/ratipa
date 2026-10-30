@@ -12,6 +12,7 @@
     "lint": "tsc --noEmit",
     "test:segments": "tsx scripts/test-fact-segments.ts",
     "test:status-line": "tsx scripts/test-status-line.ts",
+    "test:quick-filters": "tsx scripts/test-quick-filters.ts",
     "test:firebase-clean": "tsx scripts/test-firebase-clean.ts",
     "test:distance-pairs": "tsx scripts/test-distance-pairs.ts",
     "test:rate-groups-single": "tsx scripts/test-rate-groups-single.ts",
