@@ -40,8 +40,8 @@ import {
   resolveDriverLink,
   type DriverRecord,
 } from '../../utils/driverRegistry'
-import {displayDate, toISODate, dateInputValue, parseDateParts, dateYear} from '../../utils/dateText'
-import {openDatePicker} from '../../utils/openDatePicker'
+import {toISODate, parseDateParts, dateYear} from '../../utils/dateText'
+import DateTextInput from '../common/DateTextInput'
 import {normalizePlate, formatPlate, formatCoupling} from '../../utils/salaryAutofill'
 import CouplingPicker from '../common/CouplingPicker';
 import DriverAutocomplete from '../common/DriverAutocomplete';
@@ -470,7 +470,7 @@ export interface VehicleDriverRecord {
 }
 
 /**
- * Поле даты в форме: текст ДД/ММ/ГГГГ + скрытый нативный календарь.
+ * Поле даты в форме: дату можно ввести цифрами (ДД/ММ/ГГГГ) или выбрать в календаре.
  * Хранит значение ISO (новые данные) и читает старые форматы (ДД.ММ.ГГГГ).
  */
 function VddDateField({ id, label, value, onChange, required }: {
@@ -480,42 +480,18 @@ function VddDateField({ id, label, value, onChange, required }: {
   onChange: (v: string) => void;
   required?: boolean;
 }) {
-  const openPicker = () => openDatePicker(`picker-${id}`);
   return (
     <div className="flex flex-col gap-2">
-      <label className={UI.fieldLabel} htmlFor={`vdd-date-${id}`}>
+      <label className={UI.fieldLabel} htmlFor={`vdd-date-${id}-text`}>
         {label} {required ? <span className="text-rose-500">*</span> : null}
       </label>
-      <div className="relative">
-        <input
-          id={`vdd-date-${id}`}
-          type="text"
-          readOnly
-          value={displayDate(value)}
-          placeholder="ДД/ММ/ГГГГ"
-          onClick={openPicker}
-          data-ui={`vdd-date-${id}`}
-          className={`${UI.input} cursor-pointer pr-11`}
-        />
-        <input
-          type="date"
-          id={`picker-${id}`}
-          value={dateInputValue(value)}
-          onChange={(e) => onChange(toISODate(e.target.value) || e.target.value)}
-          className="absolute inset-0 opacity-0 md:pointer-events-none"
-          aria-hidden="true"
-          tabIndex={-1}
-        />
-        <button
-          type="button"
-          onClick={openPicker}
-          title={`Открыть календарь: ${label}`}
-          aria-label={`Открыть календарь: ${label}`}
-          className="absolute right-1 top-1/2 flex min-h-[36px] min-w-[36px] -translate-y-1/2 items-center justify-center rounded-lg text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)] pointer-events-none md:pointer-events-auto"
-        >
-          <Calendar className="w-4 h-4" aria-hidden="true" />
-        </button>
-      </div>
+      <DateTextInput
+        id={`vdd-date-${id}`}
+        value={value}
+        onChange={onChange}
+        label={label}
+        textDataUi={`vdd-date-${id}`}
+      />
     </div>
   );
 }

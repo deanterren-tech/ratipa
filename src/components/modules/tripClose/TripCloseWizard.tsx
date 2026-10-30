@@ -113,7 +113,7 @@ const daysLabel = (n: number) => `${n} дн.`;
 
 export default function TripCloseWizard({ user, settings, tripId, onClose }: Props) {
   const { toast } = useToast();
-  const { showConfirm } = useDialog();
+  const { showConfirm, showPrompt } = useDialog();
   const conv = useConverter();
 
   const [state, setState] = useState<TripCloseState | null>(null);
@@ -650,14 +650,16 @@ export default function TripCloseWizard({ user, settings, tripId, onClose }: Pro
   // ── общие действия шагов ─────────────────────────────────────────────────
   const postpone = async (key: StepKey) => {
     if (!assertCanWrite()) return;
-    const reason = window.prompt('Причина откладывания шага (её увидят в сводке):') || '';
+    const reason = await showPrompt('Причина откладывания шага (её увидят в сводке):', '', 'Отложить шаг', { confirmLabel: 'Отложить' });
+    // «Отмена» в окне ввода — шаг не откладывается (раньше отмена всё равно откладывала шаг).
+    if (reason === null) return;
     await tripCloseService.setStep(tripId, key, 'postponed', user.name, reason.trim() || 'Без пояснения');
     await tripCloseService.pushError(tripId, key, 'Шаг отложен', user.name).catch(() => {});
     toast('Шаг отложен — общий статус остаётся «не завершён»', 'info');
   };
   const markNotNeeded = async (key: StepKey) => {
     if (!assertCanWrite()) return;
-    const reason = window.prompt('Обоснование, почему шаг не требуется (обязательно):') || '';
+    const reason = (await showPrompt('Обоснование, почему шаг не требуется (обязательно):', '', 'Шаг не требуется', { confirmLabel: 'Подтвердить' })) || '';
     if (!reason.trim()) { toast('«Не требуется» без обоснования не принимается', 'error'); return; }
     await tripCloseService.setStep(tripId, key, 'not_needed', user.name, reason.trim());
     toast('Шаг отмечен как не требующий действия', 'success');

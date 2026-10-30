@@ -16,8 +16,8 @@ import {
   sortDrivers,
   type DriverRecord,
 } from '../../../utils/driverRegistry'
-import {displayDate, toISODate, dateInputValue} from '../../../utils/dateText'
-import {openDatePicker} from '../../../utils/openDatePicker'
+import DateTextInput from '../../common/DateTextInput'
+import {toISODate} from '../../../utils/dateText'
 import {formatDriverShortName} from '../../../utils/driverSync'
 import DriverCard from '../DriverCard'
 import VehicleCard from '../VehicleCard'
@@ -38,47 +38,23 @@ const EMPTY_FORM: Record<string, string> = {
   dispatcher: '', rateGroupId: '', comment: '', archived: '',
 };
 
-/** Поле даты: текст ДД/ММ/ГГГГ + скрытый нативный календарь; хранит ISO. */
+/** Поле даты с подписью: дату можно ввести цифрами или выбрать в календаре; хранит ISO. */
 function DriverDateField({ id, label, value, onChange }: {
   id: string;
   label: string;
   value: string;
   onChange: (iso: string) => void;
 }) {
-  const openPicker = () => openDatePicker(`picker-${id}`);
   return (
     <div className="flex flex-col gap-2">
-      <label className={UI.fieldLabel} htmlFor={`drv-date-${id}`}>{label}</label>
-      <div className="relative">
-        <input
-          id={`drv-date-${id}`}
-          type="text"
-          readOnly
-          value={displayDate(value)}
-          placeholder="ДД/ММ/ГГГГ"
-          onClick={openPicker}
-          data-ui={`driver-date-${id}`}
-          className={`${UI.input} cursor-pointer pr-11`}
-        />
-        <input
-          type="date"
-          id={`picker-${id}`}
-          value={dateInputValue(value)}
-          onChange={(e) => onChange(toISODate(e.target.value) || e.target.value)}
-          className="absolute inset-0 opacity-0 md:pointer-events-none"
-          aria-hidden="true"
-          tabIndex={-1}
-        />
-        <button
-          type="button"
-          onClick={openPicker}
-          title={`Открыть календарь: ${label}`}
-          aria-label={`Открыть календарь: ${label}`}
-          className="absolute right-1 top-1/2 flex min-h-[36px] min-w-[36px] -translate-y-1/2 items-center justify-center rounded-lg text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)] pointer-events-none md:pointer-events-auto"
-        >
-          <Calendar className="w-4 h-4" aria-hidden="true" />
-        </button>
-      </div>
+      <label className={UI.fieldLabel} htmlFor={`drv-date-${id}-text`}>{label}</label>
+      <DateTextInput
+        id={`drv-date-${id}`}
+        value={value}
+        onChange={onChange}
+        label={label}
+        textDataUi={`driver-date-${id}`}
+      />
     </div>
   );
 }

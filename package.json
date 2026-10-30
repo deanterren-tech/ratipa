@@ -19,6 +19,7 @@
     "test:plan-no-writes": "tsx scripts/test-plan-no-writes.ts",
     "test:vehicle-normalize": "tsx scripts/test-vehicle-normalize.ts",
     "test:plate": "tsx scripts/test-plate.ts",
+    "test:date-text-input": "tsx scripts/test-date-text-input.ts",
     "test:plate-unify": "tsx scripts/test-plate-unify.ts",
     "apply:plate-unify": "tsx scripts/apply-plate-unify.ts",
     "plan:plate-unify": "tsx scripts/plan-plate-unify.ts",

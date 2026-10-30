@@ -28,6 +28,7 @@ import { ModuleShell } from '../../ui/components';
 import { useToast } from '../ToastProvider';
 import { useHashRoute } from '../../hooks/useHashRoute';
 import TimelineGrid from './tripTimeline/TimelineGrid';
+import { useDialog } from '../DialogProvider';
 import TripCard from './tripTimeline/TripCard';
 import NewTripForm, { type NewTripDraft, type NewTripResult } from './tripTimeline/NewTripForm';
 import StatsBlock from './tripTimeline/StatsBlock';
@@ -79,6 +80,7 @@ export default function TripTimelineModule({ user, settings }: Props) {
   const { toast } = useToast();
   const { route, navigate } = useHashRoute({ module: 'tripTimeline' });
   const data = useTimelineData();
+  const { showPrompt } = useDialog();
 
   const requestedTab = route.tab ? SLUG_TO_TAB[route.tab] : DEFAULT_TAB;
   const activeTab: TabId = requestedTab || DEFAULT_TAB;
@@ -802,10 +804,10 @@ export default function TripTimelineModule({ user, settings }: Props) {
         await navigator.clipboard.writeText(url);
         toast('Ссылка на план дохода скопирована', 'success');
       } catch {
-        window.prompt('Ссылка на план дохода (скопируйте вручную):', url);
+        await showPrompt('Скопируйте ссылку на план дохода вручную:', url, 'Ссылка на план', { confirmLabel: 'Готово' });
       }
     },
-    [planUrl, toast],
+    [planUrl, toast, showPrompt],
   );
 
   const tabs = [

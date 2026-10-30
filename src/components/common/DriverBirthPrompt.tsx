@@ -38,7 +38,7 @@ import {UI} from '../../ui/kit'
 import {ModalShell} from '../../ui/components'
 import {useToast} from '../ToastProvider'
 import {displayDate, dateInputValue, toISODate} from '../../utils/dateText'
-import {openDatePicker} from '../../utils/openDatePicker'
+import DateTextInput from './DateTextInput'
 import {driverFullName, primaryPhone, type DriverRecord} from '../../utils/driverRegistry'
 import {
   birthPromptQueue,
@@ -330,42 +330,19 @@ export default function DriverBirthPrompt({
 
         {/* Поле даты: текст ДД/ММ/ГГГГ + скрытый календарь (как во всём портале) */}
         <div className="flex flex-col gap-2">
-          <label className={UI.fieldLabel} htmlFor="bd-date-text">Дата рождения</label>
-          <div className="relative">
-            <input
-              id="bd-date-text"
-              type="text"
-              readOnly
-              value={displayDate(value)}
-              placeholder="ДД/ММ/ГГГГ"
-              onClick={() => openDatePicker('picker-bd-birth')}
-              data-ui="bd-date-text"
-              className={`${UI.input} cursor-pointer pr-11`}
-            />
-            <input
-              type="date"
-              id="picker-bd-birth"
-              value={dateInputValue(value)}
-              onChange={(e) => {
-                setValue(toISODate(e.target.value) || e.target.value)
-                setError('')
-              }}
-              data-ui="bd-date-picker"
-              className="absolute inset-0 opacity-0 md:pointer-events-none"
-              aria-hidden="true"
-              tabIndex={-1}
-            />
-            <button
-              type="button"
-              onClick={() => openDatePicker('picker-bd-birth')}
-              title="Открыть календарь: Дата рождения"
-              aria-label="Открыть календарь: Дата рождения"
-              data-ui="bd-date-open"
-              className="absolute right-1 top-1/2 flex min-h-[36px] min-w-[36px] -translate-y-1/2 items-center justify-center rounded-lg text-[#9CA3AF] transition-colors hover:bg-[#F3F4F6] hover:text-[#121316] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-20)] pointer-events-none md:pointer-events-auto"
-            >
-              <Calendar className="w-4 h-4" aria-hidden="true" />
-            </button>
-          </div>
+          <label className={UI.fieldLabel} htmlFor="bd-birth-text">Дата рождения</label>
+          <DateTextInput
+            id="bd-birth"
+            value={value}
+            onChange={(iso) => {
+              setValue(iso)
+              setError('')
+            }}
+            label="Дата рождения"
+            textDataUi="bd-date-text"
+            pickerDataUi="bd-date-picker"
+            buttonDataUi="bd-date-open"
+          />
           {value && currentVerdict.needsInput ? (
             <span className="text-[11px] font-medium text-rose-600">{currentVerdict.reason}</span>
           ) : null}

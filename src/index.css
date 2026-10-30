@@ -678,3 +678,28 @@ input:focus, select:focus, textarea:focus, button:focus {
   box-shadow: 6px 0 8px -6px rgba(18, 19, 22, 0.28);
 }
 
+
+/* Сенсорные экраны: мелкие кнопки и флажки получают увеличенную область нажатия
+   (внешний вид не меняется). Кнопка расширяется невидимой подложкой до ~40px,
+   флажки — до 22px. Позиционированные кнопки (absolute/fixed/sticky/relative) не трогаем. */
+@media (pointer: coarse) and (max-width: 1023px) {
+  main button:where(:not(.absolute, .fixed, .sticky, .relative, [data-no-tap-expand])),
+  main [role="button"]:where(:not(.absolute, .fixed, .sticky, .relative, [data-no-tap-expand])) {
+    position: relative;
+  }
+  main button:where(:not([data-no-tap-expand]))::after,
+  main [role="button"]:where(:not([data-no-tap-expand]))::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 40px);
+    height: max(100%, 40px);
+    transform: translate(-50%, -50%);
+  }
+  main input[type="checkbox"]:not([data-no-tap-expand]),
+  main input[type="radio"]:not([data-no-tap-expand]) {
+    min-width: 22px;
+    min-height: 22px;
+  }
+}

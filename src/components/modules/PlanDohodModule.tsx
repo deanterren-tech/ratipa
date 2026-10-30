@@ -74,7 +74,7 @@ interface PlanDohodModuleProps {
 export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const { toast: addToast } = useToast();
-  const { showConfirm } = useDialog();
+  const { showConfirm, showPrompt } = useDialog();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tableScale, setTableScale] = useState<number>(() => {
     const scaleKey = `pd_table_scale_${user.uid || user.name || 'default'}`;
@@ -1996,7 +1996,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                         await navigator.clipboard.writeText(url);
                         addToast("Ссылка на запись плана дохода скопирована", "success");
                       } catch {
-                        window.prompt("Ссылка на запись плана дохода (скопируйте вручную):", url);
+                        await showPrompt("Скопируйте ссылку на запись плана дохода вручную:", url, "Ссылка на запись", { confirmLabel: "Готово" });
                       }
                     }}
                     title="Постоянная ссылка на эту запись (переживает обновление и открывается в новой вкладке)"
