@@ -24,7 +24,6 @@ export default defineConfig(() => {
         output: {
           manualChunks: {
             firebase: ['firebase/app', 'firebase/auth', 'firebase/database'],
-            pdf: ['pdfjs-dist'],
             leaflet: ['leaflet', 'react-leaflet'],
             motion: ['motion/react'],
             virtuoso: ['react-virtuoso'],

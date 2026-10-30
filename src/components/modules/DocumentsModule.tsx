@@ -37,9 +37,6 @@ import {
 } from 'lucide-react';
 import {UI} from '../../ui/kit';
 import {ModuleShell, SectionHeader, SearchField, FilterPills, EmptyState, ModalShell} from '../../ui/components';
-import * as pdfjsLib from "pdfjs-dist";
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 interface Props {
   user: UserProfile;
 }

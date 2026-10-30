@@ -1,5 +1,3 @@
-import { htmlToTextPdfBytes } from './pdf/htmlToTextPdf';
-
 /**
  * Формирование PDF для документов портала.
  *
@@ -17,6 +15,8 @@ export async function htmlToPdfBlob(html: string, _options: { quality?: number }
   if (!html || !html.trim()) {
     throw new Error('Шаблон документа пуст — PDF не сформирован.');
   }
+  // pdf-lib и шрифты тяжёлые: подгружаются только при формировании PDF, а не при открытии раздела.
+  const { htmlToTextPdfBytes } = await import('./pdf/htmlToTextPdf');
   const bytes = await htmlToTextPdfBytes(html);
   if (!bytes || bytes.length === 0) {
     throw new Error('Документ не содержит страниц — PDF не сформирован.');

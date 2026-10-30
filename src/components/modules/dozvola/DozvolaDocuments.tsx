@@ -6,16 +6,11 @@ import {UserProfile} from '../../../types'
 import {FileText, Download, Printer, CheckCircle, X, Plus, FileDown, Loader2 } from 'lucide-react'
 import { useFirebase, database, onValue } from '../../../firebase'
 import { ref, push, update } from 'firebase/database'
-import JSZip from "jszip";
-import * as pdfjsLib from "pdfjs-dist";
 import {
   PERMIT_APPLICATION_TEMPLATE_BASE64,
   RETURN_REGISTRY_TEMPLATE_BASE64,
   CHINA_COPY_TEMPLATE_BASE64
 } from "./DozvolaTemplates";
-
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 interface DozvolaDocumentsProps {
   user: UserProfile;
@@ -687,7 +682,7 @@ const formatApplicationDate = (value: string) => {
   const buildPermitApplicationDocxBlob = async () => {
     const rows = permitRows;
     const ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-    const zip = await JSZip.loadAsync(base64ToUint8Array(PERMIT_APPLICATION_TEMPLATE_BASE64));
+    const zip = await (await import("jszip")).default.loadAsync(base64ToUint8Array(PERMIT_APPLICATION_TEMPLATE_BASE64));
     const xmlText = await zip.file('word/document.xml')!.async('string');
     const xmlDoc = new DOMParser().parseFromString(xmlText, 'application/xml');
 
@@ -748,7 +743,7 @@ const formatApplicationDate = (value: string) => {
   const buildReturnRegistryDocxBlob = async () => {
     const rows = returnRows;
     const ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-    const zip = await JSZip.loadAsync(base64ToUint8Array(RETURN_REGISTRY_TEMPLATE_BASE64));
+    const zip = await (await import("jszip")).default.loadAsync(base64ToUint8Array(RETURN_REGISTRY_TEMPLATE_BASE64));
     const xmlText = await zip.file('word/document.xml')!.async('string');
     const xmlDoc = new DOMParser().parseFromString(xmlText, 'application/xml');
 
@@ -799,7 +794,7 @@ const formatApplicationDate = (value: string) => {
   const buildChinaCopyApplicationDocxBlob = async () => {
     const rows = chinaRows;
     const ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-    const zip = await JSZip.loadAsync(base64ToUint8Array(CHINA_COPY_TEMPLATE_BASE64));
+    const zip = await (await import("jszip")).default.loadAsync(base64ToUint8Array(CHINA_COPY_TEMPLATE_BASE64));
     const xmlText = await zip.file('word/document.xml')!.async('string');
     const xmlDoc = new DOMParser().parseFromString(xmlText, 'application/xml');
 

@@ -12,23 +12,33 @@ import {motion, AnimatePresence} from 'motion/react'
 import CommandCenter from './CommandCenter';
 import {useKeyboardShortcuts} from '../hooks/useKeyboardShortcuts'
 import { resolvePermission } from '../utils/permissions';
-import AccountSettingsModal from './AccountSettingsModal'
 import ErrorPage from './common/ErrorPage'
 import ModuleDataContainer from './common/ModuleLoadState'
 import {useNotifications} from '../hooks/useNotifications'
 import type { NotificationItem } from '../hooks/useNotifications'
 import {useConverter} from '../hooks/useConverter'
 import UpdateTour from './UpdateTour'
-import PortalInstructionsModal from './PortalInstructionsModal'
 import DriverBirthPrompt from './common/DriverBirthPrompt'
 import {usePresence} from '../hooks/usePresence'
 import {useChat} from '../hooks/useChat'
-import TripCloseWizard from './modules/tripClose/TripCloseWizard';
 import {OPEN_TRIP_CLOSE_EVENT} from './modules/tripClose/openTripClose';
 import { UI } from '../ui/kit';
 import { LayoutDashboard, Calculator, Wallet, TrendingUp, FileSpreadsheet, Truck, FileText, Files, Clock, Map, Settings, Settings2, ShieldAlert, LogOut, Menu, X, Radio, MessageSquare, Send, Trash2, Sparkles, ChevronDown, ArrowUp, Pencil, Calendar, CalendarRange, Bell, BellRing, Check, CheckCheck, AlertTriangle, Info, LineChart, ExternalLink, Wifi, WifiOff, RefreshCw, LoaderCircle, Home, Sliders, BookOpen, ClipboardList, CircleDollarSign, Coins, BookCheck, BookMarked, Grid3x3, MoreHorizontal } from 'lucide-react';
 
 // Import newly created business modules
+/** Сколько посещённых разделов держать в памяти: меньше на телефонах и слабых компьютерах. */
+const keptModulesLimit = (): number => {
+  const nav = typeof navigator !== 'undefined' ? (navigator as Navigator & { deviceMemory?: number }) : undefined;
+  const lowMemory = !!nav?.deviceMemory && nav.deviceMemory <= 4;
+  const fewCores = !!nav?.hardwareConcurrency && nav.hardwareConcurrency <= 4;
+  const narrow = typeof window !== 'undefined' && window.innerWidth < 768;
+  return lowMemory || fewCores || narrow ? 3 : 8;
+};
+
+// Окна, которые открываются по действию, грузятся при первом открытии, а не при старте портала.
+const AccountSettingsModal = lazy(() => import('./AccountSettingsModal'));
+const PortalInstructionsModal = lazy(() => import('./PortalInstructionsModal'));
+const TripCloseWizard = lazy(() => import('./modules/tripClose/TripCloseWizard'));
 const DashboardModule = lazy(() => import('./modules/DashboardModule'));
 const DohodModule = lazy(() => import('./modules/DohodModule'));
 const SalaryModule = lazy(() => import('./modules/SalaryModule'));
@@ -182,11 +192,14 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   }, []);
 
   useEffect(() => {
+    // Посещённые разделы остаются смонтированными (сохраняются фильтры, прокрутка, черновики),
+    // но на слабых устройствах их число ограничено: самые давние выгружаются, иначе растут
+    // память и фоновые подписки (особенно встроенные таблицы Google).
     setLoadedModules((prev) => {
-      if (!prev.includes(activeModule)) {
-        return [...prev, activeModule];
-      }
-      return prev;
+      if (prev[prev.length - 1] === activeModule) return prev;
+      const next = [...prev.filter((k) => k !== activeModule), activeModule];
+      const cap = keptModulesLimit();
+      return next.length > cap ? next.slice(next.length - cap) : next;
     });
   }, [activeModule]);
 
@@ -270,6 +283,9 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   const [tourOpen, setTourOpen] = useState(false);
   /** Подсказки про портал из меню пользователя. */
   const [portalHelpOpen, setPortalHelpOpen] = useState(false);
+  // Окно подгружается при первом открытии и остаётся смонтированным, чтобы закрываться с анимацией.
+  const helpEverOpened = useRef(false);
+  if (portalHelpOpen) helpEverOpened.current = true;
   /**
    * Ключ версии для хранения в базе: точка в ключах Firebase Realtime Database
    * недопустима («2.0.0» → «2_0_0»), иначе запись молча отклоняется.
@@ -503,6 +519,8 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
   // Меню пользователя и окно настроек учётной записи
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isAccountOpen, setIsAccountOpen] = useState(false);
+  const accountEverOpened = useRef(false);
+  if (isAccountOpen) accountEverOpened.current = true;
   const userMenuRef = useRef<HTMLDivElement | null>(null);
 
   const handleLogoutSequence = () => {
@@ -1574,20 +1592,28 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
         </div>
 
       {/* Настройки учётной записи */}
-      <AccountSettingsModal
-        isOpen={isAccountOpen}
-        user={user}
-        onClose={() => setIsAccountOpen(false)}
-      />
+      {(isAccountOpen || accountEverOpened.current) && (
+        <Suspense fallback={null}>
+          <AccountSettingsModal
+            isOpen={isAccountOpen}
+            user={user}
+            onClose={() => setIsAccountOpen(false)}
+          />
+        </Suspense>
+      )}
 
       {/* Превью обновлений: знакомство с изменениями при первом входе после
           обновления. Про акцентную тему рассказываем только как о личной
           настройке из настроек учётной записи. */}
-      <PortalInstructionsModal
-        isOpen={portalHelpOpen}
-        settings={settings}
-        onClose={() => setPortalHelpOpen(false)}
-      />
+      {(portalHelpOpen || helpEverOpened.current) && (
+        <Suspense fallback={null}>
+          <PortalInstructionsModal
+            isOpen={portalHelpOpen}
+            settings={settings}
+            onClose={() => setPortalHelpOpen(false)}
+          />
+        </Suspense>
+      )}
 
       <UpdateTour
         isOpen={tourOpen}
@@ -2069,12 +2095,14 @@ export default function AppShell({ user, onLogout }: AppShellProps) {
       />
 
       {closeTripId && (
-        <TripCloseWizard
-          user={user}
-          settings={settings}
-          tripId={closeTripId}
-          onClose={() => setCloseTripId('')}
-        />
+        <Suspense fallback={null}>
+          <TripCloseWizard
+            user={user}
+            settings={settings}
+            tripId={closeTripId}
+            onClose={() => setCloseTripId('')}
+          />
+        </Suspense>
       )}
     </div>
   );
