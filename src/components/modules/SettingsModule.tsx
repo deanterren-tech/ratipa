@@ -517,7 +517,7 @@ export default function SettingsModule({ user }: SettingsModuleProps) {
 
   const handleDeleteTariff = async (id: string) => {
     if (await showConfirm("Удалить эту тарифную группу?")) {
-      setCarRateGroups(prev => prev.filter(g => g.id !== id));
+      // Список обновится подпиской: группу, которая используется, база не удалит.
       dbService.deleteCarRateGroup(id, user.name, user.role);
     }
   };

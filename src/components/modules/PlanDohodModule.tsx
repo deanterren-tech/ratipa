@@ -1,6 +1,7 @@
 import React, {useState, useEffect, useRef, useMemo, useCallback} from 'react'
 import {useToast} from '../ToastProvider'
 import { useDialog } from '../DialogProvider';
+import { lookupDistance } from '../../utils/distancePairs';
 import { formatToTitleCase } from '../../utils/format'
 import NotebookStatusPills from './NotebookStatusPills'
 import {Virtuoso} from 'react-virtuoso'
@@ -1514,14 +1515,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
   }
 
   function findDistance(c1: string, c2: string) {
-    if (!c1 || !c2) return null;
-    const from = c1.trim().toLowerCase();
-    const to = c2.trim().toLowerCase();
-    const found = distances.find((d) => {
-      const a = (d.from || "").trim().toLowerCase();
-      const b = (d.to || "").trim().toLowerCase();
-      return (a === from && b === to) || (a === to && b === from);
-    });
+    const found = lookupDistance(distances, c1, c2);
     return found ? found.distance : null;
   }
 

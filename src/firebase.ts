@@ -19,6 +19,8 @@ import { findTripPeriodConflict } from './components/modules/tripTimeline/lib/tr
 import { planBoundsWritePlan } from './components/modules/tripTimeline/lib/planBoundsWrite';
 import { canonicalBrand, directoryKeyOf, sanitizeVehicleRecord } from './utils/vehicleRecordNormalize';
 import { sanitizeFirebaseObject } from './utils/firebaseClean';
+import { findSamePair } from './utils/distancePairs';
+import { membershipUpdates, rateGroupsWithVehicles } from './utils/rateGroupsSingle';
 import { directoryUsageCount, type UsageCollection, type UsageData, type UsageItem } from './utils/directoryUsage';
 import {
   UserProfile,
@@ -400,6 +402,9 @@ const setLocalStorageData = <T>(key: string, data: T) => {
     console.error("Storage error:", err);
   }
 };
+
+/** Очередь сохранений групп ставок (см. saveCarRateGroup). */
+let rateGroupQueue: Promise<void> = Promise.resolve();
 
 const userKey = (name: string) =>
   String(name || "")
@@ -3204,8 +3209,23 @@ export const dbService = {
 
   saveDistance: (d: DistancePreset, user: string, role: string) => {
     if (useFirebase) {
-      // Пустые (undefined) поля база не принимает — запись падала целиком.
-      set(ref(database, `knownDistancesList/${d.id}`), sanitizeFirebaseObject(d)).catch((err) =>
+      // Одна запись на пару мест: если такая пара уже есть (в любом направлении),
+      // обновляется она, а не появляется вторая запись с другим км.
+      void (async () => {
+        let target: DistancePreset = d;
+        try {
+          const snap = await firebaseGet(ref(database, "knownDistancesList"));
+          const list: DistancePreset[] = snap.exists()
+            ? Object.entries(snap.val() as Record<string, DistancePreset>).map(([k, v]) => ({ ...v, id: k }))
+            : [];
+          const same = list.some((x) => x.id === d.id) ? null : findSamePair(list, d);
+          if (same) target = { ...same, ...d, id: same.id, from: same.from, to: same.to };
+        } catch {
+          // Нет связи для проверки дублей — пишем как есть.
+        }
+        // Пустые (undefined) поля база не принимает — запись падала целиком.
+        await set(ref(database, `knownDistancesList/${target.id}`), sanitizeFirebaseObject(target));
+      })().catch((err) =>
         handleFailure("firebase", err, { path: "knownDistancesList", userMessage: "Не удалось сохранить расстояние" }));
     } else {
       const local = getLocalStorageData<DistancePreset[]>(
@@ -3283,19 +3303,51 @@ export const dbService = {
   },
 
   // CARS POOL (Тарифы по машинам)
+  /**
+   * Группы ставок — ЕДИНЫЙ справочник directories/rateGroups; список машин
+   * группы вычисляется по rateGroupId тягачей и сцепок (легаси carsPool не читается).
+   */
   getCarRateGroups: (callback: (groups: CarRateGroup[]) => void) => {
-    return sharedGetCarRateGroups(callback);
+    if (!useFirebase) return sharedGetCarRateGroups(callback);
+    let dir: any[] = [];
+    let tractors: any[] = [];
+    let couplings: any[] = [];
+    const emit = () => callback(rateGroupsWithVehicles(dir, tractors, couplings));
+    const u1 = sharedDirRateGroups((list: any[]) => { dir = list || []; emit(); });
+    const u2 = sharedGetTractors((list: any[]) => { tractors = list || []; emit(); });
+    const u3 = sharedGetCouplings((list: any[]) => { couplings = list || []; emit(); });
+    return () => { u1(); u2(); u3(); };
   },
 
   saveCarRateGroup: (g: CarRateGroup, user: string, role: string) => {
     if (useFirebase) {
-      set(ref(database, `carsPool/${g.id}`), {
-        name: g.name,
-        rate: g.rate,
-        perDiemRate: g.perDiemRate || null,
-        vehicles: g.vehicles,
-        comment: g.comment || "",
-      });
+      // Запись группы — в справочник; машины группы — полем rateGroupId у
+      // тягачей и сцепок. Сохранения идут по очереди: «убрать из одной группы,
+      // добавить в другую» не перетирают друг друга.
+      rateGroupQueue = rateGroupQueue.then(async () => {
+        const [tSnap, cSnap] = await Promise.all([firebaseGet(ref(database, "tractors")), firebaseGet(ref(database, "couplings"))]);
+        const listOf = (snap: any) => (snap.exists() ? Object.entries(snap.val() as Record<string, any>).map(([id, v]) => ({ ...v, id })) : []);
+        const membership = membershipUpdates(g.id, g.vehicles || [], { tractors: listOf(tSnap), couplings: listOf(cSnap) });
+        const unknownPlates = membership.unknownPlates;
+        const base = `directories/rateGroups/${g.id}`;
+        const updates: Record<string, unknown> = {
+          ...membership.updates,
+          [`${base}/id`]: g.id,
+          [`${base}/name`]: g.name,
+          [`${base}/rate`]: Number(g.rate) || 0,
+          [`${base}/perDiemRate`]: g.perDiemRate ?? null,
+          [`${base}/comment`]: g.comment || "",
+        };
+        await update(ref(database), updates);
+        if (unknownPlates.length) {
+          handleFailure("validation", new Error("unknown plates"), {
+            path: "directories/rateGroups",
+            userMessage: `Нет в автопарке, группа не назначена: ${unknownPlates.join(", ")}`,
+            severity: "warning",
+          });
+        }
+      }).catch((err) =>
+        handleFailure("firebase", err, { path: "directories/rateGroups", userMessage: "Не удалось сохранить группу ставок" }));
     } else {
       const local = getLocalStorageData<CarRateGroup[]>(
         "ratipa_cars_pool",
@@ -3318,7 +3370,21 @@ export const dbService = {
 
   deleteCarRateGroup: (id: string, user: string, role: string) => {
     if (useFirebase) {
-      remove(ref(database, `carsPool/${id}`));
+      // Группу, на которую ссылаются машины или водители, не удаляем — иначе ставка у них пропадёт.
+      void directoryService
+        .countDirUsage("rateGroups", { id })
+        .then((used) => {
+          if (used > 0) {
+            handleFailure("validation", new Error("rate group in use"), {
+              path: "directories/rateGroups",
+              userMessage: `Группа используется в записях (${used}). Сначала переведите машины и водителей в другую группу.`,
+              severity: "warning",
+            });
+            return;
+          }
+          return remove(ref(database, `directories/rateGroups/${id}`));
+        })
+        .catch((err) => handleFailure("firebase", err, { path: "directories/rateGroups", userMessage: "Не удалось удалить группу ставок" }));
     } else {
       const local = getLocalStorageData<CarRateGroup[]>(
         "ratipa_cars_pool",

@@ -1,6 +1,7 @@
 import {useToast} from '../ToastProvider'
 import {useDialog} from '../DialogProvider'
 import React, {useState, useEffect, useMemo} from 'react'
+import { lookupDistance } from '../../utils/distancePairs';
 import { normalizeRoadString } from '../../utils/format'
 import {
   UserProfile,
@@ -1921,14 +1922,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
   };
 
   const findDistanceInPool = (c1: string, c2: string) => {
-    if (!c1 || !c2) return null;
-    const from = c1.trim().toLowerCase();
-    const to = c2.trim().toLowerCase();
-    const found = distances.find((d) => {
-      const a = d.from.trim().toLowerCase();
-      const b = d.to.trim().toLowerCase();
-      return (a === from && b === to) || (a === to && b === from);
-    });
+    const found = lookupDistance(distances, c1, c2);
     return found ? found.distance : null;
   };
 
@@ -1938,14 +1932,7 @@ export default function DohodModule({ user }: DohodModuleProps) {
     newDist: number,
   ) => {
     if (!from || !to || newDist <= 0) return;
-    const matched = distances.find((d) => {
-      const a = d.from.trim().toLowerCase();
-      const b = d.to.trim().toLowerCase();
-      return (
-        (a === from.trim().toLowerCase() && b === to.trim().toLowerCase()) ||
-        (a === to.trim().toLowerCase() && b === from.trim().toLowerCase())
-      );
-    });
+    const matched = lookupDistance(distances, from, to);
 
     if (!matched || matched.distance !== newDist) {
       const q = matched
