@@ -53,7 +53,7 @@ import { currencyName, currencySymbol } from '../../utils/currencyMeta';
 import { useModalKeyboard } from '../../hooks/useModalKeyboard';
 
 const API_KEY =
-  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+  import.meta.env.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
   (window as any).GOOGLE_MAPS_PLATFORM_KEY ||
   "";
 const hasValidKey = Boolean(API_KEY) && API_KEY !== "YOUR_API_KEY";
