@@ -17,6 +17,51 @@ import { navbyClientFromEnv } from "./server/navby/client.ts";
 // OFFLINE HEURISTIC PARSERS (ROBUST FALLBACKS FOR BELARUS)
 // ---------------------------------------------------------
 
+/**
+ * Парсит строку с номерами и диапазонами в массив отдельных номеров.
+ * Поддерживает: 1234, 1234-1240, 1234..1240, 1234,1250, 1234;1250, 1234-1240,1250
+ * Порядок границ диапазона не важен (1240-1234 = 1234-1240).
+ * Лимит 1000 номеров на диапазон.
+ */
+function parseNumberRanges(text: string): string[] {
+    if (!text) return [];
+    const normalized = text.replace(/\.\./g, '-').replace(/\s+/g, '');
+    if (!normalized) return [];
+    const parts = normalized.split(/[,;]/).filter(Boolean);
+    const result: string[] = [];
+    const seen = new Set<string>();
+    for (const part of parts) {
+        if (!part) continue;
+        if (part.includes('-')) {
+            const [startStr, endStr] = part.split('-', 2);
+            const start = parseInt(startStr, 10);
+            const end = parseInt(endStr, 10);
+            if (isNaN(start) || isNaN(end)) {
+                const num = parseInt(part, 10);
+                if (!isNaN(num)) {
+                    const s = String(num);
+                    if (!seen.has(s)) { seen.add(s); result.push(s); }
+                }
+                continue;
+            }
+            const min = Math.min(start, end);
+            const max = Math.max(start, end);
+            const limit = Math.min(max - min + 1, 1000);
+            for (let n = min; n < min + limit; n++) {
+                const s = String(n);
+                if (!seen.has(s)) { seen.add(s); result.push(s); }
+            }
+        } else {
+            const num = parseInt(part, 10);
+            if (!isNaN(num)) {
+                const s = String(num);
+                if (!seen.has(s)) { seen.add(s); result.push(s); }
+            }
+        }
+    }
+    return result;
+}
+
 function offlineParseDozvolaText(text: string): any[] {
   console.log("[Offline Fallback Parser] Parsing dozvola text");
   const lines = text.split(/[\n;]+/);
@@ -45,9 +90,11 @@ function offlineParseDozvolaText(text: string): any[] {
     if (type === "UZ4") type = "UZ 4";
     if (type === "AM3") type = "AM3";
 
-    // Permit number
-    const numMatch = line.match(/\b\d{3,8}\b/);
-    const number = numMatch ? numMatch[0] : "";
+    // Permit number(s) — поддерживаем диапазоны (1234-1240, 1234..1240, 1234,1250)
+    const numbersText = line; // Вся строка для поиска номеров/диапазонов
+    const rangeNumbers = parseNumberRanges(numbersText);
+    const number = rangeNumbers.length > 0 ? rangeNumbers[0] : ""; // Первый номер как основной
+    const rangeNumbersAll = rangeNumbers; // Все номера из диапазона (для дальнейшей обработки)
 
     // License plates (Belarus, Russian, etc.)
     const belarusPlate = line.match(/([A-Z]{2}\s?\d{4}-\d|\d{4}\s?[A-Z]{2}-\d)/i);
@@ -92,22 +139,25 @@ function offlineParseDozvolaText(text: string): any[] {
 
     let comment = line;
     if (typeMatch) comment = comment.replace(typeMatch[0], "");
-    if (numMatch) comment = comment.replace(numMatch[0], "");
+    // numMatch больше не используется (поддержка диапазонов через parseNumberRanges)
     if (belarusPlate) comment = comment.replace(belarusPlate[0], "");
     else if (russiaPlate) comment = comment.replace(russiaPlate[0], "");
     if (car) comment = comment.replace(new RegExp(car, "gi"), "");
     comment = comment.replace(/(офис|office|руки|выдан|в пути|hand|возврат|return|сдан|used|проср|expired|копия|скан|copy|фото|photo)/gi, "").trim();
     comment = comment.replace(/[,;.\s-]+/g, " ").trim();
 
-    results.push({
-      type,
-      number,
-      car,
-      status,
-      comment: comment || "",
-      isCopy,
-      _isOfflineFallback: true
-    });
+    // Для каждого номера в диапазоне создаём отдельную запись
+    for (const num of rangeNumbersAll) {
+        results.push({
+            type,
+            number: num,
+            car,
+            status,
+            comment: comment || "",
+            isCopy,
+            _isOfflineFallback: true
+        });
+    }
   }
 
   return results;

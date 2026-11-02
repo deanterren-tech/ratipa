@@ -347,7 +347,7 @@ export const getCouplingsFlat = (cb: (list: any[]) => void): (() => void) => {
               trailerNumber: c.trailerNumber || '',
               trailerId: c.trailerId ?? null,
               brand: c.brand || '',
-              brandModel: c.brandModel || c.brands || '',
+              brandModel: c.brandModel || c.brand || c.brands || '',
               brandRu: c.brandRu || '',
               trailerBrand: c.trailerBrand || '',
               trailerMake: c.trailerMake || '',

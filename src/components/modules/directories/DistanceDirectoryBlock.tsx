@@ -7,6 +7,7 @@ import {UserProfile, DistancePreset} from '../../../types'
 import {UI} from '../../../ui/kit'
 import {SectionHeader, SearchField, FilterPills, EmptyState, ModalShell} from '../../../ui/components'
 import CityAutocomplete from '../../common/CityAutocomplete'
+import CountryAutocomplete from '../../common/CountryAutocomplete'
 
 interface Props { user: UserProfile }
 
@@ -57,14 +58,14 @@ const CITY_COUNTRY: Record<string, string> = {
   нурултан:'KZ', 'нурсултан':'KZ',
 }
 
-const COUNTRY_NAMES: Record<string, string> = {
+export const COUNTRY_NAMES: Record<string, string> = {
   BY: 'Беларусь', RUS: 'Россия', KZ: 'Казахстан',
   UZ: 'Узбекистан', TJ: 'Таджикистан', KG: 'Кыргызстан',
   MN: 'Монголия', CN: 'Китай', TR: 'Турция',
   IR: 'Иран', GE: 'Грузия', AM: 'Армения', AZ: 'Азербайджан',
 }
 
-const COUNTRY_CODES = ['BY','RUS','KZ','UZ','TJ','KG','MN','CN','TR','IR','GE','AM','AZ'];
+export const COUNTRY_CODES = ['BY','RUS','KZ','UZ','TJ','KG','MN','CN','TR','IR','GE','AM','AZ'];
 
 /** Компактный селект страны в форме маршрута. */
 const COUNTRY_SELECT_CLS =
@@ -103,6 +104,18 @@ export default function DistanceDirectoryBlock({ user }: Props) {
   const cpInputRef = useRef<HTMLInputElement>(null);
   const [cpDropdownRect, setCpDropdownRect] = useState<{top: number; left: number; width: number} | null>(null);
   const inlineRef = useRef<HTMLInputElement>(null);
+
+  // ESC закрывает модалку расстояний (не родительскую модалку плана)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && editing) {
+        e.stopPropagation();
+        setEditing(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [editing]);
 
   useEffect(() => {
     const unsub1 = dbService.getDistances((list) => setItems(list || []));
@@ -586,14 +599,10 @@ export default function DistanceDirectoryBlock({ user }: Props) {
                 author={user.name}
                 authorRole={user.role}
                 placeholder="Откуда" className={UI.input} />
-              <select value={draft.countryFrom || (getCountry(draft.from || '') !== '—' ? getCountry(draft.from || '') : '')}
-                onChange={(e) => setDraft((d) => ({ ...d, countryFrom: e.target.value }))}
-                className={COUNTRY_SELECT_CLS}>
-                <option value="">Страна</option>
-                {COUNTRY_CODES.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+              <CountryAutocomplete
+                value={draft.countryFrom || (getCountry(draft.from || '') !== '—' ? getCountry(draft.from || '') : '')}
+                onChange={(v) => setDraft((d) => ({ ...d, countryFrom: v }))}
+                placeholder="Страна" className={UI.input} />
             </div>
             <div className="flex flex-col gap-2">
               <label className={UI.fieldLabel}>Город B</label>
@@ -604,14 +613,10 @@ export default function DistanceDirectoryBlock({ user }: Props) {
                 author={user.name}
                 authorRole={user.role}
                 placeholder="Куда" className={UI.input} />
-              <select value={draft.countryTo || (getCountry(draft.to || '') !== '—' ? getCountry(draft.to || '') : '')}
-                onChange={(e) => setDraft((d) => ({ ...d, countryTo: e.target.value }))}
-                className={COUNTRY_SELECT_CLS}>
-                <option value="">Страна</option>
-                {COUNTRY_CODES.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+              <CountryAutocomplete
+                value={draft.countryTo || (getCountry(draft.to || '') !== '—' ? getCountry(draft.to || '') : '')}
+                onChange={(v) => setDraft((d) => ({ ...d, countryTo: v }))}
+                placeholder="Страна" className={UI.input} />
             </div>
           </div>
 
@@ -623,9 +628,7 @@ export default function DistanceDirectoryBlock({ user }: Props) {
 
           {/* Checkpoints */}
           <div className="flex flex-col gap-2">
-            <label className={`${UI.fieldLabel} flex items-center gap-1`}>
-              <MapPin className="w-3 h-3" aria-hidden="true" /> Погранпереходы
-            </label>
+            <label className={UI.fieldLabel}>Пограничные переходы <span className="text-[10px] text-[#9CA3AF] font-normal">(опционально)</span></label>
             <div className="flex flex-wrap gap-1">
               {(draft.checkpoints || '').split(',').filter(Boolean).map((cp, i) => (
                 <span key={i} className={`${UI.chip} inline-flex items-center gap-1`}>
