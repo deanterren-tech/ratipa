@@ -65,6 +65,7 @@ import MapRouteModal from "../MapRouteModal";
 import { UI } from "../../ui/kit";
 import { ModuleShell, SectionHeader, SearchField, FoundCount, EmptyState, ModalShell, BackButton } from "../../ui/components";
 import CityAutocomplete from "../common/CityAutocomplete";
+import CountryAutocomplete from "../common/CountryAutocomplete";
 
 interface PlanDohodModuleProps {
   user: UserProfile;
@@ -89,11 +90,15 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   );
   const [archiveMonth, setArchiveMonth] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  // Открыто ли вложенное окно (карта / «Добавить маршрут в базу») поверх формы рейса.
+  // ESC должен закрывать верхнее окно, а не саму форму плана дохода.
+  const nestedModalOpenRef = useRef(false);
   // Закрытие модалки редактирования по ESC (независимо от глобального хука)
   useEffect(() => {
     if (!isModalOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (nestedModalOpenRef.current) return; // верхний слой закроется сам
         e.preventDefault();
         setIsModalOpen(false);
       }
@@ -1269,6 +1274,11 @@ export default function PlanDohodModule({ user }: PlanDohodModuleProps) {
   const [addDistCheckpoints, setAddDistCheckpoints] = useState('');
   const [addDistCpInput, setAddDistCpInput] = useState('');
   const [allCheckpoints, setAllCheckpoints] = useState<any[]>([]);
+  // Держим ref в актуальном состоянии: ESC-обработчик формы рейса читает его,
+  // чтобы не закрывать форму, пока сверху открыто вложенное окно.
+  useEffect(() => {
+    nestedModalOpenRef.current = !!(mapModalOpen || showAddDistModal);
+  }, [mapModalOpen, showAddDistModal]);
   const [cityDropdown, setCityDropdown] = useState<{idx: number; field: 'from'|'to'; isPl: boolean; rect?: DOMRect} | null>(null);
   // Устарело: собственный список подсказок городов заменён общим CityAutocomplete
   // (справочник cities + алиасы). Состояние и разметка оставлены, чтобы не
@@ -1511,6 +1521,41 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
         return l;
       })
     );
+  }
+
+  /** Сохранение нового маршрута в общую базу расстояний.
+   *  Погранпереходы и страны — НЕОБЯЗАТЕЛЬНЫ: маршрут сохраняется только по городам и км.
+   *  Значения по умолчанию задаём явно (пустые поля не пишем, undefined в RTDB недопустим). */
+  function saveNewDistanceToDirectory() {
+    const [a, b] = [addDistFrom.trim(), addDistTo.trim()].sort((x, y) => x.localeCompare(y));
+    if (!a || !b) {
+      addToast("Укажите города A и B", "info");
+      return;
+    }
+    const km = Number(addDistKm) || 0;
+    if (km <= 0) {
+      addToast("Укажите расстояние больше 0", "info");
+      return;
+    }
+    const checkpoints = addDistCheckpoints.split(',').map(s => s.trim()).filter(Boolean);
+    const payload: any = {
+      id: 'dist_' + Date.now().toString(),
+      from: a,
+      to: b,
+      distance: km,
+      checkpoints,
+    };
+    const cf = addDistCountryFrom.trim();
+    const ct = addDistCountryTo.trim();
+    if (cf) payload.countryFrom = cf;
+    if (ct) payload.countryTo = ct;
+    try {
+      dbService.saveDistance(payload, user.name, user.role);
+      setShowAddDistModal(false);
+      addToast('Маршрут добавлен в базу расстояний', 'success');
+    } catch (err) {
+      addToast('Не удалось сохранить маршрут: ' + ((err as Error)?.message || 'ошибка базы'), 'error');
+    }
   }
 
   function findDistance(c1: string, c2: string) {
@@ -4292,7 +4337,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
           footer={
             <>
               <button onClick={() => setShowAddDistModal(false)} className={UI.buttonGhost}>Отмена</button>
-              <button onClick={() => { const [a, b] = [addDistFrom.trim(), addDistTo.trim()].sort((x, y) => x.localeCompare(y)); const id = 'dist_' + Date.now().toString(); const checkpoints = addDistCheckpoints.split(',').filter(Boolean).map(s => s.trim()); dbService.saveDistance({ id, from: a, to: b, distance: addDistKm || 0, countryFrom: addDistCountryFrom, countryTo: addDistCountryTo, checkpoints: checkpoints.length > 0 ? checkpoints : undefined, }, user.name, user.role); setShowAddDistModal(false); addToast('Маршрут добавлен в базу расстояний', 'success'); }} className={UI.buttonPrimary}>
+              <button onClick={saveNewDistanceToDirectory} className={UI.buttonPrimary}>
                 <Plus className="w-3.5 h-3.5" aria-hidden="true" /> Добавить
               </button>
             </>
@@ -4309,13 +4354,12 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 <input type="text" value={addDistFrom} onChange={(e) => setAddDistFrom(e.target.value)}
                   className={`${UI.input} mt-1`} />
                 <div className="mt-1">
-                  <select value={addDistCountryFrom} onChange={(e) => setAddDistCountryFrom(e.target.value)}
-                    className="w-full px-2 py-1.5 text-[10px] font-semibold rounded-lg border border-[#E5E7EB] outline-none focus:border-[var(--accent)] bg-white transition-colors cursor-pointer text-[#4B5563]">
-                    <option value="">Страна A</option>
-                    {['BY','RUS','KZ','UZ','TJ','KG','MN','CN','TR','IR','GE','AM','AZ'].map(c => (
-                      <option key={c} value={c}>{c === 'BY' ? '🇧🇾' : c === 'RUS' ? '🇷🇺' : c === 'KZ' ? '🇰🇿' : c === 'UZ' ? '🇺🇿' : c === 'TJ' ? '🇹🇯' : c === 'KG' ? '🇰🇬' : c === 'MN' ? '🇲🇳' : c === 'CN' ? '🇨🇳' : c === 'TR' ? '🇹🇷' : c === 'IR' ? '🇮🇷' : c === 'GE' ? '🇬🇪' : c === 'AM' ? '🇦🇲' : c === 'AZ' ? '🇦🇿' : ''} {c}</option>
-                    ))}
-                  </select>
+                  <CountryAutocomplete
+                    value={addDistCountryFrom}
+                    onChange={setAddDistCountryFrom}
+                    placeholder="Страна A — поиск (необязательно)"
+                    className="w-full px-2 py-1.5 text-[10px] font-semibold rounded-lg border border-[#E5E7EB] outline-none focus:border-[var(--accent)] bg-white transition-colors text-[#4B5563]"
+                  />
                 </div>
               </div>
               <div>
@@ -4323,13 +4367,12 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
                 <input type="text" value={addDistTo} onChange={(e) => setAddDistTo(e.target.value)}
                   className={`${UI.input} mt-1`} />
                 <div className="mt-1">
-                  <select value={addDistCountryTo} onChange={(e) => setAddDistCountryTo(e.target.value)}
-                    className="w-full px-2 py-1.5 text-[10px] font-semibold rounded-lg border border-[#E5E7EB] outline-none focus:border-[var(--accent)] bg-white transition-colors cursor-pointer text-[#4B5563]">
-                    <option value="">Страна B</option>
-                    {['BY','RUS','KZ','UZ','TJ','KG','MN','CN','TR','IR','GE','AM','AZ'].map(c => (
-                      <option key={c} value={c}>{c === 'BY' ? '🇧🇾' : c === 'RUS' ? '🇷🇺' : c === 'KZ' ? '🇰🇿' : c === 'UZ' ? '🇺🇿' : c === 'TJ' ? '🇹🇯' : c === 'KG' ? '🇰🇬' : c === 'MN' ? '🇲🇳' : c === 'CN' ? '🇨🇳' : c === 'TR' ? '🇹🇷' : c === 'IR' ? '🇮🇷' : c === 'GE' ? '🇬🇪' : c === 'AM' ? '🇦🇲' : c === 'AZ' ? '🇦🇿' : ''} {c}</option>
-                    ))}
-                  </select>
+                  <CountryAutocomplete
+                    value={addDistCountryTo}
+                    onChange={setAddDistCountryTo}
+                    placeholder="Страна B — поиск (необязательно)"
+                    className="w-full px-2 py-1.5 text-[10px] font-semibold rounded-lg border border-[#E5E7EB] outline-none focus:border-[var(--accent)] bg-white transition-colors text-[#4B5563]"
+                  />
                 </div>
               </div>
             </div>
@@ -4343,7 +4386,7 @@ const [mapWaypoints, setMapWaypoints] = useState<string[]>([]);
 
             <div>
               <label className="text-[10px] font-semibold text-[#6B7280] flex items-center gap-1">
-                <MapPin className="w-3 h-3" aria-hidden="true" /> Погранпереходы (через запятую)
+                <MapPin className="w-3 h-3" aria-hidden="true" /> Погранпереходы <span className="text-[10px] text-[#9CA3AF] font-normal">(необязательно)</span>
               </label>
               <div className="flex flex-wrap gap-1 mt-1 mb-1.5">
                 {addDistCheckpoints.split(',').filter(Boolean).map((cp, i) => (

@@ -226,8 +226,19 @@ export default function DistanceDirectoryBlock({ user }: Props) {
       const exists = items.some(x => x.from?.toLowerCase() === rec.from?.toLowerCase() && x.to?.toLowerCase() === rec.to?.toLowerCase());
       if (exists) { toast('Маршрут уже существует!', 'error'); return; }
     }
+    if (!rec.from || !rec.to) { toast('Укажите города A и B', 'error'); return; }
+    // Поля только для UI (ввод КПП, ключ записи) в базу не пишем.
+    delete rec.cpInput;
+    delete rec.dbKey;
     setIsSubmitting(true);
-    dbService.saveDistance(rec as DistancePreset, user.name, user.role);
+    // Сохранение не должно «молча» падать: любая ошибка базы видна пользователю.
+    try {
+      dbService.saveDistance(rec as DistancePreset, user.name, user.role);
+    } catch (err) {
+      setIsSubmitting(false);
+      toast('Не удалось сохранить маршрут: ' + ((err as Error)?.message || 'ошибка базы'), 'error');
+      return;
+    }
     // Optimistic update — сразу обновляем таблицу
     setItems(prev => {
       const idx = prev.findIndex(x => x.id === rec.id);

@@ -136,7 +136,9 @@ export default function CountryAutocomplete({
             top: coords.top,
             left: coords.left,
             width: coords.width,
-            zIndex: 110,
+            // Должен быть выше модальных окон (backdrop z-[5300]) и нижней навигации (6000),
+            // иначе список стран прячется под подложкой окна. Как у CityAutocomplete.
+            zIndex: 99999,
           }}
           className="bg-white border border-[#E5E7EB] rounded-xl shadow-[0_16px_40px_rgba(15,23,42,0.16)] max-h-[200px] overflow-y-auto custom-scrollbar"
           onMouseDown={(e) => e.preventDefault()}

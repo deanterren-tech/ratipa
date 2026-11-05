@@ -3144,7 +3144,10 @@ export const dbService = {
 
   saveDistance: (d: DistancePreset, user: string, role: string) => {
     if (useFirebase) {
-      set(ref(database, `knownDistancesList/${d.id}`), d);
+      // RTDB отвергает undefined в значении (set() бросает исключение).
+      // Поля вроде checkpoints/countryFrom необязательны — вычищаем их перед записью,
+      // чтобы маршрут сохранялся без погранпереходов и стран.
+      set(ref(database, `knownDistancesList/${d.id}`), stripUndefinedDeep(d));
     } else {
       const local = getLocalStorageData<DistancePreset[]>(
         "ratipa_distances",
