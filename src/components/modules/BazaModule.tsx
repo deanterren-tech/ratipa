@@ -886,13 +886,15 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
     setIsCarModalOpen(false);
   };
 
-  const moveCarToArchive = async () => {
+  const moveCarToArchive = async (departureOverride?: string, opts?: { skipConfirm?: boolean }) => {
       if (isMechanic || !canWriteBaza || !modalData) return;
-      if (!(await showConfirm(`Отправить автомобиль [${modalData.carNumber}] в рейс?\nЗапись переместится во вкладку Архив.`))) return;
+      if (!opts?.skipConfirm) {
+        if (!(await showConfirm(`Отправить автомобиль [${modalData.carNumber}] в рейс?\nЗапись переместится во вкладку Архив.`))) return;
+      }
 
       const db = getDatabase(getApp());
       const nowStr = new Date().toISOString().split('T')[0];
-      const updatedDeparture = modalData.dateDeparture || nowStr;
+      const updatedDeparture = departureOverride || modalData.dateDeparture || nowStr;
 
       // Use the RAW record from the manual journal (bazaLegacy) — NOT the display-merged `cars`,
       // whose carNumber is overwritten by the coupling's vehicleNumbers. Writing back the merged
@@ -945,6 +947,30 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
           console.error('[Archive] moveCarToArchive FAILED', err);
           toast("Ошибка при перемещении в архив: " + (err?.message || err), 'error');
       });
+  };
+
+  /** Фактический выезд: как только дата выбрана, спрашиваем «Машина выехала?».
+   *  «Да» — запись вместе с этой датой уходит в архив; «Нет» — дата остаётся в записи. */
+  const handleActualDeparture = async (value: string) => {
+    setTouchedFields(prev => ({ ...prev, dateDeparture: true }));
+    setModalData((mm: any) => ({ ...mm, dateDeparture: value }));
+    if (!value || !modalData?.id) return;
+    const alreadyArchived = modalData.status === 'archive' || modalData.isArchived === true || currentTab === 'archive';
+    if (alreadyArchived) return;
+    const prettyDate = value.split('-').reverse().join('/');
+    // Если кроме даты в карточке есть другие несохранённые правки, честно предупреждаем:
+    // в архив уходит запись из базы, правки других полей нужно сохранить отдельно.
+    const otherTouched = Object.keys(touchedFields || {}).filter((f) => f !== 'dateDeparture' && (touchedFields as Record<string, boolean>)[f]);
+    const warning = otherTouched.length > 0
+      ? '\nВнимание: несохранённые правки других полей не перенесутся — сохраните их заранее.'
+      : '';
+    const didLeave = await showConfirm(
+      `Машина [${modalData.carNumber || ''}] выехала ${prettyDate}?\nПри «Да» запись переместится во вкладку Архив.${warning}`,
+      'Фактический выезд',
+      { confirmLabel: 'Да', cancelLabel: 'Нет' }
+    );
+    if (!didLeave) return;
+    await moveCarToArchive(value, { skipConfirm: true });
   };
 
   const deleteCarRecord = async (id: string, carNumber: string, e: React.MouseEvent) => {
@@ -1662,7 +1688,7 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
         footer={
           <div className="flex flex-wrap items-center justify-end gap-2 w-full">
             {currentTab === 'base' && !isMechanic && canWriteBaza && (
-              <button onClick={moveCarToArchive} className={`${UI.buttonGhost} mr-auto`}>
+              <button onClick={() => { void moveCarToArchive(); }} className={`${UI.buttonGhost} mr-auto`}>
                 Выехал в рейс
               </button>
             )}
@@ -1765,7 +1791,7 @@ export default function BazaModule({ user: ratipaUser, settings }: BazaModulePro
               <label className={UI.fieldLabel} title="Фактический выезд">Фактический выезд</label>
               <div className="relative">
                 <input type="text" readOnly disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture ? modalData.dateDeparture.split('-').reverse().join('/') : ''} placeholder="ДД/ММ/ГГГГ" className={`${UI.input} cursor-pointer pr-10`} onClick={() => openDatePicker('modal-picker-dateDeparture')} />
-                <input type="date" id="modal-picker-dateDeparture" disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture || ''} onChange={(e)=>{ setTouchedFields(prev => ({...prev, dateDeparture: true})); setModalData((mm) => ({...mm, dateDeparture: e.target.value})); } } className="absolute inset-0 opacity-0 md:pointer-events-none" />
+                <input type="date" id="modal-picker-dateDeparture" disabled={!canEditField('dateDeparture')} value={modalData.dateDeparture || ''} onChange={(e)=>{ void handleActualDeparture(e.target.value); } } className="absolute inset-0 opacity-0 md:pointer-events-none" />
                 <button type="button" disabled={!canEditField('dateDeparture')} onClick={() => openDatePicker('modal-picker-dateDeparture')} className="absolute right-1 top-1/2 -translate-y-1/2 min-h-[36px] min-w-[36px] flex items-center justify-center text-[#9CA3AF] hover:text-[#121316] disabled:opacity-30 cursor-pointer pointer-events-none md:pointer-events-auto">
                   <Calendar className="w-4 h-4" aria-hidden="true" />
                 </button>
