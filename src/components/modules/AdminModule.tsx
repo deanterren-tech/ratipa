@@ -24,6 +24,7 @@ import AdminAgentBlock from './AdminAgentBlock';
 import AdminAuditLogsBlock from './AdminAuditLogsBlock';
 import AdminWelcomePhrasesBlock from './AdminWelcomePhrasesBlock';
 import AdminBroadcastBlock from './AdminBroadcastBlock';import AdminLinksBlock from './AdminLinksBlock';
+import SettingsFieldInput from '../common/SettingsFieldInput';
 import AdminAnnouncementsBlock from './AdminAnnouncementsBlock';
 import AdminDriverDataBlock from './AdminDriverDataBlock';
 import CurrentPlanningSettingsBlock from './CurrentPlanningSettingsBlock';
@@ -106,6 +107,20 @@ export default function AdminModule({ user }: AdminModuleProps) {
     dbService.saveSettings(newStgs, user.name, user.role).catch(() => {
       toast('Не удалось сохранить настройки. Попробуйте ещё раз.', 'error');
     });
+  };
+
+  /** Запись ОДНОГО поля настроек: в базу уходит только этот ключ,
+   *  остальные поля не перезаписываются устаревшей копией объекта. */
+  const commitSettingField = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+    setSettings((prev) => (prev ? { ...prev, [key]: value } : prev));
+    setSavedFlash(true);
+    if (savedFlashTimer.current) window.clearTimeout(savedFlashTimer.current);
+    savedFlashTimer.current = window.setTimeout(() => setSavedFlash(false), 3000);
+    return dbService.patchSettings({ [key]: value } as Partial<AppSettings>, user.name, user.role)
+      .catch(() => {
+        toast('Не удалось сохранить настройки. Попробуйте ещё раз.', 'error');
+        throw new Error('save failed');
+      });
   };
 
   // Принудительно завершить ВСЕ активные сессии (force-logout).
@@ -363,81 +378,91 @@ export default function AdminModule({ user }: AdminModuleProps) {
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-medium text-[#6B7280] block">План Загрузок</label>
-                    <input type="url"
-                      defaultValue={settings.planZagruzokSheetUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, planZagruzokSheetUrl: normalizeUrl(e.target.value)})}
+                    <SettingsFieldInput
+                      value={settings.planZagruzokSheetUrl || ''}
+                      normalize={normalizeUrl}
+                      onCommit={(next) => commitSettingField('planZagruzokSheetUrl', next)}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-medium text-[#6B7280] block">План Загрузок (чёрный список)</label>
-                    <input type="url"
-                      defaultValue={settings.planZagruzokBlacklistUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, planZagruzokBlacklistUrl: normalizeUrl(e.target.value)})}
+                    <SettingsFieldInput
+                      value={settings.planZagruzokBlacklistUrl || ''}
+                      normalize={normalizeUrl}
+                      onCommit={(next) => commitSettingField('planZagruzokBlacklistUrl', next)}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-medium text-[#6B7280] block">Диспозиция</label>
-                    <input type="url"
-                      defaultValue={settings.dispositionSheetUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, dispositionSheetUrl: normalizeUrl(e.target.value)})}
+                    <SettingsFieldInput
+                      value={settings.dispositionSheetUrl || ''}
+                      normalize={normalizeUrl}
+                      onCommit={(next) => commitSettingField('dispositionSheetUrl', next)}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-medium text-[#6B7280] block">Книга выдачи — Google Таблица</label>
-                    <input type="url"
-                      defaultValue={settings.bookIssueSheetUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, bookIssueSheetUrl: normalizeUrl(e.target.value)})}
+                    <SettingsFieldInput
+                      value={settings.bookIssueSheetUrl || ''}
+                      normalize={normalizeUrl}
+                      onCommit={(next) => commitSettingField('bookIssueSheetUrl', next)}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-medium text-[#6B7280] block">Табель — Google Таблица</label>
-                    <input type="url"
-                      defaultValue={settings.tabelSheetUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, tabelSheetUrl: normalizeUrl(e.target.value)})}
+                    <SettingsFieldInput
+                      value={settings.tabelSheetUrl || ''}
+                      normalize={normalizeUrl}
+                      onCommit={(next) => commitSettingField('tabelSheetUrl', next)}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-medium text-[#6B7280] block">Журнал МДП — Google Таблица</label>
-                    <input type="url"
-                      defaultValue={settings.mdpJournalSheetUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, mdpJournalSheetUrl: normalizeUrl(e.target.value)})}
+                    <SettingsFieldInput
+                      value={settings.mdpJournalSheetUrl || ''}
+                      normalize={normalizeUrl}
+                      onCommit={(next) => commitSettingField('mdpJournalSheetUrl', next)}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-medium text-[#6B7280] block">Расходы водителей — Google Таблица</label>
-                    <input type="url"
-                      defaultValue={settings.driverExpensesUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, driverExpensesUrl: normalizeUrl(e.target.value)})}
+                    <SettingsFieldInput
+                      value={settings.driverExpensesUrl || ''}
+                      normalize={normalizeUrl}
+                      onCommit={(next) => commitSettingField('driverExpensesUrl', next)}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-medium text-[#6B7280] block">Книга выдачи РР — Google Таблица</label>
-                    <input type="url"
-                      defaultValue={settings.bookIssueRRUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, bookIssueRRUrl: normalizeUrl(e.target.value)})}
+                    <SettingsFieldInput
+                      value={settings.bookIssueRRUrl || ''}
+                      normalize={normalizeUrl}
+                      onCommit={(next) => commitSettingField('bookIssueRRUrl', next)}
                       className={UI.input}
                       placeholder="https://docs.google.com/spreadsheets/d/..." />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-medium text-[#6B7280] block">Google Диск</label>
-                    <input type="url"
-                      defaultValue={settings.googleDriveUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, googleDriveUrl: normalizeUrl(e.target.value)})}
+                    <SettingsFieldInput
+                      value={settings.googleDriveUrl || ''}
+                      normalize={normalizeUrl}
+                      onCommit={(next) => commitSettingField('googleDriveUrl', next)}
                       className={UI.input}
                       placeholder="https://drive.google.com/drive/folders/..." />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-medium text-[#6B7280] block">Google Диск для модуля инструкций</label>
-                    <input type="url"
-                      defaultValue={settings.instructionsDriveUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, instructionsDriveUrl: normalizeUrl(e.target.value)})}
+                    <SettingsFieldInput
+                      value={settings.instructionsDriveUrl || ''}
+                      normalize={normalizeUrl}
+                      onCommit={(next) => commitSettingField('instructionsDriveUrl', next)}
                       className={UI.input}
                       placeholder="https://drive.google.com/drive/folders/..." />
                     <p className="text-[10px] leading-relaxed text-[#9CA3AF]">
@@ -457,25 +482,28 @@ export default function AdminModule({ user }: AdminModuleProps) {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-medium text-[#6B7280] block">Белтрансспутник</label>
-                    <input type="url"
-                      defaultValue={settings.gpsBeltranssputnikUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, gpsBeltranssputnikUrl: normalizeUrl(e.target.value)})}
+                    <SettingsFieldInput
+                      value={settings.gpsBeltranssputnikUrl || ''}
+                      normalize={normalizeUrl}
+                      onCommit={(next) => commitSettingField('gpsBeltranssputnikUrl', next)}
                       className={UI.input}
                       placeholder="https://..." />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-medium text-[#6B7280] block">Wialon</label>
-                    <input type="url"
-                      defaultValue={settings.gpsWialonUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, gpsWialonUrl: normalizeUrl(e.target.value)})}
+                    <SettingsFieldInput
+                      value={settings.gpsWialonUrl || ''}
+                      normalize={normalizeUrl}
+                      onCommit={(next) => commitSettingField('gpsWialonUrl', next)}
                       className={UI.input}
                       placeholder="https://..." />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-medium text-[#6B7280] block">ЭРА ГЛОНАСС</label>
-                    <input type="url"
-                      defaultValue={settings.gpsEraGlonassUrl || ''}
-                      onBlur={(e) => saveSettings({...settings, gpsEraGlonassUrl: normalizeUrl(e.target.value)})}
+                    <SettingsFieldInput
+                      value={settings.gpsEraGlonassUrl || ''}
+                      normalize={normalizeUrl}
+                      onCommit={(next) => commitSettingField('gpsEraGlonassUrl', next)}
                       className={UI.input}
                       placeholder="https://..." />
                   </div>

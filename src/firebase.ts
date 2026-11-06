@@ -3053,6 +3053,32 @@ export const dbService = {
     });
   },
 
+  /** Точечная запись полей настроек: пишет только переданные ключи.
+   *  Нужна там, где сохраняется ОДНО поле (ссылки, URL таблиц): полный объект
+   *  настроек из устаревшего состояния затирал бы чужие свежие правки. */
+  patchSettings: (patch: Partial<AppSettings>, user: string, role: string) => {
+    const clean = stripUndefinedDeep(patch) as Record<string, unknown>;
+    return new Promise<void>((resolve, reject) => {
+      if (useFirebase) {
+        update(ref(database, "appSettings"), clean)
+          .then(() => {
+            if (catalogCache.settings) {
+              catalogCache.settings = { ...catalogCache.settings, ...(clean as Partial<AppSettings>) };
+            }
+            dbService.logAction(user, role, "Обновление настроек", "Settings", "global", `Изменены поля: ${Object.keys(clean).join(', ')}`);
+            resolve();
+          })
+          .catch((e) => { console.warn("[patchSettings] update failed", e); reject(e); });
+      } else {
+        const local = getLocalStorageData<AppSettings>("ratipa_settings", {} as AppSettings);
+        const merged = sanitizeFirebaseObject({ ...local, ...(clean as Partial<AppSettings>) });
+        setLocalStorageData("ratipa_settings", merged);
+        catalogCache.settings = merged;
+        resolve();
+      }
+    });
+  },
+
   // FERRY TEMPLATES
   getFerryTemplates: (callback: (templates: FerryTemplate[]) => void) => {
     return sharedGetFerryTemplates(callback);
